@@ -1,0 +1,20 @@
+{
+  "name": "thebird",
+  "version": "1.0.0",
+  "description": "Anthropic SDK to Gemini streaming bridge — drop-in proxy that translates Anthropic message format and tool calls to Google Gemini",
+  "main": "index.js",
+  "keywords": ["anthropic", "gemini", "google", "ai", "streaming", "proxy", "bridge", "tool-use"],
+  "author": "AnEntrypoint",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnEntrypoint/thebird.git"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0"
+  },
+  "peerDependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
