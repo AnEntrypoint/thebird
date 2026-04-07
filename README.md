@@ -1,6 +1,6 @@
 # thebird
 
-Anthropic SDK to Google Gemini bridge. Drop-in adapter that translates Anthropic-style messages, tool calls, and content blocks to the Gemini API — with streaming, non-streaming, vision, retry logic, and full TypeScript types.
+Anthropic SDK to multi-provider bridge. Drop-in adapter that translates Anthropic-style messages, tool calls, and content blocks to Google Gemini or any OpenAI-compatible API — with routing, transformers, streaming, vision, retry logic, and full TypeScript types.
 
 ## Install
 
@@ -8,246 +8,168 @@ Anthropic SDK to Google Gemini bridge. Drop-in adapter that translates Anthropic
 npm install thebird
 ```
 
-Requires `GEMINI_API_KEY` environment variable, or pass `apiKey` directly.
-
 ## Quick Start
+
+**Gemini (direct)**
 
 ```js
 const { generateGemini, streamGemini } = require('thebird');
+// requires GEMINI_API_KEY env var
 
-// Non-streaming
 const { text } = await generateGemini({
   model: 'gemini-2.0-flash',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
-console.log(text);
+```
 
-// Streaming
-const { fullStream } = streamGemini({
-  model: 'gemini-2.0-flash',
-  messages: [{ role: 'user', content: 'Tell me a story.' }]
+**Multi-provider router**
+
+```js
+const { createRouter } = require('thebird');
+
+const router = createRouter({
+  Providers: [
+    { name: 'deepseek', api_base_url: 'https://api.deepseek.com/chat/completions', api_key: process.env.DEEPSEEK_API_KEY, models: ['deepseek-chat', 'deepseek-reasoner'], transformer: { use: ['deepseek'] } },
+    { name: 'gemini',   api_base_url: 'https://generativelanguage.googleapis.com/v1beta/models/', api_key: process.env.GEMINI_API_KEY, models: ['gemini-2.5-pro'] },
+    { name: 'ollama',   api_base_url: 'http://localhost:11434/v1/chat/completions', api_key: 'ollama', models: ['qwen2.5-coder:latest'] },
+  ],
+  Router: {
+    default: 'deepseek,deepseek-chat',
+    background: 'ollama,qwen2.5-coder:latest',
+    think: 'deepseek,deepseek-reasoner',
+    longContext: 'gemini,gemini-2.5-pro',
+    longContextThreshold: 60000,
+  }
 });
+
+// Stream — routes automatically based on taskType and token count
+const { fullStream } = router.stream({ messages, taskType: 'think' });
 for await (const event of fullStream) {
   if (event.type === 'text-delta') process.stdout.write(event.textDelta);
 }
+
+// Generate
+const { text } = await router.generate({ messages });
 ```
 
-## API
+**File-based config** — place config at `~/.thebird/config.json` (or set `THEBIRD_CONFIG` env) and use the auto-loading shorthand:
 
-### `generateGemini(params)` → `Promise<{ text, parts, response }>`
+```js
+const { streamRouter, generateRouter } = require('thebird');
+const { fullStream } = streamRouter({ messages, taskType: 'background' });
+```
 
-Non-streaming generation. Automatically handles multi-step tool call loops until a final text response is returned.
+## Routing
 
-### `streamGemini(params)` → `{ fullStream, warnings }`
+`createRouter` / `streamRouter` pick a provider+model per request:
 
-Returns an async iterable of events. Handles agentic tool loops — yields events for each step until the model produces a non-tool response.
+| Route key | Trigger |
+|---|---|
+| `default` | Any request not matched by another rule |
+| `background` | `taskType: 'background'` |
+| `think` | `taskType: 'think'` |
+| `webSearch` | `taskType: 'webSearch'` |
+| `image` | `taskType: 'image'` |
+| `longContext` | Estimated token count > `longContextThreshold` (default 60 000) |
+| subagent tag | First user message starts with `<CCR-SUBAGENT-MODEL>provider,model</CCR-SUBAGENT-MODEL>` |
+| custom function | `customRouter: async (params, cfg) => 'provider,model'` in config |
 
-### Shared params
+Route values are `"providerName,modelName"` strings matching a `Providers` entry.
+
+## Transformers
+
+Apply per-provider request/response transformations. Set on the provider's `transformer.use` array.
+
+```json
+{
+  "name": "deepseek",
+  "transformer": {
+    "use": ["deepseek"],
+    "deepseek-chat": { "use": [["maxtoken", { "max_tokens": 8192 }], "tooluse"] }
+  }
+}
+```
+
+Built-in transformers:
+
+| Name | Effect |
+|---|---|
+| `deepseek` | Strips `cache_control`, normalises system to string |
+| `openrouter` | Adds `HTTP-Referer` / `X-Title` headers; optional `provider` routing |
+| `maxtoken` | Sets `max_tokens` to the given value |
+| `tooluse` | Adds `tool_choice: {type:"required"}` when tools are present |
+| `cleancache` | Strips all `cache_control` fields recursively |
+| `reasoning` | Moves `reasoning_content` to `_reasoning` in response |
+| `sampling` | Removes `top_k` / `repetition_penalty` |
+| `groq` | Removes `top_k` |
+
+Pass options as a nested array: `["maxtoken", { "max_tokens": 16384 }]`.
+
+## Config File
+
+`~/.thebird/config.json` (or `THEBIRD_CONFIG` env var) — same schema as the inline config object. Supports `$VAR` / `${VAR}` environment variable interpolation anywhere in the file.
+
+```json
+{
+  "Providers": [
+    { "name": "openrouter", "api_base_url": "https://openrouter.ai/api/v1/chat/completions", "api_key": "$OPENROUTER_API_KEY", "models": ["google/gemini-2.5-pro-preview"], "transformer": { "use": ["openrouter"] } }
+  ],
+  "Router": { "default": "openrouter,google/gemini-2.5-pro-preview" }
+}
+```
+
+## Gemini Direct API
+
+`streamGemini` / `generateGemini` bypass routing and call Gemini natively via `@google/genai`. Requires `GEMINI_API_KEY`.
+
+### Params
 
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `model` | `string \| { id }` | `'gemini-2.0-flash'` | Model name or object with `id`/`modelId` |
+| `model` | `string \| { id }` | `'gemini-2.0-flash'` | Model id |
 | `messages` | `Message[]` | required | Conversation history |
 | `system` | `string` | — | System instruction |
-| `tools` | `Tools` | — | Tool definitions with optional `execute` |
-| `apiKey` | `string` | `GEMINI_API_KEY` env | Override API key |
+| `tools` | `Tools` | — | Tool definitions |
+| `apiKey` | `string` | `GEMINI_API_KEY` | Override API key |
 | `temperature` | `number` | `0.5` | Sampling temperature |
-| `maxOutputTokens` | `number` | `8192` | Max output tokens |
-| `topP` | `number` | `0.95` | Top-p sampling |
-| `topK` | `number` | — | Top-k sampling |
-| `safetySettings` | `SafetySetting[]` | — | Gemini safety thresholds |
-
-`streamGemini` also accepts:
-
-| Param | Type | Description |
-|---|---|---|
-| `onStepFinish` | `() => Promise<void>` | Called after each reasoning step |
+| `maxOutputTokens` | `number` | `8192` | Max tokens |
+| `topP` | `number` | `0.95` | Top-p |
+| `topK` | `number` | — | Top-k |
+| `safetySettings` | `SafetySetting[]` | — | Safety thresholds |
 
 ## Message Format
 
-Messages follow the Anthropic SDK format:
+Messages follow the Anthropic SDK format. All image block variants are supported:
 
 ```js
-// Simple text
-{ role: 'user', content: 'Hello' }
-
-// Content blocks
 { role: 'user', content: [
-  { type: 'text', text: 'What is in this image?' },
-  { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: '...' } }
-]}
-
-// Tool result (from assistant loop)
-{ role: 'user', content: [
-  { type: 'tool_result', name: 'my_tool', content: '{"result": 42}' }
+  { type: 'text', text: 'Describe this image.' },
+  { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '...' } }
 ]}
 ```
-
-## Vision / Images
-
-Four image formats are supported:
-
-```js
-// 1. Anthropic SDK style — base64
-{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: '<base64>' } }
-
-// 2. Anthropic SDK style — URL
-{ type: 'image', source: { type: 'url', url: 'https://...' } }
-
-// 3. Gemini native — inline base64
-{ inlineData: { mimeType: 'image/jpeg', data: '<base64>' } }
-
-// 4. Gemini native — file URI
-{ fileData: { mimeType: 'image/jpeg', fileUri: 'gs://...' } }
-```
-
-Example:
-
-```js
-const result = await generateGemini({
-  model: 'gemini-2.0-flash',
-  messages: [{
-    role: 'user',
-    content: [
-      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
-      { type: 'text', text: 'Describe this image.' }
-    ]
-  }]
-});
-```
-
-## Tool Calling
-
-Define tools as an object keyed by name. The `execute` function is called automatically during agentic loops.
-
-```js
-const tools = {
-  get_weather: {
-    description: 'Get the weather for a city.',
-    parameters: {
-      type: 'object',
-      properties: {
-        city: { type: 'string' }
-      },
-      required: ['city']
-    },
-    execute: async ({ city }) => ({ temperature: 22, condition: 'Sunny' })
-  }
-};
-
-const { text } = await generateGemini({
-  model: 'gemini-2.0-flash',
-  messages: [{ role: 'user', content: "What's the weather in Paris?" }],
-  tools
-});
-```
-
-Tool schemas are automatically cleaned — `additionalProperties` and `$schema` are stripped for Gemini compatibility.
 
 ## Streaming Events
 
-`fullStream` yields a sequence of typed events:
-
-| Event type | Fields | Description |
+| Event | Fields | Description |
 |---|---|---|
 | `start-step` | — | Beginning of a reasoning step |
-| `text-delta` | `textDelta: string` | Streamed text chunk |
-| `tool-call` | `toolCallId, toolName, args` | Model called a tool |
+| `text-delta` | `textDelta` | Streamed text chunk |
+| `tool-call` | `toolCallId, toolName, args` | Model invoked a tool |
 | `tool-result` | `toolCallId, toolName, args, result` | Tool execution result |
-| `finish-step` | `finishReason: 'stop' \| 'tool-calls' \| 'error'` | Step completed |
-| `error` | `error: Error` | Error during step |
-
-```js
-const { fullStream } = streamGemini({ model: 'gemini-2.0-flash', messages, tools });
-
-for await (const event of fullStream) {
-  switch (event.type) {
-    case 'text-delta': process.stdout.write(event.textDelta); break;
-    case 'tool-call': console.log('Calling tool:', event.toolName, event.args); break;
-    case 'tool-result': console.log('Result:', event.result); break;
-    case 'finish-step': console.log('Done, reason:', event.finishReason); break;
-    case 'error': console.error('Error:', event.error); break;
-  }
-}
-```
-
-## Safety Settings
-
-```js
-const { text } = await generateGemini({
-  model: 'gemini-2.0-flash',
-  messages: [...],
-  safetySettings: [
-    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' }
-  ]
-});
-```
-
-## Retry Logic
-
-All API calls automatically retry on 5xx errors and 429 rate limits with exponential backoff (max 3 retries, delays up to ~16 seconds).
-
-```js
-const { GeminiError } = require('thebird');
-
-try {
-  const result = await generateGemini({ ... });
-} catch (err) {
-  if (err instanceof GeminiError) {
-    console.log('Status:', err.status);
-    console.log('Retryable:', err.retryable);
-  }
-}
-```
-
-## Error Handling
-
-```js
-const { GeminiError } = require('thebird');
-
-// GeminiError properties:
-// err.message  — human-readable message
-// err.status   — HTTP status code (e.g. 429, 500)
-// err.code     — error code string if available
-// err.retryable — whether automatic retry was attempted
-```
+| `finish-step` | `finishReason` | Step completed |
+| `error` | `error` | Error during step |
 
 ## TypeScript
 
-Full types are bundled — no `@types/` package needed.
-
 ```ts
-import { generateGemini, streamGemini, GeminiError, Message, Tools, StreamEvent } from 'thebird';
-
-const messages: Message[] = [{ role: 'user', content: 'Hello' }];
-const { text } = await generateGemini({ messages });
+import { createRouter, streamRouter, generateGemini, RouterConfiguration, ProviderConfig, RouterConfig } from 'thebird';
 ```
 
 ## Utilities
 
 ```js
 const { convertMessages, convertTools, cleanSchema } = require('thebird');
-
-// Convert Anthropic messages to Gemini contents format
-const contents = convertMessages(messages);
-
-// Convert tools map to Gemini function declarations array
-const declarations = convertTools(tools);
-
-// Strip additionalProperties/$schema from a JSON schema
-const cleaned = cleanSchema(rawSchema);
 ```
-
-## Examples
-
-See the [`examples/`](./examples/) directory:
-
-- [`basic-chat.js`](./examples/basic-chat.js) — Simple text generation with system prompt
-- [`tool-use.js`](./examples/tool-use.js) — Tool/function calling (streaming and non-streaming)
-- [`vision.js`](./examples/vision.js) — Image understanding with all three image formats
-- [`streaming.js`](./examples/streaming.js) — All streaming event types with stats
-- [`multi-turn.js`](./examples/multi-turn.js) — Multi-turn chat history pattern
 
 ## License
 
