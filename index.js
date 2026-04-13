@@ -170,4 +170,7 @@ async function generateRouter(params) {
   return createRouter(config).generate(params);
 }
 
-module.exports = { streamGemini, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError };
+const { cloudGenerate, streamCloud, cloudStream } = require('./lib/cloud-generate');
+const { ensureAuth, login: oauthLogin } = require('./lib/oauth');
+
+module.exports = { streamGemini, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };
