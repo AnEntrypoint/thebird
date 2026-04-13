@@ -2,24 +2,58 @@
 
 Anthropic SDK to multi-provider bridge. Drop-in adapter that translates Anthropic-style messages, tool calls, and content blocks to Google Gemini or any OpenAI-compatible API — with routing, transformers, streaming, vision, retry logic, and full TypeScript types.
 
+## How It Works
+
+thebird accepts **Anthropic SDK message format** — the same `{ role, content }` structure you use with `@anthropic-ai/sdk` — and translates it to Gemini or any OpenAI-compatible API. No proxy server needed. You write Anthropic-format messages, thebird streams them through Gemini.
+
+```
+Anthropic SDK format  →  thebird  →  Gemini / OpenAI-compatible API
+     (messages)         (bridge)         (native streaming)
+```
+
+This means you can use `@anthropic-ai/sdk` to build your messages and tool definitions, then pass them directly to thebird for execution against Gemini models.
+
 ## Install
 
 ```bash
-npm install thebird
+npm install thebird @anthropic-ai/sdk
 ```
 
 ## Quick Start
 
-**Gemini (direct)**
+**Anthropic SDK format → Gemini (streaming)**
 
 ```js
-const { generateGemini, streamGemini } = require('thebird');
-// requires GEMINI_API_KEY env var
+const Anthropic = require('@anthropic-ai/sdk');
+const { streamGemini } = require('thebird');
+
+// Build messages using Anthropic SDK format — same structure as client.messages.create()
+const messages = [
+  { role: 'user', content: 'Count from 1 to 5.' }
+];
+
+// Stream through Gemini — no server, no proxy
+const { fullStream } = streamGemini({
+  model: 'gemini-3-flash-preview',
+  system: 'You are a helpful assistant.',
+  messages
+});
+
+for await (const event of fullStream) {
+  if (event.type === 'text-delta') process.stdout.write(event.textDelta);
+}
+```
+
+**Anthropic SDK format → Gemini (non-streaming)**
+
+```js
+const { generateGemini } = require('thebird');
 
 const { text } = await generateGemini({
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3-flash-preview',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
+console.log(text);
 ```
 
 **Multi-provider router**
