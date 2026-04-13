@@ -7,18 +7,18 @@ const { resolveTransformers, applyRequestTransformers } = require('./lib/transfo
 const openaiProv = require('./lib/providers/openai');
 
 function streamGemini({ model, system, messages, tools, onStepFinish, apiKey,
-  temperature, maxOutputTokens, topP, topK, safetySettings }) {
+  temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }) {
   return {
-    fullStream: createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings }),
+    fullStream: createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }),
     warnings: Promise.resolve([])
   };
 }
 
-async function* createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings }) {
+async function* createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }) {
   const client = getClient(apiKey);
   const modelId = extractModelId(model);
   let contents = convertMessages(messages);
-  const { config } = buildConfig({ system, tools, temperature, maxOutputTokens, topP, topK, safetySettings });
+  const { config } = buildConfig({ system, tools, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities });
   while (true) {
     yield { type: 'start-step' };
     try {
@@ -66,11 +66,11 @@ async function* createFullStream({ model, system, messages, tools, onStepFinish,
   }
 }
 
-async function generateGemini({ model, system, messages, tools, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings }) {
+async function generateGemini({ model, system, messages, tools, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }) {
   const client = getClient(apiKey);
   const modelId = extractModelId(model);
   let contents = convertMessages(messages);
-  const { config } = buildConfig({ system, tools, temperature, maxOutputTokens, topP, topK, safetySettings });
+  const { config } = buildConfig({ system, tools, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities });
   while (true) {
     const response = await withRetry(() => client.models.generateContent({ model: modelId, contents, config }));
     const candidate = response.candidates?.[0];
