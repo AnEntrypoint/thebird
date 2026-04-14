@@ -3,10 +3,18 @@ import { agentGenerate } from './agent-chat.js';
 
 const html = htm.bind(createElement);
 
-const BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const PROVIDERS = {
+  gemini:   { label: 'Google Gemini',   baseUrl: 'https://generativelanguage.googleapis.com/v1beta', keyPlaceholder: 'GEMINI_API_KEY', models: [] },
+  openai:   { label: 'OpenAI',          baseUrl: 'https://api.openai.com/v1',                        keyPlaceholder: 'OPENAI_API_KEY', models: ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'] },
+  xai:      { label: 'xAI Grok',        baseUrl: 'https://api.x.ai/v1',                              keyPlaceholder: 'XAI_API_KEY',    models: ['grok-3', 'grok-3-mini', 'grok-3-fast'] },
+  groq:     { label: 'Groq',            baseUrl: 'https://api.groq.com/openai/v1',                   keyPlaceholder: 'GROQ_API_KEY',   models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'] },
+  mistral:  { label: 'Mistral',         baseUrl: 'https://api.mistral.ai/v1',                        keyPlaceholder: 'MISTRAL_API_KEY', models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
+  deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
+  custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                           keyPlaceholder: 'API_KEY',        models: [] },
+};
 
-async function fetchModels(apiKey) {
-  const res = await fetch(`${BASE}/models?key=${apiKey}`);
+async function fetchGeminiModels(apiKey) {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
   if (!res.ok) throw new Error(`Models API ${res.status}`);
   const { models = [] } = await res.json();
   return models
@@ -14,13 +22,35 @@ async function fetchModels(apiKey) {
     .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
 }
 
+async function fetchOpenAIModels(baseUrl, apiKey) {
+  const url = baseUrl.replace(/\/$/, '') + '/models';
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+  if (!res.ok) throw new Error(`Models API ${res.status}`);
+  const { data = [] } = await res.json();
+  return data.map(m => ({ id: m.id, label: m.id })).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+async function fetchModels(providerType, baseUrl, apiKey) {
+  if (providerType === 'gemini') return fetchGeminiModels(apiKey);
+  const staticModels = PROVIDERS[providerType]?.models || [];
+  try {
+    return await fetchOpenAIModels(baseUrl, apiKey);
+  } catch {
+    return staticModels.map(id => ({ id, label: id }));
+  }
+}
 
 class BirdChat extends HTMLElement {
   constructor() {
     super();
+    const savedProvider = localStorage.getItem('provider_type') || 'gemini';
+    const savedBaseUrl = localStorage.getItem('provider_base_url') || PROVIDERS[savedProvider]?.baseUrl || '';
     this.state = {
-      messages: [], streaming: false, model: 'gemini-2.5-flash',
-      apiKey: localStorage.getItem('gemini_api_key') || '',
+      messages: [], streaming: false,
+      providerType: savedProvider,
+      baseUrl: savedBaseUrl,
+      model: localStorage.getItem('provider_model') || (savedProvider === 'gemini' ? 'gemini-2.5-flash' : (PROVIDERS[savedProvider]?.models[0] || '')),
+      apiKey: localStorage.getItem('provider_api_key') || '',
       models: [], modelsLoading: false, status: '', streamingText: '',
     };
     const self = this;
@@ -33,15 +63,16 @@ class BirdChat extends HTMLElement {
 
   connectedCallback() {
     this.render();
-    if (this.state.apiKey) this.loadModels(this.state.apiKey);
+    if (this.state.apiKey) this.loadModels();
   }
 
   setState(patch) { Object.assign(this.state, patch); this.render(); }
 
-  async loadModels(apiKey) {
+  async loadModels() {
+    const { providerType, baseUrl, apiKey } = this.state;
     this.setState({ modelsLoading: true, status: '' });
     try {
-      const models = await fetchModels(apiKey);
+      const models = await fetchModels(providerType, baseUrl, apiKey);
       const current = this.state.model;
       const model = models.find(m => m.id === current) ? current : (models[0]?.id || current);
       this.setState({ models, model, modelsLoading: false });
@@ -50,25 +81,48 @@ class BirdChat extends HTMLElement {
     }
   }
 
+  setProvider(type) {
+    const def = PROVIDERS[type] || {};
+    const baseUrl = type === 'custom' ? '' : (def.baseUrl || '');
+    const model = def.models?.[0] || '';
+    localStorage.setItem('provider_type', type);
+    localStorage.setItem('provider_base_url', baseUrl);
+    localStorage.setItem('provider_model', model);
+    this.setState({ providerType: type, baseUrl, model, models: [], apiKey: localStorage.getItem('provider_api_key') || '' });
+  }
+
   render() {
-    const { messages, streaming, model, apiKey, models, modelsLoading, status, streamingText } = this.state;
-    const opts = (models.length === 0 ? [{ id: model, label: model }] : models)
+    const { messages, streaming, model, apiKey, models, modelsLoading, status, providerType, baseUrl } = this.state;
+    const provDef = PROVIDERS[providerType] || PROVIDERS.custom;
+    const opts = (models.length === 0 ? (provDef.models.length ? provDef.models.map(id => ({ id, label: id })) : [{ id: model, label: model }]) : models)
       .map(m => html`<option value=${m.id} selected=${m.id === model}>${m.label}</option>`);
+    const provOpts = Object.entries(PROVIDERS).map(([id, p]) =>
+      html`<option value=${id} selected=${id === providerType}>${p.label}</option>`);
 
     applyDiff(this, html`
       <div class="flex flex-col h-full">
         <header class="navbar bg-base-200 border-b border-base-300 gap-2 flex-wrap px-4 py-2">
           <span class="text-primary font-bold text-lg mr-2">🐦 thebird</span>
-          <span class="text-base-content/50 text-xs hidden sm:inline">Anthropic SDK format → Gemini API</span>
           <div class="flex gap-2 flex-1 min-w-0 items-center flex-wrap">
-            <input id="api-key-input" type="password" class="input input-sm input-bordered flex-1 min-w-[160px]"
-              placeholder="GEMINI_API_KEY" value=${apiKey}
-              onchange=${e => { const v = e.target.value.trim(); localStorage.setItem('gemini_api_key', v); this.setState({ apiKey: v }); if (v) this.loadModels(v); }} />
+            <select class="select select-sm select-bordered"
+              onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
+            ${providerType === 'custom' ? html`
+              <input type="text" class="input input-sm input-bordered flex-1 min-w-[160px]"
+                placeholder="https://your-endpoint/v1" value=${baseUrl}
+                onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
+            <input id="api-key-input" type="password" class="input input-sm input-bordered flex-1 min-w-[140px]"
+              placeholder=${provDef.keyPlaceholder} value=${apiKey}
+              onchange=${e => {
+                const v = e.target.value.trim();
+                localStorage.setItem('provider_api_key', v);
+                this.setState({ apiKey: v });
+                if (v) this.loadModels();
+              }} />
             <div class="relative">
               ${modelsLoading
                 ? html`<span class="loading loading-spinner loading-sm text-primary"></span>`
-                : html`<select class="select select-sm select-bordered" value=${model} disabled=${models.length === 0}
-                    onchange=${e => this.setState({ model: e.target.value })}>${opts}</select>`}
+                : html`<select class="select select-sm select-bordered" value=${model}
+                    onchange=${e => { localStorage.setItem('provider_model', e.target.value); this.setState({ model: e.target.value }); }}>${opts}</select>`}
             </div>
             <button class="btn btn-sm btn-ghost" onclick=${() => this.setState({ messages: [], status: '' })}>Clear</button>
           </div>
@@ -100,12 +154,13 @@ class BirdChat extends HTMLElement {
     const input = this.querySelector('#chat-input');
     const text = input?.value.trim();
     if (!text || this.state.streaming) return;
-    const { apiKey, model } = this.state;
-    if (!apiKey) { this.setState({ status: 'Enter a Gemini API key above.' }); return; }
+    const { apiKey, model, providerType, baseUrl } = this.state;
+    if (!apiKey) { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
     const messages = [...this.state.messages, { role: 'user', content: text }];
     this.setState({ messages, streaming: true, status: '', streamingText: '' });
+    const provider = { type: providerType, apiKey, model, baseUrl: providerType === 'gemini' ? '' : baseUrl };
     try {
       let full = '';
       const streamEl = document.createElement('div');
@@ -119,7 +174,7 @@ class BirdChat extends HTMLElement {
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
       if (list) list.appendChild(wrap);
-      await agentGenerate(apiKey, model, messages,
+      await agentGenerate(provider, messages,
         chunk => { full += chunk; streamEl.textContent = full; const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; },
         (name, args) => { full += `\n[tool: ${name}(${JSON.stringify(args)})]\n`; streamEl.textContent = full; }
       );
