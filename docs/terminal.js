@@ -114,6 +114,9 @@ async function boot() {
   window.__debug.term = term;
   window.__debug.previewUrl = null;
   window.__debug.shell = shell;
+  window.__debug.shellWriter = writer;
+  window.__debug.idbSnapshot = files;
+  window.__debug.idbPersist = () => idbSave(JSON.stringify(window.__debug.idbSnapshot));
   window.__debug.srv = srv;
   window.__debug.validation = null;
   window.__debug.runAgent = async (key, task) => {
