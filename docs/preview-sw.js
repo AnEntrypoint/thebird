@@ -42,7 +42,6 @@ self.addEventListener('fetch', e => {
 
 const CORS_HEADERS = {
   'Cross-Origin-Resource-Policy': 'cross-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
 async function handlePreview(key, request) {
