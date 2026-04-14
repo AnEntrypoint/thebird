@@ -40,18 +40,23 @@ self.addEventListener('fetch', e => {
   e.respondWith(handlePreview(key, e.request));
 });
 
+const CORS_HEADERS = {
+  'Cross-Origin-Resource-Policy': 'cross-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+};
+
 async function handlePreview(key, request) {
   const db = await openIDB();
   const fs = await getFS(db);
-  if (key in fs) return new Response(fs[key], { status: 200, headers: { 'Content-Type': getMime(key) } });
+  if (key in fs) return new Response(fs[key], { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': getMime(key) } });
   const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  if (!clients.length) return new Response('not found: ' + key, { status: 404 });
+  if (!clients.length) return new Response('not found: ' + key, { status: 404, headers: CORS_HEADERS });
   const { port1, port2 } = new MessageChannel();
   const result = await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('express timeout')), 5000);
     port1.onmessage = e => { clearTimeout(t); res(e.data); };
     clients[0].postMessage({ type: 'EXPRESS_REQUEST', path: '/' + key, method: request.method }, [port2]);
   });
-  if (!result || result.status === 404) return new Response('not found: ' + key, { status: 404 });
-  return new Response(result.body, { status: result.status || 200, headers: { 'Content-Type': result.contentType || 'text/html' } });
+  if (!result || result.status === 404) return new Response('not found: ' + key, { status: 404, headers: CORS_HEADERS });
+  return new Response(result.body, { status: result.status || 200, headers: { ...CORS_HEADERS, 'Content-Type': result.contentType || 'text/html' } });
 }
