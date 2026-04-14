@@ -4,35 +4,6 @@ import { FitAddon } from 'https://esm.sh/@xterm/addon-fit';
 
 const IDB_KEY = 'thebird_fs';
 
-const SERVER_JS = [
-  'const http = require("http");',
-  'const state = { requests: 0, start: Date.now() };',
-  'http.createServer((req, res) => {',
-  '  state.requests++;',
-  '  res.setHeader("Content-Type", "application/json");',
-  '  res.setHeader("Access-Control-Allow-Origin", "*");',
-  '  res.end(JSON.stringify({ ok: true, path: req.url, requests: state.requests, uptime: Date.now() - state.start }));',
-  '}).listen(3000, () => console.log("server ready on :3000"));',
-].join('\n') + '\n';
-
-const INDEX_JS = [
-  'const { default: Anthropic } = require("@anthropic-ai/sdk");',
-  'const http = require("http");',
-  'const client = new Anthropic({ apiKey: "x", baseURL: "http://localhost:3000" });',
-  'console.log("sdk:", client.constructor.name);',
-  'http.get("http://localhost:3000/status", r => {',
-  '  let d = "";',
-  '  r.on("data", c => d += c);',
-  '  r.on("end", () => console.log("server:", d));',
-  '});',
-].join('\n') + '\n';
-
-const DEFAULT_FILES = {
-  'package.json': JSON.stringify({ name: 'app', dependencies: { '@anthropic-ai/sdk': '^0.88.0' } }, null, 2),
-  'server.js': SERVER_JS,
-  'index.js': INDEX_JS,
-};
-
 async function idbLoad() {
   return new Promise((res, rej) => {
     const req = indexedDB.open('thebird', 1);
@@ -60,9 +31,9 @@ async function idbSave(data) {
   });
 }
 
-async function snapshotToIDB(container, files) {
+async function snapshotToIDB(container, keys) {
   const snap = {};
-  await Promise.all(Object.keys(files).map(async p => {
+  await Promise.all(keys.map(async p => {
     try { snap[p] = await container.fs.readFile(p, 'utf-8'); } catch {}
   }));
   await idbSave(JSON.stringify(snap));
@@ -80,9 +51,20 @@ async function boot() {
   window.addEventListener('resize', () => fit.fit());
 
   const saved = await idbLoad();
-  const files = saved ? JSON.parse(saved) : DEFAULT_FILES;
+  let files;
+  if (saved) {
+    files = JSON.parse(saved);
+  } else {
+    const r = await fetch('./defaults.json');
+    files = await r.json();
+  }
+
   const mountTree = Object.fromEntries(
-    Object.entries(files).map(([p, c]) => [p, { file: { contents: c } }])
+    Object.entries(files).map(([p, c]) => {
+      const parts = p.split('/');
+      if (parts.length === 1) return [p, { file: { contents: c } }];
+      return [p, { file: { contents: c } }];
+    })
   );
 
   term.write('Booting WebContainer...\r\n');
@@ -112,7 +94,7 @@ async function boot() {
   const srv = await container.spawn('node', ['server.js']);
   srv.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
 
-  term.write('\x1b[32mReady.\x1b[0m\r\n');
+  term.write('\x1b[32mReady. Run: GEMINI_API_KEY=<key> node agent.js\x1b[0m\r\n');
 
   const shell = await container.spawn('jsh', [], {
     terminal: { cols: term.cols, rows: term.rows },
@@ -122,7 +104,7 @@ async function boot() {
   const writer = shell.input.getWriter();
   term.onData(data => writer.write(data));
 
-  await snapshotToIDB(container, files);
+  await snapshotToIDB(container, Object.keys(files));
 
   window.__debug = window.__debug || {};
   window.__debug.container = container;
