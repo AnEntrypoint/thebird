@@ -31,8 +31,12 @@ bird-chat { display: flex; flex-direction: column; height: 100%; }
   <div id="pane-term" class="flex flex-col flex-1 overflow-hidden hidden bg-black">
     <div id="term-container" class="flex-1"></div>
   </div>
-  <div id="pane-preview" class="flex-1 overflow-hidden hidden">
-    <iframe id="preview-frame" class="w-full h-full border-0" src="about:blank"></iframe>
+  <div id="pane-preview" class="flex flex-col flex-1 overflow-hidden hidden">
+    <div class="flex gap-2 px-3 py-1 bg-base-200 border-b border-base-300 shrink-0">
+      <button class="btn btn-xs btn-ghost" onclick="document.getElementById('preview-frame').src='preview/'">↺ Reload</button>
+      <span class="text-xs text-base-content/50 self-center">preview/</span>
+    </div>
+    <iframe id="preview-frame" class="w-full flex-1 border-0" src="about:blank"></iframe>
   </div>
 </div>
 <script>
@@ -41,6 +45,10 @@ function switchTab(t) {
     document.getElementById('pane-' + id).classList.toggle('hidden', id !== t);
     document.getElementById('tab-' + id).classList.toggle('tab-active', id === t);
   });
+  if (t === 'preview') {
+    const f = document.getElementById('preview-frame');
+    if (f.src === 'about:blank' || f.src === '') f.src = 'preview/';
+  }
 }
 </script>
 <script type="module" src="app.js"></script>
