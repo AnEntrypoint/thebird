@@ -65,6 +65,7 @@ async function boot() {
     const [wasmResp] = await Promise.all([
       fetch('./vendor/bash.wasm'),
       init({
+        module: fetch('./vendor/wasmer_js_bg.wasm'),
         workerUrl: absUrl('./vendor/wasmer-worker.js'),
         sdkUrl: absUrl('./vendor/wasmer-sdk.js'),
       }),
