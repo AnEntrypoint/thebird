@@ -84,7 +84,14 @@ class BirdChat extends HTMLElement {
     if (this.state.apiKey) this.loadModels(this.state.apiKey);
   }
 
-  setState(patch) { Object.assign(this.state, patch); this.render(); }
+  setState(patch) {
+    Object.assign(this.state, patch);
+    this.render();
+    if (this.streamWrap && !this.querySelector('#msg-list')?.contains(this.streamWrap)) {
+      const list = this.querySelector('#msg-list');
+      if (list) list.appendChild(this.streamWrap);
+    }
+  }
 
   async loadModels(apiKey) {
     this.setState({ modelsLoading: true, status: '' });
@@ -156,25 +163,29 @@ class BirdChat extends HTMLElement {
     this.setState({ messages, streaming: true, status: '', streamingText: '' });
     try {
       let full = '';
-      const streamEl = document.createElement('div');
-      streamEl.className = 'msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed';
+      this.streamEl = document.createElement('div');
+      this.streamEl.className = 'msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed';
       const cursor = document.createElement('span');
       cursor.className = 'animate-pulse ml-1';
       cursor.textContent = '▋';
+      this.streamWrap = document.createElement('div');
+      this.streamWrap.className = 'flex justify-start';
+      this.streamWrap.appendChild(this.streamEl);
+      this.streamWrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
-      const wrap = document.createElement('div');
-      wrap.className = 'flex justify-start';
-      wrap.appendChild(streamEl);
-      wrap.appendChild(cursor);
-      if (list) list.appendChild(wrap);
+      if (list) list.appendChild(this.streamWrap);
       for await (const chunk of streamGenerate(apiKey, model, convertMessages(messages))) {
         full += chunk;
-        streamEl.textContent = full;
-        if (list) list.scrollTop = list.scrollHeight;
+        this.streamEl.textContent = full;
+        const l = this.querySelector('#msg-list');
+        if (l) l.scrollTop = l.scrollHeight;
       }
-      wrap.remove();
+      this.streamWrap.remove();
+      this.streamEl = null;
+      this.streamWrap = null;
       this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
-      if (list) list.scrollTop = list.scrollHeight;
+      const l2 = this.querySelector('#msg-list');
+      if (l2) l2.scrollTop = l2.scrollHeight;
     } catch (err) {
       this.setState({ streaming: false, streamingText: '', status: 'Error: ' + (err?.message || String(err)) });
     }
