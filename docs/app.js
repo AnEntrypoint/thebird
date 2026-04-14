@@ -3,15 +3,45 @@ import htm from 'https://esm.sh/htm@3';
 
 const html = htm.bind(createElement);
 
-const MODELS_API = key => `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 async function fetchModels(apiKey) {
-  const res = await fetch(MODELS_API(apiKey));
-  if (!res.ok) throw new Error(`Models API ${res.status}: ${await res.text()}`);
+  const res = await fetch(`${BASE}/models?key=${apiKey}`);
+  if (!res.ok) throw new Error(`Models API ${res.status}`);
   const { models = [] } = await res.json();
   return models
     .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
     .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
+}
+
+async function* streamGenerate(apiKey, model, contents) {
+  const res = await fetch(`${BASE}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } }),
+  });
+  if (!res.ok) throw new Error(`Generate API ${res.status}: ${await res.text()}`);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const json = line.slice(6).trim();
+      if (!json || json === '[DONE]') continue;
+      try {
+        const chunk = JSON.parse(json);
+        for (const c of (chunk.candidates || []))
+          for (const p of (c.content?.parts || []))
+            if (p.text && !p.thought) yield p.text;
+      } catch {}
+    }
+  }
 }
 
 function convertMessages(messages) {
@@ -25,25 +55,12 @@ function convertMessages(messages) {
     if (Array.isArray(m.content)) {
       const parts = m.content.map(b => {
         if (b.type === 'text' && b.text) return { text: b.text };
-        if (b.type === 'tool_use') return { functionCall: { name: b.name, args: b.input || {} } };
-        if (b.type === 'tool_result') {
-          let resp;
-          try { resp = typeof b.content === 'string' ? JSON.parse(b.content) : (b.content || {}); }
-          catch { resp = { result: b.content }; }
-          return { functionResponse: { name: b.name || 'unknown', response: resp } };
-        }
         return null;
       }).filter(Boolean);
       if (parts.length) contents.push({ role, parts });
     }
   }
   return contents;
-}
-
-function buildConfig({ system, temperature } = {}) {
-  const config = { maxOutputTokens: 8192, temperature: temperature ?? 0.7 };
-  if (system) config.systemInstruction = system;
-  return config;
 }
 
 class BirdChat extends HTMLElement {
@@ -83,7 +100,7 @@ class BirdChat extends HTMLElement {
 
   render() {
     const { messages, streaming, model, apiKey, models, modelsLoading, status, streamingText } = this.state;
-    const modelOptions = (models.length === 0 ? [{ id: model, label: model }] : models)
+    const opts = (models.length === 0 ? [{ id: model, label: model }] : models)
       .map(m => html`<option value=${m.id} selected=${m.id === model}>${m.label}</option>`);
 
     applyDiff(this, html`
@@ -99,7 +116,7 @@ class BirdChat extends HTMLElement {
               ${modelsLoading
                 ? html`<span class="loading loading-spinner loading-sm text-primary"></span>`
                 : html`<select class="select select-sm select-bordered" value=${model} disabled=${models.length === 0}
-                    onchange=${e => this.setState({ model: e.target.value })}>${modelOptions}</select>`}
+                    onchange=${e => this.setState({ model: e.target.value })}>${opts}</select>`}
             </div>
             <button class="btn btn-sm btn-ghost" onclick=${() => this.setState({ messages: [], status: '' })}>Clear</button>
           </div>
@@ -142,14 +159,10 @@ class BirdChat extends HTMLElement {
     const messages = [...this.state.messages, { role: 'user', content: text }];
     this.setState({ messages, streaming: true, status: '', streamingText: '' });
     try {
-      const { GoogleGenAI } = await import('https://esm.sh/@google/genai@1');
-      const ai = new GoogleGenAI({ apiKey });
-      const stream = await ai.models.generateContentStream({ model, contents: convertMessages(messages), config: buildConfig() });
       let full = '';
-      for await (const chunk of stream) {
-        for (const candidate of (chunk.candidates || []))
-          for (const part of (candidate.content?.parts || []))
-            if (part.text && !part.thought) { full += part.text; this.setState({ streamingText: full }); }
+      for await (const chunk of streamGenerate(apiKey, model, convertMessages(messages))) {
+        full += chunk;
+        this.setState({ streamingText: full });
       }
       const list = document.getElementById('msg-list');
       if (list) list.scrollTop = list.scrollHeight;
