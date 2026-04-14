@@ -119,3 +119,11 @@ Run examples against real Gemini API to validate message translation.
 - `index.js`: Main entry point, streaming and generation wrappers
 - `index.d.ts`: TypeScript type definitions
 - `examples/`: Working examples using Anthropic SDK format
+- `wasi/cli.ts`: Deno streaming CLI — `deno run --allow-net --allow-env wasi/cli.ts [--model M] [--system S] <prompt>`
+- `deno.json`: tasks `cli` (run) and `cli:compile` (→ `dist/thebird` binary)
+
+## Environment Notes
+
+- Repo remote: `https://github.com/AnEntrypoint/thebird.git` (capital A)
+- Deno 2.1.3 available; `exec:bash` uses PowerShell — use `exec:cmd` with `set KEY=val && cmd` syntax for env vars
+- Windows `KEY=val cmd` inline env syntax fails in PowerShell
