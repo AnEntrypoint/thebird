@@ -54,10 +54,11 @@ class BirdChat extends HTMLElement {
       apiKey: localStorage.getItem('gemini_api_key') || '',
       models: [], modelsLoading: false, status: '', streamingText: '',
     };
+    const self = this;
     window.__debug = {
-      get state() { return this.state; }.bind(this),
-      get messages() { return this.state.messages; }.bind(this),
-      get models() { return this.state.models; }.bind(this),
+      get state() { return self.state; },
+      get messages() { return self.state.messages; },
+      get models() { return self.state.models; },
     };
   }
 
