@@ -93,7 +93,7 @@ class BirdChat extends HTMLElement {
   }
 
   render() {
-    const { messages, streaming, model, apiKey, models, modelsLoading, status, providerType, baseUrl } = this.state;
+    const { messages, streaming, model, apiKey, models, modelsLoading, status, providerType, baseUrl, streamingText } = this.state;
     const provDef = PROVIDERS[providerType] || PROVIDERS.custom;
     const opts = (models.length === 0 ? (provDef.models.length ? provDef.models.map(id => ({ id, label: id })) : [{ id: model, label: model }]) : models)
       .map(m => html`<option value=${m.id} selected=${m.id === model}>${m.label}</option>`);
