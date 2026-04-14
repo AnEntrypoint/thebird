@@ -182,19 +182,11 @@ Messages follow the Anthropic SDK format. All image block variants are supported
 
 Live at **[anentrypoint.github.io/thebird](https://anentrypoint.github.io/thebird/)**
 
-- **Chat tab** — Agentic chat powered by thebird `streamGemini` running in-browser (bundled in `docs/vendor/thebird-browser.js`). Tools: `read_file`, `write_file`, `list_files` (IDB-backed, no container required), `run_command` (WebContainer shell), `read_terminal` (xterm buffer snapshot), `send_to_terminal` (jsh stdin). No proxy server required. Gemini API key stored in localStorage.
-- **Terminal tab** — WebContainer (in-browser Node.js) booting thebird's full stack: `npm install`, `node server.js` (Anthropic→Gemini proxy on port 3000), then a `jsh` shell. Run Agent button validates the agent loop from the terminal.
-- **Preview tab** — iframe pointed at the WebContainer's HTTP server, live-updated when the server starts
+- **Chat tab** — Agentic chat powered by thebird `streamGemini` running in-browser (bundled in `docs/vendor/thebird-browser.js`). Tools: `read_file`, `write_file`, `list_files` (IDB-backed), `run_command`, `read_terminal`, `send_to_terminal`. No proxy server required. Gemini API key stored in localStorage.
+- **Terminal tab** — Browser-native POSIX shell (xstate v5 state machine, V8 eval) backed by IndexedDB filesystem. Built-in commands: `ls`, `cat`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`, `echo`, `env`, `export`, `node`, `npm install`. Node REPL mode with persistent scope, `require()` from IDB node_modules, `http.createServer` polyfill. No WebContainer or server required.
+- **Preview tab** — iframe served by a service worker reading files from IDB at `/preview/*`. Hot-reloads 5s after any file write.
 
 All JS and CSS dependencies are vendored locally in `docs/vendor/` — no CDN required at runtime.
-
-Run the agentic CLI inside the terminal tab:
-
-```
-GEMINI_API_KEY=<key> node agent.js "your task"
-```
-
-`agent.js` uses `@anthropic-ai/sdk` pointing at `http://localhost:3000` (thebird proxy) with tools: `read_file`, `write_file`, `run_command`.
 
 ## License
 
