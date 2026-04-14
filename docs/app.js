@@ -156,7 +156,7 @@ class BirdChat extends HTMLElement {
     const text = input?.value.trim();
     if (!text || this.state.streaming) return;
     const { apiKey, model, providerType, baseUrl } = this.state;
-    if (!apiKey) { this.setState({ status: 'Enter an API key above.' }); return; }
+    if (!apiKey && providerType !== 'acp') { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
     const messages = [...this.state.messages, { role: 'user', content: text }];
