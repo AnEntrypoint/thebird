@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="version" content="1.2.22">
+<meta name="version" content="1.2.23">
 <title>thebird — Gemini chat + terminal</title>
+<script>window.coi = { coepDegrade: () => false };</script>
 <script src="coi-serviceworker.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rippleui@1.12.1/dist/css/styles.css" />
@@ -32,7 +33,7 @@
     <div id="term-container" style="height:100%"></div>
   </div>
   <div id="pane-preview" class="flex-1 overflow-hidden hidden">
-    <iframe id="preview-frame" class="w-full h-full border-0" src="about:blank" allow="cross-origin-isolated *"></iframe>
+    <iframe id="preview-frame" class="w-full h-full border-0" src="about:blank"></iframe>
   </div>
 </div>
 <script>
