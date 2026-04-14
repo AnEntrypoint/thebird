@@ -10,7 +10,8 @@ const PROVIDERS = {
   groq:     { label: 'Groq',            baseUrl: 'https://api.groq.com/openai/v1',                   keyPlaceholder: 'GROQ_API_KEY',   models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'] },
   mistral:  { label: 'Mistral',         baseUrl: 'https://api.mistral.ai/v1',                        keyPlaceholder: 'MISTRAL_API_KEY', models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
   deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
-  custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                           keyPlaceholder: 'API_KEY',        models: [] },
+  acp:      { label: 'ACP Agent',             baseUrl: 'ws://localhost:3000',                       keyPlaceholder: '(no key needed)', models: ['default'] },
+  custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 
 async function fetchGeminiModels(apiKey) {
@@ -106,18 +107,18 @@ class BirdChat extends HTMLElement {
           <div class="flex gap-2 flex-1 min-w-0 items-center flex-wrap">
             <select class="select select-sm select-bordered"
               onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
-            ${providerType === 'custom' ? html`
+            ${(providerType === 'custom' || providerType === 'acp') ? html`
               <input type="text" class="input input-sm input-bordered flex-1 min-w-[160px]"
-                placeholder="https://your-endpoint/v1" value=${baseUrl}
+                placeholder=${providerType === 'acp' ? 'ws://localhost:3000' : 'https://your-endpoint/v1'} value=${baseUrl}
                 onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
-            <input id="api-key-input" type="password" class="input input-sm input-bordered flex-1 min-w-[140px]"
+            ${providerType !== 'acp' ? html`<input id="api-key-input" type="password" class="input input-sm input-bordered flex-1 min-w-[140px]"
               placeholder=${provDef.keyPlaceholder} value=${apiKey}
               onchange=${e => {
                 const v = e.target.value.trim();
                 localStorage.setItem('provider_api_key', v);
                 this.setState({ apiKey: v });
                 if (v) this.loadModels();
-              }} />
+              }} />` : ''}
             <div class="relative">
               ${modelsLoading
                 ? html`<span class="loading loading-spinner loading-sm text-primary"></span>`
