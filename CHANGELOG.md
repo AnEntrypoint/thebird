@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `docs/terminal.js`: build nested WebContainer mount tree from flat path keys (fixes `EIO: invalid file name` for files in subdirectories like `lib/providers/openai.js`); bump IDB_KEY to `thebird_fs_v2` to force re-fetch of defaults.json for users with stale cache
+
 ### Added
 - `docs/defaults.json`: JSON blob of all thebird lib files + `server.js` + `agent.js` fetched by terminal.js on first boot
 - `docs/terminal.js`: fetches `defaults.json` instead of hardcoded DEFAULT_FILES; jsh PTY shell with resize; `server-ready` wires iframe src + `window.__debug.previewUrl`; all debug keys registered
