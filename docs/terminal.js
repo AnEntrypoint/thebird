@@ -43,8 +43,7 @@ let reloadTimer = null;
 function scheduleReload() {
   clearTimeout(reloadTimer);
   reloadTimer = setTimeout(() => {
-    const frame = document.getElementById('preview-frame');
-    if (frame) frame.src = frame.src;
+    if (typeof window.refreshPreview === 'function') window.refreshPreview();
   }, 5000);
 }
 
