@@ -14,19 +14,6 @@ async function fetchModels(apiKey) {
     .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
 }
 
-function convertMessages(messages) {
-  const out = [];
-  for (const m of messages) {
-    const role = m.role === 'assistant' ? 'model' : 'user';
-    if (typeof m.content === 'string') {
-      if (m.content) out.push({ role, parts: [{ text: m.content }] });
-    } else if (Array.isArray(m.content)) {
-      const parts = m.content.flatMap(b => b.type === 'text' && b.text ? [{ text: b.text }] : []);
-      if (parts.length) out.push({ role, parts });
-    }
-  }
-  return out;
-}
 
 class BirdChat extends HTMLElement {
   constructor() {
@@ -132,7 +119,7 @@ class BirdChat extends HTMLElement {
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
       if (list) list.appendChild(wrap);
-      await agentGenerate(apiKey, model, convertMessages(messages),
+      await agentGenerate(apiKey, model, messages,
         chunk => { full += chunk; streamEl.textContent = full; const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; },
         (name, args) => { full += `\n[tool: ${name}(${JSON.stringify(args)})]\n`; streamEl.textContent = full; }
       );
