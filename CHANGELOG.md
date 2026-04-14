@@ -1,3 +1,10 @@
+## [Unreleased - browser-sdk]
+
+### Added
+- `docs/vendor/thebird-browser.js`: thebird `streamGemini`/`generateGemini` bundled for browser via esbuild (712KB, includes @google/genai browser build)
+- `docs/agent-chat.js`: rewritten to use thebird `streamGemini` directly; TOOLS map with `read_file`, `write_file`, `run_command` dispatch to `window.__debug.container` (WebContainer); `window.__debug.agent` live state; removes raw Gemini REST API dependency
+- `docs/app.js`: removed `convertMessages` (now handled internally by thebird); passes raw Anthropic-format messages to `agentGenerate`
+
 # Changelog
 
 ## [Unreleased]
