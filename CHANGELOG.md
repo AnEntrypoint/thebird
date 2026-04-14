@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+- Gemini tool result wrapping: string results wrapped as `{ output: result }` to satisfy Gemini Struct requirement for `function_response.response`
+- Browser bundle rebuilt with fix
+
 ## [Unreleased - agent-tools]
 
 ### Added
