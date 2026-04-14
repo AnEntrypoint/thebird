@@ -1,11 +1,15 @@
 import { createElement, applyDiff } from 'webjsx';
 
-const MODELS = [
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-thinking-exp',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
-];
+const MODELS_API = key => `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+
+async function fetchModels(apiKey) {
+  const res = await fetch(MODELS_API(apiKey));
+  if (!res.ok) throw new Error(`Models API ${res.status}: ${await res.text()}`);
+  const { models = [] } = await res.json();
+  return models
+    .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+    .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
+}
 
 function convertMessages(messages) {
   const contents = [];
@@ -45,20 +49,42 @@ class BirdChat extends HTMLElement {
     this.state = {
       messages: [],
       streaming: false,
-      model: MODELS[0],
+      model: 'gemini-2.5-flash',
       apiKey: localStorage.getItem('gemini_api_key') || '',
+      models: [],
+      modelsLoading: false,
       status: '',
       streamingText: '',
     };
-    window.__debug = { get state() { return this.state; }.bind(this), get messages() { return this.state.messages; }.bind(this) };
+    window.__debug = {
+      get state() { return this.state; }.bind(this),
+      get messages() { return this.state.messages; }.bind(this),
+      get models() { return this.state.models; }.bind(this),
+    };
   }
 
-  connectedCallback() { this.render(); }
+  connectedCallback() {
+    this.render();
+    if (this.state.apiKey) this.loadModels(this.state.apiKey);
+  }
 
   setState(patch) { Object.assign(this.state, patch); this.render(); }
 
+  async loadModels(apiKey) {
+    this.setState({ modelsLoading: true, status: '' });
+    try {
+      const models = await fetchModels(apiKey);
+      const current = this.state.model;
+      const first = models[0]?.id || 'gemini-2.5-flash';
+      const model = models.find(m => m.id === current) ? current : first;
+      this.setState({ models, model, modelsLoading: false });
+    } catch (err) {
+      this.setState({ modelsLoading: false, status: 'Failed to load models: ' + (err?.message || String(err)) });
+    }
+  }
+
   render() {
-    const { messages, streaming, model, apiKey, status, streamingText } = this.state;
+    const { messages, streaming, model, apiKey, models, modelsLoading, status, streamingText } = this.state;
     applyDiff(this, (
       <div class="flex flex-col h-full">
         <header class="navbar bg-base-200 border-b border-base-300 gap-2 flex-wrap px-4 py-2">
@@ -71,15 +97,26 @@ class BirdChat extends HTMLElement {
               class="input input-sm input-bordered flex-1 min-w-[160px]"
               placeholder="GEMINI_API_KEY"
               value={apiKey}
-              onchange={e => { const v = e.target.value.trim(); localStorage.setItem('gemini_api_key', v); this.setState({ apiKey: v }); }}
+              onchange={e => {
+                const v = e.target.value.trim();
+                localStorage.setItem('gemini_api_key', v);
+                this.setState({ apiKey: v });
+                if (v) this.loadModels(v);
+              }}
             />
-            <select
-              class="select select-sm select-bordered"
-              value={model}
-              onchange={e => this.setState({ model: e.target.value })}
-            >
-              {MODELS.map(m => <option value={m} selected={m === model}>{m}</option>)}
-            </select>
+            <div class="relative">
+              {modelsLoading
+                ? <span class="loading loading-spinner loading-sm text-primary"></span>
+                : <select
+                    class="select select-sm select-bordered"
+                    value={model}
+                    disabled={models.length === 0}
+                    onchange={e => this.setState({ model: e.target.value })}
+                  >
+                    {(models.length === 0 ? [{ id: model, label: model }] : models).map(m => <option value={m.id} selected={m.id === model}>{m.label}</option>)}
+                  </select>
+              }
+            </div>
             <button class="btn btn-sm btn-ghost" onclick={() => this.setState({ messages: [], status: '' })}>Clear</button>
           </div>
         </header>
@@ -97,11 +134,7 @@ class BirdChat extends HTMLElement {
               <div class="msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed">{streamingText}<span class="animate-pulse ml-1">▋</span></div>
             </div>
           )}
-          {!streamingText && streaming && (
-            <div class="flex justify-start">
-              <div class="card bg-base-200 px-4 py-3"><span class="loading loading-dots loading-sm"></span></div>
-            </div>
-          )}
+          {!streamingText && streaming && <div class="flex justify-start"><div class="card bg-base-200 px-4 py-3"><span class="loading loading-dots loading-sm"></span></div></div>}
         </div>
 
         {status && <div class="text-xs text-error px-4 pb-1">{status}</div>}
