@@ -1,4 +1,5 @@
 import { streamGemini, streamOpenAI } from './vendor/thebird-browser.js';
+import { streamACP } from './acp-stream.js';
 
 function idbRead(path) {
   const snap = window.__debug.idbSnapshot;
@@ -88,6 +89,9 @@ const TOOLS = {
 function buildStream(provider) {
   if (provider.type === 'gemini') {
     return streamGemini({ model: provider.model, messages: provider.messages, tools: TOOLS, apiKey: provider.apiKey, maxOutputTokens: 8192 }).fullStream;
+  }
+  if (provider.type === 'acp') {
+    return streamACP({ url: provider.baseUrl, model: provider.model, messages: provider.messages, tools: TOOLS, maxOutputTokens: 8192 });
   }
   const url = (provider.baseUrl || '').replace(/\/$/, '') + '/chat/completions';
   return streamOpenAI({ url, apiKey: provider.apiKey, messages: provider.messages, model: provider.model, tools: TOOLS, maxOutputTokens: 8192 });

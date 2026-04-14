@@ -119,18 +119,6 @@ async function boot() {
   window.__debug.idbPersist = () => idbSave(JSON.stringify(window.__debug.idbSnapshot));
   window.__debug.srv = srv;
   window.__debug.validation = null;
-  window.__debug.runAgent = async (key, task) => {
-    if (!key) { window.__debug.validation = { error: 'GEMINI_API_KEY required' }; return; }
-    window.__debug.validation = { running: true, output: '', exitCode: null };
-    const proc = await container.spawn('node', ['agent.js', task], { env: { GEMINI_API_KEY: key } });
-    proc.output.pipeTo(new WritableStream({ write: d => {
-      window.__debug.validation.output += d;
-      term.write(d);
-    }}));
-    const code = await proc.exit;
-    window.__debug.validation.running = false;
-    window.__debug.validation.exitCode = code;
-  };
 }
 
 boot().catch(e => console.error('[terminal] boot error:', e));
