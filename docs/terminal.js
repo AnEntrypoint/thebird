@@ -1,6 +1,5 @@
-import { WebContainer } from 'https://esm.sh/@webcontainer/api';
-import { Terminal } from 'https://esm.sh/@xterm/xterm';
-import { FitAddon } from 'https://esm.sh/@xterm/addon-fit';
+import { WebContainer } from './vendor/webcontainer.js';
+import { Terminal, FitAddon } from './vendor/xterm-bundle.js';
 
 const IDB_KEY = 'thebird_fs_v2';
 
