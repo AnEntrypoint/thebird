@@ -160,13 +160,19 @@ class BirdChat extends HTMLElement {
     this.setState({ messages, streaming: true, status: '', streamingText: '' });
     try {
       let full = '';
-      for await (const chunk of streamGenerate(apiKey, model, convertMessages(messages))) {
+      let rafPending = false;
+      const gen = streamGenerate(apiKey, model, convertMessages(messages));
+      for await (const chunk of gen) {
         full += chunk;
-        this.setState({ streamingText: full });
+        if (!rafPending) {
+          rafPending = true;
+          const snap = full;
+          requestAnimationFrame(() => { this.setState({ streamingText: snap }); rafPending = false; });
+        }
       }
+      this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
       const list = document.getElementById('msg-list');
       if (list) list.scrollTop = list.scrollHeight;
-      this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
     } catch (err) {
       this.setState({ streaming: false, streamingText: '', status: 'Error: ' + (err?.message || String(err)) });
     }
