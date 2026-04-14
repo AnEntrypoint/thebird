@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+- `docs/agent-chat.js`: Gemini function-calling agentic loop; tools `read_file`, `write_file`, `run_command` dispatch to `window.__debug.container` (WebContainer FS + spawn)
+- `docs/app.js`: imports `agentGenerate` from `agent-chat.js`; chat `send()` now runs agentic tool loop; `window.__debug` constructor uses `Object.assign` merge to not overwrite terminal.js keys; `streamGenerate` removed; `convertMessages` simplified
+
+### Added (prev)
 - `docs/index.html`: GEMINI_API_KEY input + Run Agent button in Terminal tab toolbar for in-browser agent validation
 - `docs/terminal.js`: `window.__debug.runAgent(key, task)` spawns `node agent.js` with env, pipes output to terminal, tracks `{ running, output, exitCode }` in `window.__debug.validation`
 

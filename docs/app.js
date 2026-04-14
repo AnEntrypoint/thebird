@@ -1,5 +1,5 @@
-import { createElement, applyDiff } from 'https://esm.sh/webjsx@0.0.73';
-import htm from 'https://esm.sh/htm@3';
+import { createElement, applyDiff, htm } from './vendor/ui-libs.js';
+import { agentGenerate } from './agent-chat.js';
 
 const html = htm.bind(createElement);
 
@@ -14,53 +14,18 @@ async function fetchModels(apiKey) {
     .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
 }
 
-async function streamGenerate(apiKey, model, contents, onChunk) {
-  const res = await fetch(`${BASE}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } }),
-  });
-  if (!res.ok) throw new Error(`Generate API ${res.status}: ${await res.text()}`);
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const json = line.slice(6).trim();
-      if (!json || json === '[DONE]') continue;
-      try {
-        const chunk = JSON.parse(json);
-        for (const c of (chunk.candidates || []))
-          for (const p of (c.content?.parts || []))
-            if (p.text && !p.thought) onChunk(p.text);
-      } catch {}
-    }
-  }
-}
-
 function convertMessages(messages) {
-  const contents = [];
+  const out = [];
   for (const m of messages) {
     const role = m.role === 'assistant' ? 'model' : 'user';
     if (typeof m.content === 'string') {
-      if (m.content) contents.push({ role, parts: [{ text: m.content }] });
-      continue;
-    }
-    if (Array.isArray(m.content)) {
-      const parts = m.content.map(b => {
-        if (b.type === 'text' && b.text) return { text: b.text };
-        return null;
-      }).filter(Boolean);
-      if (parts.length) contents.push({ role, parts });
+      if (m.content) out.push({ role, parts: [{ text: m.content }] });
+    } else if (Array.isArray(m.content)) {
+      const parts = m.content.flatMap(b => b.type === 'text' && b.text ? [{ text: b.text }] : []);
+      if (parts.length) out.push({ role, parts });
     }
   }
-  return contents;
+  return out;
 }
 
 class BirdChat extends HTMLElement {
@@ -72,11 +37,11 @@ class BirdChat extends HTMLElement {
       models: [], modelsLoading: false, status: '', streamingText: '',
     };
     const self = this;
-    window.__debug = {
+    Object.assign(window.__debug = window.__debug || {}, {
       get state() { return self.state; },
       get messages() { return self.state.messages; },
       get models() { return self.state.models; },
-    };
+    });
   }
 
   connectedCallback() {
@@ -167,12 +132,10 @@ class BirdChat extends HTMLElement {
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
       if (list) list.appendChild(wrap);
-      await streamGenerate(apiKey, model, convertMessages(messages), chunk => {
-        full += chunk;
-        streamEl.textContent = full;
-        const l = this.querySelector('#msg-list');
-        if (l) l.scrollTop = l.scrollHeight;
-      });
+      await agentGenerate(apiKey, model, convertMessages(messages),
+        chunk => { full += chunk; streamEl.textContent = full; const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; },
+        (name, args) => { full += `\n[tool: ${name}(${JSON.stringify(args)})]\n`; streamEl.textContent = full; }
+      );
       wrap.remove();
       this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
       const l2 = this.querySelector('#msg-list');
