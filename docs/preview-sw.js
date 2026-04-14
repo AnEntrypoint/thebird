@@ -44,7 +44,7 @@ async function handlePreview(key, request) {
   const db = await openIDB();
   const fs = await getFS(db);
   if (key in fs) return new Response(fs[key], { status: 200, headers: { 'Content-Type': getMime(key) } });
-  const clients = await self.clients.matchAll({ type: 'window' });
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   if (!clients.length) return new Response('not found: ' + key, { status: 404 });
   const { port1, port2 } = new MessageChannel();
   const result = await new Promise((res, rej) => {
