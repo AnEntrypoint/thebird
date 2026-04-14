@@ -33,22 +33,45 @@ bird-chat { display: flex; flex-direction: column; height: 100%; }
   </div>
   <div id="pane-preview" class="flex flex-col flex-1 overflow-hidden hidden">
     <div class="flex gap-2 px-3 py-1 bg-base-200 border-b border-base-300 shrink-0">
-      <button class="btn btn-xs btn-ghost" onclick="document.getElementById('preview-frame').src='preview/'">↺ Reload</button>
-      <span class="text-xs text-base-content/50 self-center">preview/</span>
+      <button class="btn btn-xs btn-ghost" onclick="refreshPreview()">↺ Reload</button>
     </div>
-    <iframe id="preview-frame" class="w-full flex-1 border-0" src="about:blank" credentialless></iframe>
+    <iframe id="preview-frame" class="w-full flex-1 border-0" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   </div>
 </div>
 <script>
+function callExpressRoute(path, method) {
+  const handlers = window.__debug?.shell?.httpHandlers || {};
+  const app = Object.values(handlers)[0];
+  if (!app?.routes) return null;
+  const routes = app.routes[method || 'GET'] || [];
+  const match = routes.find(r => r.path === '*' || r.path === path || path.startsWith(r.path));
+  if (!match) return null;
+  return new Promise(resolve => {
+    const res = {
+      _body: '', _status: 200, _ct: 'text/html',
+      send(b) { this._body = b; resolve({ status: this._status, body: this._body, ct: this._ct }); },
+      json(o) { this._ct = 'application/json'; this.send(JSON.stringify(o)); },
+      status(n) { this._status = n; return this; },
+    };
+    try { match.fn({ method: method || 'GET', path, query: {}, headers: {} }, res); }
+    catch(e) { resolve({ status: 500, body: e.message, ct: 'text/plain' }); }
+  });
+}
+async function refreshPreview() {
+  const iframe = document.getElementById('preview-frame');
+  if (!iframe) return;
+  const result = await callExpressRoute('/');
+  if (result) { iframe.srcdoc = result.body; return; }
+  const snap = window.__debug?.idbSnapshot || {};
+  if (snap['index.html']) { iframe.srcdoc = snap['index.html']; return; }
+  iframe.srcdoc = '<p style="font-family:sans-serif;padding:2rem;color:#888">No express app running and no index.html in filesystem.<br>Run <code>node app.js</code> in the terminal.</p>';
+}
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {
     document.getElementById('pane-' + id).classList.toggle('hidden', id !== t);
     document.getElementById('tab-' + id).classList.toggle('tab-active', id === t);
   });
-  if (t === 'preview') {
-    const f = document.getElementById('preview-frame');
-    if (f.src === 'about:blank' || f.src === '') f.src = 'preview/';
-  }
+  if (t === 'preview') refreshPreview();
 }
 </script>
 <script type="module" src="app.js"></script>
