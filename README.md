@@ -182,7 +182,7 @@ Messages follow the Anthropic SDK format. All image block variants are supported
 
 Live at **[anentrypoint.github.io/thebird](https://anentrypoint.github.io/thebird/)**
 
-- **Chat tab** — Agentic chat powered by thebird `streamGemini` running in-browser (bundled in `docs/vendor/thebird-browser.js`). Tool use: `read_file`, `write_file`, `run_command` dispatch to WebContainer FS and shell. No proxy server required. Gemini API key stored in localStorage.
+- **Chat tab** — Agentic chat powered by thebird `streamGemini` running in-browser (bundled in `docs/vendor/thebird-browser.js`). Tools: `read_file`, `write_file`, `list_files` (IDB-backed, no container required), `run_command` (WebContainer shell), `read_terminal` (xterm buffer snapshot), `send_to_terminal` (jsh stdin). No proxy server required. Gemini API key stored in localStorage.
 - **Terminal tab** — WebContainer (in-browser Node.js) booting thebird's full stack: `npm install`, `node server.js` (Anthropic→Gemini proxy on port 3000), then a `jsh` shell. Run Agent button validates the agent loop from the terminal.
 - **Preview tab** — iframe pointed at the WebContainer's HTTP server, live-updated when the server starts
 
