@@ -53,18 +53,23 @@ function makeBuiltins(ctx) {
     export: ([kv]) => { const [k, ...v] = (kv || '').split('='); ctx.env[k] = v.join('='); },
     clear: () => ctx.term.clear(),
     help: () => wl(Object.keys(makeBuiltins(ctx)).join('  ')),
-    exit: () => { if (ctx.nodeMode) { ctx.nodeMode = false; wl('[shell]'); } },
-    node: async ([file]) => {
-      if (!file) { ctx.nodeMode = true; wl('[node repl — type exit to return]'); return; }
+    exit: (actor) => {
+      const st = actor.getSnapshot().value;
+      if (st === 'node-repl') { actor.send({ type: 'EXIT_REPL' }); wl('[shell]'); }
+    },
+    node: async ([file], actor) => {
+      if (!file) { actor.send({ type: 'ENTER_REPL' }); wl('[node repl — type exit to return]'); return; }
       const path = resolvePath(ctx.cwd, file);
       const code = snap()[path];
       if (code == null) throw new Error('no such file: ' + path);
+      actor.send({ type: 'NODE_START' });
       await ctx.nodeEval(code, path);
     },
-    npm: async args => {
+    npm: async (args, actor) => {
       if (args[0] !== 'install') throw new Error('only npm install supported');
       const pkg = args[1];
       if (!pkg) throw new Error('npm install <pkg>');
+      actor.send({ type: 'NPM_START' });
       w('fetching ' + pkg + '...\r\n');
       const r = await fetch('https://esm.sh/' + pkg);
       if (!r.ok) throw new Error('fetch failed: ' + r.status);
@@ -77,17 +82,28 @@ function makeBuiltins(ctx) {
 }
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
-  idle: { on: { RUN: 'executing' } },
+  idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NPM_START: 'npm-installing', NODE_START: 'node-running' } },
   executing: { on: { DONE: 'idle', ERROR: 'idle' } },
+  'npm-installing': { on: { DONE: 'idle', ERROR: 'idle' } },
+  'node-running': { on: { DONE: 'idle', ERROR: 'idle' } },
+  'node-repl': { on: { EXIT_REPL: 'idle', RUN: 'node-repl' } },
 }});
 
 export function createShell({ term, onPreviewWrite }) {
-  const ctx = { term, cwd: '/', env: {}, nodeMode: false, history: [], httpHandlers: {} };
+  const ctx = { term, cwd: '/', env: {}, history: [], httpHandlers: {} };
   const BUILTINS = makeBuiltins(ctx);
   ctx.nodeEval = createNodeEnv({ ctx, term });
 
   const actor = createActor(machine);
   actor.start();
+
+  let inputQueue = [];
+
+  function drainQueue(onData) {
+    const items = inputQueue.slice();
+    inputQueue = [];
+    for (const d of items) onData(d);
+  }
 
   window.__debug = window.__debug || {};
   window.__debug.shell = {
@@ -96,69 +112,87 @@ export function createShell({ term, onPreviewWrite }) {
     get env() { return ctx.env; },
     get history() { return ctx.history; },
     httpHandlers: ctx.httpHandlers,
-    get nodeMode() { return ctx.nodeMode; },
+    get inputQueue() { return inputQueue.slice(); },
   };
 
-  async function runCmd(line, capture) {
+  async function runCmd(line, capture, actor) {
     if (!line.trim()) return '';
     const [cmd, ...args] = line.trim().split(/\s+/);
     const fn = BUILTINS[cmd];
     if (!capture) {
-      if (fn) await fn(args); else term.write('command not found: ' + cmd + '\r\n');
+      if (fn) await fn(args, actor); else term.write('command not found: ' + cmd + '\r\n');
       return '';
     }
     let out = '';
     const orig = term.write.bind(term);
     term.write = s => { out += s; };
-    try { if (fn) await fn(args); else out += 'command not found: ' + cmd + '\r\n'; }
+    try { if (fn) await fn(args, actor); else out += 'command not found: ' + cmd + '\r\n'; }
     finally { term.write = orig; }
     return out;
   }
 
-  async function run(line) {
+  async function run(line, onData) {
     if (!line.trim()) return;
     ctx.history.push(line);
-    if (ctx.nodeMode && line.trim() !== 'exit') { await ctx.nodeEval(line); return; }
-    if (line.trim() === 'exit') { BUILTINS.exit([]); return; }
-    actor.send({ type: 'RUN' });
+    const st = actor.getSnapshot().value;
+    if (st === 'node-repl' && line.trim() !== 'exit') { await ctx.nodeEval(line); return; }
+    if (line.trim() === 'exit') { BUILTINS.exit(actor); return; }
+    const [cmd] = line.trim().split(/\s+/);
+    if (cmd !== 'npm' && cmd !== 'node') actor.send({ type: 'RUN' });
     try {
       const parts = line.split(' | ');
       if (parts.length > 1) {
-        let buf = await runCmd(parts[0], true);
+        let buf = await runCmd(parts[0], true, actor);
         for (const p of parts.slice(1)) {
-          const [cmd, ...args] = p.trim().split(/\s+/);
-          const fn = BUILTINS[cmd];
-          if (fn) await fn([buf, ...args]); else term.write('command not found: ' + cmd + '\r\n');
+          const [c, ...a] = p.trim().split(/\s+/);
+          const fn = BUILTINS[c];
+          if (fn) await fn([buf, ...a], actor); else term.write('command not found: ' + c + '\r\n');
           buf = '';
         }
       } else {
-        await runCmd(line, false);
+        await runCmd(line, false, actor);
       }
       actor.send({ type: 'DONE' });
+      drainQueue(onData);
     } catch (e) {
       term.write('\x1b[31m' + e.message + '\x1b[0m\r\n');
       actor.send({ type: 'ERROR' });
+      drainQueue(onData);
     }
   }
 
   const prompt = () => term.write('\r\n\x1b[32m' + ctx.cwd + ' $ \x1b[0m');
   let buf = '';
-  term.onData(async data => {
+
+  function onData(data) {
+    if (data === '\x03') {
+      actor.send({ type: 'ERROR' });
+      inputQueue = [];
+      buf = '';
+      term.write('^C');
+      prompt();
+      return;
+    }
+    const st = actor.getSnapshot().value;
+    if (st !== 'idle' && st !== 'node-repl') {
+      inputQueue.push(data);
+      return;
+    }
     if (data === '\r') {
       term.write('\r\n');
       const line = buf;
       buf = '';
-      await run(line);
-      prompt();
+      run(line, onData).then(() => prompt());
     } else if (data === '\x7f') {
       if (buf.length) { buf = buf.slice(0, -1); term.write('\x08 \x08'); }
     } else {
       buf += data;
       term.write(data);
     }
-  });
+  }
 
+  term.onData(onData);
   onPreviewWrite && (window.__debug.shell.onPreviewWrite = onPreviewWrite);
   prompt();
-  return { run };
+  return { run: line => run(line, onData) };
 }
