@@ -127,11 +127,7 @@ class BirdChat extends HTMLElement {
             <div key=${i} class=${'flex ' + (m.role === 'user' ? 'justify-end' : 'justify-start')}>
               <div class=${'msg-bubble card px-4 py-3 text-sm leading-relaxed ' + (m.role === 'user' ? 'bg-primary text-primary-content' : 'bg-base-200 text-base-content')}>${m.content}</div>
             </div>`)}
-          ${streamingText && html`
-            <div class="flex justify-start">
-              <div class="msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed">${streamingText}<span class="animate-pulse ml-1">▋</span></div>
-            </div>`}
-          ${!streamingText && streaming && html`<div class="flex justify-start"><div class="card bg-base-200 px-4 py-3"><span class="loading loading-dots loading-sm"></span></div></div>`}
+          ${streaming && !streamingText && html`<div class="flex justify-start"><div class="card bg-base-200 px-4 py-3"><span class="loading loading-dots loading-sm"></span></div></div>`}
         </div>
 
         ${status && html`<div class="text-xs text-error px-4 pb-1">${status}</div>`}
@@ -160,18 +156,24 @@ class BirdChat extends HTMLElement {
     this.setState({ messages, streaming: true, status: '', streamingText: '' });
     try {
       let full = '';
-      let rafPending = false;
-      const gen = streamGenerate(apiKey, model, convertMessages(messages));
-      for await (const chunk of gen) {
+      const streamEl = document.createElement('div');
+      streamEl.className = 'msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed';
+      const cursor = document.createElement('span');
+      cursor.className = 'animate-pulse ml-1';
+      cursor.textContent = '▋';
+      const list = this.querySelector('#msg-list');
+      const wrap = document.createElement('div');
+      wrap.className = 'flex justify-start';
+      wrap.appendChild(streamEl);
+      wrap.appendChild(cursor);
+      if (list) list.appendChild(wrap);
+      for await (const chunk of streamGenerate(apiKey, model, convertMessages(messages))) {
         full += chunk;
-        if (!rafPending) {
-          rafPending = true;
-          const snap = full;
-          requestAnimationFrame(() => { this.setState({ streamingText: snap }); rafPending = false; });
-        }
+        streamEl.textContent = full;
+        if (list) list.scrollTop = list.scrollHeight;
       }
+      wrap.remove();
       this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
-      const list = document.getElementById('msg-list');
       if (list) list.scrollTop = list.scrollHeight;
     } catch (err) {
       this.setState({ streaming: false, streamingText: '', status: 'Error: ' + (err?.message || String(err)) });
