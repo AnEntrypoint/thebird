@@ -51,7 +51,7 @@ async function* createFullStream({ model, system, messages, tools, onStepFinish,
           catch (e) { result = { error: true, message: e.message }; }
         }
         yield { type: 'tool-result', toolCallId: toolId, toolName: name, args, result };
-        toolResultParts.push({ functionResponse: { name, response: result || {} } });
+        toolResultParts.push({ functionResponse: { name, response: typeof result === 'string' ? { output: result } : (result || {}) } });
       }
       yield { type: 'finish-step', finishReason: 'tool-calls' };
       if (onStepFinish) await onStepFinish();
@@ -91,7 +91,7 @@ async function generateGemini({ model, system, messages, tools, apiKey, temperat
         try { result = await toolDef.execute(args); }
         catch (e) { result = { error: true, message: e.message }; }
       }
-      toolResultParts.push({ functionResponse: { name, response: result || {} } });
+      toolResultParts.push({ functionResponse: { name, response: typeof result === 'string' ? { output: result } : (result || {}) } });
     }
     contents.push({ role: 'model', parts: allParts });
     contents.push({ role: 'user', parts: toolResultParts });
