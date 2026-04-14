@@ -1,5 +1,5 @@
-import { WebContainer } from './vendor/webcontainer.js';
 import { Terminal, FitAddon } from './vendor/xterm-bundle.js';
+import { init, runWasix } from './vendor/wasmer-sdk.js';
 
 const IDB_KEY = 'thebird_fs_v2';
 
@@ -30,12 +30,8 @@ async function idbSave(data) {
   });
 }
 
-async function snapshotToIDB(container, keys) {
-  const snap = {};
-  await Promise.all(keys.map(async p => {
-    try { snap[p] = await container.fs.readFile(p, 'utf-8'); } catch {}
-  }));
-  await idbSave(JSON.stringify(snap));
+function absUrl(path) {
+  return new URL(path, location.href).toString();
 }
 
 async function boot() {
@@ -58,67 +54,50 @@ async function boot() {
     files = await r.json();
   }
 
-  const mountTree = {};
-  for (const [path, contents] of Object.entries(files)) {
-    const parts = path.split('/');
-    const name = parts.pop();
-    let node = mountTree;
-    for (const dir of parts) {
-      if (!node[dir]) node[dir] = { directory: {} };
-      node = node[dir].directory;
-    }
-    node[name] = { file: { contents } };
-  }
-
-  term.write('Booting WebContainer...\r\n');
-  let container;
-  try {
-    container = await WebContainer.boot();
-  } catch (e) {
-    term.write('\x1b[31mBoot failed: ' + e.message + '\x1b[0m\r\n');
-    throw e;
-  }
-  await container.mount(mountTree);
-
-  container.on('server-ready', (port, url) => {
-    const frame = document.getElementById('preview-frame');
-    if (frame) frame.src = url;
-    window.__debug.previewUrl = url;
-    const btn = document.getElementById('tab-preview');
-    if (btn) btn.textContent = 'Preview :' + port;
-  });
-
-  term.write('Installing dependencies...\r\n');
-  const install = await container.spawn('npm', ['install']);
-  install.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
-  const exitCode = await install.exit;
-  if (exitCode !== 0) throw new Error('npm install failed: ' + exitCode);
-
-  const srv = await container.spawn('node', ['server.js']);
-  srv.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
-
-  term.write('\x1b[32mReady. Run: GEMINI_API_KEY=<key> node agent.js\x1b[0m\r\n');
-
-  const shell = await container.spawn('jsh', [], {
-    terminal: { cols: term.cols, rows: term.rows },
-  });
-  shell.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
-  term.onResize(({ cols, rows }) => shell.resize({ cols, rows }));
-  const writer = shell.input.getWriter();
-  term.onData(data => writer.write(data));
-
-  await snapshotToIDB(container, Object.keys(files));
-
   window.__debug = window.__debug || {};
-  window.__debug.container = container;
-  window.__debug.term = term;
-  window.__debug.previewUrl = null;
-  window.__debug.shell = shell;
-  window.__debug.shellWriter = writer;
   window.__debug.idbSnapshot = files;
   window.__debug.idbPersist = () => idbSave(JSON.stringify(window.__debug.idbSnapshot));
-  window.__debug.srv = srv;
-  window.__debug.validation = null;
+  window.__debug.term = term;
+
+  term.write('Initialising Wasmer...\r\n');
+
+  try {
+    const [wasmResp] = await Promise.all([
+      fetch('./vendor/bash.wasm'),
+      init({
+        workerUrl: absUrl('./vendor/wasmer-worker.js'),
+        sdkUrl: absUrl('./vendor/wasmer-sdk.js'),
+      }),
+    ]);
+
+    const bashModule = await WebAssembly.compileStreaming(wasmResp);
+
+    term.write('Starting shell...\r\n');
+
+    const instance = await runWasix(bashModule, {
+      program: 'bash',
+      args: ['-i'],
+      env: { TERM: 'xterm-256color', HOME: '/', PATH: '/usr/bin:/bin' },
+      stdin: new ReadableStream({
+        start(ctrl) { window.__debug.stdinCtrl = ctrl; }
+      }),
+    });
+
+    instance.stdout.pipeTo(new WritableStream({ write: d => term.write(d) }));
+    instance.stderr.pipeTo(new WritableStream({ write: d => term.write(d) }));
+
+    term.onData(data => window.__debug.stdinCtrl?.enqueue(new TextEncoder().encode(data)));
+    term.onResize(({ cols, rows }) => instance.setTtySize?.({ cols, rows }));
+
+    window.__debug.wasmerInstance = instance;
+    window.__debug.validation = null;
+
+    instance.wait().then(exit => term.write(`\r\n[process exited: ${exit.code}]\r\n`));
+
+  } catch (e) {
+    term.write(`\x1b[31mError: ${e.message}\x1b[0m\r\n`);
+    console.error('[terminal] wasmer error:', e);
+  }
 }
 
 boot().catch(e => console.error('[terminal] boot error:', e));
