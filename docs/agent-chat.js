@@ -13,6 +13,7 @@ function idbWrite(path, content) {
   if (!snap) throw new Error('idb snapshot not ready');
   snap[path] = content;
   window.__debug.idbPersist?.();
+  window.__debug.shell?.onPreviewWrite?.();
 }
 
 const TOOLS = {

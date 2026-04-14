@@ -20,3 +20,5 @@ export async function registerPreviewSW() {
     throw err;
   }
 }
+
+registerPreviewSW();
