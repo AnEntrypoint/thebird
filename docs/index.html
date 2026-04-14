@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="version" content="1.2.22">
 <title>thebird — Gemini chat + terminal</title>
-<meta name="version" content="1.2.21">
 <script src="coi-serviceworker.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rippleui@1.12.1/dist/css/styles.css" />
@@ -23,6 +23,7 @@
   <div class="flex border-b border-base-300 bg-base-200 gap-2 px-4 pt-2 shrink-0">
     <button id="tab-chat" class="px-3 py-1 text-sm tab-active" onclick="switchTab('chat')">Chat</button>
     <button id="tab-term" class="px-3 py-1 text-sm" onclick="switchTab('term')">Terminal</button>
+    <button id="tab-preview" class="px-3 py-1 text-sm" onclick="switchTab('preview')">Preview</button>
   </div>
   <div id="pane-chat" class="flex-1 overflow-hidden">
     <bird-chat></bird-chat>
@@ -30,13 +31,16 @@
   <div id="pane-term" class="flex-1 overflow-hidden hidden p-2 bg-black">
     <div id="term-container" style="height:100%"></div>
   </div>
+  <div id="pane-preview" class="flex-1 overflow-hidden hidden">
+    <iframe id="preview-frame" class="w-full h-full border-0" src="about:blank" allow="cross-origin-isolated *"></iframe>
+  </div>
 </div>
 <script>
 function switchTab(t) {
-  document.getElementById('pane-chat').classList.toggle('hidden', t !== 'chat');
-  document.getElementById('pane-term').classList.toggle('hidden', t !== 'term');
-  document.getElementById('tab-chat').classList.toggle('tab-active', t === 'chat');
-  document.getElementById('tab-term').classList.toggle('tab-active', t === 'term');
+  ['chat', 'term', 'preview'].forEach(id => {
+    document.getElementById('pane-' + id).classList.toggle('hidden', id !== t);
+    document.getElementById('tab-' + id).classList.toggle('tab-active', id === t);
+  });
 }
 </script>
 <script type="module" src="app.js"></script>
