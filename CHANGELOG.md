@@ -1,3 +1,9 @@
+## [Unreleased - agent-tools]
+
+### Added
+- `docs/agent-chat.js`: 3 new tools — `list_files` (IDB snapshot keys), `read_terminal` (xterm buffer snapshot, last N lines), `send_to_terminal` (write to jsh stdin via shellWriter); `read_file` falls back to IDB snapshot when container not ready; `write_file` writes to both container and IDB snapshot; `window.__debug.agent.lastTool` tracks last dispatched tool
+- `docs/terminal.js`: exposes `window.__debug.shellWriter` (jsh stdin writer), `window.__debug.idbSnapshot` (live file map), `window.__debug.idbPersist` (persist snapshot to IndexedDB)
+
 ## [Unreleased - browser-sdk]
 
 ### Added
