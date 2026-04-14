@@ -1,5 +1,6 @@
 import { createMachine, createActor } from './vendor/xstate.js';
 import { createNodeEnv } from './shell-node.js';
+import { createReadline } from './shell-readline.js';
 
 function resolvePath(cwd, p) {
   if (!p || p === '~') return '/';
@@ -134,7 +135,6 @@ export function createShell({ term, onPreviewWrite }) {
 
   async function run(line, onData) {
     if (!line.trim()) return;
-    ctx.history.push(line);
     const st = actor.getSnapshot().value;
     if (st === 'node-repl' && line.trim() !== 'exit') { await ctx.nodeEval(line); return; }
     if (line.trim() === 'exit') { BUILTINS.exit(actor); return; }
@@ -162,16 +162,30 @@ export function createShell({ term, onPreviewWrite }) {
     }
   }
 
-  const prompt = () => term.write('\r\n\x1b[32m' + ctx.cwd + ' $ \x1b[0m');
-  let buf = '';
+  function getCompletions(line, word) {
+    const snap = window.__debug.idbSnapshot || {};
+    const files = Object.keys(snap);
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length <= 1 && !line.includes(' ')) {
+      const cmds = Object.keys(BUILTINS);
+      return cmds.filter(c => c.startsWith(word));
+    }
+    return files.filter(f => f.startsWith(word));
+  }
+
+  const rl = createReadline({
+    term,
+    getCompletions,
+    getPrompt: () => ctx.cwd,
+    onLine: line => run(line, onData).then(() => rl.showPrompt()),
+  });
 
   function onData(data) {
     if (data === '\x03') {
       actor.send({ type: 'ERROR' });
       inputQueue = [];
-      buf = '';
       term.write('^C');
-      prompt();
+      rl.showPrompt();
       return;
     }
     const st = actor.getSnapshot().value;
@@ -179,23 +193,13 @@ export function createShell({ term, onPreviewWrite }) {
       inputQueue.push(data);
       return;
     }
-    if (data === '\r') {
-      term.write('\r\n');
-      const line = buf;
-      buf = '';
-      run(line, onData).then(() => prompt());
-    } else if (data === '\x7f') {
-      if (buf.length) { buf = buf.slice(0, -1); term.write('\x08 \x08'); }
-    } else {
-      buf += data;
-      term.write(data);
-    }
+    rl.onData(data);
   }
 
   term.onData(onData);
   onPreviewWrite && (window.__debug.shell.onPreviewWrite = onPreviewWrite);
   const runPublic = line => run(line, onData);
   window.__debug.shell.run = runPublic;
-  prompt();
+  rl.showPrompt();
   return { run: runPublic };
 }
