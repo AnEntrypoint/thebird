@@ -86,7 +86,8 @@ async function boot() {
     bootActor.send({ type: 'SW_ERROR' });
   }
 
-  createShell({ term, onPreviewWrite: scheduleReload });
+  const shell = createShell({ term, onPreviewWrite: scheduleReload });
+  window.__debug.shellWriter = { write: line => shell.run(line.replace(/\n$/, '')) };
 }
 
 boot().catch(e => {
