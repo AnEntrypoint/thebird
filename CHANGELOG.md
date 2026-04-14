@@ -4,6 +4,7 @@
 - `docs/shell.js`: `createShell({ term, onPreviewWrite })` — POSIX shell + Node REPL using browser V8 eval + xstate v5 state machine. Dispatch table of built-ins: ls, cat, echo, pwd, cd, mkdir, rm, cp, mv, env, export, clear, help, node, npm install, exit. Pipe support via ` | ` split. `window.__debug.shell` exposes state, cwd, env, history, httpHandlers, nodeMode. `http.createServer` polyfill registers handlers in httpHandlers map.
 - `docs/shell-node.js`: `createNodeEnv({ ctx, term })` — persistent V8 eval scope with process, console, require (IDB node_modules), Buffer shim, http.createServer polyfill, fetch, timers.
 - `docs/vendor/xstate.js`: replaced broken stub with self-contained 46KB jsdelivr bundle (xstate@5.30.0) exporting createMachine, createActor — no external imports.
+- `docs/terminal.js`: rewritten — removes all Wasmer/WinterJS; boots xterm, loads IDB, registers preview SW, creates shell via shell.js with 5s debounced hot-reload on idbWrite. window.__debug.term and window.__debug.shell live.
 
 ### Fixed
 - Gemini tool result wrapping: string results wrapped as `{ output: result }` to satisfy Gemini Struct requirement for `function_response.response`

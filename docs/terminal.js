@@ -1,5 +1,6 @@
 import { Terminal, FitAddon } from './vendor/xterm-bundle.js';
-import { init, runWasix } from './vendor/wasmer-sdk.js';
+import { createShell } from './shell.js';
+import { registerPreviewSW } from './preview-sw-client.js';
 
 const IDB_KEY = 'thebird_fs_v2';
 
@@ -30,8 +31,13 @@ async function idbSave(data) {
   });
 }
 
-function absUrl(path) {
-  return new URL(path, location.href).toString();
+let reloadTimer = null;
+function scheduleReload() {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    const frame = document.getElementById('preview-frame');
+    if (frame) frame.src = frame.src;
+  }, 5000);
 }
 
 async function boot() {
@@ -59,46 +65,16 @@ async function boot() {
   window.__debug.idbPersist = () => idbSave(JSON.stringify(window.__debug.idbSnapshot));
   window.__debug.term = term;
 
-  term.write('Initialising Wasmer...\r\n');
-
   try {
-    const [wasmResp] = await Promise.all([
-      fetch('./vendor/winterjs.wasm'),
-      init({
-        module: fetch('./vendor/wasmer_js_bg.wasm'),
-        workerUrl: absUrl('./vendor/wasmer-worker.js'),
-        sdkUrl: absUrl('./vendor/wasmer-sdk.js'),
-      }),
-    ]);
-
-    const winterModule = await WebAssembly.compileStreaming(wasmResp);
-
-    term.write('Starting WinterJS...\r\n');
-
-    const instance = await runWasix(winterModule, {
-      program: 'winterjs',
-      args: ['--repl'],
-      env: { TERM: 'xterm-256color' },
-      stdin: new ReadableStream({
-        start(ctrl) { window.__debug.stdinCtrl = ctrl; }
-      }),
-    });
-
-    instance.stdout.pipeTo(new WritableStream({ write: d => term.write(d) }));
-    instance.stderr.pipeTo(new WritableStream({ write: d => term.write(d) }));
-
-    term.onData(data => window.__debug.stdinCtrl?.enqueue(new TextEncoder().encode(data)));
-    term.onResize(({ cols, rows }) => instance.setTtySize?.({ cols, rows }));
-
-    window.__debug.wasmerInstance = instance;
-    window.__debug.validation = null;
-
-    instance.wait().then(exit => term.write(`\r\n[process exited: ${exit.code}]\r\n`));
-
+    await registerPreviewSW();
   } catch (e) {
-    term.write(`\x1b[31mError: ${e.message}\x1b[0m\r\n`);
-    console.error('[terminal] wasmer error:', e);
+    term.write('\x1b[33mSW: ' + e.message + '\x1b[0m\r\n');
   }
+
+  createShell({ term, onPreviewWrite: scheduleReload });
 }
 
-boot().catch(e => console.error('[terminal] boot error:', e));
+boot().catch(e => {
+  console.error('[terminal] boot error:', e);
+  throw e;
+});
