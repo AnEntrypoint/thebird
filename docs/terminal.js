@@ -63,7 +63,7 @@ async function boot() {
 
   try {
     const [wasmResp] = await Promise.all([
-      fetch('./vendor/bash.wasm'),
+      fetch('./vendor/winterjs.wasm'),
       init({
         module: fetch('./vendor/wasmer_js_bg.wasm'),
         workerUrl: absUrl('./vendor/wasmer-worker.js'),
@@ -71,14 +71,14 @@ async function boot() {
       }),
     ]);
 
-    const bashModule = await WebAssembly.compileStreaming(wasmResp);
+    const winterModule = await WebAssembly.compileStreaming(wasmResp);
 
-    term.write('Starting shell...\r\n');
+    term.write('Starting WinterJS...\r\n');
 
-    const instance = await runWasix(bashModule, {
-      program: 'bash',
-      args: ['-i'],
-      env: { TERM: 'xterm-256color', HOME: '/', PATH: '/usr/bin:/bin' },
+    const instance = await runWasix(winterModule, {
+      program: 'winterjs',
+      args: ['--repl'],
+      env: { TERM: 'xterm-256color' },
       stdin: new ReadableStream({
         start(ctrl) { window.__debug.stdinCtrl = ctrl; }
       }),
