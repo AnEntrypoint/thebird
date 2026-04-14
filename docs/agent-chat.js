@@ -1,4 +1,4 @@
-import { streamGemini } from './vendor/thebird-browser.js';
+import { streamGemini, streamOpenAI } from './vendor/thebird-browser.js';
 
 function idbRead(path) {
   const snap = window.__debug.idbSnapshot;
@@ -85,12 +85,20 @@ const TOOLS = {
   },
 };
 
-export async function agentGenerate(apiKey, model, messages, onChunk, onTool) {
+function buildStream(provider) {
+  if (provider.type === 'gemini') {
+    return streamGemini({ model: provider.model, messages: provider.messages, tools: TOOLS, apiKey: provider.apiKey, maxOutputTokens: 8192 }).fullStream;
+  }
+  const url = (provider.baseUrl || '').replace(/\/$/, '') + '/chat/completions';
+  return streamOpenAI({ url, apiKey: provider.apiKey, messages: provider.messages, model: provider.model, tools: TOOLS, maxOutputTokens: 8192 });
+}
+
+export async function agentGenerate(provider, messages, onChunk, onTool) {
   Object.assign(window.__debug = window.__debug || {}, {
-    agent: { model, active: true, lastTool: null },
+    agent: { provider: provider.type, model: provider.model, active: true, lastTool: null },
   });
   try {
-    for await (const ev of streamGemini({ model, messages, tools: TOOLS, apiKey, maxOutputTokens: 8192 }).fullStream) {
+    for await (const ev of buildStream({ ...provider, messages })) {
       if (ev.type === 'text-delta') onChunk(ev.textDelta);
       else if (ev.type === 'tool-call') {
         window.__debug.agent.lastTool = { name: ev.toolName, args: ev.args };
