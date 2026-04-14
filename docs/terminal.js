@@ -1,4 +1,5 @@
 import { Terminal, FitAddon } from './vendor/xterm-bundle.js';
+import { createMachine, createActor } from './vendor/xstate.js';
 import { createShell } from './shell.js';
 import { registerPreviewSW } from './preview-sw-client.js';
 
@@ -31,6 +32,13 @@ async function idbSave(data) {
   });
 }
 
+const bootMachine = createMachine({ id: 'terminal', initial: 'loading-idb', states: {
+  'loading-idb': { on: { IDB_READY: 'registering-sw' } },
+  'registering-sw': { on: { SW_READY: 'ready', SW_ERROR: 'ready' } },
+  'ready': {},
+  'error': {},
+}});
+
 let reloadTimer = null;
 function scheduleReload() {
   clearTimeout(reloadTimer);
@@ -43,6 +51,12 @@ function scheduleReload() {
 async function boot() {
   const el = document.getElementById('term-container');
   if (!el) return;
+
+  const bootActor = createActor(bootMachine);
+  bootActor.start();
+
+  window.__debug = window.__debug || {};
+  window.__debug.terminal = { get state() { return bootActor.getSnapshot().value; } };
 
   const term = new Terminal({ theme: { background: '#000000' }, convertEol: true });
   const fit = new FitAddon();
@@ -60,15 +74,17 @@ async function boot() {
     files = await r.json();
   }
 
-  window.__debug = window.__debug || {};
   window.__debug.idbSnapshot = files;
   window.__debug.idbPersist = () => idbSave(JSON.stringify(window.__debug.idbSnapshot));
   window.__debug.term = term;
+  bootActor.send({ type: 'IDB_READY' });
 
   try {
     await registerPreviewSW();
+    bootActor.send({ type: 'SW_READY' });
   } catch (e) {
     term.write('\x1b[33mSW: ' + e.message + '\x1b[0m\r\n');
+    bootActor.send({ type: 'SW_ERROR' });
   }
 
   createShell({ term, onPreviewWrite: scheduleReload });
