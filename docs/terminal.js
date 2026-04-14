@@ -3,9 +3,34 @@ import { Terminal } from 'https://esm.sh/@xterm/xterm';
 import { FitAddon } from 'https://esm.sh/@xterm/addon-fit';
 
 const IDB_KEY = 'thebird_fs';
+
+const SERVER_JS = [
+  'const http = require("http");',
+  'const state = { requests: 0, start: Date.now() };',
+  'http.createServer((req, res) => {',
+  '  state.requests++;',
+  '  res.setHeader("Content-Type", "application/json");',
+  '  res.setHeader("Access-Control-Allow-Origin", "*");',
+  '  res.end(JSON.stringify({ ok: true, path: req.url, requests: state.requests, uptime: Date.now() - state.start }));',
+  '}).listen(3000, () => console.log("server ready on :3000"));',
+].join('\n') + '\n';
+
+const INDEX_JS = [
+  'const { default: Anthropic } = require("@anthropic-ai/sdk");',
+  'const http = require("http");',
+  'const client = new Anthropic({ apiKey: "x", baseURL: "http://localhost:3000" });',
+  'console.log("sdk:", client.constructor.name);',
+  'http.get("http://localhost:3000/status", r => {',
+  '  let d = "";',
+  '  r.on("data", c => d += c);',
+  '  r.on("end", () => console.log("server:", d));',
+  '});',
+].join('\n') + '\n';
+
 const DEFAULT_FILES = {
   'package.json': JSON.stringify({ name: 'app', dependencies: { '@anthropic-ai/sdk': '^0.88.0' } }, null, 2),
-  'index.js': 'const Anthropic = require("@anthropic-ai/sdk");\nconsole.log("sdk loaded:", typeof Anthropic);\n',
+  'server.js': SERVER_JS,
+  'index.js': INDEX_JS,
 };
 
 async function idbLoad() {
@@ -65,40 +90,46 @@ async function boot() {
   try {
     container = await WebContainer.boot();
   } catch (e) {
-    term.write('\x1b[31mWebContainer boot failed: ' + e.message + '\x1b[0m\r\n');
+    term.write('\x1b[31mBoot failed: ' + e.message + '\x1b[0m\r\n');
     throw e;
   }
   await container.mount(mountTree);
-  term.write('Installing dependencies...\r\n');
 
+  container.on('server-ready', (port, url) => {
+    const frame = document.getElementById('preview-frame');
+    if (frame) frame.src = url;
+    window.__debug.previewUrl = url;
+    const btn = document.getElementById('tab-preview');
+    if (btn) btn.textContent = 'Preview :' + port;
+  });
+
+  term.write('Installing dependencies...\r\n');
   const install = await container.spawn('npm', ['install']);
   install.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
-  const code = await install.exit;
-  if (code !== 0) throw new Error('npm install failed with code ' + code);
+  const exitCode = await install.exit;
+  if (exitCode !== 0) throw new Error('npm install failed: ' + exitCode);
 
-  term.write('\x1b[32mReady.\x1b[0m Run commands below.\r\n$ ');
+  const srv = await container.spawn('node', ['server.js']);
+  srv.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
 
-  const shell = await container.spawn('sh', ['-c', 'while true; do read -r line && sh -c "$line" && printf "$ "; done']);
-  shell.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
+  term.write('\x1b[32mReady.\x1b[0m\r\n');
 
-  let buf = '';
-  term.onData(async data => {
-    if (data === '\r') {
-      term.write('\r\n');
-      await shell.input.write(buf + '\n');
-      await snapshotToIDB(container, files);
-      buf = '';
-    } else if (data === '\x7f') {
-      if (buf.length > 0) { buf = buf.slice(0, -1); term.write('\b \b'); }
-    } else {
-      buf += data;
-      term.write(data);
-    }
+  const shell = await container.spawn('jsh', [], {
+    terminal: { cols: term.cols, rows: term.rows },
   });
+  shell.output.pipeTo(new WritableStream({ write: d => term.write(d) }));
+  term.onResize(({ cols, rows }) => shell.resize({ cols, rows }));
+  const writer = shell.input.getWriter();
+  term.onData(data => writer.write(data));
+
+  await snapshotToIDB(container, files);
 
   window.__debug = window.__debug || {};
   window.__debug.container = container;
   window.__debug.term = term;
+  window.__debug.previewUrl = null;
+  window.__debug.shell = shell;
+  window.__debug.srv = srv;
 }
 
 boot().catch(e => console.error('[terminal] boot error:', e));
