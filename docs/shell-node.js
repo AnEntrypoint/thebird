@@ -6,7 +6,7 @@ function serializeRoutes(routes) {
   return out;
 }
 
-const BUILTIN_MODULES = {
+const makeBuiltinModules = term => ({
   express: () => () => {
     const routes = { GET: [], POST: [], USE: [] };
     const app = {
@@ -37,9 +37,10 @@ const BUILTIN_MODULES = {
       };
     }
   },
-};
+});
 
 export function createNodeEnv({ ctx, term }) {
+  const BUILTIN_MODULES = makeBuiltinModules(term);
   const scope = {
     process: {
       argv: [],
