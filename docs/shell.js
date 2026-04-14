@@ -15,16 +15,17 @@ function resolvePath(cwd, p) {
 
 function makeBuiltins(ctx) {
   const snap = () => window.__debug.idbSnapshot || {};
+  const toKey = p => p.replace(/^\//, '');
   const w = s => ctx.term.write(s);
   const wl = s => w(s + '\r\n');
   return {
     ls: ([p]) => {
-      const prefix = resolvePath(ctx.cwd, p || '') + '/';
-      const keys = prefix === '//' ? Object.keys(snap()) : Object.keys(snap()).filter(k => k.startsWith(prefix === '//' ? '/' : prefix));
+      const prefix = toKey(resolvePath(ctx.cwd, p || '')) + '/';
+      const keys = prefix === '/' ? Object.keys(snap()) : Object.keys(snap()).filter(k => k.startsWith(prefix));
       wl(keys.join('\r\n') || '(empty)');
     },
     cat: ([f]) => {
-      const c = snap()[resolvePath(ctx.cwd, f)];
+      const c = snap()[toKey(resolvePath(ctx.cwd, f))];
       if (c == null) throw new Error('no such file: ' + f);
       wl(c);
     },
@@ -32,19 +33,19 @@ function makeBuiltins(ctx) {
     pwd: () => wl(ctx.cwd),
     cd: ([p]) => { ctx.cwd = resolvePath(ctx.cwd, p || '~'); },
     mkdir: ([p]) => {
-      window.__debug.idbSnapshot[resolvePath(ctx.cwd, p) + '/.keep'] = '';
+      window.__debug.idbSnapshot[toKey(resolvePath(ctx.cwd, p)) + '/.keep'] = '';
       window.__debug.idbPersist?.();
     },
     rm: ([f]) => {
-      delete window.__debug.idbSnapshot[resolvePath(ctx.cwd, f)];
+      delete window.__debug.idbSnapshot[toKey(resolvePath(ctx.cwd, f))];
       window.__debug.idbPersist?.();
     },
     cp: ([s, d]) => {
-      window.__debug.idbSnapshot[resolvePath(ctx.cwd, d)] = snap()[resolvePath(ctx.cwd, s)];
+      window.__debug.idbSnapshot[toKey(resolvePath(ctx.cwd, d))] = snap()[toKey(resolvePath(ctx.cwd, s))];
       window.__debug.idbPersist?.();
     },
     mv: ([s, d]) => {
-      const src = resolvePath(ctx.cwd, s), dst = resolvePath(ctx.cwd, d);
+      const src = toKey(resolvePath(ctx.cwd, s)), dst = toKey(resolvePath(ctx.cwd, d));
       window.__debug.idbSnapshot[dst] = snap()[src];
       delete window.__debug.idbSnapshot[src];
       window.__debug.idbPersist?.();
@@ -60,7 +61,7 @@ function makeBuiltins(ctx) {
     node: async ([file], actor) => {
       if (!file) { actor.send({ type: 'ENTER_REPL' }); wl('[node repl — type exit to return]'); return; }
       const path = resolvePath(ctx.cwd, file);
-      const code = snap()[path];
+      const code = snap()[toKey(path)];
       if (code == null) throw new Error('no such file: ' + path);
       actor.send({ type: 'NODE_START' });
       await ctx.nodeEval(code, path);
@@ -193,6 +194,8 @@ export function createShell({ term, onPreviewWrite }) {
 
   term.onData(onData);
   onPreviewWrite && (window.__debug.shell.onPreviewWrite = onPreviewWrite);
+  const runPublic = line => run(line, onData);
+  window.__debug.shell.run = runPublic;
   prompt();
-  return { run: line => run(line, onData) };
+  return { run: runPublic };
 }
