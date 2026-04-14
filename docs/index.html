@@ -13,8 +13,7 @@
 <style>
   html, body { height: 100%; background: #0f1117; }
   .tab-active { border-bottom: 2px solid oklch(var(--p)); }
-  #term-container { height: 100%; }
-  bird-chat { display: flex; flex-direction: column; height: 100%; }
+bird-chat { display: flex; flex-direction: column; height: 100%; }
   .msg-bubble { max-width: 680px; white-space: pre-wrap; word-break: break-word; }
   #msg-list { scroll-behavior: smooth; }
 </style>
@@ -29,8 +28,12 @@
   <div id="pane-chat" class="flex-1 overflow-hidden">
     <bird-chat></bird-chat>
   </div>
-  <div id="pane-term" class="flex-1 overflow-hidden hidden p-2 bg-black">
-    <div id="term-container" style="height:100%"></div>
+  <div id="pane-term" class="flex flex-col flex-1 overflow-hidden hidden bg-black">
+    <div class="flex gap-2 px-2 py-1 bg-base-200 shrink-0">
+      <input id="gemini-key" type="password" class="input input-xs input-bordered flex-1 min-w-0" placeholder="GEMINI_API_KEY" />
+      <button class="btn btn-xs btn-primary" onclick="window.__debug.runAgent(document.getElementById('gemini-key').value, 'write a file called validate.txt with content hello from agent, then read it back and print the contents')">Run Agent</button>
+    </div>
+    <div id="term-container" class="flex-1"></div>
   </div>
   <div id="pane-preview" class="flex-1 overflow-hidden hidden">
     <iframe id="preview-frame" class="w-full h-full border-0" src="about:blank"></iframe>

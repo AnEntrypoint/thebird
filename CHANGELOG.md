@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- `docs/index.html`: GEMINI_API_KEY input + Run Agent button in Terminal tab toolbar for in-browser agent validation
+- `docs/terminal.js`: `window.__debug.runAgent(key, task)` spawns `node agent.js` with env, pipes output to terminal, tracks `{ running, output, exitCode }` in `window.__debug.validation`
+
 ### Fixed
 - `docs/terminal.js`: build nested WebContainer mount tree from flat path keys (fixes `EIO: invalid file name` for files in subdirectories like `lib/providers/openai.js`); bump IDB_KEY to `thebird_fs_v2` to force re-fetch of defaults.json for users with stale cache
 
