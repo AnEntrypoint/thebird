@@ -156,21 +156,6 @@ Pass options as a nested array: `["maxtoken", { "max_tokens": 16384 }]`.
 
 `streamGemini` / `generateGemini` bypass routing and call Gemini natively via `@google/genai`. Requires `GEMINI_API_KEY`.
 
-### Params
-
-| Param | Type | Default | Description |
-|---|---|---|---|
-| `model` | `string \| { id }` | `'gemini-2.0-flash'` | Model id |
-| `messages` | `Message[]` | required | Conversation history |
-| `system` | `string` | — | System instruction |
-| `tools` | `Tools` | — | Tool definitions |
-| `apiKey` | `string` | `GEMINI_API_KEY` | Override API key |
-| `temperature` | `number` | `0.5` | Sampling temperature |
-| `maxOutputTokens` | `number` | `8192` | Max tokens |
-| `topP` | `number` | `0.95` | Top-p |
-| `topK` | `number` | — | Top-k |
-| `safetySettings` | `SafetySetting[]` | — | Safety thresholds |
-
 ## Message Format
 
 Messages follow the Anthropic SDK format. All image block variants are supported:
@@ -193,17 +178,21 @@ Messages follow the Anthropic SDK format. All image block variants are supported
 | `finish-step` | `finishReason` | Step completed |
 | `error` | `error` | Error during step |
 
-## TypeScript
+## Browser Demo
 
-```ts
-import { createRouter, streamRouter, generateGemini, RouterConfiguration, ProviderConfig, RouterConfig } from 'thebird';
+Live at **[anentrypoint.github.io/thebird](https://anentrypoint.github.io/thebird/)**
+
+- **Chat tab** — Gemini chat via direct API (Gemini API key stored in localStorage)
+- **Terminal tab** — WebContainer (in-browser Node.js) booting thebird's full stack: `npm install`, `node server.js` (Anthropic→Gemini proxy on port 3000), then a `jsh` shell
+- **Preview tab** — iframe pointed at the WebContainer's HTTP server, live-updated when the server starts
+
+Run the agentic CLI inside the terminal tab:
+
+```
+GEMINI_API_KEY=<key> node agent.js "your task"
 ```
 
-## Utilities
-
-```js
-const { convertMessages, convertTools, cleanSchema } = require('thebird');
-```
+`agent.js` uses `@anthropic-ai/sdk` pointing at `http://localhost:3000` (thebird proxy) with tools: `read_file`, `write_file`, `run_command`.
 
 ## License
 
