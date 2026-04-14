@@ -134,6 +134,11 @@ Interactive terminal in docs/index.html runs thebird + Node.js server in WebCont
 - **iframe allow attribute**: Remove `allow="cross-origin-isolated"` — not a valid Feature Policy keyword. WebContainer iframes work without it.
 - **agent.js routing**: Inside container, agent.js uses `@anthropic-ai/sdk` with `baseURL: "http://localhost:3000"` pointing at thebird proxy (server.js), which translates Anthropic format → Gemini.
 
+### spawn() and window.__debug API
+
+- **container.spawn() env passing**: `container.spawn('node', ['agent.js', task], { env: { GEMINI_API_KEY: key } })` passes env vars directly to spawned process. Third arg accepts `{ env, cwd, terminal }`.
+- **window.__debug.runAgent(key, task)**: Spawns agent.js in WebContainer with GEMINI_API_KEY env, pipes stdout/stderr to xterm terminal, tracks state in `window.__debug.validation = { running, output, exitCode }`.
+
 ## Environment Notes
 
 - Repo remote: `https://github.com/AnEntrypoint/thebird.git` (capital A)
