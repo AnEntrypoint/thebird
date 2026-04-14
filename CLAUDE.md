@@ -130,6 +130,9 @@ Run examples against real Gemini API to validate message translation.
 - Some models have different tool naming conventions — check provider docs
 - Streaming response parsing varies by provider — see lib/providers/ for details
 - OAuth tokens expire — gembird uses browser session instead of capturing tokens
+- Cannot bundle index.js directly for browser — it imports Node-only modules (oauth.js, config.js, cloud-generate.js) at top level. Create a separate browser entry that imports only lib/client.js, lib/errors.js, lib/convert.js. Use ESM wrapper (not CJS module.exports) to preserve named exports in bundle.
+- Tool parameter types must be lowercase for Gemini API — `object`, `string`, `number` not `OBJECT`, `STRING`, `NUMBER`. Uppercase types fail schema validation.
+- agentGenerate passes raw Anthropic-format messages to streamGemini internally, which calls convertMessages. Do NOT pre-convert in app.js — double-conversion breaks tool schemas.
 
 ## Files
 
