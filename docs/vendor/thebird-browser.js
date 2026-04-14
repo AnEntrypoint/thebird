@@ -18209,6 +18209,19 @@ var require_errors = __commonJS({
       const msg = err?.message ?? "";
       return /quota|rate.?limit|overloaded|unavailable/i.test(msg);
     }
+    function parseRetryDelay(err) {
+      try {
+        const body = typeof err.message === "string" ? JSON.parse(err.message) : err.message;
+        const details = body?.error?.details || [];
+        const retryInfo = details.find((d) => d["@type"]?.includes("RetryInfo"));
+        if (retryInfo?.retryDelay) {
+          const secs = parseFloat(retryInfo.retryDelay);
+          if (!isNaN(secs)) return secs * 1e3;
+        }
+      } catch (_) {
+      }
+      return null;
+    }
     async function withRetry(fn, maxRetries = 3) {
       let lastErr;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -18217,7 +18230,8 @@ var require_errors = __commonJS({
         } catch (err) {
           lastErr = err;
           if (!isRetryable(err) || attempt === maxRetries) throw err;
-          const delay = Math.min(1e3 * 2 ** attempt + Math.random() * 200, 16e3);
+          const suggested = parseRetryDelay(err);
+          const delay = suggested != null ? suggested + Math.random() * 1e3 : Math.min(1e3 * 2 ** attempt + Math.random() * 200, 16e3);
           await new Promise((r) => setTimeout(r, delay));
         }
       }
