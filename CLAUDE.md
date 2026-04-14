@@ -122,8 +122,21 @@ Run examples against real Gemini API to validate message translation.
 - `wasi/cli.ts`: Deno streaming CLI — `deno run --allow-net --allow-env wasi/cli.ts [--model M] [--system S] <prompt>`
 - `deno.json`: tasks `cli` (run) and `cli:compile` (→ `dist/thebird` binary)
 
+## WebContainer Terminal in docs/
+
+Interactive terminal in docs/index.html runs thebird + Node.js server in WebContainer API.
+
+### Architecture
+
+- **defaults.json**: docs/defaults.json is a 46KB single-line JSON blob containing all container files (package.json, lib/*.js, index.js, server.js, agent.js). Fetched by terminal.js on first boot instead of hardcoding DEFAULT_FILES inline (avoids 200-line limit).
+- **Flat mount object**: WebContainer accepts `{'lib/client.js': ...}` directly — no nested directory tree needed.
+- **COEP window.coi fix**: Add `<script>window.coi = { coepDegrade: () => false };</script>` BEFORE coi-serviceworker.js. Prevents degradation from credentialless to require-corp, which blocks Tailwind CDN. Key is `window.coi` (not `window.__coi_serviceworker`).
+- **iframe allow attribute**: Remove `allow="cross-origin-isolated"` — not a valid Feature Policy keyword. WebContainer iframes work without it.
+- **agent.js routing**: Inside container, agent.js uses `@anthropic-ai/sdk` with `baseURL: "http://localhost:3000"` pointing at thebird proxy (server.js), which translates Anthropic format → Gemini.
+
 ## Environment Notes
 
 - Repo remote: `https://github.com/AnEntrypoint/thebird.git` (capital A)
 - Deno 2.1.3 available; `exec:bash` uses PowerShell — use `exec:cmd` with `set KEY=val && cmd` syntax for env vars
 - Windows `KEY=val cmd` inline env syntax fails in PowerShell
+- CI workflow commits version bump after every push to main — always `git pull --rebase origin main` before pushing to avoid fast-forward rejection
