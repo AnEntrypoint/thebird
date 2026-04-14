@@ -2,7 +2,7 @@ import { WebContainer } from 'https://esm.sh/@webcontainer/api';
 import { Terminal } from 'https://esm.sh/@xterm/xterm';
 import { FitAddon } from 'https://esm.sh/@xterm/addon-fit';
 
-const IDB_KEY = 'thebird_fs';
+const IDB_KEY = 'thebird_fs_v2';
 
 async function idbLoad() {
   return new Promise((res, rej) => {
@@ -59,13 +59,17 @@ async function boot() {
     files = await r.json();
   }
 
-  const mountTree = Object.fromEntries(
-    Object.entries(files).map(([p, c]) => {
-      const parts = p.split('/');
-      if (parts.length === 1) return [p, { file: { contents: c } }];
-      return [p, { file: { contents: c } }];
-    })
-  );
+  const mountTree = {};
+  for (const [path, contents] of Object.entries(files)) {
+    const parts = path.split('/');
+    const name = parts.pop();
+    let node = mountTree;
+    for (const dir of parts) {
+      if (!node[dir]) node[dir] = { directory: {} };
+      node = node[dir].directory;
+    }
+    node[name] = { file: { contents } };
+  }
 
   term.write('Booting WebContainer...\r\n');
   let container;
