@@ -41,8 +41,10 @@ function wsStream(url) {
     });
     ws.addEventListener('error', (e) => {
       window.__debug.acp.wsState = 'error';
-      window.__debug.acp.wsError = e.message || String(e);
-      rej(e);
+      const errMsg = e?.message || 'WebSocket connection failed';
+      window.__debug.acp.wsError = errMsg;
+      console.log('[ACP] Connection error:', errMsg);
+      rej(new Error(errMsg));
     });
   });
 }

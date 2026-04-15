@@ -79,10 +79,14 @@ async function boot() {
   bootActor.send({ type: 'IDB_READY' });
 
   try {
-    await registerPreviewSW();
+    const swPromise = registerPreviewSW();
+    const swTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('SW registration timeout')), 3000));
+    await Promise.race([swPromise, swTimeout]);
     bootActor.send({ type: 'SW_READY' });
   } catch (e) {
-    term.write('\x1b[33mSW: ' + e.message + '\x1b[0m\r\n');
+    console.log('[terminal] SW error:', e.message);
+    window.__debug.sw = window.__debug.sw || {};
+    window.__debug.sw.bootError = e.message;
     bootActor.send({ type: 'SW_ERROR' });
   }
 

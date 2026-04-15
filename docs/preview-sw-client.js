@@ -21,8 +21,6 @@ export async function registerPreviewSW() {
   }
 }
 
-registerPreviewSW();
-
 navigator.serviceWorker?.addEventListener('message', e => {
   if (e.data?.type !== 'EXPRESS_REQUEST') return;
   const { path, method } = e.data;
