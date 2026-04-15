@@ -64,6 +64,7 @@ class BirdChat extends HTMLElement {
 
   connectedCallback() {
     this.render();
+    Object.assign(window.__debug, { acp: { baseUrl: this.state.baseUrl, provider: this.state.providerType } });
     if (this.state.apiKey) this.loadModels();
   }
 
