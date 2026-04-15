@@ -4,6 +4,9 @@ function wsStream(url) {
   const ws = new WebSocket(url);
   const incoming = [];
   let notify = null;
+  Object.assign(window.__debug = window.__debug || {}, {
+    acp: Object.assign(window.__debug?.acp || {}, { wsUrl: url, wsState: 'connecting' })
+  });
   ws.addEventListener('message', e => {
     const msg = JSON.parse(e.data);
     if (notify) { const fn = notify; notify = null; fn(msg); }
@@ -11,8 +14,15 @@ function wsStream(url) {
   });
   const readable = new ReadableStream({
     start(ctrl) {
-      ws.addEventListener('close', () => ctrl.close());
-      ws.addEventListener('error', e => ctrl.error(e));
+      ws.addEventListener('close', () => {
+        window.__debug.acp.wsState = 'closed';
+        ctrl.close();
+      });
+      ws.addEventListener('error', e => {
+        window.__debug.acp.wsState = 'error';
+        window.__debug.acp.wsError = e.message || String(e);
+        ctrl.error(e);
+      });
     },
     pull() {
       return new Promise(res => {
@@ -25,8 +35,15 @@ function wsStream(url) {
     write(msg) { ws.send(JSON.stringify(msg)); }
   });
   return new Promise((res, rej) => {
-    ws.addEventListener('open', () => res({ readable, writable }));
-    ws.addEventListener('error', rej);
+    ws.addEventListener('open', () => {
+      window.__debug.acp.wsState = 'open';
+      res({ readable, writable });
+    });
+    ws.addEventListener('error', (e) => {
+      window.__debug.acp.wsState = 'error';
+      window.__debug.acp.wsError = e.message || String(e);
+      rej(e);
+    });
   });
 }
 
