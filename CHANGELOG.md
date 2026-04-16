@@ -8,6 +8,11 @@
 - `lib/circuit-breaker.js`: `createCircuitBreaker()` — per-provider failure tracking with auto-recovery after cooldown
 - `lib/capabilities.js`: `getCapabilities()` / `stripUnsupported()` — provider capability metadata with automatic feature stripping and warnings
 - `lib/router-stream.js`: Router logic extracted from index.js — circuit breaker and capability checks integrated
+- `docs/tui.css`: TUI (text user interface) theme — monospace, green-on-black, box-drawing borders, scanline overlay, ASCII spinner
+
+### Changed
+- `docs/index.html`: Restyled to TUI aesthetic — ASCII art header, bracket-style tabs, removed Tailwind/RippleUI dependencies
+- `docs/app.js`: Chat UI uses TUI-styled classes — monospace messages with `> ` / `< ` prefixes, bracket buttons
 
 ### Changed
 - `index.js`: Trimmed from 177 to 104 lines by extracting router logic to lib/router-stream.js

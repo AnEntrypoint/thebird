@@ -1,43 +1,38 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="version" content="1.2.23">
-<title>thebird — Gemini chat + terminal</title>
+<title>thebird — TUI</title>
 <script>window.coi = { coepDegrade: () => false };</script>
 <script src="coi-serviceworker.js"></script>
-<link rel="stylesheet" href="vendor/tailwind.css" />
-<link rel="stylesheet" href="vendor/rippleui.css" />
 <link rel="stylesheet" href="vendor/xterm.css" />
-<style>
-  html, body { height: 100%; background: #0f1117; }
-  .tab-active { border-bottom: 2px solid oklch(var(--p)); }
-bird-chat { display: flex; flex-direction: column; height: 100%; }
-  .msg-bubble { max-width: 680px; white-space: pre-wrap; word-break: break-word; }
-  #msg-list { scroll-behavior: smooth; }
-</style>
+<link rel="stylesheet" href="tui.css" />
 </head>
-<body class="bg-base-100 text-base-content h-full">
-<div class="flex flex-col h-full">
-  <div class="flex border-b border-base-300 bg-base-200 gap-2 px-4 pt-2 shrink-0">
-    <button id="tab-chat" class="px-3 py-1 text-sm tab-active" onclick="switchTab('chat')">Chat</button>
-    <button id="tab-term" class="px-3 py-1 text-sm" onclick="switchTab('term')">Terminal</button>
-    <button id="tab-preview" class="px-3 py-1 text-sm" onclick="switchTab('preview')">Preview</button>
+<body>
+<div style="display:flex;flex-direction:column;height:100%">
+  <div class="tui-header"><pre class="logo" style="margin:0;padding:2px 1ch">  ▀█▀ █░█ █▀▀ █▄▄ █ █▀█ █▀▄   <span class="ver">v1.2</span>
+   █  █▀█ ██▄ █▄█ █ █▀▄ █▄▀   <span style="color:#1a9a1a">anthropic → gemini/openai bridge</span></pre></div>
+  <div class="tui-tabs">
+    <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">Chat</button>
+    <button id="tab-term" class="tui-tab" onclick="switchTab('term')">Terminal</button>
+    <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">Preview</button>
   </div>
-  <div id="pane-chat" class="flex-1 overflow-hidden">
+  <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
     <bird-chat></bird-chat>
   </div>
-  <div id="pane-term" class="flex flex-col flex-1 overflow-hidden hidden bg-black">
-    <div id="term-container" class="flex-1"></div>
+  <div id="pane-term" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+    <div id="term-container" style="flex:1"></div>
   </div>
-  <div id="pane-preview" class="flex flex-col flex-1 overflow-hidden hidden">
-    <div class="flex gap-2 px-3 py-1 bg-base-200 border-b border-base-300 shrink-0">
-      <button class="btn btn-xs btn-ghost" onclick="refreshPreview()">↺ Reload</button>
+  <div id="pane-preview" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+    <div class="tui-toolbar">
+      <button class="tui-btn" onclick="refreshPreview()">[reload]</button>
     </div>
-    <iframe id="preview-frame" class="w-full flex-1 border-0" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:#000" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   </div>
 </div>
+<div class="tui-scanline"></div>
 <script>
 function callExpressRoute(path, method) {
   const handlers = window.__debug?.shell?.httpHandlers || {};
@@ -64,12 +59,13 @@ async function refreshPreview() {
   if (result) { iframe.srcdoc = result.body; return; }
   const snap = window.__debug?.idbSnapshot || {};
   if (snap['index.html']) { iframe.srcdoc = snap['index.html']; return; }
-  iframe.srcdoc = '<p style="font-family:sans-serif;padding:2rem;color:#888">No express app running and no index.html in filesystem.<br>Run <code>node app.js</code> in the terminal.</p>';
+  iframe.srcdoc = '<pre style="color:#33ff33;padding:1ch;font-family:monospace">No express app running.\nRun node app.js in terminal.</pre>';
 }
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {
     document.getElementById('pane-' + id).classList.toggle('hidden', id !== t);
-    document.getElementById('tab-' + id).classList.toggle('tab-active', id === t);
+    const tab = document.getElementById('tab-' + id);
+    tab.classList.toggle('active', id === t);
   });
   if (t === 'preview') refreshPreview();
 }

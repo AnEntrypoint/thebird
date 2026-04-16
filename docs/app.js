@@ -103,51 +103,44 @@ class BirdChat extends HTMLElement {
       html`<option value=${id} selected=${id === providerType}>${p.label}</option>`);
 
     applyDiff(this, html`
-      <div class="flex flex-col h-full">
-        <header class="navbar bg-base-200 border-b border-base-300 gap-2 flex-wrap px-4 py-2">
-          <span class="text-primary font-bold text-lg mr-2">🐦 thebird</span>
-          <div class="flex gap-2 flex-1 min-w-0 items-center flex-wrap">
-            <select class="select select-sm select-bordered"
-              onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
-            ${(providerType === 'custom' || providerType === 'acp') ? html`
-              <input type="text" class="input input-sm input-bordered flex-1 min-w-[160px]"
-                placeholder=${providerType === 'acp' ? 'ws://localhost:3000' : 'https://your-endpoint/v1'} value=${baseUrl}
-                onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
-            ${providerType !== 'acp' ? html`<input id="api-key-input" type="password" class="input input-sm input-bordered flex-1 min-w-[140px]"
-              placeholder=${provDef.keyPlaceholder} value=${apiKey}
-              onchange=${e => {
-                const v = e.target.value.trim();
-                localStorage.setItem('provider_api_key', v);
-                this.setState({ apiKey: v });
-                if (v) this.loadModels();
-              }} />` : ''}
-            <div class="relative">
-              ${modelsLoading
-                ? html`<span class="loading loading-spinner loading-sm text-primary"></span>`
-                : html`<select class="select select-sm select-bordered" value=${model}
-                    onchange=${e => { localStorage.setItem('provider_model', e.target.value); this.setState({ model: e.target.value }); }}>${opts}</select>`}
-            </div>
-            <button class="btn btn-sm btn-ghost" onclick=${() => this.setState({ messages: [], status: '' })}>Clear</button>
-          </div>
-        </header>
-
-        <div id="msg-list" class="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
-          ${messages.map((m, i) => html`
-            <div key=${i} class=${'flex ' + (m.role === 'user' ? 'justify-end' : 'justify-start')}>
-              <div class=${'msg-bubble card px-4 py-3 text-sm leading-relaxed ' + (m.role === 'user' ? 'bg-primary text-primary-content' : 'bg-base-200 text-base-content')}>${m.content}</div>
-            </div>`)}
-          ${streaming && !streamingText && html`<div class="flex justify-start"><div class="card bg-base-200 px-4 py-3"><span class="loading loading-dots loading-sm"></span></div></div>`}
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div class="tui-toolbar">
+          <label>provider:</label>
+          <select class="tui-select" onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
+          ${(providerType === 'custom' || providerType === 'acp') ? html`
+            <input type="text" class="tui-input" style="flex:1;min-width:140px"
+              placeholder=${providerType === 'acp' ? 'ws://localhost:3000' : 'https://your-endpoint/v1'} value=${baseUrl}
+              onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
+          ${providerType !== 'acp' ? html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px"
+            placeholder=${provDef.keyPlaceholder} value=${apiKey}
+            onchange=${e => {
+              const v = e.target.value.trim();
+              localStorage.setItem('provider_api_key', v);
+              this.setState({ apiKey: v });
+              if (v) this.loadModels();
+            }} />` : ''}
+          ${modelsLoading
+            ? html`<span class="tui-spinner"></span>`
+            : html`<select class="tui-select" value=${model}
+                onchange=${e => { localStorage.setItem('provider_model', e.target.value); this.setState({ model: e.target.value }); }}>${opts}</select>`}
+          <button class="tui-btn" onclick=${() => this.setState({ messages: [], status: '' })}>[clear]</button>
         </div>
 
-        ${status && html`<div class="text-xs text-error px-4 pb-1">${status}</div>`}
+        <div id="msg-list" class="tui-msglist">
+          ${messages.map((m, i) => html`
+            <div key=${i} class=${'tui-msg ' + m.role}>${m.content}</div>`)}
+          ${streaming && !streamingText && html`<div class="tui-msg assistant"><span class="tui-spinner"></span> thinking...</div>`}
+        </div>
 
-        <form class="flex gap-2 p-3 border-t border-base-300 bg-base-200" onsubmit=${e => { e.preventDefault(); this.send(); }}>
-          <textarea id="chat-input" class="textarea textarea-bordered flex-1 resize-none min-h-[42px] max-h-[120px] text-sm"
-            placeholder="Message… (Shift+Enter for newline)" rows="1" disabled=${streaming}
+        ${status && html`<div class="tui-error-text" style="padding:0 1ch">${status}</div>`}
+
+        <form class="tui-compose" onsubmit=${e => { e.preventDefault(); this.send(); }}>
+          <textarea id="chat-input" class="tui-textarea" style="flex:1;resize:none;min-height:24px;max-height:120px"
+            placeholder="type message... (shift+enter for newline)" rows="1" disabled=${streaming}
             onkeydown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } }}
             oninput=${e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}></textarea>
-          <button type="submit" class="btn btn-primary self-end" disabled=${streaming}>
-            ${streaming ? html`<span class="loading loading-spinner loading-sm"></span>` : 'Send'}
+          <button type="submit" class="tui-btn primary" disabled=${streaming}>
+            ${streaming ? html`<span class="tui-spinner"></span>` : '[send]'}
           </button>
         </form>
       </div>`);
@@ -167,12 +160,11 @@ class BirdChat extends HTMLElement {
     try {
       let full = '';
       const streamEl = document.createElement('div');
-      streamEl.className = 'msg-bubble card bg-base-200 text-base-content px-4 py-3 text-sm leading-relaxed';
+      streamEl.className = 'tui-msg assistant';
       const cursor = document.createElement('span');
-      cursor.className = 'animate-pulse ml-1';
-      cursor.textContent = '▋';
+      cursor.style.cssText = 'animation:blink 0.5s step-end infinite';
+      cursor.textContent = '█';
       const wrap = document.createElement('div');
-      wrap.className = 'flex justify-start';
       wrap.appendChild(streamEl);
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
