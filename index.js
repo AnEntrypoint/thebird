@@ -1,10 +1,7 @@
 const { getClient } = require('./lib/client');
 const { GeminiError, withRetry } = require('./lib/errors');
 const { convertMessages, convertTools, cleanSchema, extractModelId, buildConfig } = require('./lib/convert');
-const { loadConfig } = require('./lib/config');
-const { route } = require('./lib/router');
-const { resolveTransformers, applyRequestTransformers } = require('./lib/transformers');
-const openaiProv = require('./lib/providers/openai');
+const { guardStream } = require('./lib/stream-guard');
 
 function streamGemini({ model, system, messages, tools, onStepFinish, apiKey,
   temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }) {
@@ -14,7 +11,7 @@ function streamGemini({ model, system, messages, tools, onStepFinish, apiKey,
   };
 }
 
-async function* createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities }) {
+async function* createFullStream({ model, system, messages, tools, onStepFinish, apiKey, temperature, maxOutputTokens, topP, topK, safetySettings, responseModalities, streamGuard }) {
   const client = getClient(apiKey);
   const modelId = extractModelId(model);
   let contents = convertMessages(messages);
@@ -24,7 +21,7 @@ async function* createFullStream({ model, system, messages, tools, onStepFinish,
     try {
       const stream = await withRetry(() => client.models.generateContentStream({ model: modelId, contents, config }));
       const allParts = [];
-      for await (const chunk of stream) {
+      for await (const chunk of guardStream(stream, streamGuard)) {
         for (const candidate of (chunk.candidates || [])) {
           for (const part of (candidate.content?.parts || [])) {
             allParts.push(part);
@@ -98,79 +95,9 @@ async function generateGemini({ model, system, messages, tools, apiKey, temperat
   }
 }
 
-function isGeminiProvider(p) {
-  return p.name === 'gemini' || (p.api_base_url || '').includes('generativelanguage.googleapis.com');
-}
-
-function findProvider(providers, providerName, modelName) {
-  if (providerName) return providers.find(p => p.name === providerName);
-  if (modelName) return providers.find(p => (p.models || []).includes(modelName));
-  return providers[0];
-}
-
-function buildOpenAIUrl(base) {
-  const clean = (base || '').replace(/\/$/g, '');
-  return clean.includes('/completions') ? clean : clean + '/chat/completions';
-}
-
-function resolveForProvider(provider, model, customMap) {
-  const useList = provider.transformer?.[model]?.use || provider.transformer?.use || [];
-  return resolveTransformers(useList, customMap);
-}
-
-async function* routerStream(params, resolver) {
-  const { provider, actualModel, transformers } = await resolver(params);
-  if (isGeminiProvider(provider)) {
-    yield* createFullStream({ ...params, model: actualModel, apiKey: provider.api_key || params.apiKey });
-  } else {
-    const oaiMsgs = openaiProv.convertMessages(params.messages, params.system);
-    const oaiTools = openaiProv.convertTools(params.tools);
-    let req = { messages: oaiMsgs, model: actualModel, max_tokens: params.maxOutputTokens || 8192, temperature: params.temperature ?? 0.5 };
-    if (oaiTools) req.tools = oaiTools;
-    req = applyRequestTransformers(req, transformers);
-    yield* openaiProv.streamOpenAI({ url: buildOpenAIUrl(provider.api_base_url), apiKey: provider.api_key, headers: req._extraHeaders, body: req, tools: params.tools, onStepFinish: params.onStepFinish });
-  }
-}
-
-function createRouter(config) {
-  const providers = config.Providers || config.providers || [];
-  const routerCfg = config.Router || {};
-  async function resolve(params) {
-    const { providerName, modelName } = await route(params, routerCfg, config.customRouter);
-    const provider = findProvider(providers, providerName, modelName) || providers[0];
-    if (!provider) throw new Error('[thebird] no provider configured');
-    const actualModel = modelName || (provider.models || [])[0] || extractModelId(params.model) || 'gemini-2.0-flash';
-    const transformers = resolveForProvider(provider, actualModel, config._transformers);
-    return { provider, actualModel, transformers };
-  }
-  return {
-    stream(params) { return { fullStream: routerStream(params, resolve), warnings: Promise.resolve([]) }; },
-    async generate(params) {
-      const { provider, actualModel, transformers } = await resolve(params);
-      if (isGeminiProvider(provider)) return generateGemini({ ...params, model: actualModel, apiKey: provider.api_key || params.apiKey });
-      const oaiMsgs = openaiProv.convertMessages(params.messages, params.system);
-      const oaiTools = openaiProv.convertTools(params.tools);
-      let req = { messages: oaiMsgs, model: actualModel, max_tokens: params.maxOutputTokens || 8192, temperature: params.temperature ?? 0.5 };
-      if (oaiTools) req.tools = oaiTools;
-      req = applyRequestTransformers(req, transformers);
-      return openaiProv.generateOpenAI({ url: buildOpenAIUrl(provider.api_base_url), apiKey: provider.api_key, headers: req._extraHeaders, body: req, tools: params.tools });
-    }
-  };
-}
-
-function streamRouter(params) {
-  const config = loadConfig(params.configPath);
-  if (!(config.Providers || config.providers)?.length) return streamGemini(params);
-  return createRouter(config).stream(params);
-}
-
-async function generateRouter(params) {
-  const config = loadConfig(params.configPath);
-  if (!(config.Providers || config.providers)?.length) return generateGemini(params);
-  return createRouter(config).generate(params);
-}
-
+const { streamRouter, generateRouter, createRouter } = require('./lib/router-stream');
 const { cloudGenerate, streamCloud, cloudStream } = require('./lib/cloud-generate');
 const { ensureAuth, login: oauthLogin } = require('./lib/oauth');
+const { TimeoutError } = require('./lib/stream-guard');
 
-module.exports = { streamGemini, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };
+module.exports = { streamGemini, createFullStream, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, TimeoutError, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };
