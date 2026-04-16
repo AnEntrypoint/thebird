@@ -108,15 +108,8 @@ export function createShell({ term, onPreviewWrite }) {
   let inputQueue = [];
   function drainQueue(onData) { const items = inputQueue.slice(); inputQueue = []; for (const d of items) onData(d); }
 
+  const httpHandlers = {};
   window.__debug = window.__debug || {};
-  window.__debug.shell = {
-    get state() { return actor.getSnapshot().value; },
-    get cwd() { return ctx.cwd; },
-    get env() { return ctx.env; },
-    get history() { return ctx.history; },
-    httpHandlers: {},
-    get inputQueue() { return inputQueue.slice(); },
-  };
 
   async function runCmd(line, capture) {
     if (!line.trim()) return '';
@@ -182,5 +175,12 @@ export function createShell({ term, onPreviewWrite }) {
   term.onData(onData);
   const runPublic = line => run(line, onData);
   rl.showPrompt();
-  return { run: runPublic, onPreviewWrite };
+  return {
+    run: runPublic, onPreviewWrite, httpHandlers,
+    get state() { return actor.getSnapshot().value; },
+    get cwd() { return ctx.cwd; },
+    get env() { return ctx.env; },
+    get history() { return ctx.history; },
+    get inputQueue() { return inputQueue.slice(); },
+  };
 }
