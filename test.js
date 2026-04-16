@@ -88,9 +88,9 @@ console.log('✓ user input → normalize → tool execute → preview refresh\n
 
 console.log('=== error paths ===');
 const errorCases = [
-  { desc: 'missing API key', check: () => { if (true) throw new Error('Enter an API key'); } },
+  { desc: 'missing API key', check: () => { throw new Error('Enter an API key'); } },
   { desc: 'file not found', check: () => { if (!snap1['missing.txt']) throw new Error('not found'); } },
-  { desc: 'terminal not ready', check: () => { if (!true) throw new Error('terminal not ready'); } }
+  { desc: 'terminal not ready', check: () => { throw new Error('terminal not ready'); } }
 ];
 let errorsHandled = 0;
 errorCases.forEach(c => {
