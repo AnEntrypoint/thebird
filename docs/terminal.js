@@ -57,7 +57,7 @@ async function boot() {
   window.__debug = window.__debug || {};
   window.__debug.terminal = { get state() { return bootActor.getSnapshot().value; } };
 
-  const term = new Terminal({ theme: { background: '#000000' }, convertEol: true });
+  const term = new Terminal({ theme: { background: '#000000', foreground: '#33ff33' }, convertEol: true });
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(el);
