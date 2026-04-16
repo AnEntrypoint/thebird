@@ -134,6 +134,9 @@ Run examples against real Gemini API to validate message translation.
 - Tool parameter types must be lowercase for Gemini API — `object`, `string`, `number` not `OBJECT`, `STRING`, `NUMBER`. Uppercase types fail schema validation.
 - agentGenerate passes raw Anthropic-format messages to streamGemini internally, which calls convertMessages. Do NOT pre-convert in app.js — double-conversion breaks tool schemas.
 - Anthropic format IS the canonical message format — do NOT add an intermediate transformation layer. Direct translation to provider-native formats is cleaner than another abstraction level.
+- **shell.js httpHandlers visibility chain**: shell.js creates `httpHandlers = {}` and returns it on the shell object. terminal.js assigns `window.__debug.shell = shell`. shell-node.js mutates `window.__debug.shell.httpHandlers[port]` to register routes. index.html reads from `window.__debug.shell.httpHandlers`. All four modules reference the same object; httpHandlers MUST be returned on the shell object or the chain breaks.
+- **CI tag collision bug**: .github/workflows/publish.yml fails on every push to main because it does not check if the version tag already exists before running `npm version patch`. This is pre-existing and unrelated to code changes. Expect CI failures on main.
+- **Test policy**: Single test.js file (max 139L per constraint). e2e-test.js deleted. Validation via live API calls with exec:nodejs (browser automation unavailable in this environment).
 
 ## Error Architecture
 
