@@ -37,7 +37,7 @@ export interface FinishStepEvent { type: 'finish-step'; finishReason: 'stop' | '
 export interface ErrorEvent { type: 'error'; error: Error }
 export type StreamEvent = StartStepEvent | TextDeltaEvent | ToolCallEvent | ToolResultEvent | FinishStepEvent | ErrorEvent;
 export interface StreamResult { fullStream: AsyncIterable<StreamEvent>; warnings: Promise<unknown[]> }
-export interface StreamParams extends GenerationParams { onStepFinish?: () => Promise<void> | void }
+export interface StreamParams extends GenerationParams { onStepFinish?: () => Promise<void> | void; streamGuard?: StreamGuardOptions }
 export function streamGemini(params: StreamParams): StreamResult;
 export interface GenerateResult { text: string; parts: unknown[]; response: unknown }
 export function generateGemini(params: GenerationParams): Promise<GenerateResult>;
@@ -53,6 +53,7 @@ export interface ProviderConfig {
   api_key: string;
   models?: string[];
   transformer?: TransformerConfig;
+  capabilities?: Partial<CapabilitySet>;
 }
 export interface RouterConfig {
   default?: string;
@@ -69,8 +70,10 @@ export interface RouterConfiguration {
   Router?: RouterConfig;
   customRouter?: (params: GenerationParams, config: RouterConfig) => Promise<string | null>;
   configPath?: string;
+  circuitBreaker?: CircuitBreakerOptions;
 }
 export interface RouterInstance {
+  breaker: { isOpen(name: string): boolean; recordFailure(name: string): void; recordSuccess(name: string): void };
   stream(params: StreamParams): StreamResult;
   generate(params: GenerationParams): Promise<GenerateResult | { text: string; response: unknown }>;
 }
@@ -89,10 +92,35 @@ export interface GeminiContent { role: 'user' | 'model'; parts: GeminiPart[] }
 export function convertMessages(messages: Message[]): GeminiContent[];
 export function convertTools(tools: Tools): Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
 export function cleanSchema(schema: unknown): unknown;
-export class GeminiError extends Error {
-  name: 'GeminiError';
+export interface StreamGuardOptions {
+  chunkTimeoutMs?: number;
+  maxRepeats?: number;
+}
+export interface CapabilitySet {
+  streaming: boolean;
+  toolUse: boolean;
+  vision: boolean;
+  systemMessage: boolean;
+  jsonMode: boolean;
+}
+export interface CircuitBreakerOptions {
+  maxFailures?: number;
+  cooldownMs?: number;
+}
+export class BridgeError extends Error {
+  name: string;
   status?: number;
   code?: string | number;
   retryable: boolean;
-  constructor(message: string, options?: { status?: number; code?: string | number; retryable?: boolean });
+  provider?: string;
+  constructor(message: string, options?: { status?: number; code?: string | number; retryable?: boolean; provider?: string; headers?: unknown });
 }
+export class AuthError extends BridgeError {}
+export class RateLimitError extends BridgeError {}
+export class TimeoutError extends BridgeError {}
+export class ContextWindowError extends BridgeError {}
+export class ContentPolicyError extends BridgeError {}
+export class ProviderError extends BridgeError {}
+export const GeminiError: typeof BridgeError;
+export function classifyError(status: number, message: string, provider?: string): BridgeError;
+export function redactKeys(str: string): string;

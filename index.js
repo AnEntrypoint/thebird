@@ -98,6 +98,6 @@ async function generateGemini({ model, system, messages, tools, apiKey, temperat
 const { streamRouter, generateRouter, createRouter } = require('./lib/router-stream');
 const { cloudGenerate, streamCloud, cloudStream } = require('./lib/cloud-generate');
 const { ensureAuth, login: oauthLogin } = require('./lib/oauth');
-const { TimeoutError } = require('./lib/stream-guard');
+const { BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError, classifyError } = require('./lib/errors');
 
-module.exports = { streamGemini, createFullStream, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, TimeoutError, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };
+module.exports = { streamGemini, createFullStream, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError, classifyError, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };

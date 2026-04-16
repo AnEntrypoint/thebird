@@ -1,6 +1,20 @@
 ## [Unreleased]
 
 ### Added
+- `lib/errors.js`: Typed error hierarchy — BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError with classifyError factory. GeminiError kept as alias.
+- `lib/errors.js`: `redactKeys()` — auto-redacts API keys (AIza, sk-, key- patterns) in error messages to `...XXXX`
+- `lib/errors.js`: `parseRetryAfterHeader()` — parses standard HTTP Retry-After header (seconds and date formats) in addition to Gemini-specific retry info
+- `lib/stream-guard.js`: `guardStream()` — wraps async iterables with per-chunk timeout (30s default) and repeated-chunk detection (100 threshold)
+- `lib/circuit-breaker.js`: `createCircuitBreaker()` — per-provider failure tracking with auto-recovery after cooldown
+- `lib/capabilities.js`: `getCapabilities()` / `stripUnsupported()` — provider capability metadata with automatic feature stripping and warnings
+- `lib/router-stream.js`: Router logic extracted from index.js — circuit breaker and capability checks integrated
+
+### Changed
+- `index.js`: Trimmed from 177 to 104 lines by extracting router logic to lib/router-stream.js
+- `index.d.ts`: Added types for BridgeError hierarchy, StreamGuardOptions, CapabilitySet, CircuitBreakerOptions
+- `lib/providers/openai.js`: Passes response headers to error objects for Retry-After parsing; integrates guardStream
+
+### Added
 - `docs/app.js`: Cerebras as OpenAI-compatible provider option (https://api.cerebras.ai/v1)
 - `docs/shell.js`: `createShell({ term, onPreviewWrite })` — POSIX shell + Node REPL using browser V8 eval + xstate v5 state machine. Dispatch table of built-ins: ls, cat, echo, pwd, cd, mkdir, rm, cp, mv, env, export, clear, help, node, npm install, exit. Pipe support via ` | ` split. `window.__debug.shell` exposes state, cwd, env, history, httpHandlers, nodeMode. `http.createServer` polyfill registers handlers in httpHandlers map.
 - `docs/shell-node.js`: `createNodeEnv({ ctx, term })` — persistent V8 eval scope with process, console, require (IDB node_modules), Buffer shim, http.createServer polyfill, fetch, timers.
