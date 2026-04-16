@@ -1,6 +1,6 @@
 {
   "name": "thebird",
-  "version": "1.2.70",
+  "version": "1.2.71",
   "description": "Anthropic SDK to Gemini streaming bridge — drop-in proxy that translates Anthropic message format and tool calls to Google Gemini",
   "scripts": {
     "start": "node serve.js"
