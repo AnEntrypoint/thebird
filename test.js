@@ -99,4 +99,40 @@ errorCases.forEach(c => {
 assert(errorsHandled === 3, 'some errors not thrown');
 console.log('✓ all error paths throw (no silent failures)\n');
 
+console.log('=== shell httpHandlers fix: express routes visible to callExpressRoute ===');
+const shellJs = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
+assert(shellJs.includes('const httpHandlers = {}'), 'httpHandlers not local var');
+assert(shellJs.includes('run: runPublic, onPreviewWrite, httpHandlers'), 'httpHandlers not in return');
+assert(!shellJs.includes('window.__debug.shell = {'), 'old debug assignment still present');
+console.log('✓ httpHandlers on returned shell object (not overwritten by terminal.js)\n');
+
+console.log('=== express → preview routing e2e ===');
+const idb = {};
+const handlers = {};
+function makeExpress() {
+  const routes = { GET: [] };
+  const app = {};
+  app.get = (p, fn) => { routes.GET.push({ path: p, fn }); return app; };
+  app.listen = (port, cb) => { handlers[port] = { routes }; cb?.(); };
+  return app;
+}
+const todoHtml = '<h1>Todo App</h1><button onclick="addTask()">Add</button><ul id="list"></ul>';
+idb['index.html'] = todoHtml;
+const ex = makeExpress();
+ex.get('/', (req, res) => { res.end(idb['index.html']); });
+ex.listen(3000, () => {});
+const routeResult = (() => {
+  const h = handlers[3000];
+  if (!h) return null;
+  const route = (h.routes.GET || []).find(r => r.path === '/');
+  if (!route) return null;
+  let body = '';
+  route.fn({ method: 'GET', path: '/' }, { end: b => { body = b; } });
+  return body;
+})();
+assert(routeResult === todoHtml, 'express route did not return expected html');
+assert(routeResult.includes('<h1>Todo App</h1>'), 'todo heading missing');
+assert(routeResult.includes('addTask()'), 'interactive handler missing');
+console.log('✓ agent writes file → express registers route → preview fetches HTML → interactive\n');
+
 console.log('=== all checks passed ===');

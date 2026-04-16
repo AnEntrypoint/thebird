@@ -1,6 +1,10 @@
 ## [Unreleased]
 
 ### Fixed
+- `docs/shell.js`: httpHandlers now returned on shell object instead of assigned to window.__debug.shell separately — terminal.js overwrote the debug object (which had httpHandlers) with the createShell() return value (which had none), making express routes invisible to index.html callExpressRoute(). Fix: remove internal window.__debug.shell assignment, include httpHandlers and all debug getters on the returned shell object so terminal.js assignment preserves the reference
+- `test.js`: consolidate e2e-test.js coverage into test.js (express routing e2e + httpHandlers fix regression); delete e2e-test.js to enforce single-test-file policy
+
+### Fixed
 - `docs/app.js`: Normalize message content format to Anthropic array structure `[{ type: 'text', text: '...' }]` to prevent double-conversion in streamGemini/streamOpenAI (was sending string content)
 - `docs/agent-chat.js`: Add lastError tracking in window.__debug.agent for error visibility and debugging
 - `docs/shell.js`: Expose onPreviewWrite callback on returned shell object for preview refresh integration
