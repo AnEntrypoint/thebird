@@ -1,7 +1,15 @@
 ## [Unreleased]
 
+### Fixed
+- `docs/app.js`: Normalize message content format to Anthropic array structure `[{ type: 'text', text: '...' }]` to prevent double-conversion in streamGemini/streamOpenAI (was sending string content)
+- `docs/agent-chat.js`: Add lastError tracking in window.__debug.agent for error visibility and debugging
+- `docs/shell.js`: Expose onPreviewWrite callback on returned shell object for preview refresh integration
+- `docs/terminal.js`: Add shell reference to window.__debug for tool access; reduce preview refresh debounce 5s → 1s for quicker feedback
+- `docs/preview-sw.js`: Add missing service worker for preview iframe routing (handle EXPRESS_REQUEST messages from main thread)
+- `test.js`: Create integration test suite validating bootstrap, defaults.json, tools, errors, observability structures
+
 ### Changed
-- `docs/defaults.json`: Split and optimized for Git constraints — reduced from 154.83 MB to 1.23 MB by including only 17 critical bootstrap files (app.js, agent-chat.js, terminal.js, shell.js, vendor/xterm-bundle.js, vendor/xstate.js, vendor/ui-libs.js, vendor/thebird-browser.js, etc.). Excludes large unused vendors (winterjs.wasm 46 MB, wasmer_js_bg.wasm 6.3 MB, rippleui.css 4.5 MB, sql-wasm.wasm 0.6 MB, acp-sdk.js 0.6 MB) not required for WebContainer bootstrap path.
+- `docs/defaults.json`: Split and optimized for Git constraints — reduced from 154.83 MB to 1.23 MB by including only 16 critical bootstrap files (app.js, agent-chat.js, terminal.js, shell.js, vendor/xterm-bundle.js, vendor/xstate.js, vendor/ui-libs.js, vendor/thebird-browser.js, etc.). Excludes large unused vendors (winterjs.wasm 46 MB, wasmer_js_bg.wasm 6.3 MB, rippleui.css 4.5 MB, sql-wasm.wasm 0.6 MB, acp-sdk.js 0.6 MB) not required for WebContainer bootstrap path.
 - `docs/terminal.js`: Updated xterm.js theme with green foreground (#33ff33) to match Claude Code TUI aesthetic. Maintains AAA contrast ratio (14.61:1 on black background).
 
 ### Added
