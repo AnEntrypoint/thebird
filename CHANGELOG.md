@@ -1,6 +1,15 @@
 ## [Unreleased]
 
 ### Added
+- `docs/node-builtins.js`: Full Node.js module polyfills — path, fs (IDB-backed), events (EventEmitter), url, querystring, Buffer class with encoding support
+- `docs/shell-node.js`: Enhanced Node env — relative require, JSON require, per-file __dirname, process.stdout/stderr/nextTick/argv/hrtime, console.dir/table/time/assert/count, express with route params/middleware/static/json, os/util/crypto/stream modules
+- `docs/shell.js`: Added node -e/-v flags, touch/head/tail/wc/grep/which commands, npm i alias
+
+### Changed
+- `docs/shell-node.js`: Rewritten to import from node-builtins.js; require() resolves relative paths, .json, directory/index.js
+- `docs/shell.js`: Trimmed from 206L to 189L; ls shows directory entries properly
+
+### Added
 - `lib/errors.js`: Typed error hierarchy — BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError with classifyError factory. GeminiError kept as alias.
 - `lib/errors.js`: `redactKeys()` — auto-redacts API keys (AIza, sk-, key- patterns) in error messages to `...XXXX`
 - `lib/errors.js`: `parseRetryAfterHeader()` — parses standard HTTP Retry-After header (seconds and date formats) in addition to Gemini-specific retry info

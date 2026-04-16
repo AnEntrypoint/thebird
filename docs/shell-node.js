@@ -1,106 +1,191 @@
+import { createPath, createFs, createEvents, createUrl, createQuerystring, createBuffer } from './node-builtins.js';
+
 function serializeRoutes(routes) {
   const out = {};
-  for (const [method, arr] of Object.entries(routes)) {
-    out[method] = arr.map(r => ({ path: r.path }));
-  }
+  for (const [method, arr] of Object.entries(routes)) out[method] = arr.map(r => ({ path: r.path }));
   return out;
 }
 
-const makeBuiltinModules = term => ({
-  express: () => () => {
-    const routes = { GET: [], POST: [], USE: [] };
-    const app = {
-      get: (path, fn) => routes.GET.push({ path, fn }),
-      post: (path, fn) => routes.POST.push({ path, fn }),
-      use: (fn) => routes.USE.push({ path: '*', fn }),
-      listen: (port, cb) => {
-        window.__debug.shell.httpHandlers[port] = { routes };
-        navigator.serviceWorker?.controller?.postMessage({ type: 'REGISTER_ROUTES', port, routes: serializeRoutes(routes) });
-        term.write('Express listening on :' + port + '\r\n');
-        cb?.();
-      },
+function matchRoute(pattern, path) {
+  if (pattern === '*') return {};
+  const pp = pattern.split('/'), rp = path.split('/');
+  if (pp.length !== rp.length) return null;
+  const params = {};
+  for (let i = 0; i < pp.length; i++) {
+    if (pp[i].startsWith(':')) params[pp[i].slice(1)] = rp[i];
+    else if (pp[i] !== rp[i]) return null;
+  }
+  return params;
+}
+
+function createExpress(term, fsmod) {
+  return () => {
+    const routes = { GET: [], POST: [], PUT: [], DELETE: [], USE: [] };
+    const middlewares = [];
+    const app = fn => middlewares.push(fn);
+    app.get = (p, ...fns) => routes.GET.push({ path: p, fns });
+    app.post = (p, ...fns) => routes.POST.push({ path: p, fns });
+    app.put = (p, ...fns) => routes.PUT.push({ path: p, fns });
+    app.delete = (p, ...fns) => routes.DELETE.push({ path: p, fns });
+    app.use = (...args) => {
+      if (typeof args[0] === 'function') middlewares.push(args[0]);
+      else routes.USE.push({ path: args[0], fn: args[1] });
+    };
+    app.listen = (port, cb) => {
+      window.__debug.shell.httpHandlers[port] = { routes, middlewares };
+      navigator.serviceWorker?.controller?.postMessage({ type: 'REGISTER_ROUTES', port, routes: serializeRoutes(routes) });
+      term.write('Express listening on :' + port + '\r\n');
+      cb?.();
+    };
+    app.json = () => (req, res, next) => {
+      if (typeof req.body === 'string') try { req.body = JSON.parse(req.body); } catch {}
+      next?.();
+    };
+    app.static = dir => (req, res) => {
+      const fp = dir.replace(/\/$/, '') + req.path;
+      try { res.send(fsmod.readFileSync(fp)); } catch { res.status(404).send('Not Found'); }
     };
     return app;
-  },
-  'better-sqlite3': () => class Database {
+  };
+}
+
+function createSqlite() {
+  return class Database {
     constructor(name) {
       this._name = name;
-      if (!window.__sqlJs) throw new Error('sql.js not loaded — call await loadSql() first');
+      if (!window.__sqlJs) throw new Error('sql.js not loaded');
       this._db = new window.__sqlJs.Database();
     }
     prepare(sql) {
       const db = this._db;
       return {
-        run: (...params) => { db.run(sql, params); return { changes: 1 }; },
-        get: (...params) => { const r = db.exec(sql, params); return r[0]?.values[0] ? Object.fromEntries(r[0].columns.map((c, i) => [c, r[0].values[0][i]])) : undefined; },
-        all: (...params) => { const r = db.exec(sql, params); if (!r[0]) return []; return r[0].values.map(row => Object.fromEntries(r[0].columns.map((c, i) => [c, row[i]]))); },
+        run: (...p) => { db.run(sql, p); return { changes: 1 }; },
+        get: (...p) => { const r = db.exec(sql, p); return r[0]?.values[0] ? Object.fromEntries(r[0].columns.map((c, i) => [c, r[0].values[0][i]])) : undefined; },
+        all: (...p) => { const r = db.exec(sql, p); if (!r[0]) return []; return r[0].values.map(row => Object.fromEntries(r[0].columns.map((c, i) => [c, row[i]]))); },
       };
     }
-  },
-});
+    close() {}
+  };
+}
+
+function createConsole(term) {
+  const w = s => term.write(s + '\r\n');
+  const timers = {};
+  return {
+    log: (...a) => w(a.map(v => typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)).join(' ')),
+    error: (...a) => term.write('\x1b[31m' + a.map(String).join(' ') + '\x1b[0m\r\n'),
+    warn: (...a) => term.write('\x1b[33m' + a.map(String).join(' ') + '\x1b[0m\r\n'),
+    info: (...a) => w(a.map(String).join(' ')),
+    dir: (o, opts) => w(JSON.stringify(o, null, 2)),
+    table: data => {
+      if (!Array.isArray(data)) { w(JSON.stringify(data, null, 2)); return; }
+      if (!data.length) { w('(empty)'); return; }
+      const cols = Object.keys(data[0]);
+      w(cols.join('\t'));
+      for (const row of data) w(cols.map(c => String(row[c] ?? '')).join('\t'));
+    },
+    time: label => { timers[label || 'default'] = performance.now(); },
+    timeEnd: label => {
+      const k = label || 'default';
+      const ms = timers[k] ? (performance.now() - timers[k]).toFixed(3) : 0;
+      delete timers[k];
+      w(k + ': ' + ms + 'ms');
+    },
+    assert: (cond, ...a) => { if (!cond) term.write('\x1b[31mAssertion failed: ' + a.join(' ') + '\x1b[0m\r\n'); },
+    count: (() => { const c = {}; return label => { const k = label || 'default'; c[k] = (c[k] || 0) + 1; w(k + ': ' + c[k]); }; })(),
+    clear: () => term.clear(),
+    trace: (...a) => w('Trace: ' + a.map(String).join(' ')),
+    group: () => {},
+    groupEnd: () => {},
+  };
+}
+
+function createProcess(term, ctx) {
+  return {
+    argv: ['node'],
+    env: ctx.env,
+    cwd: () => ctx.cwd,
+    chdir: d => { ctx.cwd = d; },
+    exit: code => term.write('[exit ' + (code || 0) + ']\r\n'),
+    platform: 'browser',
+    version: 'v20.0.0',
+    versions: { node: '20.0.0' },
+    pid: 1,
+    nextTick: fn => Promise.resolve().then(fn),
+    stdout: { write: s => term.write(String(s)) },
+    stderr: { write: s => term.write('\x1b[31m' + String(s) + '\x1b[0m') },
+    stdin: { on: () => {} },
+    on: () => {},
+    off: () => {},
+    hrtime: { bigint: () => BigInt(Math.round(performance.now() * 1e6)) },
+  };
+}
 
 export function createNodeEnv({ ctx, term }) {
-  const BUILTIN_MODULES = makeBuiltinModules(term);
-  const scope = {
-    process: {
-      argv: [],
-      env: ctx.env,
-      cwd: () => ctx.cwd,
-      exit: code => term.write('[exit ' + code + ']\r\n'),
-    },
-    console: {
-      log: (...a) => term.write(a.map(String).join(' ') + '\r\n'),
-      error: (...a) => term.write('\x1b[31m' + a.map(String).join(' ') + '\x1b[0m\r\n'),
-      warn: (...a) => term.write('\x1b[33m' + a.map(String).join(' ') + '\x1b[0m\r\n'),
-    },
-    require: id => {
-      if (BUILTIN_MODULES[id]) return BUILTIN_MODULES[id]();
-      const key = 'node_modules/' + id + '/index.js';
-      const src = (window.__debug.idbSnapshot || {})[key];
-      if (src == null) throw new Error('module not found: ' + id);
-      const mod = { exports: {} };
-      new Function('module', 'exports', 'require', src)(mod, mod.exports, scope.require);
-      return mod.exports;
-    },
-    loadSql: async () => {
-      if (window.__sqlJs) return window.__sqlJs;
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = './vendor/sql-wasm.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-      window.__sqlJs = await initSqlJs({ locateFile: f => './vendor/' + f });
-      return window.__sqlJs;
-    },
-    setTimeout, setInterval, clearTimeout, clearInterval, fetch,
-    Buffer: {
-      from: (s, enc) => enc === 'base64'
-        ? new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)))
-        : new TextEncoder().encode(s),
-      toString: (buf, enc) => enc === 'base64'
-        ? btoa(String.fromCharCode(...buf))
-        : new TextDecoder().decode(buf),
-    },
-    get __filename() { return ctx.cwd + '/repl'; },
-    get __dirname() { return ctx.cwd; },
-    http: {
-      createServer: handler => ({
-        listen: (port, cb) => {
-          window.__debug.shell.httpHandlers[port] = handler;
-          term.write('listening on :' + port + '\r\n');
-          cb?.();
-        },
-      }),
-    },
+  const pathmod = createPath();
+  const fsmod = createFs();
+  const Buf = createBuffer();
+  const MODULES = {
+    path: () => pathmod,
+    fs: () => fsmod,
+    events: () => createEvents(),
+    url: () => createUrl(),
+    querystring: () => createQuerystring(),
+    os: () => ({ platform: () => 'browser', homedir: () => '/', tmpdir: () => '/tmp', cpus: () => [{}], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n' }),
+    util: () => ({ format: (...a) => a.join(' '), inspect: o => JSON.stringify(o, null, 2), promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), types: { isPromise: p => p instanceof Promise } }),
+    crypto: () => ({ randomBytes: n => Buf.from(Array.from({ length: n }, () => Math.random() * 256 | 0)), randomUUID: () => crypto.randomUUID(), createHash: () => ({ update: () => ({ digest: () => 'stub' }) }) }),
+    stream: () => ({ Readable: createEvents(), Writable: createEvents(), Transform: createEvents(), pipeline: (...a) => a.pop()(null) }),
+    express: createExpress(term, fsmod),
+    'better-sqlite3': createSqlite,
   };
 
-  return async function nodeEval(code, filename) {
+  const cons = createConsole(term);
+  const proc = createProcess(term, ctx);
+
+  function makeRequire(dir) {
+    return function require(id) {
+      if (MODULES[id]) return MODULES[id]();
+      const candidates = id.startsWith('.') ? [
+        pathmod.resolve(dir, id) + '.js',
+        pathmod.resolve(dir, id),
+        pathmod.resolve(dir, id) + '/index.js',
+        pathmod.resolve(dir, id, 'index.js'),
+      ] : ['node_modules/' + id + '/index.js'];
+      const s = snap();
+      for (const c of candidates) {
+        const key = c.replace(/^\//, '');
+        if (key in s) {
+          if (key.endsWith('.json')) return JSON.parse(s[key]);
+          const mod = { exports: {} };
+          const modDir = pathmod.dirname('/' + key);
+          new Function('module', 'exports', 'require', '__filename', '__dirname', 'process', 'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'fetch', s[key])(mod, mod.exports, makeRequire(modDir), '/' + key, modDir, proc, cons, Buf, setTimeout, setInterval, clearTimeout, clearInterval, fetch);
+          return mod.exports;
+        }
+      }
+      throw new Error('Cannot find module: ' + id);
+    };
+  }
+
+  const snap = () => window.__debug?.idbSnapshot || {};
+
+  async function loadSql() {
+    if (window.__sqlJs) return window.__sqlJs;
+    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = './vendor/sql-wasm.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+    window.__sqlJs = await initSqlJs({ locateFile: f => './vendor/' + f });
+    return window.__sqlJs;
+  }
+
+  return async function nodeEval(code, filename, argv) {
+    const dir = filename ? pathmod.dirname(filename) : ctx.cwd;
+    const fpath = filename || ctx.cwd + '/repl';
+    proc.argv = ['node', fpath, ...(argv || [])];
+    const scope = { process: proc, console: cons, require: makeRequire(dir), Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, loadSql, module: { exports: {} }, exports: {} };
     try {
       const keys = Object.keys(scope);
       const vals = Object.values(scope);
       const fn = new Function(...keys, 'return (async () => {\n' + code + '\n})()');
-      await fn(...vals);
+      const result = await fn(...vals);
+      if (result !== undefined && !filename) cons.log(result);
     } catch (e) {
       term.write('\x1b[31m' + (filename ? filename + ': ' : '') + e.message + '\x1b[0m\r\n');
     }
