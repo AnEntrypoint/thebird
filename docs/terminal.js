@@ -44,7 +44,7 @@ function scheduleReload() {
   clearTimeout(reloadTimer);
   reloadTimer = setTimeout(() => {
     if (typeof window.refreshPreview === 'function') window.refreshPreview();
-  }, 5000);
+  }, 1000);
 }
 
 async function boot() {
@@ -91,6 +91,7 @@ async function boot() {
   }
 
   const shell = createShell({ term, onPreviewWrite: scheduleReload });
+  window.__debug.shell = shell;
   window.__debug.shellWriter = { write: line => shell.run(line.replace(/\n$/, '')) };
 }
 

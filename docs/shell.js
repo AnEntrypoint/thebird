@@ -180,9 +180,7 @@ export function createShell({ term, onPreviewWrite }) {
   }
 
   term.onData(onData);
-  onPreviewWrite && (window.__debug.shell.onPreviewWrite = onPreviewWrite);
   const runPublic = line => run(line, onData);
-  window.__debug.shell.run = runPublic;
   rl.showPrompt();
-  return { run: runPublic };
+  return { run: runPublic, onPreviewWrite };
 }

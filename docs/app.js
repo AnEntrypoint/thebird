@@ -154,8 +154,10 @@ class BirdChat extends HTMLElement {
     if (!apiKey && providerType !== 'acp') { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
-    const messages = [...this.state.messages, { role: 'user', content: text }];
-    this.setState({ messages, streaming: true, status: '', streamingText: '' });
+    const normalizedMessages = [...this.state.messages, { role: 'user', content: text }].map(m => ({
+      ...m, content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content
+    }));
+    this.setState({ messages: normalizedMessages, streaming: true, status: '', streamingText: '' });
     const provider = { type: providerType, apiKey, model, baseUrl: providerType === 'gemini' ? '' : baseUrl };
     try {
       let full = '';
@@ -169,12 +171,12 @@ class BirdChat extends HTMLElement {
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
       if (list) list.appendChild(wrap);
-      await agentGenerate(provider, messages,
+      await agentGenerate(provider, normalizedMessages,
         chunk => { full += chunk; streamEl.textContent = full; const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; },
         (name, args) => { full += `\n[tool: ${name}(${JSON.stringify(args)})]\n`; streamEl.textContent = full; }
       );
       wrap.remove();
-      this.setState({ messages: [...messages, { role: 'assistant', content: full || '(empty)' }], streaming: false, streamingText: '' });
+      this.setState({ messages: [...normalizedMessages, { role: 'assistant', content: [{ type: 'text', text: full || '(empty)' }] }], streaming: false, streamingText: '' });
       const l2 = this.querySelector('#msg-list');
       if (l2) l2.scrollTop = l2.scrollHeight;
     } catch (err) {

@@ -100,7 +100,7 @@ function buildStream(provider) {
 
 export async function agentGenerate(provider, messages, onChunk, onTool) {
   Object.assign(window.__debug = window.__debug || {}, {
-    agent: { provider: provider.type, model: provider.model, active: true, lastTool: null },
+    agent: { provider: provider.type, model: provider.model, active: true, lastTool: null, lastError: null },
   });
   try {
     for await (const ev of buildStream({ ...provider, messages })) {
@@ -110,6 +110,9 @@ export async function agentGenerate(provider, messages, onChunk, onTool) {
         onTool(ev.toolName, ev.args);
       } else if (ev.type === 'error') throw ev.error;
     }
+  } catch (e) {
+    window.__debug.agent.lastError = { message: e.message, stack: e.stack, timestamp: Date.now() };
+    throw e;
   } finally {
     window.__debug.agent.active = false;
   }
