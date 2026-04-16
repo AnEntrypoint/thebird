@@ -152,6 +152,68 @@ Pass options as a nested array: `["maxtoken", { "max_tokens": 16384 }]`.
 }
 ```
 
+## Error Handling
+
+thebird uses a typed error hierarchy. All errors extend `BridgeError`:
+
+| Error | Status | Retryable | When |
+|---|---|---|---|
+| `AuthError` | 401, 403 | No | Invalid API key |
+| `RateLimitError` | 429 | Yes | Quota exceeded |
+| `TimeoutError` | 408 | Yes | Stream chunk timeout |
+| `ContextWindowError` | 413 | No | Input too long |
+| `ContentPolicyError` | 451 | No | Safety filter triggered |
+| `ProviderError` | 5xx | Yes | Upstream server error |
+
+`GeminiError` is an alias for `BridgeError` (backwards compatible). API keys are auto-redacted in error messages.
+
+```js
+const { classifyError, BridgeError } = require('thebird');
+try { /* ... */ } catch (err) {
+  if (err instanceof BridgeError && err.retryable) { /* retry */ }
+}
+```
+
+## Streaming Resilience
+
+Pass `streamGuard` to protect against stalled or looping streams:
+
+```js
+streamGemini({
+  messages,
+  streamGuard: { chunkTimeoutMs: 30000, maxRepeats: 100 }
+});
+```
+
+- **Chunk timeout** — throws `TimeoutError` if no chunk received within the timeout (default 30s)
+- **Repeat detection** — throws if the same chunk appears consecutively N times (default 100)
+
+## Circuit Breaker
+
+The router tracks per-provider failures. After consecutive failures exceed the threshold, the provider is temporarily skipped:
+
+```js
+createRouter({
+  Providers: [/* ... */],
+  circuitBreaker: { maxFailures: 5, cooldownMs: 60000 }
+});
+```
+
+## Provider Capabilities
+
+Declare what each provider supports. Unsupported features are stripped automatically with warnings:
+
+```json
+{
+  "name": "groq",
+  "api_base_url": "...",
+  "api_key": "$GROQ_API_KEY",
+  "capabilities": { "vision": false, "jsonMode": true }
+}
+```
+
+Defaults: `streaming: true, toolUse: true, vision: true, systemMessage: true, jsonMode: false`.
+
 ## Gemini Direct API
 
 `streamGemini` / `generateGemini` bypass routing and call Gemini natively via `@google/genai`. Requires `GEMINI_API_KEY`.

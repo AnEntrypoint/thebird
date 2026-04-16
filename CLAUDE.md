@@ -133,14 +133,41 @@ Run examples against real Gemini API to validate message translation.
 - Cannot bundle index.js directly for browser — it imports Node-only modules (oauth.js, config.js, cloud-generate.js) at top level. Create a separate browser entry that imports only lib/client.js, lib/errors.js, lib/convert.js. Use ESM wrapper (not CJS module.exports) to preserve named exports in bundle.
 - Tool parameter types must be lowercase for Gemini API — `object`, `string`, `number` not `OBJECT`, `STRING`, `NUMBER`. Uppercase types fail schema validation.
 - agentGenerate passes raw Anthropic-format messages to streamGemini internally, which calls convertMessages. Do NOT pre-convert in app.js — double-conversion breaks tool schemas.
+- Anthropic format IS the canonical message format — do NOT add an intermediate transformation layer. Direct translation to provider-native formats is cleaner than another abstraction level.
+
+## Error Architecture
+
+**Error hierarchy** (lib/errors.js):
+- `BridgeError(message, { status, code, retryable, provider, headers })` — base class, `GeminiError` alias for backwards compat
+- `AuthError` (401/403), `RateLimitError` (429, retryable), `TimeoutError` (408, retryable), `ContextWindowError` (413), `ContentPolicyError` (451), `ProviderError` (5xx, retryable)
+- `classifyError(status, message, provider)` — factory returns typed error from status code
+- `redactKeys(str)` — masks API keys (AIza, sk-, key- patterns) to `...XXXX`
+- `parseRetryAfterHeader(err)` — standard HTTP Retry-After (seconds + date formats)
+
+**Stream guards** (lib/stream-guard.js):
+- `guardStream(iterable, { chunkTimeoutMs, maxRepeats })` — wraps async iterables
+- Chunk timeout default 30s, repeat threshold default 100
+
+**Circuit breaker** (lib/circuit-breaker.js):
+- `createCircuitBreaker({ maxFailures, cooldownMs })` — per-provider failure tracking
+- Auto-recovery after cooldown, reset on success
+
+**Capabilities** (lib/capabilities.js):
+- `getCapabilities(provider)` — merges provider.capabilities with defaults
+- `stripUnsupported(params, caps)` — removes unsupported features, returns warnings
+- Defaults: streaming, toolUse, vision, systemMessage = true; jsonMode = false
 
 ## Files
 
 - `lib/convert.js`: Message/tool translation logic
 - `lib/client.js`: Provider client factory
-- `lib/errors.js`: Error handling and retry logic
+- `lib/errors.js`: Typed error hierarchy (BridgeError, AuthError, RateLimitError, etc.), classifyError, redactKeys, withRetry
+- `lib/stream-guard.js`: guardStream — chunk timeout and repeated-chunk detection for async iterables
+- `lib/circuit-breaker.js`: Per-provider failure tracking with auto-recovery
+- `lib/capabilities.js`: Provider capability metadata and unsupported feature stripping
+- `lib/router-stream.js`: Router streaming/generation with circuit breaker and capability integration
 - `lib/providers/`: Provider-specific streaming implementations
-- `index.js`: Main entry point, streaming and generation wrappers
+- `index.js`: Main entry point, Gemini streaming/generation, re-exports
 - `index.d.ts`: TypeScript type definitions
 - `examples/`: Working examples using Anthropic SDK format
 - `wasi/cli.ts`: Deno streaming CLI — `deno run --allow-net --allow-env wasi/cli.ts [--model M] [--system S] <prompt>`
