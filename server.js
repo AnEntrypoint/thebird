@@ -71,7 +71,7 @@ const landingPage = () => `<!DOCTYPE html>
 <h2>endpoints</h2>
 <ul>
   <li><span class="endpoint">POST /v1/messages</span> — Anthropic Messages API (translated to Gemini)</li>
-  <li><span class="endpoint">GET /debug/server</span> — <a href="/debug/server">live state JSON</a></li>
+  <li><span class="endpoint">GET /debug/server</span> — <a href="debug/server">live state JSON</a></li>
   <li><span class="endpoint">GET /</span> — this landing page</li>
 </ul>
 <h2>usage</h2>
@@ -103,7 +103,7 @@ http.createServer(async (req, res) => {
     res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>404</title>
 <style>body{font-family:monospace;background:#000;color:#ff3333;padding:2ch;margin:0}h1{color:#33ff33}a{color:#33ff33}.box{border:1px solid #ff3333;padding:1ch;margin:1ch 0}</style></head>
 <body><h1>404</h1><div class="box">not found: <code>${req.method} ${req.url}</code></div>
-<p><a href="/">← back to landing page</a></p></body></html>`);
+<p><a href="./">← back to landing page</a></p></body></html>`);
   } catch (err) {
     state.errors++;
     res.writeHead(500, { 'Content-Type': 'text/html' });
