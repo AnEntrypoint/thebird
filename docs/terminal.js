@@ -78,20 +78,17 @@ async function boot() {
   window.__debug.term = term;
   bootActor.send({ type: 'IDB_READY' });
 
-  try {
-    const swPromise = registerPreviewSW();
-    const swTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('SW registration timeout')), 8000));
-    await Promise.race([swPromise, swTimeout]);
+  const shell = createShell({ term, onPreviewWrite: scheduleReload });
+  window.__debug.shell = shell;
+
+  registerPreviewSW().then(() => {
     bootActor.send({ type: 'SW_READY' });
-  } catch (e) {
+  }).catch(e => {
     console.log('[terminal] SW error:', e.message);
     window.__debug.sw = window.__debug.sw || {};
     window.__debug.sw.bootError = e.message;
     bootActor.send({ type: 'SW_ERROR' });
-  }
-
-  const shell = createShell({ term, onPreviewWrite: scheduleReload });
-  window.__debug.shell = shell;
+  });
   window.__debug.shellWriter = { write: line => shell.run(line.replace(/\n$/, '')) };
 }
 
