@@ -11,6 +11,8 @@ assert(defaults['terminal.js'], 'terminal.js missing');
 assert(defaults['agent-chat.js'], 'agent-chat.js missing');
 assert(defaults['shell.js'], 'shell.js missing');
 assert(defaults['vendor/thebird-browser.js'], 'thebird-browser.js missing');
+assert(defaults['shell-node.js'], 'shell-node.js missing');
+assert(defaults['shell-node-modules.js'], 'shell-node-modules.js missing');
 assert(Object.keys(defaults).length > 10, 'insufficient files');
 console.log('✓ defaults.json has', Object.keys(defaults).length, 'files\n');
 
@@ -98,6 +100,24 @@ errorCases.forEach(c => {
 });
 assert(errorsHandled === 3, 'some errors not thrown');
 console.log('✓ all error paths throw (no silent failures)\n');
+
+console.log('=== node builtins: http, https, child_process, buffer, zlib, assert resolvable ===');
+const nodeEnv = fs.readFileSync(path.join(__dirname, 'docs/shell-node.js'), 'utf8');
+['http:', 'https:', 'buffer:', 'child_process:', 'net:', 'zlib:', 'assert:'].forEach(m => {
+  assert(nodeEnv.includes(m), 'builtin ' + m + ' missing from MODULES');
+});
+const modsJs = fs.readFileSync(path.join(__dirname, 'docs/shell-node-modules.js'), 'utf8');
+assert(modsJs.includes('createHttp'), 'createHttp factory missing');
+assert(modsJs.includes('httpHandlers[port] = { routes'), 'http.createServer must register httpHandlers');
+console.log('✓ core node builtins exposed\n');
+
+console.log('=== esm.sh async package loading ===');
+const shellJs2 = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
+assert(shellJs2.includes('esm.sh'), 'npm install must fetch from esm.sh');
+assert(shellJs2.includes('?bundle'), 'esm.sh must use bundle flag');
+assert(nodeEnv.includes('preloadAsyncPkgs'), 'preloadAsyncPkgs missing');
+assert(nodeEnv.includes('pkgCache'), 'pkgCache missing');
+console.log('✓ npm install → esm.sh → preloadAsyncPkgs → pkgCache → sync require\n');
 
 console.log('=== shell httpHandlers fix: express routes visible to callExpressRoute ===');
 const shellJs = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');

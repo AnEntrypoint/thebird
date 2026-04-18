@@ -78,14 +78,16 @@ function makeBuiltins(ctx) {
     },
     npm: async (args) => {
       if (args[0] !== 'install' && args[0] !== 'i') throw new Error('only npm install supported');
-      const pkg = args[1];
-      if (!pkg) throw new Error('npm install <pkg>');
-      w('fetching ' + pkg + '...\r\n');
-      const r = await fetch('https://esm.sh/' + pkg);
-      if (!r.ok) throw new Error('fetch failed: ' + r.status);
-      snap()['node_modules/' + pkg + '/index.js'] = await r.text();
-      window.__debug.idbPersist?.();
-      wl('installed ' + pkg);
+      const pkgs = args.slice(1);
+      if (!pkgs.length) throw new Error('npm install <pkg> [<pkg>...]');
+      for (const pkg of pkgs) {
+        w('fetching ' + pkg + '...\r\n');
+        const url = 'https://esm.sh/' + pkg + '?bundle&target=es2022';
+        await import(url);
+        snap()['node_modules/' + pkg + '/index.js'] = '// async esm.sh stub\nawait import(' + JSON.stringify(url) + ');';
+        window.__debug.idbPersist?.();
+        wl('installed ' + pkg);
+      }
     },
   };
 }

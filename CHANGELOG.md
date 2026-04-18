@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### Added
+- `docs/shell-node.js`: `http` and `https` core builtins — `http.createServer(handler)` registers wildcard route in `window.__debug.shell.httpHandlers[port]` (same mechanism as express.listen), so `node server.js` now works for servers that use raw `require('http')`
+- `docs/shell-node.js`: `buffer`, `child_process`, `net`, `zlib`, `assert` builtin stubs so common Node scripts don't die on trivial requires
+- `docs/shell-node.js`: `preloadAsyncPkgs(code)` scans source for `require('pkg')` calls, resolves each via dynamic `import(esm.sh/pkg)`, populates `pkgCache`. Synchronous `require()` then reads from cache — bridges Node CJS semantics to browser ESM loading
+- `docs/shell-node-modules.js`: new file holding `createExpress`, `createHttp`, `createSqlite`, `createConsole`, `createProcess` factories (split out to keep shell-node.js under 200 lines)
+
+### Changed
+- `docs/shell.js`: `npm install` supports multiple packages per invocation; writes an `await import(...)` stub to `node_modules/<pkg>/index.js` as a marker, real resolution happens via `preloadAsyncPkgs` in nodeEval
+- `docs/shell-node.js`: external (non-relative, non-builtin) require throws clear `Cannot find module: X (run: npm install X)` instead of generic error
+- `docs/shell-node-modules.js` createExpress: routes now store `{ path, fn }` where `fn` runs full middleware chain via `runFns`, matching `index.html` callExpressRoute's `match.fn(req, res)` expectation (was previously `{ path, fns }` which broke route invocation)
+
 ### Fixed
 - `docs/shell.js`: httpHandlers now returned on shell object instead of assigned to window.__debug.shell separately — terminal.js overwrote the debug object (which had httpHandlers) with the createShell() return value (which had none), making express routes invisible to index.html callExpressRoute(). Fix: remove internal window.__debug.shell assignment, include httpHandlers and all debug getters on the returned shell object so terminal.js assignment preserves the reference
 - `test.js`: consolidate e2e-test.js coverage into test.js (express routing e2e + httpHandlers fix regression); delete e2e-test.js to enforce single-test-file policy
