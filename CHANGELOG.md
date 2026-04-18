@@ -140,3 +140,12 @@
 ### Added
 - `docs/index.html`: Preview tab with iframe (`#preview-frame`), `switchTab` extended to dispatch over `['chat','term','preview']`.
 - `docs/terminal.js`: DEFAULT_FILES now includes `server.js` (HTTP server on port 3000, JSON status endpoint) and updated `index.js` (loads @anthropic-ai/sdk, hits server). Server auto-starts after `npm install`. `container.on('server-ready')` wires iframe src + `window.__debug.previewUrl`. Shell upgraded from `sh` loop to `jsh` with PTY resize. `window.__debug.srv` and `window.__debug.shell` live.
+
+
+## shell predictability fixes (2026-04-18)
+- Pipe stdin passthrough: grep/sed detect piped content as first arg (stdinFirst pattern)
+- Tokenizer: preserves \\n inside double-quotes so echo -e works correctly
+- $? expansion, $() command substitution, inline var assignment (X=val cmd)
+- echo -e with \\n \\t escape sequences
+- New builtins: sed, sort, uniq, tr
+- shell-builtins.js split into shell-builtins-text.js (both under 200L)
