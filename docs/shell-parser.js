@@ -33,7 +33,8 @@ export function parsePipeline(line) {
 }
 
 export function splitTopLevel(line, seps) {
-  const parts = [];
+  const cmds = [];
+  const separators = [];
   let cur = '';
   let quote = null;
   let escape = false;
@@ -50,15 +51,16 @@ export function splitTopLevel(line, seps) {
     let matched = null;
     for (const sep of seps) if (line.startsWith(sep, i)) { matched = sep; break; }
     if (matched) {
-      parts.push({ cmd: cur.trim(), sep: matched });
+      cmds.push(cur.trim());
+      separators.push(matched);
       cur = '';
       i += matched.length - 1;
       continue;
     }
     cur += c;
   }
-  if (cur.trim()) parts.push({ cmd: cur.trim(), sep: null });
-  return parts;
+  if (cur.trim()) cmds.push(cur.trim());
+  return cmds.map((cmd, i) => ({ cmd, sep: separators[i - 1] || null }));
 }
 
 export function parseRedirects(tokens) {
