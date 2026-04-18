@@ -80,7 +80,7 @@ async function boot() {
 
   try {
     const swPromise = registerPreviewSW();
-    const swTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('SW registration timeout')), 3000));
+    const swTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('SW registration timeout')), 8000));
     await Promise.race([swPromise, swTimeout]);
     bootActor.send({ type: 'SW_READY' });
   } catch (e) {
