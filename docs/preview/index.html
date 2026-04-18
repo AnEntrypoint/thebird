@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>preview — bootstrap</title>
+<style>body{font-family:monospace;background:#000;color:#33ff33;padding:2ch;margin:0}</style></head>
+<body>
+<p id="msg">bootstrapping preview...</p>
+<script>
+(async () => {
+  const msg = document.getElementById('msg');
+  if (navigator.serviceWorker.controller) {
+    msg.textContent = 'SW already controls — reloading to fetch content...';
+    location.reload();
+    return;
+  }
+  msg.textContent = 'waiting for SW to activate...';
+  try {
+    await navigator.serviceWorker.ready;
+    let tries = 0;
+    while (!navigator.serviceWorker.controller && tries++ < 20) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    if (navigator.serviceWorker.controller) {
+      msg.textContent = 'SW ready — fetching real content...';
+      location.reload();
+    } else {
+      msg.textContent = 'SW registered but not controlling. Ensure preview-sw.js is at /thebird/preview-sw.js.';
+    }
+  } catch (e) {
+    msg.textContent = 'SW error: ' + e.message;
+  }
+})();
+</script>
+</body></html>
