@@ -184,4 +184,24 @@ assert(routeResult.includes('<h1>Todo App</h1>'), 'todo heading missing');
 assert(routeResult.includes('addTask()'), 'interactive handler missing');
 console.log('✓ agent writes file → express registers route → preview fetches HTML → interactive\n');
 
+console.log('=== new shell features: glob, positional, test, tee, xargs, control flow ===');
+assert(expand('$1', {}, 0, ['script.js', 'hello']) === 'hello', '$1 positional param');
+assert(expand('$#', {}, 0, ['a', 'b', 'c']) === '3', '$# argc');
+assert(expand('$@', {}, 0, ['a', 'b']) === 'a b', '$@ all args');
+assert(expand('$0', {}, 0, ['script.js']) === 'script.js', '$0 script name');
+const extraJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins-extra.js'), 'utf8');
+assert(extraJs.includes('test:'), 'test builtin missing');
+assert(extraJs.includes("'['"), '[ builtin missing');
+assert(extraJs.includes('tee:'), 'tee builtin missing');
+assert(extraJs.includes('xargs:'), 'xargs builtin missing');
+assert(extraJs.includes('read:'), 'read builtin missing');
+const controlJs = fs.readFileSync(path.join(__dirname, 'docs/shell-control.js'), 'utf8');
+assert(controlJs.includes('runIf'), 'if/then/fi missing');
+assert(controlJs.includes('runWhile'), 'while/do/done missing');
+assert(controlJs.includes('runFor'), 'for/do/done missing');
+assert(shellMain.includes('expandGlob'), 'glob expansion missing from shell.js');
+assert(defaults['shell-builtins-extra.js'], 'shell-builtins-extra.js missing from defaults.json');
+assert(defaults['shell-control.js'], 'shell-control.js missing from defaults.json');
+console.log('✓ glob, $1/$#/$@, test, tee, xargs, read, if/while/for all present\n');
+
 console.log('=== all checks passed ===');

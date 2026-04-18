@@ -6,7 +6,7 @@ export function tokenize(line) {
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (escape) {
-      if (quote === '"' && !'"\\\`$'.includes(c)) cur += '\\';
+      if (quote === '"' && !'"\\`$'.includes(c)) cur += '\\';
       cur += c; escape = false; continue;
     }
     if (c === '\\' && quote !== "'") { escape = true; continue; }
@@ -26,16 +26,20 @@ export function tokenize(line) {
   return tokens;
 }
 
-export function expand(token, env, lastExitCode) {
-  return token.replace(/\$\(([^)]+)\)|\$\{?(\?|[A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, sub, name) => {
+export function expand(token, env, lastExitCode, argv) {
+  return token.replace(/\$\(([^)]+)\)|\$\{?(\?|#|@|[0-9]|[A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, sub, name) => {
     if (sub) return match;
     if (name === '?') return String(lastExitCode ?? 0);
+    if (name === '#') return String((argv || []).length);
+    if (name === '@') return (argv || []).join(' ');
+    if (name === '0') return (argv || [])[0] || '';
+    if (/^[1-9]$/.test(name)) return (argv || [])[parseInt(name)] || '';
     return env[name] ?? '';
   });
 }
 
-export function expandCmdSub(token, env, lastExitCode, runCapture) {
-  if (!token.includes('$(')) return expand(token, env, lastExitCode);
+export function expandCmdSub(token, env, lastExitCode, runCapture, argv) {
+  if (!token.includes('$(')) return expand(token, env, lastExitCode, argv);
   return token.replace(/\$\(([^)]+)\)/g, (_, cmd) => runCapture ? runCapture(cmd) : '');
 }
 

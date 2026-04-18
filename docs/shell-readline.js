@@ -1,4 +1,4 @@
-export function createReadline({ term, getCompletions, onLine, getPrompt }) {
+export function createReadline({ term, getCompletions, onLine, getPrompt, isBlockOpen }) {
   let buf = '';
   let pos = 0;
   let histIdx = -1;
@@ -71,6 +71,12 @@ export function createReadline({ term, getCompletions, onLine, getPrompt }) {
   function commit() {
     const line = buf;
     write('\r\n');
+    if (line.endsWith('\\')) {
+      buf = line.slice(0, -1) + '\n';
+      pos = buf.length;
+      write('\x1b[32m> \x1b[0m');
+      return;
+    }
     const hist = getHistory();
     if (line.trim()) hist.unshift(line);
     buf = '';
@@ -126,5 +132,7 @@ export function createReadline({ term, getCompletions, onLine, getPrompt }) {
     if (data >= ' ') { insert(data); return; }
   }
 
-  return { onData, showPrompt };
+  function showContinuation() { write('\x1b[32m> \x1b[0m'); }
+
+  return { onData, showPrompt, showContinuation };
 }

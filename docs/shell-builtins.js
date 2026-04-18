@@ -1,4 +1,5 @@
 import { makeTextBuiltins } from './shell-builtins-text.js';
+import { makeExtraBuiltins } from './shell-builtins-extra.js';
 
 export function resolvePath(cwd, p) {
   if (!p || p === '~') return '/';
@@ -40,7 +41,7 @@ function removeRecursive(prefix) {
   return count;
 }
 
-export function makeBuiltins(ctx, actor) {
+export function makeBuiltins(ctx, actor, invokeBuiltin) {
   const w = s => ctx.term.write(s);
   const wl = s => w(s + '\r\n');
   const readFile = p => {
@@ -55,6 +56,7 @@ export function makeBuiltins(ctx, actor) {
     previewWrite();
   };
   const text = makeTextBuiltins(ctx, readFile, writeFile);
+  const extra = makeExtraBuiltins(ctx, readFile, writeFile);
   const b = {
     ls: args => {
       const flags = args.filter(a => a.startsWith('-')).join('');
@@ -168,6 +170,7 @@ export function makeBuiltins(ctx, actor) {
       }
     },
     ...text,
+    ...extra,
     which: args => text.which(args, b),
     exit: (args, ac) => text.exit(args, ac || actor),
   };
