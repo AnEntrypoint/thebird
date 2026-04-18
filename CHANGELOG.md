@@ -1,6 +1,15 @@
 ## [Unreleased]
 
 ### Added
+- `docs/defaults.json`: bundled real project files (package.json, index.js, server.js, lib/*, lib/providers/*) so browser jsh has a working thebird source tree on boot — user can immediately run `npm install && node server.js` without needing to write files first
+- `docs/shell.js`: `npm install` with no args reads cwd `package.json` dependencies + peerDependencies, installs all of them (multi-pkg via single command)
+- `docs/shell-node.js`: `preloadAsyncPkgs` now walks the full require graph from entry file (BFS through relative requires) so transitive external package deps get loaded before sync require runs. Previously only scanned top-level code — server.js → ./index.js → @google/genai chain failed
+- `docs/index.html`: callExpressRoute response object supports both Node http-style (writeHead/write/end/setHeader) and express-style (send/json/status). Request object now has `url`, `method`, async iterator for empty body — matches what `http.createServer` handlers expect
+
+### Changed
+- `docs/terminal.js`: IDB_KEY bumped `thebird_fs_v2` → `thebird_fs_v3` to force refresh of browser fs cache (users with stale idb will re-fetch defaults.json with the real project files)
+
+### Added (prev)
 - `docs/shell-node.js`: `http` and `https` core builtins — `http.createServer(handler)` registers wildcard route in `window.__debug.shell.httpHandlers[port]` (same mechanism as express.listen), so `node server.js` now works for servers that use raw `require('http')`
 - `docs/shell-node.js`: `buffer`, `child_process`, `net`, `zlib`, `assert` builtin stubs so common Node scripts don't die on trivial requires
 - `docs/shell-node.js`: `preloadAsyncPkgs(code)` scans source for `require('pkg')` calls, resolves each via dynamic `import(esm.sh/pkg)`, populates `pkgCache`. Synchronous `require()` then reads from cache — bridges Node CJS semantics to browser ESM loading
