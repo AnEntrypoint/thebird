@@ -22,7 +22,7 @@ export function createNodeEnv({ ctx, term }) {
     net: () => ({ Socket: createEvents(), createServer: () => ({ listen: () => {} }) }),
     zlib: () => ({ gzipSync: b => b, gunzipSync: b => b, createGzip: () => ({ pipe: () => {} }), createGunzip: () => ({ pipe: () => {} }) }),
     assert: () => { const a = (v, m) => { if (!v) throw new Error(m || 'assertion failed'); }; a.ok = a; a.equal = (x, y, m) => a(x === y, m); a.deepEqual = (x, y, m) => a(JSON.stringify(x) === JSON.stringify(y), m); a.strictEqual = a.equal; return a; },
-    express: createExpress(term, fsmod),
+    express: () => createExpress(term, fsmod),
     'better-sqlite3': createSqlite,
   };
 
