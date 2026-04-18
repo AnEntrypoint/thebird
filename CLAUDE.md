@@ -136,7 +136,9 @@ Run examples against real Gemini API to validate message translation.
 - Anthropic format IS the canonical message format — do NOT add an intermediate transformation layer. Direct translation to provider-native formats is cleaner than another abstraction level.
 - **shell.js httpHandlers visibility chain**: shell.js creates `httpHandlers = {}` and returns it on the shell object. terminal.js assigns `window.__debug.shell = shell`. shell-node.js mutates `window.__debug.shell.httpHandlers[port]` to register routes. index.html reads from `window.__debug.shell.httpHandlers`. All four modules reference the same object; httpHandlers MUST be returned on the shell object or the chain breaks.
 - **CI tag collision bug**: .github/workflows/publish.yml fails on every push to main because it does not check if the version tag already exists before running `npm version patch`. This is pre-existing and unrelated to code changes. Expect CI failures on main.
-- **Test policy**: Single test.js file (max 139L per constraint). e2e-test.js deleted. Validation via live API calls with exec:nodejs (browser automation unavailable in this environment).
+
+- **Shell builtin pipe stdin detection**: When a builtin receives piped input (e.g. `echo hello | grep hello`), the pipe buffer arrives as `args[0]`. Builtins with mandatory leading args (grep: pattern, sed: expression) must detect `positional[0].includes('\n')` BEFORE extracting those args, then shift stdin off. `cat`/`wc`/`sort`/`uniq` use the same check. Single-line piped content always has `\n` because `echo` appends `\r\n`.
+- **Tokenizer double-quote escape sequences**: Inside double-quotes, only `"`, `\`, `` ` ``, `$` are valid escape sequences. `\n` in double-quotes must be preserved as literal backslash-n for `echo -e` to process. Fix: when escape=true and quote==='"', re-emit backslash before char if char not in `"\\\`$`.- **Test policy**: Single test.js file (max 139L per constraint). e2e-test.js deleted. Validation via live API calls with exec:nodejs (browser automation unavailable in this environment).
 
 ## Error Architecture
 
@@ -175,6 +177,8 @@ Run examples against real Gemini API to validate message translation.
 - `examples/`: Working examples using Anthropic SDK format
 - `wasi/cli.ts`: Deno streaming CLI — `deno run --allow-net --allow-env wasi/cli.ts [--model M] [--system S] <prompt>`
 - `deno.json`: tasks `cli` (run) and `cli:compile` (→ `dist/thebird` binary)
+- `docs/shell-builtins.js`: FS/IO builtins (ls/cat/echo/cd/mkdir/rm/cp/mv/touch/head/tail/wc) — imports makeTextBuiltins
+- `docs/shell-builtins-text.js`: Text-processing builtins (grep/sed/sort/uniq/tr) + env/export/clear/history/which/exit/true/false/printenv
 
 ## WebContainer Terminal in docs/
 
