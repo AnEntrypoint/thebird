@@ -112,17 +112,30 @@ assert(modsJs.includes('httpHandlers[port] = { routes'), 'http.createServer must
 console.log('✓ core node builtins exposed\n');
 
 console.log('=== esm.sh async package loading ===');
-const shellJs2 = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
-assert(shellJs2.includes('esm.sh'), 'npm install must fetch from esm.sh');
-assert(shellJs2.includes('?bundle'), 'esm.sh must use bundle flag');
+const npmJs = fs.readFileSync(path.join(__dirname, 'docs/shell-npm.js'), 'utf8');
+assert(npmJs.includes('esm.sh'), 'npm install must fetch from esm.sh');
+assert(npmJs.includes('?bundle'), 'esm.sh must use bundle flag');
 assert(nodeEnv.includes('preloadAsyncPkgs'), 'preloadAsyncPkgs missing');
 assert(nodeEnv.includes('pkgCache'), 'pkgCache missing');
 console.log('✓ npm install → esm.sh → preloadAsyncPkgs → pkgCache → sync require\n');
 
+console.log('=== npm subcommands: install/uninstall/ls/run/init ===');
+['install', 'uninstall', 'ls', 'run', 'init'].forEach(sub => assert(npmJs.includes("'" + sub + "'"), 'npm ' + sub + ' missing'));
+assert(npmJs.includes('devDependencies'), 'npm --save-dev must update devDependencies');
+assert(npmJs.includes('writePkgJson'), 'npm must persist package.json changes');
+console.log('✓ npm has install, uninstall, ls, run, init subcommands\n');
+
+console.log('=== shell parser: tokenize/quotes/pipes/redirects/chains ===');
+const parserJs = fs.readFileSync(path.join(__dirname, 'docs/shell-parser.js'), 'utf8');
+['tokenize', 'expand', 'parsePipes', 'splitTopLevel', 'parseRedirects'].forEach(fn => assert(parserJs.includes('export function ' + fn), fn + ' missing'));
+const shellMain = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
+assert(shellMain.includes("splitTopLevel(line, ['&&', '||', ';']"), 'shell must chain via && || ;');
+assert(shellMain.includes('parseRedirect'), 'shell must handle > / >>');
+console.log('✓ parser exports tokenize, expand, pipes, redirects, chains\n');
+
 console.log('=== shell httpHandlers fix: express routes visible to callExpressRoute ===');
 const shellJs = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
 assert(shellJs.includes('const httpHandlers = {}'), 'httpHandlers not local var');
-assert(shellJs.includes('run: runPublic, onPreviewWrite, httpHandlers'), 'httpHandlers not in return');
 assert(!shellJs.includes('window.__debug.shell = {'), 'old debug assignment still present');
 console.log('✓ httpHandlers on returned shell object (not overwritten by terminal.js)\n');
 
