@@ -1,4 +1,10 @@
 
+## [unreleased] 2026-04-18 browser validation
+- fix: require('express') returned instance not factory (MODULES wrapper called createExpress twice)
+- fix: SW registration non-blocking — shell boots immediately, SW registers in background
+- fix: splitTopLevel sep semantics — sep is preceding operator not following, fixes && || chain evaluation
+- fix: lastExitCode-based lastOk — false builtin sets exit code 1 without throwing
+
 ## [unreleased] 2026-04-18
 - feat: full CLI overhaul — shell-parser.js (tokenize/expand/parsePipes/splitTopLevel/parseRedirects), shell-builtins.js (POSIX builtins: ls -la, rm -r, cp -r, grep -inH, cd -, history), shell-npm.js (install/uninstall/ls/run/init with package.json read/write), shell.js refactored to use modules; IDB_KEY bumped to thebird_fs_v4; defaults.json updated with all new files
 ## [Unreleased]
