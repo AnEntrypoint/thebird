@@ -141,10 +141,12 @@ assert(expand('${HOME}', { HOME: '/root' }, 0) === '/root', '${HOME} not expande
 assert(expandCmdSub('hello', {}, 0, null) === 'hello', 'expandCmdSub passthrough');
 assert(expandCmdSub('pre_$(echo hi)_post', {}, 0, () => 'hi') === 'pre_hi_post', '$() substitution');
 const builtinsJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins.js'), 'utf8');
-['sed', 'sort', 'uniq', 'tr'].forEach(cmd => assert(builtinsJs.includes("'" + cmd + "'") || builtinsJs.includes(cmd + ':'), cmd + ' builtin missing'));
-assert(builtinsJs.includes('echo -e') || builtinsJs.includes("args[0] === '-e'"), 'echo -e not handled');
+const builtinsTextJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins-text.js'), 'utf8');
+['grep', 'sed', 'sort', 'uniq', 'tr'].forEach(cmd => assert(builtinsTextJs.includes(cmd + ':'), cmd + ' missing from shell-builtins-text.js'));
+assert(builtinsJs.includes("args[0] === '-e'"), 'echo -e not handled');
 assert(shellMain.includes('varAssigns'), 'inline var assignment missing');
 assert(shellMain.includes('expandCmdSub'), 'expandCmdSub not used in shell');
+assert(defaults['shell-builtins-text.js'], 'shell-builtins-text.js missing from defaults.json');
 console.log('✓ $?, $(), inline var assignment, echo -e, sed, sort, uniq, tr all present\n');
 
 console.log('=== shell httpHandlers fix: express routes visible to callExpressRoute ===');

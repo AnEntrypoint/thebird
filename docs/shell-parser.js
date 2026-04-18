@@ -5,7 +5,10 @@ export function tokenize(line) {
   let escape = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (escape) { cur += c; escape = false; continue; }
+    if (escape) {
+      if (quote === '"' && !'"\\\`$'.includes(c)) cur += '\\';
+      cur += c; escape = false; continue;
+    }
     if (c === '\\' && quote !== "'") { escape = true; continue; }
     if (quote) {
       if (c === quote) { quote = null; continue; }

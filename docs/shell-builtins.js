@@ -1,3 +1,5 @@
+import { makeTextBuiltins } from './shell-builtins-text.js';
+
 export function resolvePath(cwd, p) {
   if (!p || p === '~') return '/';
   if (p.startsWith('~/')) p = '/' + p.slice(2);
@@ -38,11 +40,6 @@ function removeRecursive(prefix) {
   return count;
 }
 
-function readStdin(args, firstArgIsStdin) {
-  if (firstArgIsStdin && args.length) return { stdin: args[0], rest: args.slice(1) };
-  return { stdin: null, rest: args };
-}
-
 export function makeBuiltins(ctx, actor) {
   const w = s => ctx.term.write(s);
   const wl = s => w(s + '\r\n');
@@ -57,6 +54,7 @@ export function makeBuiltins(ctx, actor) {
     persist();
     previewWrite();
   };
+  const text = makeTextBuiltins(ctx, readFile, writeFile);
   const b = {
     ls: args => {
       const flags = args.filter(a => a.startsWith('-')).join('');
@@ -80,19 +78,17 @@ export function makeBuiltins(ctx, actor) {
     },
     cat: args => {
       if (!args.length) throw new Error('cat: missing file operand');
-      const { stdin, rest } = readStdin(args, true);
-      if (stdin !== null && !rest.length) { w(stdin); return; }
-      const files = stdin !== null ? rest : args;
+      const stdinFirst = args[0].includes('\n') || args[0].includes('\r');
+      const stdin = stdinFirst ? args[0] : null;
+      const files = stdinFirst ? args.slice(1) : args;
+      if (stdin !== null && !files.length) { w(stdin); return; }
       for (const f of files) w(readFile(f));
     },
     echo: args => {
       const escape = args[0] === '-e';
       const noNewline = args[0] === '-n' || (escape && args[1] === '-n') || (args[0] === '-n' && args[1] === '-e');
-      let ea = args.filter(a => a !== '-e' && a !== '-n');
-      let txt = ea.join(' ');
-      if (escape || args[0] === '-e') {
-        txt = txt.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
-      }
+      let txt = args.filter(a => a !== '-e' && a !== '-n').join(' ');
+      if (escape) txt = txt.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
       w(txt.replace(/\n/g, '\r\n') + (noNewline ? '' : '\r\n'));
     },
     pwd: () => wl(ctx.cwd),
@@ -104,16 +100,13 @@ export function makeBuiltins(ctx, actor) {
       ctx.cwd = next;
     },
     mkdir: args => {
-      for (const p of args.filter(a => !a.startsWith('-'))) {
-        snap()[toKey(resolvePath(ctx.cwd, p)) + '/.keep'] = '';
-      }
+      for (const p of args.filter(a => !a.startsWith('-'))) snap()[toKey(resolvePath(ctx.cwd, p)) + '/.keep'] = '';
       persist();
     },
     rm: args => {
       const recursive = args.some(a => a === '-r' || a === '-rf' || a === '-fr' || a === '-R');
       const force = args.some(a => a.includes('f'));
-      const targets = args.filter(a => !a.startsWith('-'));
-      for (const f of targets) {
+      for (const f of args.filter(a => !a.startsWith('-'))) {
         const k = toKey(resolvePath(ctx.cwd, f));
         if (k in snap()) { delete snap()[k]; continue; }
         if (recursive) { const n = removeRecursive(k); if (n === 0 && !force) throw new Error(f + ': No such file or directory'); continue; }
@@ -123,32 +116,25 @@ export function makeBuiltins(ctx, actor) {
     },
     cp: args => {
       const recursive = args.some(a => a === '-r' || a === '-R');
-      const positional = args.filter(a => !a.startsWith('-'));
-      const [src, dst] = positional;
+      const [src, dst] = args.filter(a => !a.startsWith('-'));
       if (!src || !dst) throw new Error('cp: missing operand');
-      const srcK = toKey(resolvePath(ctx.cwd, src));
-      const dstK = toKey(resolvePath(ctx.cwd, dst));
+      const srcK = toKey(resolvePath(ctx.cwd, src)), dstK = toKey(resolvePath(ctx.cwd, dst));
       const s = snap();
       if (srcK in s) { s[dstK] = s[srcK]; persist(); return; }
       if (!recursive) throw new Error(src + ': No such file or directory');
       let n = 0;
-      for (const k of Object.keys(s)) {
-        if (k === srcK || k.startsWith(srcK + '/')) { s[dstK + k.slice(srcK.length)] = s[k]; n++; }
-      }
+      for (const k of Object.keys(s)) { if (k === srcK || k.startsWith(srcK + '/')) { s[dstK + k.slice(srcK.length)] = s[k]; n++; } }
       if (!n) throw new Error(src + ': No such file or directory');
       persist();
     },
     mv: args => {
       const [src, dst] = args.filter(a => !a.startsWith('-'));
       if (!src || !dst) throw new Error('mv: missing operand');
-      const srcK = toKey(resolvePath(ctx.cwd, src));
-      const dstK = toKey(resolvePath(ctx.cwd, dst));
+      const srcK = toKey(resolvePath(ctx.cwd, src)), dstK = toKey(resolvePath(ctx.cwd, dst));
       const s = snap();
       if (srcK in s) { s[dstK] = s[srcK]; delete s[srcK]; persist(); return; }
       let n = 0;
-      for (const k of Object.keys(s)) {
-        if (k === srcK || k.startsWith(srcK + '/')) { s[dstK + k.slice(srcK.length)] = s[k]; delete s[k]; n++; }
-      }
+      for (const k of Object.keys(s)) { if (k === srcK || k.startsWith(srcK + '/')) { s[dstK + k.slice(srcK.length)] = s[k]; delete s[k]; n++; } }
       if (!n) throw new Error(src + ': No such file or directory');
       persist();
     },
@@ -156,114 +142,34 @@ export function makeBuiltins(ctx, actor) {
     head: args => {
       const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
       const rest = args[0] === '-n' ? args.slice(2) : args;
-      const { stdin, rest: files } = readStdin(rest, true);
-      const getText = f => f ? readFile(f) : stdin || '';
+      const stdinFirst = rest.length > 0 && rest[0].includes('\n');
+      const stdin = stdinFirst ? rest[0] : null;
+      const files = stdinFirst ? rest.slice(1) : rest;
       const targets = files.length ? files : [null];
-      for (const f of targets) wl(getText(f).split('\n').slice(0, n).join('\r\n'));
+      for (const f of targets) wl((f ? readFile(f) : stdin || '').split('\n').slice(0, n).join('\r\n'));
     },
     tail: args => {
       const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
       const rest = args[0] === '-n' ? args.slice(2) : args;
-      const { stdin, rest: files } = readStdin(rest, true);
-      const getText = f => f ? readFile(f) : stdin || '';
+      const stdinFirst = rest.length > 0 && rest[0].includes('\n');
+      const stdin = stdinFirst ? rest[0] : null;
+      const files = stdinFirst ? rest.slice(1) : rest;
       const targets = files.length ? files : [null];
-      for (const f of targets) wl(getText(f).split('\n').slice(-n).join('\r\n'));
+      for (const f of targets) wl((f ? readFile(f) : stdin || '').split('\n').slice(-n).join('\r\n'));
     },
     wc: args => {
-      const { stdin, rest: files } = readStdin(args, true);
+      const stdinFirst = args.length > 0 && args[0].includes('\n');
+      const stdin = stdinFirst ? args[0] : null;
+      const files = stdinFirst ? args.slice(1) : args;
       const pairs = files.length ? files.map(f => [f, readFile(f)]) : [['', stdin || '']];
       for (const [name, c] of pairs) {
         const lines = c.split('\n').length;
         wl(`${String(lines).padStart(8)}${String(c.split(/\s+/).filter(Boolean).length).padStart(8)}${String(c.length).padStart(8)}${name ? ' ' + name : ''}`);
       }
     },
-    grep: args => {
-      const flags = args.filter(a => a.startsWith('-')).join('');
-      const positional = args.filter(a => !a.startsWith('-'));
-      const [pat, ...rest] = positional;
-      if (!pat) throw new Error('grep: missing pattern');
-      const re = new RegExp(pat, flags.includes('i') ? 'gi' : 'g');
-      const lineNos = flags.includes('n');
-      const hasFiles = rest.length > 0;
-      const sources = hasFiles ? rest.map(f => ({ name: f, text: readFile(f) })) : [{ name: '', text: '' }];
-      const showFile = sources.length > 1 || flags.includes('H');
-      let matched = 0;
-      for (const { name, text } of sources) {
-        const lines = text.split('\n');
-        lines.forEach((l, i) => {
-          re.lastIndex = 0;
-          if (re.test(l)) { wl((showFile && name ? name + ':' : '') + (lineNos ? (i + 1) + ':' : '') + l); matched++; }
-        });
-      }
-      if (!matched) ctx.lastExitCode = 1;
-    },
-    sed: args => {
-      const flags = args.filter(a => a.startsWith('-')).join('');
-      const positional = args.filter(a => !a.startsWith('-'));
-      const [expr, ...rest] = positional;
-      if (!expr) throw new Error('sed: missing expression');
-      const m = expr.match(/^s(.)(.+?)\1(.*?)\1([gig]*)$/);
-      if (!m) throw new Error('sed: unsupported expression: ' + expr);
-      const [, , search, replace, gflags] = m;
-      const re = new RegExp(search, gflags.includes('g') ? 'g' : '');
-      const { stdin, rest: files } = readStdin(rest, true);
-      const pairs = files.length ? files.map(f => [f, readFile(f)]) : [['', stdin || '']];
-      for (const [name, text] of pairs) {
-        const out = text.split('\n').map(l => l.replace(re, replace)).join('\n');
-        if (name) { writeFile(name, out); } else { w(out.replace(/\n/g, '\r\n')); }
-      }
-    },
-    sort: args => {
-      const flags = args.filter(a => a.startsWith('-')).join('');
-      const positional = args.filter(a => !a.startsWith('-'));
-      const { stdin, rest: files } = readStdin(positional, true);
-      const getText = f => f ? readFile(f) : stdin || '';
-      const targets = files.length ? files : [null];
-      for (const f of targets) {
-        let lines = getText(f).split('\n');
-        if (flags.includes('r')) lines.reverse();
-        else lines.sort();
-        if (flags.includes('u')) lines = [...new Set(lines)];
-        wl(lines.join('\r\n'));
-      }
-    },
-    uniq: args => {
-      const positional = args.filter(a => !a.startsWith('-'));
-      const { stdin, rest: files } = readStdin(positional, true);
-      const getText = f => f ? readFile(f) : stdin || '';
-      const targets = files.length ? files : [null];
-      for (const f of targets) {
-        const lines = getText(f).split('\n');
-        const out = lines.filter((l, i) => i === 0 || l !== lines[i - 1]);
-        wl(out.join('\r\n'));
-      }
-    },
-    tr: args => {
-      const positional = args.filter(a => !a.startsWith('-'));
-      const { stdin } = readStdin(positional, true);
-      const [from, to] = positional.slice(1);
-      if (!from) throw new Error('tr: missing operand');
-      const text = stdin || '';
-      if (to == null) {
-        wl(text.split('').filter(c => !from.includes(c)).join('').replace(/\n/g, '\r\n'));
-      } else {
-        wl(text.split('').map(c => { const i = from.indexOf(c); return i >= 0 ? (to[i] || to[to.length - 1]) : c; }).join('').replace(/\n/g, '\r\n'));
-      }
-    },
-    env: () => wl(Object.entries(ctx.env).map(([k, v]) => k + '=' + v).join('\r\n')),
-    export: args => { for (const kv of args) { const [k, ...v] = kv.split('='); ctx.env[k] = v.join('='); } },
-    clear: () => ctx.term.clear(),
-    history: () => ctx.history.forEach((l, i) => wl(String(i + 1).padStart(5) + '  ' + l)),
-    which: args => { const cmd = args[0]; if (!cmd) throw new Error('which: missing operand'); if (b[cmd]) wl('(builtin) ' + cmd); else wl(cmd + ' not found'); },
-    exit: () => {
-      if (actor.getSnapshot().value === 'node-repl') { actor.send({ type: 'EXIT_REPL' }); wl('[shell]'); }
-    },
-    true: () => {},
-    false: () => { ctx.lastExitCode = 1; },
-    printenv: args => {
-      if (!args.length) wl(Object.entries(ctx.env).map(([k, v]) => k + '=' + v).join('\r\n'));
-      else wl(ctx.env[args[0]] ?? '');
-    },
+    ...text,
+    which: args => text.which(args, b),
+    exit: (args, ac) => text.exit(args, ac || actor),
   };
   b.readFile = readFile;
   b.writeFile = writeFile;
