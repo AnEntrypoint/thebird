@@ -3,7 +3,7 @@ import { createMachine, createActor } from './vendor/xstate.js';
 import { createShell } from './shell.js';
 import { registerPreviewSW } from './preview-sw-client.js';
 
-const IDB_KEY = 'thebird_fs_v2';
+const IDB_KEY = 'thebird_fs_v3';
 
 async function idbLoad() {
   return new Promise((res, rej) => {

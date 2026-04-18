@@ -42,14 +42,24 @@ function callExpressRoute(path, method) {
   const match = routes.find(r => r.path === '*' || r.path === path || path.startsWith(r.path));
   if (!match) return null;
   return new Promise(resolve => {
+    let done = false;
+    const finish = (status, body, ct) => { if (done) return; done = true; resolve({ status, body, ct }); };
     const res = {
       _body: '', _status: 200, _ct: 'text/html',
-      send(b) { this._body = b; resolve({ status: this._status, body: this._body, ct: this._ct }); },
+      writeHead(code, headers) { this._status = code; if (headers?.['Content-Type']) this._ct = headers['Content-Type']; return this; },
+      setHeader(k, v) { if (k.toLowerCase() === 'content-type') this._ct = v; return this; },
+      write(chunk) { this._body += String(chunk); return true; },
+      end(chunk) { if (chunk != null) this._body += String(chunk); finish(this._status, this._body, this._ct); },
+      send(b) { this._body = typeof b === 'string' ? b : JSON.stringify(b); finish(this._status, this._body, this._ct); },
       json(o) { this._ct = 'application/json'; this.send(JSON.stringify(o)); },
       status(n) { this._status = n; return this; },
     };
-    try { match.fn({ method: method || 'GET', path, query: {}, headers: {} }, res); }
-    catch(e) { resolve({ status: 500, body: e.message, ct: 'text/plain' }); }
+    const req = { method: method || 'GET', url: path, path, query: {}, headers: {}, [Symbol.asyncIterator]: async function* () {} };
+    try {
+      const r = match.fn(req, res);
+      if (r && typeof r.then === 'function') r.catch(e => finish(500, e.message, 'text/plain'));
+    } catch(e) { finish(500, e.message, 'text/plain'); }
+    setTimeout(() => finish(res._status, res._body, res._ct), 5000);
   });
 }
 async function refreshPreview() {

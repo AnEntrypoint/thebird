@@ -66,14 +66,40 @@ export function createNodeEnv({ ctx, term }) {
     return window.__sqlJs;
   }
 
-  async function preloadAsyncPkgs(code) {
-    const s = snap();
+  function collectRequires(code) {
     const ids = new Set();
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
     let m;
     while ((m = re.exec(code))) ids.add(m[1]);
-    for (const id of ids) {
-      if (MODULES[id] || id.startsWith('.') || pkgCache[id]) continue;
+    return ids;
+  }
+
+  async function preloadAsyncPkgs(entryCode, entryDir) {
+    const s = snap();
+    const visited = new Set();
+    const queue = [{ code: entryCode, dir: entryDir }];
+    const pkgIds = new Set();
+    while (queue.length) {
+      const { code, dir } = queue.shift();
+      for (const id of collectRequires(code)) {
+        if (MODULES[id]) continue;
+        if (!id.startsWith('.')) { pkgIds.add(id); continue; }
+        const candidates = [
+          pathmod.resolve(dir, id) + '.js',
+          pathmod.resolve(dir, id),
+          pathmod.resolve(dir, id) + '/index.js',
+        ];
+        for (const c of candidates) {
+          const key = c.replace(/^\//, '');
+          if (visited.has(key) || !(key in s)) continue;
+          visited.add(key);
+          queue.push({ code: s[key], dir: pathmod.dirname('/' + key) });
+          break;
+        }
+      }
+    }
+    for (const id of pkgIds) {
+      if (pkgCache[id]) continue;
       const key = 'node_modules/' + id + '/index.js';
       if (!(key in s)) continue;
       const urlMatch = s[key].match(/import\((".+?")\)/);
@@ -92,7 +118,7 @@ export function createNodeEnv({ ctx, term }) {
     const dir = filename ? pathmod.dirname(filename) : ctx.cwd;
     const fpath = filename || ctx.cwd + '/repl';
     proc.argv = ['node', fpath, ...(argv || [])];
-    await preloadAsyncPkgs(code);
+    await preloadAsyncPkgs(code, dir);
     const scope = { process: proc, console: cons, require: makeRequire(dir), Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, loadSql, module: { exports: {} }, exports: {} };
     try {
       const keys = Object.keys(scope);

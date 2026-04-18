@@ -78,8 +78,16 @@ function makeBuiltins(ctx) {
     },
     npm: async (args) => {
       if (args[0] !== 'install' && args[0] !== 'i') throw new Error('only npm install supported');
-      const pkgs = args.slice(1);
-      if (!pkgs.length) throw new Error('npm install <pkg> [<pkg>...]');
+      let pkgs = args.slice(1);
+      if (!pkgs.length) {
+        const pkgJsonKey = toKey(resolvePath(ctx.cwd, 'package.json'));
+        const raw = snap()[pkgJsonKey];
+        if (!raw) throw new Error('no package.json in ' + ctx.cwd + ' — try: npm install <pkg>');
+        const pj = JSON.parse(raw);
+        pkgs = Object.keys({ ...(pj.dependencies || {}), ...(pj.peerDependencies || {}) });
+        if (!pkgs.length) { wl('no dependencies to install'); return; }
+        wl('installing ' + pkgs.length + ' deps from package.json: ' + pkgs.join(', '));
+      }
       for (const pkg of pkgs) {
         w('fetching ' + pkg + '...\r\n');
         const url = 'https://esm.sh/' + pkg + '?bundle&target=es2022';
