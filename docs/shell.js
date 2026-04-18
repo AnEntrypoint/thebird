@@ -3,7 +3,7 @@ import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
 import { makeNpm } from './shell-npm.js';
-import { tokenize, expand, splitTopLevel, parsePipes } from './shell-parser.js';
+import { tokenize, expand, expandCmdSub, splitTopLevel, parsePipes } from './shell-parser.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NODE_START: 'node-running' } },
@@ -28,6 +28,26 @@ export function createShell({ term, onPreviewWrite }) {
   function toKey(p) { return p.replace(/^\//, ''); }
   const snap = () => window.__debug.idbSnapshot || {};
 
+  function expandTokens(tokens) {
+    return tokens.map(t => expandCmdSub(t, ctx.env, ctx.lastExitCode, captureRun));
+  }
+
+  function captureRun(line) {
+    let out = '';
+    const orig = term.write.bind(term);
+    term.write = s => { out += s; };
+    try {
+      const raw = tokenize(line);
+      if (!raw.length) return '';
+      const expanded = expandTokens(raw);
+      const redir = parseRedirect(expanded);
+      const [cmd, ...args] = redir.args;
+      const fn = BUILTINS[cmd];
+      if (fn) fn(args, actor);
+    } finally { term.write = orig; }
+    return out.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  }
+
   async function invokeBuiltin(name, args, withCaptureInto) {
     const fn = BUILTINS[name];
     if (!fn) throw new Error('command not found: ' + name);
@@ -42,22 +62,46 @@ export function createShell({ term, onPreviewWrite }) {
   async function runSingleCommand(line) {
     const raw = tokenize(line);
     if (!raw.length) return;
-    const expanded = raw.map(t => expand(t, ctx.env));
+
+    const varAssigns = [];
+    let tokenStart = 0;
+    for (let i = 0; i < raw.length; i++) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(raw[i])) { varAssigns.push(raw[i]); tokenStart = i + 1; }
+      else break;
+    }
+    const rest = raw.slice(tokenStart);
+
+    if (!rest.length) {
+      for (const kv of varAssigns) { const eq = kv.indexOf('='); ctx.env[kv.slice(0, eq)] = expandCmdSub(kv.slice(eq + 1), ctx.env, ctx.lastExitCode, captureRun); }
+      return;
+    }
+
+    const expanded = expandTokens(rest);
     const redir = parseRedirect(expanded);
     const [cmd, ...args] = redir.args;
     const writeOut = redir.stdout ? buf => { const k = toKey(resolvePath(ctx.cwd, redir.stdout)); snap()[k] = redir.append ? (snap()[k] || '') + buf : buf; window.__debug.idbPersist?.(); } : null;
-    if (cmd === 'npm') {
-      const capturing = !!writeOut;
-      let out = '';
-      if (capturing) { const orig = term.write.bind(term); term.write = s => { out += s; }; try { const result = await npmCmd(args); if (result?.runInShell) await run(result.runInShell); } finally { term.write = orig; } writeOut(out); return; }
-      const result = await npmCmd(args);
-      if (result?.runInShell) await run(result.runInShell);
-      return;
+
+    const envOverrides = {};
+    for (const kv of varAssigns) { const eq = kv.indexOf('='); envOverrides[kv.slice(0, eq)] = expandCmdSub(kv.slice(eq + 1), ctx.env, ctx.lastExitCode, captureRun); }
+    const prevEnv = {};
+    for (const k of Object.keys(envOverrides)) { prevEnv[k] = ctx.env[k]; ctx.env[k] = envOverrides[k]; }
+
+    try {
+      if (cmd === 'npm') {
+        const capturing = !!writeOut;
+        let out = '';
+        if (capturing) { const orig = term.write.bind(term); term.write = s => { out += s; }; try { const result = await npmCmd(args); if (result?.runInShell) await run(result.runInShell); } finally { term.write = orig; } writeOut(out); return; }
+        const result = await npmCmd(args);
+        if (result?.runInShell) await run(result.runInShell);
+        return;
+      }
+      if (cmd === 'node') { await runNode(args); return; }
+      if (cmd === 'exit') { BUILTINS.exit([], actor); return; }
+      if (writeOut) { const out = await invokeBuiltin(cmd, args, true); writeOut(out); return; }
+      await invokeBuiltin(cmd, args, false);
+    } finally {
+      for (const k of Object.keys(prevEnv)) { if (prevEnv[k] === undefined) delete ctx.env[k]; else ctx.env[k] = prevEnv[k]; }
     }
-    if (cmd === 'node') { await runNode(args); return; }
-    if (cmd === 'exit') { BUILTINS.exit([], actor); return; }
-    if (writeOut) { const out = await invokeBuiltin(cmd, args, true); writeOut(out); return; }
-    await invokeBuiltin(cmd, args, false);
   }
 
   function parseRedirect(tokens) {
@@ -88,12 +132,12 @@ export function createShell({ term, onPreviewWrite }) {
     for (let i = 0; i < pipes.length; i++) {
       const isLast = i === pipes.length - 1;
       const raw = tokenize(pipes[i]);
-      const expanded = raw.map(t => expand(t, ctx.env));
+      const expanded = expandTokens(raw);
       const redir = parseRedirect(expanded);
       const [cmd, ...args] = redir.args;
-      const effectiveArgs = i === 0 ? args : [buf, ...args];
-      if (isLast && !redir.stdout) { await invokeBuiltin(cmd, effectiveArgs, false); buf = ''; continue; }
-      const out = await invokeBuiltin(cmd, effectiveArgs, true);
+      const stdinArgs = i === 0 ? args : (buf ? [buf, ...args] : args);
+      if (isLast && !redir.stdout) { await invokeBuiltin(cmd, stdinArgs, false); buf = ''; continue; }
+      const out = await invokeBuiltin(cmd, stdinArgs, true);
       if (redir.stdout) { const k = toKey(resolvePath(ctx.cwd, redir.stdout)); snap()[k] = redir.append ? (snap()[k] || '') + out : out; window.__debug.idbPersist?.(); buf = ''; } else { buf = out; }
     }
   }

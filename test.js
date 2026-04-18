@@ -133,6 +133,20 @@ assert(shellMain.includes("splitTopLevel(line, ['&&', '||', ';']"), 'shell must 
 assert(shellMain.includes('parseRedirect'), 'shell must handle > / >>');
 console.log('✓ parser exports tokenize, expand, pipes, redirects, chains\n');
 
+console.log('=== shell predictability: $?, inline var, $(), echo -e, sed, sort ===');
+const { expand, expandCmdSub } = require('./docs/shell-parser.js');
+assert(expand('$?', {}, 42) === '42', '$? not expanded');
+assert(expand('$HOME', { HOME: '/root' }, 0) === '/root', '$HOME not expanded');
+assert(expand('${HOME}', { HOME: '/root' }, 0) === '/root', '${HOME} not expanded');
+assert(expandCmdSub('hello', {}, 0, null) === 'hello', 'expandCmdSub passthrough');
+assert(expandCmdSub('pre_$(echo hi)_post', {}, 0, () => 'hi') === 'pre_hi_post', '$() substitution');
+const builtinsJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins.js'), 'utf8');
+['sed', 'sort', 'uniq', 'tr'].forEach(cmd => assert(builtinsJs.includes("'" + cmd + "'") || builtinsJs.includes(cmd + ':'), cmd + ' builtin missing'));
+assert(builtinsJs.includes('echo -e') || builtinsJs.includes("args[0] === '-e'"), 'echo -e not handled');
+assert(shellMain.includes('varAssigns'), 'inline var assignment missing');
+assert(shellMain.includes('expandCmdSub'), 'expandCmdSub not used in shell');
+console.log('✓ $?, $(), inline var assignment, echo -e, sed, sort, uniq, tr all present\n');
+
 console.log('=== shell httpHandlers fix: express routes visible to callExpressRoute ===');
 const shellJs = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
 assert(shellJs.includes('const httpHandlers = {}'), 'httpHandlers not local var');

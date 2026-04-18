@@ -23,8 +23,17 @@ export function tokenize(line) {
   return tokens;
 }
 
-export function expand(token, env) {
-  return token.replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (_, name) => env[name] ?? '');
+export function expand(token, env, lastExitCode) {
+  return token.replace(/\$\(([^)]+)\)|\$\{?(\?|[A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, sub, name) => {
+    if (sub) return match;
+    if (name === '?') return String(lastExitCode ?? 0);
+    return env[name] ?? '';
+  });
+}
+
+export function expandCmdSub(token, env, lastExitCode, runCapture) {
+  if (!token.includes('$(')) return expand(token, env, lastExitCode);
+  return token.replace(/\$\(([^)]+)\)/g, (_, cmd) => runCapture ? runCapture(cmd) : '');
 }
 
 export function parsePipeline(line) {

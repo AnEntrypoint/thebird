@@ -38,6 +38,11 @@ function removeRecursive(prefix) {
   return count;
 }
 
+function readStdin(args, firstArgIsStdin) {
+  if (firstArgIsStdin && args.length) return { stdin: args[0], rest: args.slice(1) };
+  return { stdin: null, rest: args };
+}
+
 export function makeBuiltins(ctx, actor) {
   const w = s => ctx.term.write(s);
   const wl = s => w(s + '\r\n');
@@ -75,13 +80,20 @@ export function makeBuiltins(ctx, actor) {
     },
     cat: args => {
       if (!args.length) throw new Error('cat: missing file operand');
-      for (const f of args) w(readFile(f));
+      const { stdin, rest } = readStdin(args, true);
+      if (stdin !== null && !rest.length) { w(stdin); return; }
+      const files = stdin !== null ? rest : args;
+      for (const f of files) w(readFile(f));
     },
     echo: args => {
-      const noNewline = args[0] === '-n';
-      const ea = noNewline ? args.slice(1) : args;
-      const txt = ea.join(' ');
-      w(txt + (noNewline ? '' : '\r\n'));
+      const escape = args[0] === '-e';
+      const noNewline = args[0] === '-n' || (escape && args[1] === '-n') || (args[0] === '-n' && args[1] === '-e');
+      let ea = args.filter(a => a !== '-e' && a !== '-n');
+      let txt = ea.join(' ');
+      if (escape || args[0] === '-e') {
+        txt = txt.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
+      }
+      w(txt.replace(/\n/g, '\r\n') + (noNewline ? '' : '\r\n'));
     },
     pwd: () => wl(ctx.cwd),
     cd: args => {
@@ -143,38 +155,100 @@ export function makeBuiltins(ctx, actor) {
     touch: args => { for (const f of args) { const k = toKey(resolvePath(ctx.cwd, f)); if (!(k in snap())) snap()[k] = ''; } persist(); },
     head: args => {
       const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
-      const files = args[0] === '-n' ? args.slice(2) : args;
-      for (const f of files) wl(readFile(f).split('\n').slice(0, n).join('\r\n'));
+      const rest = args[0] === '-n' ? args.slice(2) : args;
+      const { stdin, rest: files } = readStdin(rest, true);
+      const getText = f => f ? readFile(f) : stdin || '';
+      const targets = files.length ? files : [null];
+      for (const f of targets) wl(getText(f).split('\n').slice(0, n).join('\r\n'));
     },
     tail: args => {
       const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
-      const files = args[0] === '-n' ? args.slice(2) : args;
-      for (const f of files) wl(readFile(f).split('\n').slice(-n).join('\r\n'));
+      const rest = args[0] === '-n' ? args.slice(2) : args;
+      const { stdin, rest: files } = readStdin(rest, true);
+      const getText = f => f ? readFile(f) : stdin || '';
+      const targets = files.length ? files : [null];
+      for (const f of targets) wl(getText(f).split('\n').slice(-n).join('\r\n'));
     },
     wc: args => {
-      for (const f of args) {
-        const c = readFile(f);
+      const { stdin, rest: files } = readStdin(args, true);
+      const pairs = files.length ? files.map(f => [f, readFile(f)]) : [['', stdin || '']];
+      for (const [name, c] of pairs) {
         const lines = c.split('\n').length;
-        wl(`${String(lines).padStart(8)}${String(c.split(/\s+/).filter(Boolean).length).padStart(8)}${String(c.length).padStart(8)} ${f}`);
+        wl(`${String(lines).padStart(8)}${String(c.split(/\s+/).filter(Boolean).length).padStart(8)}${String(c.length).padStart(8)}${name ? ' ' + name : ''}`);
       }
     },
     grep: args => {
       const flags = args.filter(a => a.startsWith('-')).join('');
       const positional = args.filter(a => !a.startsWith('-'));
-      const [pat, ...files] = positional;
+      const [pat, ...rest] = positional;
       if (!pat) throw new Error('grep: missing pattern');
       const re = new RegExp(pat, flags.includes('i') ? 'gi' : 'g');
       const lineNos = flags.includes('n');
-      const showFile = files.length > 1 || flags.includes('H');
+      const hasFiles = rest.length > 0;
+      const sources = hasFiles ? rest.map(f => ({ name: f, text: readFile(f) })) : [{ name: '', text: '' }];
+      const showFile = sources.length > 1 || flags.includes('H');
       let matched = 0;
-      for (const f of files) {
-        const lines = readFile(f).split('\n');
+      for (const { name, text } of sources) {
+        const lines = text.split('\n');
         lines.forEach((l, i) => {
           re.lastIndex = 0;
-          if (re.test(l)) { wl((showFile ? f + ':' : '') + (lineNos ? (i + 1) + ':' : '') + l); matched++; }
+          if (re.test(l)) { wl((showFile && name ? name + ':' : '') + (lineNos ? (i + 1) + ':' : '') + l); matched++; }
         });
       }
       if (!matched) ctx.lastExitCode = 1;
+    },
+    sed: args => {
+      const flags = args.filter(a => a.startsWith('-')).join('');
+      const positional = args.filter(a => !a.startsWith('-'));
+      const [expr, ...rest] = positional;
+      if (!expr) throw new Error('sed: missing expression');
+      const m = expr.match(/^s(.)(.+?)\1(.*?)\1([gig]*)$/);
+      if (!m) throw new Error('sed: unsupported expression: ' + expr);
+      const [, , search, replace, gflags] = m;
+      const re = new RegExp(search, gflags.includes('g') ? 'g' : '');
+      const { stdin, rest: files } = readStdin(rest, true);
+      const pairs = files.length ? files.map(f => [f, readFile(f)]) : [['', stdin || '']];
+      for (const [name, text] of pairs) {
+        const out = text.split('\n').map(l => l.replace(re, replace)).join('\n');
+        if (name) { writeFile(name, out); } else { w(out.replace(/\n/g, '\r\n')); }
+      }
+    },
+    sort: args => {
+      const flags = args.filter(a => a.startsWith('-')).join('');
+      const positional = args.filter(a => !a.startsWith('-'));
+      const { stdin, rest: files } = readStdin(positional, true);
+      const getText = f => f ? readFile(f) : stdin || '';
+      const targets = files.length ? files : [null];
+      for (const f of targets) {
+        let lines = getText(f).split('\n');
+        if (flags.includes('r')) lines.reverse();
+        else lines.sort();
+        if (flags.includes('u')) lines = [...new Set(lines)];
+        wl(lines.join('\r\n'));
+      }
+    },
+    uniq: args => {
+      const positional = args.filter(a => !a.startsWith('-'));
+      const { stdin, rest: files } = readStdin(positional, true);
+      const getText = f => f ? readFile(f) : stdin || '';
+      const targets = files.length ? files : [null];
+      for (const f of targets) {
+        const lines = getText(f).split('\n');
+        const out = lines.filter((l, i) => i === 0 || l !== lines[i - 1]);
+        wl(out.join('\r\n'));
+      }
+    },
+    tr: args => {
+      const positional = args.filter(a => !a.startsWith('-'));
+      const { stdin } = readStdin(positional, true);
+      const [from, to] = positional.slice(1);
+      if (!from) throw new Error('tr: missing operand');
+      const text = stdin || '';
+      if (to == null) {
+        wl(text.split('').filter(c => !from.includes(c)).join('').replace(/\n/g, '\r\n'));
+      } else {
+        wl(text.split('').map(c => { const i = from.indexOf(c); return i >= 0 ? (to[i] || to[to.length - 1]) : c; }).join('').replace(/\n/g, '\r\n'));
+      }
     },
     env: () => wl(Object.entries(ctx.env).map(([k, v]) => k + '=' + v).join('\r\n')),
     export: args => { for (const kv of args) { const [k, ...v] = kv.split('='); ctx.env[k] = v.join('='); } },
