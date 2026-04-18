@@ -109,7 +109,7 @@ export function createShell({ term, onPreviewWrite }) {
       if (sep === '&&' && !lastOk) continue;
       if (sep === '||' && lastOk) { lastOk = true; continue; }
       actor.send({ type: 'RUN' });
-      try { await runPipeline(cmd); ctx.lastExitCode = 0; lastOk = true; actor.send({ type: 'DONE' }); }
+      try { ctx.lastExitCode = 0; await runPipeline(cmd); lastOk = ctx.lastExitCode === 0; actor.send({ type: 'DONE' }); }
       catch (e) { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); ctx.lastExitCode = 1; lastOk = false; actor.send({ type: 'ERROR' }); }
     }
     drainQueue(onData);
