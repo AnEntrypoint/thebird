@@ -23,20 +23,34 @@ export async function registerPreviewSW() {
 
 navigator.serviceWorker?.addEventListener('message', e => {
   if (e.data?.type !== 'EXPRESS_REQUEST') return;
-  const { path, method } = e.data;
+  const { path, method, body: reqBody, headers: reqHeaders } = e.data;
   const replyPort = e.ports[0];
   const handlers = window.__debug?.shell?.httpHandlers || {};
   const app = Object.values(handlers)[0];
-  if (!app?.routes) { replyPort.postMessage({ status: 404, body: 'no express app' }); return; }
+  if (!app?.routes) { replyPort.postMessage({ status: 503, body: '<h1>503</h1><p>no server running — run <code>node server.js</code> in terminal</p>', contentType: 'text/html' }); return; }
   const routes = app.routes[method] || [];
   const match = routes.find(r => r.path === '*' || r.path === path || path.startsWith(r.path));
-  if (!match) { replyPort.postMessage({ status: 404, body: 'no route for ' + path }); return; }
+  if (!match) { replyPort.postMessage({ status: 404, body: 'no route for ' + method + ' ' + path, contentType: 'text/plain' }); return; }
+  let done = false;
+  const finish = (status, body, ct) => { if (done) return; done = true; replyPort.postMessage({ status, body, contentType: ct }); };
   const res = {
     _body: '', _status: 200, _ct: 'text/html',
-    send(b) { this._body = b; replyPort.postMessage({ status: this._status, body: this._body, contentType: this._ct }); },
+    writeHead(code, headers) { this._status = code; if (headers?.['Content-Type']) this._ct = headers['Content-Type']; return this; },
+    setHeader(k, v) { if (k.toLowerCase() === 'content-type') this._ct = v; return this; },
+    write(chunk) { this._body += String(chunk); return true; },
+    end(chunk) { if (chunk != null) this._body += String(chunk); finish(this._status, this._body, this._ct); },
+    send(b) { this._body = typeof b === 'string' ? b : JSON.stringify(b); finish(this._status, this._body, this._ct); },
     json(o) { this._ct = 'application/json'; this.send(JSON.stringify(o)); },
     status(n) { this._status = n; return this; },
   };
-  const req = { method, path, query: {}, headers: {} };
-  try { match.fn(req, res); } catch (err) { replyPort.postMessage({ status: 500, body: err.message }); }
+  let bodyConsumed = false;
+  const req = {
+    method, url: path, path, query: {}, headers: reqHeaders || {},
+    [Symbol.asyncIterator]: async function* () { if (!bodyConsumed && reqBody) { bodyConsumed = true; yield reqBody; } },
+  };
+  try {
+    const r = match.fn(req, res);
+    if (r && typeof r.then === 'function') r.catch(err => finish(500, '<h1>500</h1><pre>' + String(err.message).replace(/</g, '&lt;') + '</pre>', 'text/html'));
+  } catch (err) { finish(500, '<h1>500</h1><pre>' + String(err.message).replace(/</g, '&lt;') + '</pre>', 'text/html'); }
+  setTimeout(() => finish(res._status, res._body, res._ct), 10000);
 });

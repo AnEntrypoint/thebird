@@ -65,11 +65,20 @@ function callExpressRoute(path, method) {
 async function refreshPreview() {
   const iframe = document.getElementById('preview-frame');
   if (!iframe) return;
+  const swReady = window.__debug?.sw?.registered;
+  const handlers = window.__debug?.shell?.httpHandlers || {};
+  const hasServer = Object.keys(handlers).length > 0;
+  if (swReady && hasServer) {
+    const target = './preview/';
+    if (!iframe.src || !iframe.src.includes('/preview/')) iframe.src = target;
+    else iframe.contentWindow?.location.reload();
+    return;
+  }
   const result = await callExpressRoute('/');
   if (result) { iframe.srcdoc = result.body; return; }
   const snap = window.__debug?.idbSnapshot || {};
   if (snap['index.html']) { iframe.srcdoc = snap['index.html']; return; }
-  iframe.srcdoc = '<pre style="color:#33ff33;padding:1ch;font-family:monospace">No express app running.\nRun node app.js in terminal.</pre>';
+  iframe.srcdoc = '<pre style="color:#33ff33;padding:1ch;font-family:monospace">No express app running.\nRun: node server.js</pre>';
 }
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {
