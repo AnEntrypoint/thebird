@@ -17,16 +17,18 @@ export function makeStreamingZlib(streamMod,Buf,fflate){
 
 export function makeVmModule(){
   const contexts=new WeakMap();
-  const registry=new FinalizationRegistry(iframe=>{try{iframe.remove();}catch{}});
-  const mkIframe=ctx=>{const f=document.createElement('iframe');f.style.display='none';f.setAttribute('sandbox','allow-scripts allow-same-origin');document.body.appendChild(f);const win=f.contentWindow;if(ctx)for(const k of Object.keys(ctx))win[k]=ctx[k];registry.register(ctx||{},f);return{iframe:f,win};};
-  const run=(code,ctxOrIframe)=>{const win=ctxOrIframe.contentWindow||ctxOrIframe.win||ctxOrIframe;return win.eval(code);};
+  const registry=typeof FinalizationRegistry!=='undefined'?new FinalizationRegistry(iframe=>{try{iframe.remove();}catch{}}):{register(){}};
+  const hasDom=typeof document!=='undefined';
+  const cloneAcross=v=>{if(v==null||typeof v!=='object'&&typeof v!=='function')return v;if(typeof v==='function')return v;try{return structuredClone(v);}catch{return v;}};
+  const mkIframe=ctx=>{if(!hasDom)return{iframe:null,win:globalThis};const f=document.createElement('iframe');f.style.display='none';f.setAttribute('sandbox','allow-scripts allow-same-origin');document.body.appendChild(f);const win=f.contentWindow;if(ctx)for(const k of Object.keys(ctx))win[k]=cloneAcross(ctx[k]);registry.register(ctx||{},f);return{iframe:f,win};};
+  const syncBack=(ctx,win)=>{for(const k of Object.keys(ctx))if(k in win)ctx[k]=cloneAcross(win[k]);for(const k of Object.keys(win))if(!(k in ctx)&&!['window','self','document','location','navigator','parent','top','frames','opener','localStorage','sessionStorage'].includes(k))ctx[k]=cloneAcross(win[k]);};
   return{
     runInThisContext:code=>(0,eval)(code),
-    runInNewContext:(code,ctx={})=>{const{win}=mkIframe(ctx);const r=win.eval(code);for(const k of Object.keys(win))if(ctx.hasOwnProperty(k)||k in ctx)ctx[k]=win[k];return r;},
-    runInContext:(code,ctxObj)=>{const ref=contexts.get(ctxObj);if(!ref)throw new Error('vm.runInContext: context not created via createContext');return ref.win.eval(code);},
+    runInNewContext:(code,ctx={})=>{const{win}=mkIframe(ctx);const r=win.eval?win.eval(code):(0,eval)(code);if(win.eval)syncBack(ctx,win);return cloneAcross(r);},
+    runInContext:(code,ctxObj)=>{const ref=contexts.get(ctxObj);if(!ref)throw new Error('vm.runInContext: context not created via createContext');const r=ref.win.eval(code);syncBack(ctxObj,ref.win);return cloneAcross(r);},
     createContext:(ctx={})=>{const ref=mkIframe(ctx);contexts.set(ctx,ref);return ctx;},
     isContext:ctx=>contexts.has(ctx),
-    Script:class Script{constructor(code){this.code=code;}runInThisContext(){return(0,eval)(this.code);}runInNewContext(ctx){return(0,eval)(this.code);}runInContext(ctx){const ref=contexts.get(ctx);if(!ref)throw new Error('Script.runInContext: createContext first');return ref.win.eval(this.code);}},
+    Script:class Script{constructor(code){this.code=code;}runInThisContext(){return(0,eval)(this.code);}runInNewContext(ctx={}){const{win}=mkIframe(ctx);const r=win.eval?win.eval(this.code):(0,eval)(this.code);if(win.eval)syncBack(ctx,win);return cloneAcross(r);}runInContext(ctx){const ref=contexts.get(ctx);if(!ref)throw new Error('Script.runInContext: createContext first');const r=ref.win.eval(this.code);syncBack(ctx,ref.win);return cloneAcross(r);}},
     compileFunction:(code,params=[])=>new Function(...params,code),
   };
 }

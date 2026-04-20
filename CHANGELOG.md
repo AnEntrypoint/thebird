@@ -1,4 +1,25 @@
 
+## [unreleased] 2026-04-20 node parity pass 7 — Firefox maximization + polyfills
+- feat: browser detection (vendor, version, 10+ capabilities) + window.__debug.node.polyfills registry
+- feat: OPFS-backed fs.promises when available — real persistence (readFile/writeFile/mkdir/rm/stat/list) via SyncAccessHandle in worker, IDB fallback
+- feat: brotli polyfill via brotli-wasm (compressSync/decompressSync + Transform streams)
+- feat: Error.prepareStackTrace source-map integration via source-map-js — original filenames/lines when process.sourceMapsEnabled
+- feat: net.Socket/tls.connect real polyfill via WebSocket-backed TCP tunnel (window.__plugkit_tcp_relay)
+- feat: dgram.Socket polyfill via WebSocket-wrapped datagrams (window.__plugkit_udp_relay)
+- feat: inspector.open() real CDP endpoint via postMessage channel (Runtime.evaluate/Debugger.enable/Profiler.*)
+- feat: v8 CPU profiler backed by PerformanceObserver (CPUProfile.startProfiling/stopProfiling)
+- feat: v8.writeHeapSnapshot — minimal valid V8 heap snapshot JSON format, Chrome DevTools importable
+- feat: X509Certificate sync access via crypto.preloadX509()
+- feat: vm cross-realm structuredClone boundary — Array/Object instanceof works across iframe
+- feat: cluster module real impl via BroadcastChannel (fork/isMaster/worker.send/'message')
+- feat: CompressionStream native gzip/deflate preferred over fflate when available
+- feat: WebCodecs exposed as 'codecs' module (VideoEncoder/AudioEncoder/etc)
+- feat: web-push module (pushManager.subscribe/getSubscription)
+- feat: process.storage.estimate/persist/persisted + process.storageBuckets
+- feat: FileSystemObserver integration for real fs.watch events on OPFS
+- feat: Firefox Worker module-type compat shim
+- feat: observability panel window.__debug.node.polyfills shows backing (native|wasm|fallback) per feature
+
 ## [unreleased] 2026-04-20 node parity pass 6 — 23 PRD items shipped
 - feat: crypto ECDSA PEM sign/verify (P-256/P-384/P-521)
 - feat: crypto.hkdf/hkdfAsync via webcrypto deriveBits

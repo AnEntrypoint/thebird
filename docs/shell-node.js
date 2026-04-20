@@ -11,13 +11,24 @@ import { extendKeys } from './shell-node-keyobject.js';
 import { makeStreamingZlib, makeVmModule, makeModuleRegister, makeHttp2, makeWasi } from './shell-node-advanced.js';
 import { makeDebugRegistry, makeDiagnosticsChannel, makeTraceEvents, makeBufferPool, makeProcessBindings, makePerfMemory, makeFetchPool, makeFsWatchReal, installPrepareStackTraceHook, installCaptureStackTrace } from './shell-node-observe.js';
 import { makeWorkerThreads, makeChildProcessReal, makeRepl } from './shell-node-runtime.js';
+import { detectBrowser, registerPolyfill, makeCompressionStreamZlib, makeWebCodecs, makeWebPush, makeStorageHelpers } from './shell-node-firefox.js';
+import { makeOpfsBackend, wireOpfsIntoFs } from './shell-node-opfs.js';
+import { preloadBrotli, makeBrotli } from './shell-node-brotli.js';
+import { preloadSourceMap, installSourceMapStacks } from './shell-node-srcmap.js';
+import { makeNet, makeTls, makeDgram } from './shell-node-net.js';
+import { makeInspector } from './shell-node-inspector.js';
+import { makeV8Profiler, makeHeapSnapshot } from './shell-node-profiler.js';
+import { makeCluster } from './shell-node-cluster.js';
+import { preloadX509 } from './shell-node-keyobject.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = extendPath(createPath());
   const Buf = makeBufferPool(extendBuffer(createBuffer()));
   const debugReg = makeDebugRegistry();
+  const browserInfo = detectBrowser(); debugReg.browser = browserInfo;
   const snapFn = () => window.__debug?.idbSnapshot || {};
   const fsmod = extendFsStreams(createFs(), Buf);
+  const opfs = makeOpfsBackend(Buf); if (opfs) wireOpfsIntoFs(fsmod, opfs, debugReg);
   fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatchReal(snapFn);
   fsmod.glob = (pat, opts, cb) => { if (typeof opts === 'function') { cb = opts; opts = {}; } const matches = Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k)); queueMicrotask(() => cb?.(null, matches)); };
   fsmod.globSync = pat => Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k));
@@ -30,51 +41,37 @@ export function createNodeEnv({ ctx, term }) {
   let cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
   cryptoMod = extendKeys(extendCrypto(cryptoMod, Buf));
   cryptoMod._ops = () => ++debugReg.cryptoOps;
-  const errorCodes = makeErrorCodes(); const stubs = makeStubs(ctx);
-  const diagCh = makeDiagnosticsChannel(); const traceEv = makeTraceEvents(debugReg);
-  const vmMod = makeVmModule(); const http2Mod = makeHttp2(); const wasiMod = makeWasi();
-  const moduleRegister = makeModuleRegister(); const workerThreads = makeWorkerThreads(snapFn, Buf);
-  const getMem = makePerfMemory(performance); const FetchAgent = makeFetchPool();
+  const errorCodes = makeErrorCodes(); const stubs = makeStubs(ctx); const diagCh = makeDiagnosticsChannel(); const traceEv = makeTraceEvents(debugReg);
+  const vmMod = makeVmModule(); const http2Mod = makeHttp2(); const wasiMod = makeWasi(); const moduleRegister = makeModuleRegister(); const workerThreads = makeWorkerThreads(snapFn, Buf);
+  const getMem = makePerfMemory(performance); const FetchAgent = makeFetchPool(); const netMod = makeNet(Buf); const tlsMod = makeTls(netMod, Buf); const dgramMod = makeDgram(Buf);
+  const v8Real = makeV8Profiler(debugReg); const heapSnap = makeHeapSnapshot(); const clusterReal = makeCluster(); const inspector = makeInspector(debugReg);
+  const nativeCS = makeCompressionStreamZlib(streamMod, Buf); const webCodecs = makeWebCodecs(); const webPush = makeWebPush(); const storage = makeStorageHelpers();
+  if (nativeCS) registerPolyfill(debugReg, 'compressionStream', 'native', 'CompressionStream available');
+  if (browserInfo.capabilities.webCodecs) registerPolyfill(debugReg, 'webCodecs', 'native', 'WebCodecs available');
   const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
-  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem;
+  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem; proc.storage = storage; proc.storageBuckets = storage.buckets;
   const MODULES = {
     path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrlExt(), querystring: () => createQuerystring(),
     os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}), loadavg: () => [0, 0, 0], userInfo: () => ({ username: ctx.env.USER || 'root', uid: 0, gid: 0, shell: ctx.env.SHELL, homedir: ctx.env.HOME }), endianness: () => 'LE', version: () => '#1 SMP', machine: () => 'x86_64', devNull: '/dev/null', availableParallelism: () => 1, constants: { signals: {}, errno: {} } }),
     util: () => ({ inspect, format, promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), callbackify: fn => (...a) => { const cb = a.pop(); fn(...a).then(v => cb(null, v), e => cb(e)); }, types: { isPromise: p => p instanceof Promise, isDate: v => v instanceof Date, isRegExp: v => v instanceof RegExp, isBuffer: v => v instanceof Uint8Array, isTypedArray: v => ArrayBuffer.isView(v) && !(v instanceof DataView), isAsyncFunction: f => f?.constructor?.name === 'AsyncFunction', isNativeError: e => e instanceof Error }, deprecate: fn => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); }, debuglog: () => () => {}, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b), styleText: (s, t) => t, parseArgs: ({ args = [], options = {} }) => { const values = {}, positionals = []; for (let i = 0; i < args.length; i++) { const a = args[i]; if (a.startsWith('--')) { const [k, v] = a.slice(2).split('='); if (v !== undefined) values[k] = v; else if (options[k]?.type === 'string') values[k] = args[++i]; else values[k] = true; } else positionals.push(a); } return { values, positionals }; } }),
     crypto: () => cryptoMod,
-    stream: () => streamMod,
-    'stream/promises': () => streamMod.promises,
-    'stream/consumers': () => makeStreamConsumers(),
-    'stream/web': () => ({ ReadableStream, WritableStream, TransformStream }),
+    stream: () => streamMod, 'stream/promises': () => streamMod.promises, 'stream/consumers': () => makeStreamConsumers(), 'stream/web': () => ({ ReadableStream, WritableStream, TransformStream }),
     http: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }), https: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }),
     http2: () => http2Mod, 'node:http2': () => http2Mod,
     vm: () => vmMod, 'node:vm': () => vmMod,
     buffer: () => ({ Buffer: Buf, constants: { MAX_LENGTH: 4294967295, MAX_STRING_LENGTH: 536870888 }, kMaxLength: 4294967295, Blob, File }),
     child_process: () => cpMod,
-    net: () => makeNetStub(), dgram: () => makeDgramStub(), worker_threads: () => workerThreads,
-    zlib: () => ({ ...zlibMod, ...makeStreamingZlib(streamMod, Buf, globalThis.__fflate || {}) }),
+    net: () => netMod, dgram: () => dgramMod, tls: () => tlsMod, worker_threads: () => workerThreads,
+    zlib: () => ({ ...zlibMod, ...makeStreamingZlib(streamMod, Buf, globalThis.__fflate || {}), ...(nativeCS || {}), ...makeBrotli(streamMod, Buf) }),
     assert: () => { const a = (v, m) => { if (!v) throw new Error(m || 'assertion failed'); }; a.ok = a; a.equal = (x, y, m) => a(x === y, m); a.deepEqual = (x, y, m) => a(JSON.stringify(x) === JSON.stringify(y), m); a.deepStrictEqual = a.deepEqual; a.strictEqual = a.equal; a.notEqual = (x, y, m) => a(x !== y, m); a.notDeepEqual = (x, y, m) => a(JSON.stringify(x) !== JSON.stringify(y), m); a.notStrictEqual = a.notEqual; a.throws = (fn, m) => { try { fn(); throw new Error('did not throw'); } catch (e) {} }; a.doesNotThrow = fn => fn(); a.rejects = async fn => { try { await (typeof fn === 'function' ? fn() : fn); throw new Error('did not reject'); } catch {} }; a.fail = m => { throw new Error(m || 'failed'); }; a.match = (s, re) => a(re.test(s)); return a; },
-    string_decoder: () => stubs.string_decoder,
-    readline: () => makeReadline(term, proc),
-    'readline/promises': () => stubs.readline_promises,
-    timers: () => makeTimersMod(), 'timers/promises': () => makeTimersMod().promises,
-    perf_hooks: () => makePerfHooks(),
-    v8: () => makeV8Mod(),
-    async_hooks: () => makeAsyncHooks(),
-    inspector: () => stubs.inspector,
-    cluster: () => stubs.cluster,
-    sea: () => stubs.sea,
-    'node:sea': () => stubs.sea,
-    test: () => stubs.test_runner,
-    'node:test': () => stubs.test_runner,
-    'node:test/reporters': () => ({ spec: class {}, tap: class {}, dot: class {} }),
-    tls: () => stubs.tls,
-    tty: () => stubs.tty,
-    domain: () => stubs.domain,
-    diagnostics_channel: () => diagCh,
-    punycode: () => stubs.punycode,
-    errors: () => errorCodes,
-    trace_events: () => traceEv,
+    string_decoder: () => stubs.string_decoder, readline: () => makeReadline(term, proc), 'readline/promises': () => stubs.readline_promises,
+    timers: () => makeTimersMod(), 'timers/promises': () => makeTimersMod().promises, perf_hooks: () => makePerfHooks(),
+    v8: () => ({ ...makeV8Mod(), ...v8Real, ...heapSnap }), async_hooks: () => makeAsyncHooks(),
+    inspector: () => inspector, cluster: () => clusterReal || stubs.cluster,
+    codecs: () => { if (!webCodecs) throw makeModuleNotFoundError('codecs', []); return webCodecs; }, 'web-push': () => webPush,
+    sea: () => stubs.sea, 'node:sea': () => stubs.sea, test: () => stubs.test_runner, 'node:test': () => stubs.test_runner,
+    'node:test/reporters': () => ({ spec: class {}, tap: class {}, dot: class {} }), tty: () => stubs.tty, domain: () => stubs.domain,
+    diagnostics_channel: () => diagCh, punycode: () => stubs.punycode, errors: () => errorCodes, trace_events: () => traceEv,
     wasi: () => wasiMod,
     module: () => ({ ...makeModuleModule(() => {}, MODULES), register: moduleRegister.register, _registerHooks: moduleRegister._hooks }),
     express: () => createExpress(term, fsmod),
@@ -166,6 +163,7 @@ export function createNodeEnv({ ctx, term }) {
     proc.exitCode = 0;
     loadDotEnv();
     globalThis.__fflate = await preloadFflate().catch(() => ({}));
+    if (proc.sourceMapsEnabled) { await preloadSourceMap().catch(() => {}); installSourceMapStacks(snapFn); }
     await preloadAsyncPkgs(code, dir);
     const reqFn = makeRequire(dir);
     const scope = { process: proc, console: cons, require: reqFn, Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, module: { exports: {} }, exports: {}, global: globalThis, URL, URLSearchParams, TextEncoder, TextDecoder };
