@@ -7,25 +7,36 @@ import { resolveExports, resolveImports, walkUpNodeModules, resolvePackageEntry,
 import { extendBuffer, extendPath, createUrlExt, makeStringDecoder, makeReadline, makeTimersMod, makePerfHooks, makeV8Mod, makeAsyncHooks, makeStubs, makeErrorCodes, extendProcessExtras, makeStreamConsumers } from './shell-node-extras.js';
 import { makeStream, extendFsStreams } from './shell-node-streams.js';
 import { extendCrypto } from './shell-node-cipher.js';
+import { extendKeys } from './shell-node-keyobject.js';
+import { makeStreamingZlib, makeVmModule, makeModuleRegister, makeHttp2, makeWasi } from './shell-node-advanced.js';
+import { makeDebugRegistry, makeDiagnosticsChannel, makeTraceEvents, makeBufferPool, makeProcessBindings, makePerfMemory, makeFetchPool, makeFsWatchReal, installPrepareStackTraceHook, installCaptureStackTrace } from './shell-node-observe.js';
+import { makeWorkerThreads, makeChildProcessReal, makeRepl } from './shell-node-runtime.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = extendPath(createPath());
-  const Buf = extendBuffer(createBuffer());
+  const Buf = makeBufferPool(extendBuffer(createBuffer()));
+  const debugReg = makeDebugRegistry();
+  const snapFn = () => window.__debug?.idbSnapshot || {};
   const fsmod = extendFsStreams(createFs(), Buf);
-  fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatch();
+  fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatchReal(snapFn);
   fsmod.glob = (pat, opts, cb) => { if (typeof opts === 'function') { cb = opts; opts = {}; } const matches = Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k)); queueMicrotask(() => cb?.(null, matches)); };
   fsmod.globSync = pat => Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k));
   const zlibMod = createZlib(Buf);
   const httpClient = createHttpClient(Buf);
   const cpMod = createChildProcess(ctx);
-  cpMod.execSync = () => { throw new Error('child_process.execSync: synchronous subprocess not available in browser event loop — use exec() with callback'); };
-  let cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
-  cryptoMod = extendCrypto(cryptoMod, Buf);
   const streamMod = makeStream();
-  const errorCodes = makeErrorCodes();
-  const stubs = makeStubs(ctx);
+  const cpReal = makeChildProcessReal(Buf, streamMod);
+  Object.assign(cpMod, { exec: cpReal.exec.bind(cpReal), spawn: cpReal.spawn.bind(cpReal), execFile: cpReal.execFile.bind(cpReal), execSync: cpReal.execSync, spawnSync: cpReal.spawnSync, fork: cpReal.fork });
+  let cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
+  cryptoMod = extendKeys(extendCrypto(cryptoMod, Buf));
+  cryptoMod._ops = () => ++debugReg.cryptoOps;
+  const errorCodes = makeErrorCodes(); const stubs = makeStubs(ctx);
+  const diagCh = makeDiagnosticsChannel(); const traceEv = makeTraceEvents(debugReg);
+  const vmMod = makeVmModule(); const http2Mod = makeHttp2(); const wasiMod = makeWasi();
+  const moduleRegister = makeModuleRegister(); const workerThreads = makeWorkerThreads(snapFn, Buf);
+  const getMem = makePerfMemory(performance); const FetchAgent = makeFetchPool();
   const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
-  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false;
+  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem;
   const MODULES = {
     path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrlExt(), querystring: () => createQuerystring(),
     os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}), loadavg: () => [0, 0, 0], userInfo: () => ({ username: ctx.env.USER || 'root', uid: 0, gid: 0, shell: ctx.env.SHELL, homedir: ctx.env.HOME }), endianness: () => 'LE', version: () => '#1 SMP', machine: () => 'x86_64', devNull: '/dev/null', availableParallelism: () => 1, constants: { signals: {}, errno: {} } }),
@@ -35,11 +46,13 @@ export function createNodeEnv({ ctx, term }) {
     'stream/promises': () => streamMod.promises,
     'stream/consumers': () => makeStreamConsumers(),
     'stream/web': () => ({ ReadableStream, WritableStream, TransformStream }),
-    http: () => httpClient, https: () => ({ ...httpClient, Agent: class Agent { constructor() {} }, globalAgent: { maxSockets: Infinity } }),
+    http: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }), https: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }),
+    http2: () => http2Mod, 'node:http2': () => http2Mod,
+    vm: () => vmMod, 'node:vm': () => vmMod,
     buffer: () => ({ Buffer: Buf, constants: { MAX_LENGTH: 4294967295, MAX_STRING_LENGTH: 536870888 }, kMaxLength: 4294967295, Blob, File }),
     child_process: () => cpMod,
-    net: () => makeNetStub(), dgram: () => makeDgramStub(), worker_threads: () => makeWorkerThreadsStub(),
-    zlib: () => zlibMod,
+    net: () => makeNetStub(), dgram: () => makeDgramStub(), worker_threads: () => workerThreads,
+    zlib: () => ({ ...zlibMod, ...makeStreamingZlib(streamMod, Buf, globalThis.__fflate || {}) }),
     assert: () => { const a = (v, m) => { if (!v) throw new Error(m || 'assertion failed'); }; a.ok = a; a.equal = (x, y, m) => a(x === y, m); a.deepEqual = (x, y, m) => a(JSON.stringify(x) === JSON.stringify(y), m); a.deepStrictEqual = a.deepEqual; a.strictEqual = a.equal; a.notEqual = (x, y, m) => a(x !== y, m); a.notDeepEqual = (x, y, m) => a(JSON.stringify(x) !== JSON.stringify(y), m); a.notStrictEqual = a.notEqual; a.throws = (fn, m) => { try { fn(); throw new Error('did not throw'); } catch (e) {} }; a.doesNotThrow = fn => fn(); a.rejects = async fn => { try { await (typeof fn === 'function' ? fn() : fn); throw new Error('did not reject'); } catch {} }; a.fail = m => { throw new Error(m || 'failed'); }; a.match = (s, re) => a(re.test(s)); return a; },
     string_decoder: () => stubs.string_decoder,
     readline: () => makeReadline(term, proc),
@@ -58,11 +71,12 @@ export function createNodeEnv({ ctx, term }) {
     tls: () => stubs.tls,
     tty: () => stubs.tty,
     domain: () => stubs.domain,
-    diagnostics_channel: () => stubs.diagnostics_channel,
+    diagnostics_channel: () => diagCh,
     punycode: () => stubs.punycode,
     errors: () => errorCodes,
-    trace_events: () => ({ createTracing: () => ({ enable() {}, disable() {}, categories: [] }) }),
-    wasi: () => ({ WASI: class { constructor() { throw new Error('WASI: not supported in browser'); } } }),
+    trace_events: () => traceEv,
+    wasi: () => wasiMod,
+    module: () => ({ ...makeModuleModule(() => {}, MODULES), register: moduleRegister.register, _registerHooks: moduleRegister._hooks }),
     express: () => createExpress(term, fsmod),
     'better-sqlite3': createSqlite,
   };
@@ -70,18 +84,9 @@ export function createNodeEnv({ ctx, term }) {
   const cons = createConsole(term);
   cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log;
   cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n');
-  cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n');
-  cons.debug = cons.log;
-  const snap = () => window.__debug?.idbSnapshot || {};
-  const pkgCache = {};
-  const reqCache = {};
-  let requireStack = [];
-
-  function loadDotEnv() {
-    const envFile = snap()[ctx.cwd.replace(/^\//, '').replace(/\/$/, '') + '/.env'] || snap()['.env'];
-    if (!envFile) return;
-    for (const [k, v] of Object.entries(parseDotEnv(envFile))) if (!(k in ctx.env)) ctx.env[k] = v;
-  }
+  cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n'); cons.debug = cons.log;
+  const pkgCache = {}; const reqCache = {}; let requireStack = [];
+  function loadDotEnv() { const envFile = snapFn()[ctx.cwd.replace(/^\//, '').replace(/\/$/, '') + '/.env'] || snapFn()['.env']; if (!envFile) return; for (const [k, v] of Object.entries(parseDotEnv(envFile))) if (!(k in ctx.env)) ctx.env[k] = v; }
 
   const resolveCandidates = (dir, id) => [pathmod.resolve(dir, id) + '.js', pathmod.resolve(dir, id), pathmod.resolve(dir, id) + '/index.js', pathmod.resolve(dir, id, 'index.js')];
   function findPkgJsonDir(s, dir) { let d = dir.replace(/^\//, '').replace(/\/$/, ''); while (true) { const k = (d ? d + '/' : '') + 'package.json'; if (k in s) return d; if (!d) return null; const up = d.slice(0, d.lastIndexOf('/')); if (up === d) return null; d = up; } }
@@ -91,7 +96,7 @@ export function createNodeEnv({ ctx, term }) {
     const req = function require(id) {
       if (id === 'module') return makeModuleModule(req, MODULES);
       if (MODULES[id]) return MODULES[id]();
-      const s = snap();
+      const s = snapFn();
       if (id.startsWith('#')) {
         const pjRoot = findPkgJsonDir(s, dir);
         if (pjRoot) { const pj = JSON.parse(s[pjRoot + '/package.json']); const target = resolveImports(pj, id); if (target) { const resolved = pathmod.resolve('/' + pjRoot, target); return loadFile(resolved.replace(/^\//, ''), s); } }
@@ -127,7 +132,7 @@ export function createNodeEnv({ ctx, term }) {
     }
     req.resolve = id => {
       if (MODULES[id] || id === 'module') return id;
-      const s = snap();
+      const s = snapFn();
       if (!id.startsWith('.')) { const pkgDir = walkUpNodeModules(s, dir, id); if (pkgDir) return resolvePackageEntry(s, pkgDir) || pkgDir; throw makeModuleNotFoundError(id, requireStack); }
       for (const c of resolveCandidates(dir, id)) { const key = c.replace(/^\//, ''); if (key in s) return '/' + key; }
       throw makeModuleNotFoundError(id, requireStack);
@@ -137,7 +142,7 @@ export function createNodeEnv({ ctx, term }) {
   }
 
   async function preloadAsyncPkgs(entryCode, entryDir) {
-    const s = snap();
+    const s = snapFn();
     const visited = new Set(); const queue = [{ code: entryCode, dir: entryDir }]; const pkgIds = new Set();
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
     while (queue.length) {
@@ -160,14 +165,13 @@ export function createNodeEnv({ ctx, term }) {
     proc.argv = filename ? ['node', fpath, ...(argv || [])] : ['node'];
     proc.exitCode = 0;
     loadDotEnv();
-    await preloadFflate().catch(() => {});
+    globalThis.__fflate = await preloadFflate().catch(() => ({}));
     await preloadAsyncPkgs(code, dir);
     const reqFn = makeRequire(dir);
     const scope = { process: proc, console: cons, require: reqFn, Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, module: { exports: {} }, exports: {}, global: globalThis, URL, URLSearchParams, TextEncoder, TextDecoder };
     const prevGlobals = { process: globalThis.process, Buffer: globalThis.Buffer };
     globalThis.process = proc; globalThis.Buffer = Buf;
-    if (!Error.captureStackTrace) Error.captureStackTrace = (target, ctor) => { const e = new Error(); const lines = (e.stack || '').split('\n'); target.stack = (ctor?.name ? ctor.name : 'Error') + (target.message ? ': ' + target.message : '') + '\n' + lines.slice(2).join('\n'); };
-    if (!('prepareStackTrace' in Error)) Error.prepareStackTrace = null;
+    installCaptureStackTrace(); installPrepareStackTraceHook();
     const unhandledH = e => { e.preventDefault?.(); const err = e.reason || e; term.write('\x1b[31m' + rewriteStack(err, fpath) + '\x1b[0m\r\n'); ctx.lastExitCode = 1; };
     window.addEventListener('unhandledrejection', unhandledH);
     try {

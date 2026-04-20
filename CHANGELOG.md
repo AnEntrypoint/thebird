@@ -1,4 +1,28 @@
 
+## [unreleased] 2026-04-20 node parity pass 6 — 23 PRD items shipped
+- feat: crypto ECDSA PEM sign/verify (P-256/P-384/P-521)
+- feat: crypto.hkdf/hkdfAsync via webcrypto deriveBits
+- feat: crypto.createECDH (prime256v1/secp384r1/secp521r1) shared-secret derivation
+- feat: KeyObject (createPrivateKey/createPublicKey) + X509Certificate via @peculiar/x509
+- feat: streaming zlib (createGzip/Gunzip/Deflate/Inflate) via fflate class API
+- feat: vm module (runInThisContext/runInNewContext/runInContext via iframe)
+- feat: module.register() ESM loader hooks (resolve/load pipeline)
+- feat: http2.connect fetch-backed ClientHttp2Session
+- feat: WASI real impl via @bjorn3/browser_wasi_shim
+- feat: diagnostics_channel real pub/sub + tracingChannel
+- feat: trace_events real recorder with event buffer
+- feat: worker_threads.Worker backed by real Web Worker + Blob URL
+- feat: child_process exec/spawn via WebContainer when available
+- feat: fs.watch real events via IDB snapshot diff polling
+- feat: REPL command handling (.clear/.exit/.help/.load/.save/.editor) + multi-line balance detection
+- feat: Buffer pool (Buffer.poolSize=8192) for small allocUnsafe
+- feat: process.binding('util') selective exposure, execArgv, features
+- feat: process.memoryUsage from performance.memory
+- feat: http.Agent / https.Agent real fetch pool with maxSockets
+- feat: Error.prepareStackTrace V8-hook via Object.defineProperty on Error.prototype.stack
+- feat: window.__debug.node registry for runtime observability
+- feat: net/tls stubs with clearer error messages
+
 ## [unreleased] 2026-04-20 node parity pass 5
 - feat: zlib sync (fflate via esm.sh /es2022 bundle) — gzipSync/gunzipSync/deflateSync/inflateSync
 - feat: crypto.sign/verify + createSign/createVerify with PEM key import (RSA-SHA256 via webcrypto pkcs8/spki)
