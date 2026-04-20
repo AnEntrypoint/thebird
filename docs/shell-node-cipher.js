@@ -1,0 +1,50 @@
+const ALG_MAP={
+  'aes-128-gcm':{name:'AES-GCM',length:128},'aes-192-gcm':{name:'AES-GCM',length:192},'aes-256-gcm':{name:'AES-GCM',length:256},
+  'aes-128-cbc':{name:'AES-CBC',length:128},'aes-192-cbc':{name:'AES-CBC',length:192},'aes-256-cbc':{name:'AES-CBC',length:256},
+  'aes-128-ctr':{name:'AES-CTR',length:128},'aes-256-ctr':{name:'AES-CTR',length:256},
+};
+const toBytes=d=>typeof d==='string'?new TextEncoder().encode(d):d instanceof Uint8Array?d:new Uint8Array(d);
+const concat=list=>{const t=list.reduce((s,c)=>s+c.length,0);const out=new Uint8Array(t);let o=0;for(const c of list){out.set(c,o);o+=c.length;}return out;};
+
+async function importKey(alg,keyBytes,usages){
+  return crypto.subtle.importKey('raw',keyBytes,{name:alg.name,length:alg.length},false,usages);
+}
+
+function makeCipher(alg,keyBytes,iv,decrypt=false){
+  const spec=ALG_MAP[alg];
+  if(!spec)throw new Error(`cipher algorithm not supported: ${alg}`);
+  const chunks=[];let authTag=null;let aad=null;let final=null;
+  const usage=decrypt?['decrypt']:['encrypt'];
+  return {
+    update(data,inputEnc,outputEnc){const bytes=inputEnc?Buffer.from(data,inputEnc):toBytes(data);chunks.push(bytes);return Buffer.alloc(0);},
+    async final(enc){const input=concat(chunks);const key=await importKey(spec,toBytes(keyBytes),usage);const params={name:spec.name,iv:toBytes(iv)};if(spec.name==='AES-GCM'&&aad)params.additionalData=aad;if(decrypt&&spec.name==='AES-GCM'&&authTag){const full=concat([input,authTag]);const out=new Uint8Array(await crypto.subtle.decrypt(params,key,full));return enc?Buffer.from(out).toString(enc):Buffer.from(out);}const op=decrypt?crypto.subtle.decrypt.bind(crypto.subtle):crypto.subtle.encrypt.bind(crypto.subtle);const out=new Uint8Array(await op(params,key,input));if(!decrypt&&spec.name==='AES-GCM'){authTag=out.slice(-16);const ct=out.slice(0,-16);final=Buffer.from(ct);return enc?final.toString(enc):final;}return enc?Buffer.from(out).toString(enc):Buffer.from(out);},
+    setAAD(d){aad=toBytes(d);return this;},
+    setAuthTag(t){authTag=toBytes(t);return this;},
+    getAuthTag(){return authTag?Buffer.from(authTag):null;},
+    setAutoPadding(){return this;},
+  };
+}
+
+export function extendCrypto(cryptoMod,Buf){
+  globalThis.Buffer=globalThis.Buffer||Buf;
+  cryptoMod.createCipheriv=(alg,key,iv)=>makeCipher(alg.toLowerCase(),key,iv,false);
+  cryptoMod.createDecipheriv=(alg,key,iv)=>makeCipher(alg.toLowerCase(),key,iv,true);
+  cryptoMod.createCipher=()=>{throw new Error('crypto.createCipher: deprecated and unsafe — use createCipheriv');};
+  cryptoMod.createDecipher=()=>{throw new Error('crypto.createDecipher: deprecated — use createDecipheriv');};
+  cryptoMod.generateKeyPair=(type,opts,cb)=>{cryptoMod.generateKeyPairAsync?.(type,opts).then(r=>cb(null,r.publicKey,r.privateKey),cb);};
+  cryptoMod.generateKeyPairSync=()=>{throw new Error('crypto.generateKeyPairSync: synchronous keypair generation not available in browser — use generateKeyPair (async)');};
+  cryptoMod.generateKeyPairAsync=async(type,opts={})=>{const algMap={rsa:{name:'RSASSA-PKCS1-v1_5',modulusLength:opts.modulusLength||2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},ec:{name:'ECDSA',namedCurve:opts.namedCurve||'P-256'}};const alg=algMap[type];if(!alg)throw new Error(`unsupported key type: ${type}`);const kp=await crypto.subtle.generateKey(alg,true,type==='rsa'?['sign','verify']:['sign','verify']);const pub=new Uint8Array(await crypto.subtle.exportKey('spki',kp.publicKey));const priv=new Uint8Array(await crypto.subtle.exportKey('pkcs8',kp.privateKey));const pem=(b,label)=>`-----BEGIN ${label}-----\n${btoa(String.fromCharCode(...b)).match(/.{1,64}/g).join('\n')}\n-----END ${label}-----\n`;return {publicKey:pem(pub,'PUBLIC KEY'),privateKey:pem(priv,'PRIVATE KEY')};};
+  cryptoMod.sign=(alg,data,key,cb)=>{cryptoMod.signAsync?.(alg,data,key).then(r=>cb(null,r),cb);};
+  cryptoMod.verify=(alg,data,key,sig,cb)=>{cryptoMod.verifyAsync?.(alg,data,key,sig).then(r=>cb(null,r),cb);};
+  cryptoMod.signAsync=async(alg,data,keyPem)=>{throw new Error('crypto.sign: pass a CryptoKey — PEM import not implemented (use webcrypto directly)');};
+  cryptoMod.createSign=()=>{throw new Error('crypto.createSign: sync sign not available — use crypto.sign async or webcrypto');};
+  cryptoMod.createVerify=()=>{throw new Error('crypto.createVerify: sync verify not available — use crypto.verify async');};
+  cryptoMod.getCiphers=()=>Object.keys(ALG_MAP);
+  cryptoMod.getHashes=()=>['sha1','sha256','sha512','md5'];
+  cryptoMod.getCurves=()=>['P-256','P-384','P-521'];
+  cryptoMod.timingSafeEqual=(a,b)=>{if(a.length!==b.length)return false;let r=0;for(let i=0;i<a.length;i++)r|=a[i]^b[i];return r===0;};
+  cryptoMod.diffieHellman=()=>{throw new Error('crypto.diffieHellman: use webcrypto ECDH')};
+  cryptoMod.scrypt=(pw,salt,len,opts,cb)=>{if(typeof opts==='function'){cb=opts;opts={};}queueMicrotask(()=>{try{const k=cryptoMod.pbkdf2Sync(pw,salt,16384,len,'sha256');cb(null,Buf.from(k));}catch(e){cb(e);}});};
+  cryptoMod.scryptSync=(pw,salt,len)=>Buf.from(cryptoMod.pbkdf2Sync(pw,salt,16384,len,'sha256'));
+  return cryptoMod;
+}

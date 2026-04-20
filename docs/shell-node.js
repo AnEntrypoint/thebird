@@ -4,36 +4,69 @@ import { inspect, format, createZlib } from './shell-node-stdlib.js';
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from './shell-node-crypto.js';
 import { createChildProcess, createHttpClient, extendProcess, rewriteStack, isEsmCode, runEsm, parseDotEnv } from './shell-node-io.js';
 import { resolveExports, walkUpNodeModules, resolvePackageEntry, makeModuleModule, makeModuleNotFoundError, makeFsPromises, makeFsWatch, makeNetStub, makeDgramStub, makeWorkerThreadsStub } from './shell-node-resolve.js';
+import { extendBuffer, extendPath, createUrlExt, makeStringDecoder, makeReadline, makeTimersMod, makePerfHooks, makeV8Mod, makeAsyncHooks, makeStubs, makeErrorCodes, extendProcessExtras, makeStreamConsumers } from './shell-node-extras.js';
+import { makeStream, extendFsStreams } from './shell-node-streams.js';
+import { extendCrypto } from './shell-node-cipher.js';
 
 export function createNodeEnv({ ctx, term }) {
-  const pathmod = createPath();
-  const fsmod = createFs();
+  const pathmod = extendPath(createPath());
+  const Buf = extendBuffer(createBuffer());
+  const fsmod = extendFsStreams(createFs(), Buf);
   fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatch();
-  const Buf = createBuffer();
+  fsmod.glob = (pat, opts, cb) => { if (typeof opts === 'function') { cb = opts; opts = {}; } const matches = Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k)); queueMicrotask(() => cb?.(null, matches)); };
+  fsmod.globSync = pat => Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k));
   const zlibMod = createZlib(Buf);
   const httpClient = createHttpClient(Buf);
   const cpMod = createChildProcess(ctx);
   cpMod.execSync = () => { throw new Error('child_process.execSync: synchronous subprocess not available in browser event loop — use exec() with callback'); };
-  const cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
+  let cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
+  cryptoMod = extendCrypto(cryptoMod, Buf);
+  const streamMod = makeStream();
+  const errorCodes = makeErrorCodes();
+  const stubs = makeStubs(ctx);
+  const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
+  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false;
   const MODULES = {
-    path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrl(), querystring: () => createQuerystring(),
-    os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0 }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}) }),
-    util: () => ({ inspect, format, promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), types: { isPromise: p => p instanceof Promise, isDate: v => v instanceof Date, isRegExp: v => v instanceof RegExp, isBuffer: v => v instanceof Uint8Array }, deprecate: fn => fn, inherits: () => {} }),
+    path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrlExt(), querystring: () => createQuerystring(),
+    os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}), loadavg: () => [0, 0, 0], userInfo: () => ({ username: ctx.env.USER || 'root', uid: 0, gid: 0, shell: ctx.env.SHELL, homedir: ctx.env.HOME }), endianness: () => 'LE', version: () => '#1 SMP', machine: () => 'x86_64', devNull: '/dev/null', availableParallelism: () => 1, constants: { signals: {}, errno: {} } }),
+    util: () => ({ inspect, format, promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), callbackify: fn => (...a) => { const cb = a.pop(); fn(...a).then(v => cb(null, v), e => cb(e)); }, types: { isPromise: p => p instanceof Promise, isDate: v => v instanceof Date, isRegExp: v => v instanceof RegExp, isBuffer: v => v instanceof Uint8Array, isTypedArray: v => ArrayBuffer.isView(v) && !(v instanceof DataView), isAsyncFunction: f => f?.constructor?.name === 'AsyncFunction', isNativeError: e => e instanceof Error }, deprecate: fn => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); }, debuglog: () => () => {}, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b), styleText: (s, t) => t, parseArgs: ({ args = [], options = {} }) => { const values = {}, positionals = []; for (let i = 0; i < args.length; i++) { const a = args[i]; if (a.startsWith('--')) { const [k, v] = a.slice(2).split('='); if (v !== undefined) values[k] = v; else if (options[k]?.type === 'string') values[k] = args[++i]; else values[k] = true; } else positionals.push(a); } return { values, positionals }; } }),
     crypto: () => cryptoMod,
-    stream: () => ({ Readable: createEvents(), Writable: createEvents(), Transform: createEvents(), Duplex: createEvents(), PassThrough: createEvents(), pipeline: (...a) => { const cb = a.pop(); queueMicrotask(() => cb(null)); } }),
-    http: () => httpClient, https: () => httpClient,
-    buffer: () => ({ Buffer: Buf, constants: { MAX_LENGTH: 4294967295 } }),
+    stream: () => streamMod,
+    'stream/promises': () => streamMod.promises,
+    'stream/consumers': () => makeStreamConsumers(),
+    'stream/web': () => ({ ReadableStream, WritableStream, TransformStream }),
+    http: () => httpClient, https: () => ({ ...httpClient, Agent: class Agent { constructor() {} }, globalAgent: { maxSockets: Infinity } }),
+    buffer: () => ({ Buffer: Buf, constants: { MAX_LENGTH: 4294967295, MAX_STRING_LENGTH: 536870888 }, kMaxLength: 4294967295, Blob, File }),
     child_process: () => cpMod,
     net: () => makeNetStub(), dgram: () => makeDgramStub(), worker_threads: () => makeWorkerThreadsStub(),
     zlib: () => zlibMod,
-    assert: () => { const a = (v, m) => { if (!v) throw new Error(m || 'assertion failed'); }; a.ok = a; a.equal = (x, y, m) => a(x === y, m); a.deepEqual = (x, y, m) => a(JSON.stringify(x) === JSON.stringify(y), m); a.strictEqual = a.equal; a.notEqual = (x, y, m) => a(x !== y, m); a.fail = m => { throw new Error(m || 'failed'); }; return a; },
+    assert: () => { const a = (v, m) => { if (!v) throw new Error(m || 'assertion failed'); }; a.ok = a; a.equal = (x, y, m) => a(x === y, m); a.deepEqual = (x, y, m) => a(JSON.stringify(x) === JSON.stringify(y), m); a.deepStrictEqual = a.deepEqual; a.strictEqual = a.equal; a.notEqual = (x, y, m) => a(x !== y, m); a.notDeepEqual = (x, y, m) => a(JSON.stringify(x) !== JSON.stringify(y), m); a.notStrictEqual = a.notEqual; a.throws = (fn, m) => { try { fn(); throw new Error('did not throw'); } catch (e) {} }; a.doesNotThrow = fn => fn(); a.rejects = async fn => { try { await (typeof fn === 'function' ? fn() : fn); throw new Error('did not reject'); } catch {} }; a.fail = m => { throw new Error(m || 'failed'); }; a.match = (s, re) => a(re.test(s)); return a; },
+    string_decoder: () => stubs.string_decoder,
+    readline: () => makeReadline(term, proc),
+    'readline/promises': () => stubs.readline_promises,
+    timers: () => makeTimersMod(), 'timers/promises': () => makeTimersMod().promises,
+    perf_hooks: () => makePerfHooks(),
+    v8: () => makeV8Mod(),
+    async_hooks: () => makeAsyncHooks(),
+    inspector: () => stubs.inspector,
+    cluster: () => stubs.cluster,
+    sea: () => stubs.sea,
+    'node:sea': () => stubs.sea,
+    test: () => stubs.test_runner,
+    'node:test': () => stubs.test_runner,
+    'node:test/reporters': () => ({ spec: class {}, tap: class {}, dot: class {} }),
+    tls: () => stubs.tls,
+    tty: () => stubs.tty,
+    domain: () => stubs.domain,
+    diagnostics_channel: () => stubs.diagnostics_channel,
+    punycode: () => stubs.punycode,
+    errors: () => errorCodes,
+    trace_events: () => ({ createTracing: () => ({ enable() {}, disable() {}, categories: [] }) }),
+    wasi: () => ({ WASI: class { constructor() { throw new Error('WASI: not supported in browser'); } } }),
     express: () => createExpress(term, fsmod),
     'better-sqlite3': createSqlite,
   };
-  for (const k of Object.keys(MODULES)) MODULES['node:' + k] = MODULES[k];
-
-  const proc = extendProcess(createProcess(term, ctx), ctx);
-  proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false;
+  for (const k of Object.keys(MODULES)) if (!k.startsWith('node:')) MODULES['node:' + k] = MODULES[k];
   const cons = createConsole(term);
   cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log;
   cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n');

@@ -1,0 +1,59 @@
+- id: crypto-sign-verify-pem
+  subject: crypto.sign/verify with PEM key import via webcrypto
+  status: pending
+  effort: medium
+  acceptance:
+    - RSA-SHA256 sign+verify round-trip using generated keypair PEM
+
+- id: zlib-sync-sab
+  subject: zlib.gzipSync/gunzipSync via SharedArrayBuffer + worker
+  status: pending
+  effort: large
+  acceptance:
+    - zlib.gzipSync(buf) returns compressed synchronously
+    - Cross-origin-isolated required (already set)
+
+- id: repl-advanced
+  subject: REPL top-level-await, multi-line continuation, completion, history
+  status: pending
+  effort: medium
+  acceptance:
+    - await Promise.resolve(1) + 1 returns 2 in REPL
+    - unclosed brace shows continuation prompt '...'
+    - Tab completion for global names
+    - Up/down arrow walks history
+
+- id: module-exports-full
+  subject: Full conditional exports, subpath imports (#), type:module
+  status: pending
+  effort: medium
+  acceptance:
+    - package.json {exports:{'.':{import:'./esm.js',require:'./cjs.js'}}} picks right entry
+    - #internal/x resolves via imports map
+    - type:module forces ESM for .js
+
+- id: error-cause-prepare
+  subject: Error cause chaining + Error.prepareStackTrace + AggregateError
+  status: pending
+  effort: small
+  acceptance:
+    - new Error('x',{cause:e}).cause === e
+    - Error.prepareStackTrace receives call sites
+    - AggregateError.errors populated
+
+- id: inspect-advanced
+  subject: util.inspect showHidden/getters/colors, Symbol keys, BigInt suffix
+  status: pending
+  effort: small
+  acceptance:
+    - inspect({[Symbol('k')]:'v'}) shows symbol
+    - inspect(10n) === '10n'
+    - colors:true wraps with ansi
+
+- id: node-flags
+  subject: process.execArgv + NODE_OPTIONS parsing + --enable-source-maps
+  status: pending
+  effort: small
+  acceptance:
+    - process.execArgv is array
+    - NODE_OPTIONS env flags readable via process.allowedNodeEnvironmentFlags
