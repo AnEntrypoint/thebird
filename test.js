@@ -145,7 +145,7 @@ const builtinsTextJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins
 ['grep', 'sed', 'sort', 'uniq', 'tr'].forEach(cmd => assert(builtinsTextJs.includes(cmd + ':'), cmd + ' missing from shell-builtins-text.js'));
 assert(builtinsJs.includes("args[0] === '-e'"), 'echo -e not handled');
 assert(shellMain.includes('varAssigns'), 'inline var assignment missing');
-assert(shellMain.includes('expandCmdSub'), 'expandCmdSub not used in shell');
+assert(shellMain.includes('fullExpand') || shellMain.includes('expandCmdSub'), 'expansion not wired in shell');
 assert(defaults['shell-builtins-text.js'], 'shell-builtins-text.js missing from defaults.json');
 console.log('✓ $?, $(), inline var assignment, echo -e, sed, sort, uniq, tr all present\n');
 
@@ -181,5 +181,27 @@ const rlJs = fs.readFileSync(path.join(__dirname, 'docs/shell-readline.js'), 'ut
 assert(rlJs.includes('heredocTag'), 'heredoc support missing');
 ['shell-builtins-extra.js', 'shell-control.js'].forEach(k => assert(defaults[k], k + ' missing from defaults'));
 console.log('✓ glob, positional, test, tee, xargs, read, printf, shift, local, set, break/continue, source, if/while/for/case, functions, heredoc all present\n');
+
+console.log('=== rich expansion: params, arithmetic, braces, tilde, backticks ===');
+const exp = require('./docs/shell-expand.js');
+assert(exp.evalArith('2 + 3 * 4', {}) === 14, 'arith precedence');
+assert(exp.evalArith('x + 1', { x: '5' }) === 6, 'arith var');
+assert(exp.expandBraces('a{b,c}d').join(',') === 'abd,acd', 'brace list');
+assert(exp.expandBraces('{1..3}').join(',') === '1,2,3', 'brace range');
+assert(exp.expandTilde('~/foo', { HOME: '/home/u' }) === '/home/u/foo', 'tilde');
+assert(exp.fullExpand('${FOO:-x}', {}, 0, [], null) === 'x', 'default');
+assert(exp.fullExpand('${#X}', { X: 'abcde' }, 0, [], null) === '5', 'length');
+assert(exp.fullExpand('${X:1:3}', { X: 'abcdef' }, 0, [], null) === 'bcd', 'slice');
+assert(exp.fullExpand('${X/o/0}', { X: 'food' }, 0, [], null) === 'f0od', 'substitute');
+assert(exp.fullExpand('${X%.js}', { X: 'foo.js' }, 0, [], null) === 'foo', 'suffix');
+assert(exp.fullExpand('$((2+3*4))', {}, 0, [], null) === '14', 'arith subst');
+assert(exp.fullExpand('`echo hi`', {}, 0, [], () => 'hi') === 'hi', 'backticks');
+const utilJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins-util.js'), 'utf8');
+['basename', 'dirname', 'realpath', 'date', 'find', 'awk', 'eval', 'command', "'[['", 'getopts', 'wait'].forEach(b => assert(utilJs.includes(b + ':'), b + ' missing'));
+assert(controlJs.includes('until'), 'until loop missing');
+assert(controlJs.includes('elif'), 'elif missing');
+assert(defaults['shell-expand.js'], 'shell-expand.js missing from defaults');
+assert(defaults['shell-builtins-util.js'], 'shell-builtins-util.js missing from defaults');
+console.log('✓ arithmetic, braces, tilde, backticks, param-op, basename/dirname/date/find/awk/eval/command/getopts/[[/wait, elif, until present\n');
 
 console.log('=== all checks passed ===');

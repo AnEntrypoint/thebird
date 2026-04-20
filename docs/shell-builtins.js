@@ -1,5 +1,6 @@
 import { makeTextBuiltins } from './shell-builtins-text.js';
 import { makeExtraBuiltins } from './shell-builtins-extra.js';
+import { makeUtilBuiltins } from './shell-builtins-util.js';
 
 export function resolvePath(cwd, p) {
   if (!p || p === '~') return '/';
@@ -57,6 +58,7 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
   };
   const text = makeTextBuiltins(ctx, readFile, writeFile);
   const extra = makeExtraBuiltins(ctx, readFile, writeFile);
+  const util = makeUtilBuiltins(ctx, readFile, writeFile);
   const b = {
     ls: args => {
       const flags = args.filter(a => a.startsWith('-')).join('');
@@ -171,6 +173,7 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
     },
     ...text,
     ...extra,
+    ...util,
     which: args => text.which(args, b),
     exit: (args, ac) => text.exit(args, ac || actor),
   };

@@ -1,7 +1,7 @@
 export function isControlStart(cmd) {
   const t = cmd.trim();
   const first = t.split(/\s+/)[0];
-  if (first === 'if' || first === 'while' || first === 'for' || first === 'case') return true;
+  if (first === 'if' || first === 'while' || first === 'for' || first === 'case' || first === 'until') return true;
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)/.test(t)) return true;
   return false;
 }
@@ -11,7 +11,7 @@ export function isBlockOpen(lines) {
   let depth = 0;
   const tokens = joined.split(/\s+/);
   for (const t of tokens) {
-    if (t === 'if' || t === 'while' || t === 'for' || t === 'case') depth++;
+    if (t === 'if' || t === 'while' || t === 'for' || t === 'case' || t === 'until') depth++;
     if (t === 'fi' || t === 'done' || t === 'esac') depth--;
   }
   const fnOpen = /\{\s*$/.test(joined) || /\(\s*\)\s*$/.test(joined);
@@ -33,7 +33,8 @@ export async function runControl(block, run, ctx) {
   const joined = block.join(' ').trim();
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)/.test(joined)) return defineFn(joined, ctx);
   if (joined.startsWith('if ')) return runIf(joined, run, ctx);
-  if (joined.startsWith('while ')) return runWhile(joined, run, ctx);
+  if (joined.startsWith('while ')) return runWhile(joined, run, ctx, false);
+  if (joined.startsWith('until ')) return runWhile(joined.replace(/^until /, 'while '), run, ctx, true);
   if (joined.startsWith('for ')) return runFor(joined, run, ctx);
   if (joined.startsWith('case ')) return runCase(joined, run, ctx);
 }
@@ -47,15 +48,25 @@ function defineFn(text, ctx) {
 }
 
 async function runIf(text, run, ctx) {
-  const m = text.match(/^if\s+(.+?)\s*;\s*then\s+(.+?)(?:\s*;\s*else\s+(.+?))?\s*;\s*fi$/s);
-  if (!m) throw new Error('if: parse error: ' + text);
-  const [, cond, thenBody, elseBody] = m;
-  await run(cond);
-  if (ctx.lastExitCode === 0) await run(thenBody);
-  else if (elseBody) await run(elseBody);
+  const body = text.replace(/^if\s+/, '').replace(/\s*;\s*fi$/, '');
+  const parts = body.split(/\s*;\s*(?=then|elif|else)\s*/);
+  const branches = [];
+  let i = 0;
+  while (i < parts.length) {
+    if (parts[i] === 'then' || parts[i] === 'elif' || parts[i] === 'else') { i++; continue; }
+    if (parts[i - 1] === 'else') { branches.push({ cond: null, body: parts[i] }); i++; continue; }
+    const cond = parts[i]; const bodyPart = parts[i + 2] || parts[i + 1];
+    branches.push({ cond, body: bodyPart });
+    i += (parts[i + 1] === 'then' ? 3 : 2);
+  }
+  for (const br of branches) {
+    if (br.cond === null) { await run(br.body); return; }
+    await run(br.cond);
+    if (ctx.lastExitCode === 0) { await run(br.body); return; }
+  }
 }
 
-async function runWhile(text, run, ctx) {
+async function runWhile(text, run, ctx, invert) {
   const m = text.match(/^while\s+(.+?)\s*;\s*do\s+(.+?)\s*;\s*done$/s);
   if (!m) throw new Error('while: parse error: ' + text);
   const [, cond, body] = m;
@@ -63,7 +74,8 @@ async function runWhile(text, run, ctx) {
   ctx.loopFlag = null;
   while (guard++ < 10000) {
     await run(cond);
-    if (ctx.lastExitCode !== 0) break;
+    const ok = ctx.lastExitCode === 0;
+    if ((invert ? ok : !ok)) break;
     await run(body);
     if (ctx.loopFlag === 'break') { ctx.loopFlag = null; break; }
     if (ctx.loopFlag === 'continue') ctx.loopFlag = null;

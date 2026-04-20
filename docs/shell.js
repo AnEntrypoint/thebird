@@ -3,7 +3,8 @@ import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
 import { makeNpm } from './shell-npm.js';
-import { tokenize, expand, expandCmdSub, splitTopLevel, parsePipes, globToRe } from './shell-parser.js';
+import { tokenize, splitTopLevel, parsePipes, globToRe } from './shell-parser.js';
+import { fullExpand, expandBraces, expandTilde } from './shell-expand.js';
 import { isControlStart, isBlockOpen, runControl } from './shell-control.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
@@ -28,7 +29,7 @@ export function createShell({ term, onPreviewWrite }) {
 
   const BUILTINS = makeBuiltins(ctx, actor, invokeBuiltin);
   ctx.builtinsRef = BUILTINS;
-  ctx.expand = token => expandCmdSub(token, ctx.env, ctx.lastExitCode, captureRun, ctx.argv);
+  ctx.expand = token => fullExpand(token, ctx.env, ctx.lastExitCode, ctx.argv, captureRun);
   const npmCmd = makeNpm(ctx);
   ctx.nodeEval = createNodeEnv({ ctx, term });
 
@@ -43,8 +44,9 @@ export function createShell({ term, onPreviewWrite }) {
 
   function expandTokens(tokens) {
     return tokens.flatMap(t => {
-      const expanded = expandCmdSub(t, ctx.env, ctx.lastExitCode, captureRun, ctx.argv);
-      return expandGlob(expanded);
+      const tilde = expandTilde(t, ctx.env);
+      const braces = expandBraces(tilde);
+      return braces.flatMap(b => expandGlob(fullExpand(b, ctx.env, ctx.lastExitCode, ctx.argv, captureRun)));
     });
   }
 
@@ -82,7 +84,7 @@ export function createShell({ term, onPreviewWrite }) {
     return captureFn(() => fn(args, actor, stdinBuf, invokeBuiltin, run));
   }
 
-  function evalKV(kv) { const eq = kv.indexOf('='); return [kv.slice(0, eq), expandCmdSub(kv.slice(eq + 1), ctx.env, ctx.lastExitCode, captureRun, ctx.argv)]; }
+  function evalKV(kv) { const eq = kv.indexOf('='); return [kv.slice(0, eq), fullExpand(kv.slice(eq + 1), ctx.env, ctx.lastExitCode, ctx.argv, captureRun)]; }
 
   async function runSingleCommand(line) {
     const raw = tokenize(line); if (!raw.length) return;
