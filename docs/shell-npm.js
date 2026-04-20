@@ -1,3 +1,5 @@
+import { NPM_VERSION } from './shell-node-modules.js';
+
 const toKey = p => p.replace(/^\//, '');
 const snap = () => window.__debug.idbSnapshot || {};
 const persist = () => window.__debug.idbPersist?.();
@@ -26,6 +28,18 @@ function writePkgJson(pkgPath, data) {
   persist();
 }
 
+function injectNpmEnv(ctx, data, scriptName) {
+  const prev = {};
+  const set = (k, v) => { prev[k] = ctx.env[k]; ctx.env[k] = v; };
+  set('npm_lifecycle_event', scriptName);
+  set('npm_package_name', data.name || '');
+  set('npm_package_version', data.version || '');
+  set('npm_config_user_agent', 'npm/' + NPM_VERSION + ' node/v23.10.0');
+  set('NODE_ENV', ctx.env.NODE_ENV || 'development');
+  for (const [k, v] of Object.entries(data.scripts || {})) set('npm_package_scripts_' + k.replace(/[^a-z0-9_]/gi, '_'), v);
+  return () => { for (const k of Object.keys(prev)) { if (prev[k] === undefined) delete ctx.env[k]; else ctx.env[k] = prev[k]; } };
+}
+
 export function makeNpm(ctx) {
   const w = s => ctx.term.write(s);
   const wl = s => w(s + '\r\n');
@@ -50,16 +64,14 @@ export function makeNpm(ctx) {
       await installOne(name, version, ctx.term);
     }
     if (!noSave) {
-      try {
-        const { path: pkgPath, data } = resolvePkgJson(ctx.cwd, ctx);
-        const target = saveDev ? 'devDependencies' : 'dependencies';
-        data[target] = data[target] || {};
-        for (const spec of pkgs) {
-          const m = spec.match(/^(@?[^@]+?)(?:@(.+))?$/);
-          data[target][m[1]] = m[2] || 'latest';
-        }
-        writePkgJson(pkgPath, data);
-      } catch {}
+      const { path: pkgPath, data } = resolvePkgJson(ctx.cwd, ctx);
+      const target = saveDev ? 'devDependencies' : 'dependencies';
+      data[target] = data[target] || {};
+      for (const spec of pkgs) {
+        const m = spec.match(/^(@?[^@]+?)(?:@(.+))?$/);
+        data[target][m[1]] = m[2] || 'latest';
+      }
+      writePkgJson(pkgPath, data);
     }
     wl('added ' + pkgs.length + ' package' + (pkgs.length === 1 ? '' : 's'));
   }
@@ -75,11 +87,9 @@ export function makeNpm(ctx) {
       }
       wl(n ? 'removed ' + pkg : pkg + ' not installed');
     }
-    try {
-      const { path: pkgPath, data } = resolvePkgJson(ctx.cwd, ctx);
-      for (const pkg of pkgs) { delete data.dependencies?.[pkg]; delete data.devDependencies?.[pkg]; }
-      writePkgJson(pkgPath, data);
-    } catch {}
+    const { path: pkgPath, data } = resolvePkgJson(ctx.cwd, ctx);
+    for (const pkg of pkgs) { delete data.dependencies?.[pkg]; delete data.devDependencies?.[pkg]; }
+    writePkgJson(pkgPath, data);
     persist();
   }
 
@@ -101,28 +111,42 @@ export function makeNpm(ctx) {
 
   async function cmdRun(args) {
     const [scriptName, ...rest] = args;
+    const { data } = resolvePkgJson(ctx.cwd, ctx);
     if (!scriptName) {
-      try {
-        const { data } = resolvePkgJson(ctx.cwd, ctx);
-        wl('Scripts:');
-        for (const [n, s] of Object.entries(data.scripts || {})) wl('  ' + n + '\r\n    ' + s);
-      } catch (e) { wl(e.message); }
+      wl('Lifecycle scripts included in ' + (data.name || 'package') + '@' + (data.version || '') + ':');
+      for (const [n, s] of Object.entries(data.scripts || {})) wl('  ' + n + '\r\n    ' + s);
       return null;
     }
-    const { data } = resolvePkgJson(ctx.cwd, ctx);
     const cmd = data.scripts?.[scriptName];
-    if (!cmd) throw new Error('npm: script "' + scriptName + '" not found in package.json');
-    wl('> ' + (data.name || 'package') + '@' + (data.version || '') + ' ' + scriptName);
-    wl('> ' + cmd + '\r\n');
-    return { runInShell: cmd + (rest.length ? ' ' + rest.join(' ') : '') };
+    if (!cmd) throw new Error('npm: Missing script: "' + scriptName + '"');
+    const pre = data.scripts?.['pre' + scriptName];
+    const post = data.scripts?.['post' + scriptName];
+    const restore = injectNpmEnv(ctx, data, scriptName);
+    try {
+      const chain = [];
+      if (pre) chain.push({ name: 'pre' + scriptName, cmd: pre });
+      chain.push({ name: scriptName, cmd: cmd + (rest.length ? ' ' + rest.join(' ') : '') });
+      if (post) chain.push({ name: 'post' + scriptName, cmd: post });
+      return { runInShell: null, npmChain: chain, pkgName: data.name || 'package', pkgVersion: data.version || '' };
+    } finally { queueMicrotask(restore); }
   }
 
   function cmdInit(args) {
     const yes = args.includes('-y') || args.includes('--yes');
     if (!yes) { wl('npm init -y — use -y for non-interactive'); return; }
-    const pj = { name: ctx.cwd.split('/').filter(Boolean).pop() || 'project', version: '1.0.0', main: 'index.js', scripts: { start: 'node index.js' }, dependencies: {} };
+    const pj = { name: ctx.cwd.split('/').filter(Boolean).pop() || 'project', version: '1.0.0', main: 'index.js', scripts: { start: 'node index.js', test: 'echo "Error: no test specified" && exit 1' }, dependencies: {} };
     writePkgJson(ctx.cwd.replace(/\/$/, '') + '/package.json', pj);
-    wl('wrote package.json');
+    wl('Wrote to ' + ctx.cwd.replace(/\/$/, '') + '/package.json');
+  }
+
+  async function cmdExec(args) {
+    const pkg = args[0];
+    if (!pkg) throw new Error('npx: package required');
+    const s = snap();
+    if (!s['node_modules/' + pkg + '/index.js']) await installOne(pkg, null, ctx.term);
+    const binPath = 'node_modules/.bin/' + pkg;
+    if (s[binPath]) return { runInShell: 'node /' + binPath + (args.length > 1 ? ' ' + args.slice(1).join(' ') : '') };
+    return { runInShell: 'node -e "require(\'' + pkg + '\')"' };
   }
 
   return async function npm(args) {
@@ -133,9 +157,17 @@ export function makeNpm(ctx) {
     if (sub === 'ls' || sub === 'list') return cmdList(rest);
     if (sub === 'run' || sub === 'run-script') return cmdRun(rest);
     if (sub === 'start') return cmdRun(['start', ...rest]);
-    if (sub === 'test') return cmdRun(['test', ...rest]);
-    if (sub === 'init') return cmdInit(rest);
-    if (sub === '--version' || sub === '-v') { wl('10.0.0 (thebird browser jsh)'); return; }
-    throw new Error('npm: unknown command "' + sub + '" — try: install, uninstall, ls, run, init');
+    if (sub === 'test' || sub === 't') return cmdRun(['test', ...rest]);
+    if (sub === 'init' || sub === 'create') return cmdInit(rest);
+    if (sub === 'exec' || sub === 'x') return cmdExec(rest);
+    if (sub === '--version' || sub === '-v') { wl(NPM_VERSION); return; }
+    if (sub === 'prefix') { wl(ctx.cwd); return; }
+    if (sub === 'root') { wl(ctx.cwd.replace(/\/$/, '') + '/node_modules'); return; }
+    if (sub === 'view' || sub === 'info' || sub === 'show') { const p = rest[0]; wl(p + ' — use esm.sh to inspect'); return; }
+    throw new Error('npm: unknown command "' + sub + '"');
   };
+}
+
+export function makeNpx(npmCmd) {
+  return args => npmCmd(['exec', ...args]);
 }

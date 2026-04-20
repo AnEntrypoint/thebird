@@ -1,5 +1,5 @@
 import { createPath, createFs, createEvents, createUrl, createQuerystring, createBuffer } from './node-builtins.js';
-import { createExpress, createHttp, createSqlite, createConsole, createProcess } from './shell-node-modules.js';
+import { createExpress, createHttp, createSqlite, createConsole, createProcess, NODE_VERSION, NODE_VERSIONS, NodeExit } from './shell-node-modules.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = createPath();
@@ -11,7 +11,7 @@ export function createNodeEnv({ ctx, term }) {
     events: () => createEvents(),
     url: () => createUrl(),
     querystring: () => createQuerystring(),
-    os: () => ({ platform: () => 'browser', homedir: () => '/', tmpdir: () => '/tmp', cpus: () => [{}], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n' }),
+    os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => '/', tmpdir: () => '/tmp', cpus: () => [{}], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0' }),
     util: () => ({ format: (...a) => a.join(' '), inspect: o => JSON.stringify(o, null, 2), promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), types: { isPromise: p => p instanceof Promise } }),
     crypto: () => ({ randomBytes: n => Buf.from(Array.from({ length: n }, () => Math.random() * 256 | 0)), randomUUID: () => crypto.randomUUID(), createHash: () => ({ update: () => ({ digest: () => 'stub' }) }) }),
     stream: () => ({ Readable: createEvents(), Writable: createEvents(), Transform: createEvents(), pipeline: (...a) => a.pop()(null) }),
@@ -30,33 +30,43 @@ export function createNodeEnv({ ctx, term }) {
   const proc = createProcess(term, ctx);
   const snap = () => window.__debug?.idbSnapshot || {};
   const pkgCache = {};
+  const reqCache = {};
+
+  function resolveCandidates(dir, id) {
+    return [pathmod.resolve(dir, id) + '.js', pathmod.resolve(dir, id), pathmod.resolve(dir, id) + '/index.js', pathmod.resolve(dir, id, 'index.js')];
+  }
 
   function makeRequire(dir) {
-    return function require(id) {
+    const req = function require(id) {
       if (MODULES[id]) return MODULES[id]();
       if (!id.startsWith('.')) {
         if (pkgCache[id]) return pkgCache[id];
-        throw new Error('Cannot find module: ' + id + ' (run: npm install ' + id + ')');
+        throw new Error("Cannot find module '" + id + "' (run: npm install " + id + ")");
       }
-      const candidates = [
-        pathmod.resolve(dir, id) + '.js',
-        pathmod.resolve(dir, id),
-        pathmod.resolve(dir, id) + '/index.js',
-        pathmod.resolve(dir, id, 'index.js'),
-      ];
       const s = snap();
-      for (const c of candidates) {
+      for (const c of resolveCandidates(dir, id)) {
         const key = c.replace(/^\//, '');
         if (key in s) {
           if (key.endsWith('.json')) return JSON.parse(s[key]);
+          if (reqCache[key]) return reqCache[key].exports;
           const mod = { exports: {} };
+          reqCache[key] = mod;
           const modDir = pathmod.dirname('/' + key);
           new Function('module', 'exports', 'require', '__filename', '__dirname', 'process', 'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'fetch', s[key])(mod, mod.exports, makeRequire(modDir), '/' + key, modDir, proc, cons, Buf, setTimeout, setInterval, clearTimeout, clearInterval, fetch);
           return mod.exports;
         }
       }
-      throw new Error('Cannot find module: ' + id);
+      throw new Error("Cannot find module '" + id + "'");
     };
+    req.resolve = id => {
+      if (MODULES[id]) return id;
+      if (!id.startsWith('.')) { if (pkgCache[id]) return 'node_modules/' + id; throw new Error("Cannot find module '" + id + "'"); }
+      const s = snap();
+      for (const c of resolveCandidates(dir, id)) { const key = c.replace(/^\//, ''); if (key in s) return '/' + key; }
+      throw new Error("Cannot find module '" + id + "'");
+    };
+    req.cache = reqCache;
+    return req;
   }
 
   async function loadSql() {
@@ -84,12 +94,7 @@ export function createNodeEnv({ ctx, term }) {
       for (const id of collectRequires(code)) {
         if (MODULES[id]) continue;
         if (!id.startsWith('.')) { pkgIds.add(id); continue; }
-        const candidates = [
-          pathmod.resolve(dir, id) + '.js',
-          pathmod.resolve(dir, id),
-          pathmod.resolve(dir, id) + '/index.js',
-        ];
-        for (const c of candidates) {
+        for (const c of resolveCandidates(dir, id)) {
           const key = c.replace(/^\//, '');
           if (visited.has(key) || !(key in s)) continue;
           visited.add(key);
@@ -114,20 +119,27 @@ export function createNodeEnv({ ctx, term }) {
     }
   }
 
-  return async function nodeEval(code, filename, argv) {
+  return async function nodeEval(code, filename, argv, stdinBuf) {
     const dir = filename ? pathmod.dirname(filename) : ctx.cwd;
     const fpath = filename || ctx.cwd + '/repl';
-    proc.argv = ['node', fpath, ...(argv || [])];
+    proc.argv = filename ? ['node', fpath, ...(argv || [])] : ['node'];
+    proc.exitCode = 0;
     await preloadAsyncPkgs(code, dir);
-    const scope = { process: proc, console: cons, require: makeRequire(dir), Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, loadSql, module: { exports: {} }, exports: {} };
+    const scope = { process: proc, console: cons, require: makeRequire(dir), Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, loadSql, module: { exports: {} }, exports: {}, global: globalThis };
     try {
       const keys = Object.keys(scope);
       const vals = Object.values(scope);
       const fn = new Function(...keys, 'return (async () => {\n' + code + '\n})()');
-      const result = await fn(...vals);
+      const pending = fn(...vals);
+      if (stdinBuf) queueMicrotask(() => proc.stdin._feed(stdinBuf));
+      const result = await pending;
       if (result !== undefined && !filename) cons.log(result);
+      ctx.lastExitCode = proc.exitCode | 0;
     } catch (e) {
-      term.write('\x1b[31m' + (filename ? filename + ': ' : '') + e.message + '\x1b[0m\r\n');
+      if (e && e.__nodeExit) { ctx.lastExitCode = e.code | 0; return; }
+      term.write('\x1b[31m' + (filename ? filename + ':' : '') + e.message + '\x1b[0m\r\n');
+      if (e.stack) term.write('\x1b[90m' + e.stack.split('\n').slice(1, 4).join('\r\n') + '\x1b[0m\r\n');
+      ctx.lastExitCode = 1;
     }
   };
 }

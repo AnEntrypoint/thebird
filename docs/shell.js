@@ -2,7 +2,7 @@ import { createMachine, createActor } from './vendor/xstate.js';
 import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
-import { makeNpm } from './shell-npm.js';
+import { makeNpm, makeNpx } from './shell-npm.js';
 import { tokenize, splitTopLevel, parsePipes } from './shell-parser.js';
 import { fullExpand } from './shell-expand.js';
 import { isControlStart, isBlockOpen, runControl, runScript } from './shell-control.js';
@@ -10,7 +10,7 @@ import { createSignals, makeKillBuiltin, makeTrapBuiltin } from './shell-signals
 import { createJobRegistry, makeJobsBuiltin, makeFgBuiltin, makeBgBuiltin, makeDisownBuiltin } from './shell-jobs.js';
 import { createFdTable, makeExecBuiltin } from './shell-fd.js';
 import { readStream } from './shell-procsub.js';
-import { makeExpander, makeCaptureRun } from './shell-exec.js';
+import { makeExpander, makeCaptureRun, makeNodeRunner, makeNpmResultRunner } from './shell-exec.js';
 import { createSwJobs, makeNohupBuiltin, makeNetcatStub, makeCurlBuiltin } from './shell-sw-jobs.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
@@ -48,7 +48,10 @@ export function createShell({ term, onPreviewWrite }) {
   ctx.runScript = text => runScript(text, run, ctx);
   ctx.expand = token => fullExpand(token, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays);
   const npmCmd = makeNpm(ctx);
+  const npxCmd = makeNpx(npmCmd);
   ctx.nodeEval = createNodeEnv({ ctx, term });
+  const runNode = makeNodeRunner(ctx, actor);
+  const runNpmResult = makeNpmResultRunner(ctx, line => run(line));
 
   let expandTokens, captureRun;
 
@@ -95,7 +98,8 @@ export function createShell({ term, onPreviewWrite }) {
     const writeOut = rout ? buf => { const k = toKey(resolvePath(ctx.cwd, rout)); snap()[k] = append ? (snap()[k] || '') + buf : buf; window.__debug.idbPersist?.(); } : null;
     const prevEnv = {}; for (const kv of varAssigns) { const [k, v] = evalKV(kv); prevEnv[k] = ctx.env[k]; ctx.env[k] = v; }
     try {
-      if (cmd === 'npm') { if (writeOut) { writeOut(await captureFn(async () => { const r = await npmCmd(args); if (r?.runInShell) await run(r.runInShell); })); return; } const r = await npmCmd(args); if (r?.runInShell) await run(r.runInShell); return; }
+      if (cmd === 'npm') { if (writeOut) { writeOut(await captureFn(async () => { await runNpmResult(await npmCmd(args)); })); return; } await runNpmResult(await npmCmd(args)); return; }
+      if (cmd === 'npx') { await runNpmResult(await npxCmd(args)); return; }
       if (cmd === 'node') { await runNode(args); return; }
       if (cmd === 'exit') { BUILTINS.exit([], actor); return; }
       if (writeOut) { writeOut(await invokeBuiltin(cmd, args, true)); return; }
@@ -112,17 +116,6 @@ export function createShell({ term, onPreviewWrite }) {
     return out;
   }
 
-  async function runNode(args) {
-    if (!args.length) { actor.send({ type: 'ENTER_REPL' }); term.write('[node repl — type exit to return]\r\n'); return; }
-    if (args[0] === '-v' || args[0] === '--version') { term.write('v20.0.0\r\n'); return; }
-    if (args[0] === '-e' || args[0] === '--eval') { await ctx.nodeEval(args.slice(1).join(' ')); return; }
-    if (args[0] === '-p' || args[0] === '--print') { await ctx.nodeEval('console.log(' + args.slice(1).join(' ') + ')'); return; }
-    const code = snap()[toKey(resolvePath(ctx.cwd, args[0]))];
-    if (code == null) throw new Error('node: no such file: ' + args[0]);
-    actor.send({ type: 'NODE_START' }); ctx.argv = args;
-    try { await ctx.nodeEval(code, args[0], args.slice(1)); } finally { ctx.argv = []; }
-  }
-
   async function runPipeline(line) {
     const pipes = parsePipes(line);
     if (pipes.length === 1) { await runSingleCommand(pipes[0]); return; }
@@ -130,9 +123,13 @@ export function createShell({ term, onPreviewWrite }) {
     for (let i = 0; i < pipes.length; i++) {
       const isLast = i === pipes.length - 1;
       const { args: [cmd, ...args], stdout: rout, append } = parseRedirect(expandTokens(tokenize(pipes[i])));
-      const sArgs = i === 0 ? args : (buf ? [buf, ...args] : args);
-      if (isLast && !rout) { await invokeBuiltin(cmd, sArgs, false, buf); buf = ''; continue; }
-      const out = await invokeBuiltin(cmd, sArgs, true, buf);
+      const sArgs = i === 0 ? args : (buf && cmd !== 'node' ? [buf, ...args] : args);
+      const stdinForStage = cmd === 'node' ? buf : buf;
+      if (isLast && !rout) {
+        if (cmd === 'node') { await runNode(args, stdinForStage); buf = ''; continue; }
+        await invokeBuiltin(cmd, sArgs, false, stdinForStage); buf = ''; continue;
+      }
+      const out = cmd === 'node' ? await captureFn(() => runNode(args, stdinForStage)) : await invokeBuiltin(cmd, sArgs, true, stdinForStage);
       if (rout) { const k = toKey(resolvePath(ctx.cwd, rout)); snap()[k] = append ? (snap()[k] || '') + out : out; window.__debug.idbPersist?.(); buf = ''; } else { buf = out; }
     }
   }

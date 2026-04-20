@@ -118,23 +118,40 @@ export function createConsole(term) {
   };
 }
 
+export const NODE_VERSION = 'v23.10.0';
+export const NODE_VERSIONS = { node: '23.10.0', acorn: '8.14.0', ada: '3.1.3', amaro: '0.4.1', ares: '1.34.4', brotli: '1.1.0', cjs_module_lexer: '2.1.0', cldr: '46.0', icu: '76.1', llhttp: '9.2.1', modules: '131', napi: '10', nbytes: '0.1.1', ncrypto: '0.0.1', nghttp2: '1.64.0', openssl: '3.0.16', simdjson: '3.12.2', simdutf: '6.0.3', sqlite: '3.49.1', tz: '2025a', undici: '6.21.1', unicode: '16.0', uv: '1.50.0', uvwasi: '0.0.21', v8: '12.9.202.28-node.13', zlib: '1.3.0.1-motley-788cb3c', zstd: '1.5.6' };
+export const NPM_VERSION = '10.9.2';
+
+export class NodeExit extends Error { constructor(code) { super('__NodeExit:' + code); this.code = code | 0; this.__nodeExit = true; } }
+
 export function createProcess(term, ctx) {
+  const stdinHandlers = { data: [], end: [] };
   return {
     argv: ['node'],
     env: ctx.env,
     cwd: () => ctx.cwd,
     chdir: d => { ctx.cwd = d; },
-    exit: code => term.write('[exit ' + (code || 0) + ']\r\n'),
-    platform: 'browser',
-    version: 'v20.0.0',
-    versions: { node: '20.0.0' },
+    exit: code => { throw new NodeExit(code || 0); },
+    platform: 'linux',
+    arch: 'x64',
+    version: NODE_VERSION,
+    versions: { ...NODE_VERSIONS },
     pid: 1,
+    ppid: 0,
     nextTick: fn => Promise.resolve().then(fn),
-    stdout: { write: s => term.write(String(s)) },
-    stderr: { write: s => term.write('\x1b[31m' + String(s) + '\x1b[0m') },
-    stdin: { on: () => {} },
+    stdout: { write: s => { term.write(String(s)); return true; }, isTTY: true, columns: 80, rows: 24 },
+    stderr: { write: s => { term.write('\x1b[31m' + String(s) + '\x1b[0m'); return true; }, isTTY: true, columns: 80, rows: 24 },
+    stdin: {
+      on: (ev, fn) => { (stdinHandlers[ev] || (stdinHandlers[ev] = [])).push(fn); return this; },
+      once: (ev, fn) => { (stdinHandlers[ev] || (stdinHandlers[ev] = [])).push(fn); },
+      _feed: buf => { if (buf) for (const h of stdinHandlers.data) h(buf); for (const h of stdinHandlers.end) h(); },
+      isTTY: false, setEncoding: () => {}, resume: () => {}, pause: () => {},
+    },
     on: () => {},
     off: () => {},
-    hrtime: { bigint: () => BigInt(Math.round(performance.now() * 1e6)) },
+    emit: () => {},
+    hrtime: Object.assign(() => [0, 0], { bigint: () => BigInt(Math.round(performance.now() * 1e6)) }),
+    exitCode: 0,
+    _stdinHandlers: stdinHandlers,
   };
 }

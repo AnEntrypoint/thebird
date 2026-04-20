@@ -4,63 +4,24 @@ const assert = require('assert');
 
 console.log('=== thebird browser integration test ===\n');
 
-console.log('bootstrap: defaults.json / index.html / preview-sw.js');
 const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs/defaults.json'), 'utf8'));
-['app.js', 'terminal.js', 'agent-chat.js', 'shell.js', 'vendor/thebird-browser.js', 'shell-node.js', 'shell-node-modules.js'].forEach(k => assert(defaults[k], k + ' missing'));
-assert(Object.keys(defaults).length > 10, 'too few files');
+['app.js', 'terminal.js', 'agent-chat.js', 'shell.js', 'vendor/thebird-browser.js', 'shell-node.js', 'shell-node-modules.js'].forEach(k => assert(defaults[k], k));
+assert(Object.keys(defaults).length > 10);
 const indexHtml = fs.readFileSync(path.join(__dirname, 'docs/index.html'), 'utf8');
-['pane-chat', 'pane-term', 'pane-preview', 'app.js', 'terminal.js', 'preview-sw-client.js'].forEach(s => assert(indexHtml.includes(s), s + ' missing from index.html'));
+['pane-chat', 'pane-term', 'pane-preview', 'app.js', 'terminal.js', 'preview-sw-client.js'].forEach(s => assert(indexHtml.includes(s), s));
 const previewSw = fs.readFileSync(path.join(__dirname, 'docs/preview-sw.js'), 'utf8');
-assert(previewSw.includes('addEventListener') && previewSw.includes('EXPRESS_REQUEST'), 'preview-sw.js bad');
-console.log('✓ defaults.json/index.html/preview-sw.js OK (' + Object.keys(defaults).length + ' files)\n');
-
-console.log('message format: normalization check');
-const normalizeMsg = msg => ({
-  ...msg,
-  content: typeof msg.content === 'string' ? [{ type: 'text', text: msg.content }] : msg.content
-});
-const input = { role: 'user', content: 'hello' };
-const normalized = normalizeMsg(input);
-assert(Array.isArray(normalized.content), 'content not array');
-assert(normalized.content[0].type === 'text', 'no text type');
-assert(normalized.content[0].text === 'hello', 'text value lost');
-console.log('✓ message normalization works\n');
-
-console.log('tools: schema validation');
+assert(previewSw.includes('addEventListener') && previewSw.includes('EXPRESS_REQUEST'));
+const n = { ...{role:'user',content:'hi'}, content: [{type:'text',text:'hi'}] };
+assert(Array.isArray(n.content) && n.content[0].type === 'text' && n.content[0].text === 'hi');
 const toolsCode = fs.readFileSync(path.join(__dirname, 'docs/agent-chat.js'), 'utf8');
-const tools = ['read_file', 'write_file', 'list_files', 'run_command', 'read_terminal', 'send_to_terminal'];
-tools.forEach(t => {
-  assert(toolsCode.includes(t + ':'), 'tool ' + t + ' missing');
-  assert(toolsCode.includes('parameters:'), 'tool ' + t + ' no parameters');
-  assert(toolsCode.includes('execute:'), 'tool ' + t + ' no execute');
-});
-console.log('✓ all 6 tools defined\n');
-
-console.log('error handling: context tracking');
-assert(toolsCode.includes('lastError'), 'lastError tracking missing');
-assert(toolsCode.includes('throw'), 'error throwing missing');
-console.log('✓ errors throw with context\n');
-
-console.log('observability: window.__debug structure');
+['read_file','write_file','list_files','run_command','read_terminal','send_to_terminal'].forEach(t => assert(toolsCode.includes(t+':') && toolsCode.includes('parameters:') && toolsCode.includes('execute:'), t));
+assert(toolsCode.includes('lastError') && toolsCode.includes('throw'));
 const appJs = fs.readFileSync(path.join(__dirname, 'docs/app.js'), 'utf8');
 const terminalJs = fs.readFileSync(path.join(__dirname, 'docs/terminal.js'), 'utf8');
-assert(appJs.includes('window.__debug') && terminalJs.includes('window.__debug') && toolsCode.includes('window.__debug.agent') && terminalJs.includes('window.__debug.shell') && terminalJs.includes('window.__debug.idbSnapshot'), 'debug wiring missing');
-console.log('✓ window.__debug initialized by all modules\n');
-
-console.log('performance: debounce timing');
-assert(terminalJs.includes('1000'), 'debounce may not be 1s');
-console.log('✓ preview refresh debounce set to 1s\n');
-
-console.log('file size: fits git limit');
-const stat = fs.statSync(path.join(__dirname, 'docs/defaults.json'));
-const sizeMB = (stat.size / 1024 / 1024).toFixed(2);
-assert(stat.size < 100 * 1024 * 1024, 'defaults.json > 100MB');
-console.log('✓ defaults.json', sizeMB, 'MB (< 100MB limit)\n');
-
-console.log('=== e2e flow + error paths ===');
-let eh = 0; [() => { throw 0; }, () => { throw 1; }, () => { throw 2; }].forEach(c => { try { c(); } catch { eh++; } });
-assert(eh === 3, 'error paths');
-console.log('✓ e2e OK\n');
+assert(appJs.includes('window.__debug') && terminalJs.includes('window.__debug') && toolsCode.includes('window.__debug.agent') && terminalJs.includes('window.__debug.shell') && terminalJs.includes('window.__debug.idbSnapshot'));
+assert(terminalJs.includes('1000'));
+assert(fs.statSync(path.join(__dirname, 'docs/defaults.json')).size < 100 * 1024 * 1024);
+console.log('✓ bootstrap/msgs/tools/__debug/size OK\n');
 
 console.log('=== node builtins: http, https, child_process, buffer, zlib, assert resolvable ===');
 const nodeEnv = fs.readFileSync(path.join(__dirname, 'docs/shell-node.js'), 'utf8');
@@ -194,5 +155,24 @@ const pp = psM.registerStream('data'); assert(psM.readStream(pp.split('/').pop()
 const swJs = fs.readFileSync(path.join(__dirname, 'docs/preview-sw.js'), 'utf8');
 assert(swJs.includes('dev') && swJs.includes('tcp') && swJs.includes('procsub') && swJs.includes('JOB_REGISTER'), 'SW routes');
 console.log('✓ signals, fd, procsub, SW job coord, /dev/tcp, /procsub wired\n');
+
+console.log('=== node/npm CLI parity ===');
+const nm = require('./docs/shell-node-modules.js');
+assert(nm.NODE_VERSION === 'v23.10.0', 'NODE_VERSION');
+assert(nm.NPM_VERSION === '10.9.2', 'NPM_VERSION');
+assert(nm.NODE_VERSIONS.node === '23.10.0' && Object.keys(nm.NODE_VERSIONS).length >= 25, 'versions map');
+const pr = nm.createProcess({ write(){} }, { env: {}, cwd: '/' });
+assert(pr.version === 'v23.10.0' && pr.arch === 'x64' && pr.versions.v8.includes('12.9'), 'proc fields');
+let threw = false; try { pr.exit(3); } catch (e) { threw = e.__nodeExit && e.code === 3; } assert(threw, 'exit throws NodeExit');
+let rcv = ''; pr.stdin.on('data', b => rcv += b); pr.stdin._feed('abc'); assert(rcv === 'abc', 'stdin feed');
+const sn = fs.readFileSync(path.join(__dirname, 'docs/shell-node.js'), 'utf8');
+assert(sn.includes('stdinBuf') && sn.includes('require.resolve') || sn.includes('req.resolve'), 'stdin+resolve');
+assert(sn.includes('__nodeExit') && sn.includes('ctx.lastExitCode'), 'exit propagation');
+assert(npmJs.includes('npm_lifecycle_event') && npmJs.includes('npm_package_name') && npmJs.includes("'pre' + scriptName"), 'npm env+hooks');
+assert(npmJs.includes('NPM_VERSION') && npmJs.includes('makeNpx'), 'npm -v / npx');
+const sxJs = fs.readFileSync(path.join(__dirname, 'docs/shell-exec.js'), 'utf8');
+assert(sxJs.includes('makeNodeRunner') && sxJs.includes('NODE_VERSION'), 'node runner');
+assert(shellMain.includes("'npx'") && shellMain.includes('runNpmResult'), 'npx wired');
+console.log('✓ v23.10.0, npm 10.9.2, process.exit propagation, stdin, env injection, hooks, npx\n');
 
 console.log('=== all checks passed ===');

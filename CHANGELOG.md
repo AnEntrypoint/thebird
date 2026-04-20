@@ -1,4 +1,15 @@
 
+## [unreleased] 2026-04-20 node/npm CLI parity
+- feat: node reports v23.10.0 + full process.versions map (27 fields, matches real CLI)
+- feat: npm reports 10.9.2, npm_lifecycle_event/npm_package_name/npm_package_version env injection, pre/post<script> lifecycle hooks
+- feat: process.exit(n) throws NodeExit, propagates to ctx.lastExitCode
+- feat: script errors set lastExitCode=1 with stack trace display
+- feat: node reads stdin via pipe (echo x | node script.js) through proc.stdin._feed
+- feat: require.resolve + require.cache for module introspection
+- feat: npx builtin (npx cowsay hi)
+- feat: node -h/--help, node -p fixed (stdout.write not console.log)
+- refactor: extracted runNode + runNpmResult into shell-exec.js (shell.js stays <200L)
+
 ## [unreleased] 2026-04-18 browser validation
 - fix: require('express') returned instance not factory (MODULES wrapper called createExpress twice)
 - fix: SW registration non-blocking — shell boots immediately, SW registers in background
