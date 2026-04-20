@@ -89,7 +89,9 @@ export function createShell({ term, onPreviewWrite }) {
 
   async function runSingleCommand(line) {
     const arrM = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)=\((.*)\)\s*$/);
-    if (arrM) { ctx.arrays = ctx.arrays || {}; ctx.arrays[arrM[1]] = tokenize(arrM[2]).map(t => fullExpand(t, ctx.env, ctx.lastExitCode, ctx.argv, captureRun)); return; }
+    if (arrM) { (ctx.arrays = ctx.arrays || {})[arrM[1]] = tokenize(arrM[2]).map(t => fullExpand(t, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays)); return; }
+    const idxM = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\[([^\]]+)\]=(.*)$/);
+    if (idxM) { ctx.arrays = ctx.arrays || {}; if (!ctx.arrays[idxM[1]]) ctx.arrays[idxM[1]] = {}; const a = ctx.arrays[idxM[1]], ex = t => fullExpand(t, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays), k = ex(idxM[2]), v = ex(idxM[3]); if (Array.isArray(a)) a[parseInt(k, 10)] = v; else a[k] = v; return; }
     const raw = tokenize(line); if (!raw.length) return;
     let i = 0; const varAssigns = [];
     while (i < raw.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(raw[i])) varAssigns.push(raw[i++]);
@@ -182,18 +184,14 @@ export function createShell({ term, onPreviewWrite }) {
   function onData(data) {
     if (data === '\x03') { actor.send({ type: 'ERROR' }); inputQueue = []; blockLines = []; term.write('^C'); rl.showPrompt(); return; }
     const st = actor.getSnapshot().value;
-    if (st !== 'idle' && st !== 'node-repl') { inputQueue.push(data); return; }
-    rl.onData(data);
+    if (st !== 'idle' && st !== 'node-repl') inputQueue.push(data); else rl.onData(data);
   }
   term.onData(onData);
   rl.showPrompt();
   return {
     run: line => run(line, onData), onPreviewWrite, httpHandlers,
-    get state() { return actor.getSnapshot().value; },
-    get cwd() { return ctx.cwd; },
-    get env() { return ctx.env; },
-    get history() { return ctx.history; },
-    get lastExitCode() { return ctx.lastExitCode; },
-    get inputQueue() { return inputQueue.slice(); },
+    get state() { return actor.getSnapshot().value; }, get cwd() { return ctx.cwd; },
+    get env() { return ctx.env; }, get history() { return ctx.history; },
+    get lastExitCode() { return ctx.lastExitCode; }, get inputQueue() { return inputQueue.slice(); },
   };
 }

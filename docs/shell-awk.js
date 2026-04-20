@@ -55,8 +55,12 @@ function execAction(action, rec, emit, ctx) {
   for (const stmt of action.split(';').map(s => s.trim()).filter(Boolean)) {
     const pr = stmt.match(/^print\s*(.*)$/);
     if (pr) { emit(evalPrint(pr[1] || '$0', rec, ctx)); continue; }
+    const printf = stmt.match(/^printf\s+(.+)$/);
+    if (printf) { const parts = splitTop(printf[1], ','); const vals = parts.map(p => evalExpr(p.trim(), rec, ctx)); emit(AWK_FNS.sprintf(vals[0], ...vals.slice(1))); continue; }
     const assign = stmt.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
     if (assign) { ctx.vars[assign[1]] = evalExpr(assign[2], rec, ctx); continue; }
+    if (stmt === 'next') { ctx.skipRest = true; continue; }
+    try { evalExpr(stmt, rec, ctx); } catch {}
   }
 }
 
@@ -65,6 +69,19 @@ function evalPrint(args, rec, ctx) {
   const parts = splitTop(args, ',');
   return parts.map(p => String(evalExpr(p.trim(), rec, ctx))).join(' ');
 }
+
+const AWK_FNS = {
+  length: s => String(s ?? '').length,
+  substr: (s, i, n) => String(s).substr((i|0) - 1, n == null ? undefined : n|0),
+  tolower: s => String(s).toLowerCase(),
+  toupper: s => String(s).toUpperCase(),
+  index: (s, t) => String(s).indexOf(String(t)) + 1,
+  match: (s, re) => { const m = String(s).match(new RegExp(re)); return m ? m.index + 1 : 0; },
+  split: (s, arr, re) => { const parts = String(s).split(new RegExp(re || /\s+/)); for (let i = 0; i < parts.length; i++) arr[i + 1] = parts[i]; return parts.length; },
+  sub: (re, rep, s) => { const r = new RegExp(re); const v = String(s ?? ''); return v.replace(r, rep); },
+  gsub: (re, rep, s) => { const r = new RegExp(re, 'g'); const v = String(s ?? ''); return v.replace(r, rep); },
+  sprintf: (fmt, ...a) => { let i = 0; return String(fmt).replace(/%([sdfox])/g, (_, k) => { const v = a[i++]; if (k === 'd') return String(parseInt(v, 10) || 0); if (k === 's') return String(v ?? ''); if (k === 'f') return String(parseFloat(v) || 0); if (k === 'x') return (parseInt(v, 10) || 0).toString(16); if (k === 'o') return (parseInt(v, 10) || 0).toString(8); return ''; }); },
+};
 
 function evalExpr(expr, rec, ctx) {
   const s = expr.trim();
@@ -77,7 +94,10 @@ function evalExpr(expr, rec, ctx) {
   if (ctx.vars[s] !== undefined) return ctx.vars[s];
   const num = +s;
   if (!isNaN(num)) return num;
-  try { return Function('$', 'NR', 'NF', 'v', 'return (' + s.replace(/\$(\d+|NF)/g, (_, n) => n === 'NF' ? 'NF' : '$[' + n + ']').replace(/\b([A-Za-z_]\w*)\b/g, (_, n) => 'v.' + n) + ')')(rec.$, rec.NR, rec.NF, ctx.vars) || ''; } catch { return s; }
+  try {
+    const body = 'return (' + s.replace(/\$(\d+|NF)/g, (_, n) => n === 'NF' ? 'NF' : '$[' + n + ']').replace(/\b([A-Za-z_]\w*)\b/g, (_, n) => AWK_FNS[n] ? 'F.' + n : 'v.' + n) + ')';
+    return Function('$', 'NR', 'NF', 'v', 'F', body)(rec.$, rec.NR, rec.NF, ctx.vars, AWK_FNS) ?? '';
+  } catch { return s; }
 }
 
 function splitTop(s, sep) {

@@ -8,18 +8,44 @@ export function expandParam(name, env, argv, lastExit, arrays) {
   if (/^[1-9]$/.test(name)) return (argv || [])[parseInt(name)] || '';
   const arrM = name.match(/^([A-Za-z_][A-Za-z0-9_]*)\[(.+?)\]$/);
   if (arrM && arrays) {
-    const arr = arrays[arrM[1]] || [];
-    if (arrM[2] === '@' || arrM[2] === '*') return arr.join(' ');
-    return arr[parseInt(arrM[2], 10)] || '';
+    const a = arrays[arrM[1]];
+    if (a == null) return '';
+    if (arrM[2] === '@' || arrM[2] === '*') return Array.isArray(a) ? a.join(' ') : Object.values(a).join(' ');
+    if (Array.isArray(a)) return a[parseInt(arrM[2], 10)] || '';
+    return a[arrM[2]] || '';
   }
   const lenArrM = name.match(/^#([A-Za-z_][A-Za-z0-9_]*)\[@\]$/);
-  if (lenArrM && arrays) return String((arrays[lenArrM[1]] || []).length);
+  if (lenArrM && arrays) { const a = arrays[lenArrM[1]] || []; return String(Array.isArray(a) ? a.length : Object.keys(a).length); }
   return env[name] ?? '';
 }
 
 export function expandParamOp(expr, env, argv, lastExit, arrays) {
+  if (expr.startsWith('!')) {
+    const prefM = expr.match(/^!([A-Za-z_]\w*)([@*])$/);
+    if (prefM) return Object.keys(env).filter(k => k.startsWith(prefM[1])).join(' ');
+    const keysM = expr.match(/^!([A-Za-z_]\w*)\[[@*]\]$/);
+    if (keysM && arrays) { const a = arrays[keysM[1]] || []; return Array.isArray(a) ? a.map((_, i) => i).join(' ') : Object.keys(a).join(' '); }
+    const indM = expr.match(/^!([A-Za-z_]\w*)$/);
+    if (indM) { const t = env[indM[1]]; return t ? expandParam(t, env, argv, lastExit, arrays) : ''; }
+  }
+  const caseM = expr.match(/^([A-Za-z_][A-Za-z0-9_]*|@)(\^\^|,,|\^|,)(.*)$/s);
+  if (caseM) {
+    const v = expandParam(caseM[1], env, argv, lastExit, arrays);
+    const op = caseM[2];
+    if (op === '^^') return v.toUpperCase();
+    if (op === ',,') return v.toLowerCase();
+    if (op === '^') return v.charAt(0).toUpperCase() + v.slice(1);
+    if (op === ',') return v.charAt(0).toLowerCase() + v.slice(1);
+  }
+  const qM = expr.match(/^([A-Za-z_][A-Za-z0-9_]*|@)@([QEP])$/);
+  if (qM) {
+    const v = expandParam(qM[1], env, argv, lastExit, arrays);
+    if (qM[2] === 'Q') return "'" + v.replace(/'/g, "'\\''") + "'";
+    if (qM[2] === 'E') return v.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+    if (qM[2] === 'P') return v;
+  }
   const lenArrM = expr.match(/^#([A-Za-z_]\w*)\[[@*]\]$/);
-  if (lenArrM) return String(((arrays || {})[lenArrM[1]] || []).length);
+  if (lenArrM) { const a = (arrays || {})[lenArrM[1]] || []; return String(Array.isArray(a) ? a.length : Object.keys(a).length); }
   const lenM = expr.match(/^#(.+)$/);
   if (lenM) return String(expandParam(lenM[1], env, argv, lastExit, arrays).length);
   const sliceM = expr.match(/^([^:]+):(\d+)(?::(\d+))?$/);

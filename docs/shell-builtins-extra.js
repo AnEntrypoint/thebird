@@ -35,6 +35,9 @@ export function makeExtraBuiltins(ctx, readFile, writeFile) {
     },
     printf: args => {
       if (!args.length) return;
+      let dest = null;
+      if (args[0] === '-v') { dest = args[1]; args = args.slice(2); }
+      if (!args.length) return;
       const fmt = args[0].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
       let idx = 1;
       const out = fmt.replace(/%([sdxof])/g, (_, spec) => {
@@ -45,7 +48,13 @@ export function makeExtraBuiltins(ctx, readFile, writeFile) {
         if (spec === 'f') return String(parseFloat(v) || 0);
         return String(v);
       });
-      w(out.replace(/\n/g, '\r\n'));
+      if (dest) ctx.env[dest] = out; else w(out.replace(/\n/g, '\r\n'));
+    },
+    declare: args => {
+      const assoc = args.includes('-A');
+      const arr = args.includes('-a');
+      const names = args.filter(a => !a.startsWith('-'));
+      for (const n of names) { const eq = n.indexOf('='); const k = eq >= 0 ? n.slice(0, eq) : n; if (assoc) { ctx.arrays = ctx.arrays || {}; ctx.arrays[k] = {}; } else if (arr) { ctx.arrays = ctx.arrays || {}; ctx.arrays[k] = []; } else if (eq >= 0) ctx.env[k] = n.slice(eq + 1); }
     },
     shift: args => {
       const n = parseInt(args[0], 10) || 1;

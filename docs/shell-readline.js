@@ -96,6 +96,16 @@ export function createReadline({ term, getCompletions, onLine, getPrompt, isBloc
       write('\x1b[32m> \x1b[0m');
       return;
     }
+    const hereStr = line.match(/^(.*?)<<<\s*(.+)$/);
+    if (hereStr) {
+      const body = hereStr[2].replace(/^["']|["']$/g, '');
+      const full = hereStr[1].trim() + ' "' + body.replace(/"/g, '\\"') + '"';
+      buf = ''; pos = 0; histIdx = -1;
+      const hist = getHistory();
+      if (line.trim()) hist.unshift(line);
+      onLine(full);
+      return;
+    }
     if (line.endsWith('\\')) {
       buf = line.slice(0, -1) + '\n';
       pos = buf.length;
