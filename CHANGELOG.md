@@ -1,4 +1,19 @@
 
+## [unreleased] 2026-04-21 node parity pass 11 — virtualization + polyfills wave 3
+- feat: virtual /proc filesystem — /proc/self/{cmdline,environ,stat,status,maps,limits}, /proc/{cpuinfo,meminfo,uptime,loadavg,version,stat,mounts,filesystems}
+- feat: virtual /etc — hosts, resolv.conf, passwd, group, os-release, hostname, machine-id, shells
+- feat: isomorphic-git wrapper — git.clone/commit/push/pull/status/log/checkout against real remotes via HTTP
+- feat: tar/tar.gz extract + list — hand-rolled POSIX tar reader + fflate gunzip, works with real npm tarballs
+- feat: DoH DNS polyfill — dns.resolve/resolve4/resolve6/resolveMx/resolveTxt/resolveNs/lookup/reverse via Cloudflare DoH with Google fallback
+- feat: native addon dispatch — .node files route to WASM/JS equivalents (bufferutil, utf-8-validate, bcrypt, argon2, farmhash; sharp/better_sqlite3 placeholders)
+- feat: process.dlopen for native modules
+- feat: coreutils builtins — uname/whoami/hostname/id/df/free/uptime/ps/nproc/arch/yes/seq/tac/rev/nl/fold/od/xxd/dirname/basename/pwd/groups/logname/tty/stty/locale
+- feat: npm registry shim — view/search/deps/tarballUrl/fetchTarball via esm.sh + registry.npmjs.org
+- feat: os.cpus() returns real navigator.hardwareConcurrency, os.networkInterfaces returns lo
+- feat: process.resourceUsage real numbers from performance.memory
+- feat: crypto.secureHeapUsed
+- feat: os.constants.signals/errno populated
+
 ## [unreleased] 2026-04-21 node parity pass 10 — test runner + util extras + IPC
 - feat: node:test real runner — test/describe/it execute, report pass/fail/skip with colors and timing
 - feat: node:test mock.fn / mock.method with calls recording

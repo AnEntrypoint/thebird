@@ -1,0 +1,36 @@
+export function makeCoreutils(ctx,procFs){
+  const term=ctx.term;
+  const out=s=>term.write(s+'\r\n');
+  return{
+    uname:args=>{const flags=args.join('');const info={kernel:'Linux',node:'thebird',release:'6.0.0-browser',version:'#1 SMP',machine:'x86_64',os:'thebird'};if(flags.includes('a'))out(`${info.kernel} ${info.node} ${info.release} ${info.version} ${info.machine} ${info.os}`);else if(flags.includes('r'))out(info.release);else if(flags.includes('n'))out(info.node);else if(flags.includes('m'))out(info.machine);else if(flags.includes('s'))out(info.kernel);else if(flags.includes('o'))out(info.os);else out(info.kernel);return 0;},
+    whoami:()=>{out(ctx.env.USER||'root');return 0;},
+    hostname:args=>{if(args[0]){ctx.env.HOSTNAME=args[0];return 0;}out(ctx.env.HOSTNAME||'thebird');return 0;},
+    id:args=>{out('uid=0(root) gid=0(root) groups=0(root)');return 0;},
+    df:args=>{const used=performance.memory?.usedJSHeapSize||5e8;const total=performance.memory?.jsHeapSizeLimit||2e9;out('Filesystem     1K-blocks      Used Available Use% Mounted on');out(`idbfs      ${(total/1024)|0} ${(used/1024)|0} ${((total-used)/1024)|0} ${((used/total)*100)|0}%  /`);return 0;},
+    free:args=>{const m=performance.memory||{totalJSHeapSize:1e9,usedJSHeapSize:5e8,jsHeapSizeLimit:2e9};const kb=n=>(n/1024)|0;out('              total        used        free      shared  buff/cache   available');out(`Mem:    ${kb(m.jsHeapSizeLimit).toString().padStart(11)} ${kb(m.usedJSHeapSize).toString().padStart(11)} ${kb(m.jsHeapSizeLimit-m.usedJSHeapSize).toString().padStart(11)}           0           0 ${kb(m.jsHeapSizeLimit-m.usedJSHeapSize).toString().padStart(11)}`);out('Swap:             0           0           0');return 0;},
+    uptime:args=>{const sec=(performance.now()/1000)|0;const h=(sec/3600)|0,m=((sec%3600)/60)|0;out(`${new Date().toTimeString().slice(0,8)} up ${h}:${String(m).padStart(2,'0')}, 1 user, load average: 0.00, 0.00, 0.00`);return 0;},
+    ps:args=>{out('  PID TTY          TIME CMD');out('    1 pts/0    00:00:00 sh');out('    2 pts/0    00:00:00 ps');return 0;},
+    nproc:args=>{out(String(navigator?.hardwareConcurrency||1));return 0;},
+    arch:()=>{out('x86_64');return 0;},
+    yes:args=>{const s=args.length?args.join(' '):'y';for(let i=0;i<1000;i++)out(s);return 0;},
+    true:()=>0,
+    false:()=>1,
+    sleep:args=>new Promise(r=>setTimeout(()=>r(0),(parseFloat(args[0])||0)*1000)),
+    seq:args=>{const[first,...rest]=args.map(Number);const last=rest.length?rest[rest.length-1]:first;const step=rest.length===2?rest[0]:1;const start=rest.length?first:1;for(let i=start;step>0?i<=last:i>=last;i+=step)out(String(i));return 0;},
+    tac:args=>{if(args[0]){const c=ctx.readFile?.(args[0])||'';out(c.split('\n').reverse().join('\n'));}return 0;},
+    rev:args=>{if(args[0]){const c=ctx.readFile?.(args[0])||'';for(const line of c.split('\n'))out([...line].reverse().join(''));}return 0;},
+    nl:args=>{if(args[0]){const c=ctx.readFile?.(args[0])||'';c.split('\n').forEach((line,i)=>out(`     ${i+1}\t${line}`));}return 0;},
+    fold:args=>{const w=args.includes('-w')?parseInt(args[args.indexOf('-w')+1])||80:80;const text=args.filter(a=>!a.startsWith('-'))[0];if(text){const c=ctx.readFile?.(text)||'';for(const line of c.split('\n'))for(let i=0;i<line.length;i+=w)out(line.slice(i,i+w));}return 0;},
+    tr:args=>{return 0;},
+    od:args=>{if(args[0]){const c=ctx.readFile?.(args[0])||'';const b=typeof c==='string'?new TextEncoder().encode(c):c;for(let i=0;i<b.length;i+=16){const hex=[...b.slice(i,i+16)].map(x=>x.toString(16).padStart(2,'0')).join(' ');out(i.toString(8).padStart(7,'0')+' '+hex);}}return 0;},
+    xxd:args=>{if(args[0]){const c=ctx.readFile?.(args[0])||'';const b=typeof c==='string'?new TextEncoder().encode(c):c;for(let i=0;i<b.length;i+=16){const row=b.slice(i,i+16);const hex=[...row].map(x=>x.toString(16).padStart(2,'0')).join(' ').padEnd(47);const asc=[...row].map(x=>x>=0x20&&x<0x7f?String.fromCharCode(x):'.').join('');out(i.toString(16).padStart(8,'0')+': '+hex+' '+asc);}}return 0;},
+    dirname:args=>{out((args[0]||'').replace(/\/[^/]*$/,'')||'.');return 0;},
+    basename:args=>{const p=args[0]||'';const ext=args[1]||'';let b=p.split('/').pop()||'';if(ext&&b.endsWith(ext))b=b.slice(0,-ext.length);out(b);return 0;},
+    pwd:()=>{out(ctx.cwd||'/');return 0;},
+    groups:()=>{out('root');return 0;},
+    logname:()=>{out('root');return 0;},
+    tty:()=>{out('/dev/pts/0');return 0;},
+    stty:()=>0,
+    locale:()=>{out('LANG=C\nLC_ALL=\n');return 0;},
+  };
+}
