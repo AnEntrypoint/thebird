@@ -3,9 +3,15 @@ import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
 import { makeNpm } from './shell-npm.js';
-import { tokenize, splitTopLevel, parsePipes, globToRe } from './shell-parser.js';
-import { fullExpand, expandBraces, expandTilde } from './shell-expand.js';
+import { tokenize, splitTopLevel, parsePipes } from './shell-parser.js';
+import { fullExpand } from './shell-expand.js';
 import { isControlStart, isBlockOpen, runControl, runScript } from './shell-control.js';
+import { createSignals, makeKillBuiltin, makeTrapBuiltin } from './shell-signals.js';
+import { createJobRegistry, makeJobsBuiltin, makeFgBuiltin, makeBgBuiltin, makeDisownBuiltin } from './shell-jobs.js';
+import { createFdTable, makeExecBuiltin } from './shell-fd.js';
+import { readStream } from './shell-procsub.js';
+import { makeExpander, makeCaptureRun } from './shell-exec.js';
+import { createSwJobs, makeNohupBuiltin, makeNetcatStub, makeCurlBuiltin } from './shell-sw-jobs.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NODE_START: 'node-running' } },
@@ -29,34 +35,22 @@ export function createShell({ term, onPreviewWrite }) {
 
   const BUILTINS = makeBuiltins(ctx, actor, invokeBuiltin);
   ctx.builtinsRef = BUILTINS;
+  const _exp = makeExpander(ctx, l => captureRun(l), t => parseRedirect(t));
+  expandTokens = _exp.expandTokens;
+  captureRun = makeCaptureRun(ctx, BUILTINS, actor, t => parseRedirect(t), t => expandTokens(t));
+  ctx.signals = createSignals(ctx);
+  ctx.fdTable = createFdTable(ctx);
+  ctx.swJobs = createSwJobs();
+  const jobRegistry = createJobRegistry(ctx);
+  ctx.jobRegistry = jobRegistry;
+  ctx.runPipeline = line => runPipeline(line);
+  Object.assign(BUILTINS, { kill: makeKillBuiltin(ctx), trap: makeTrapBuiltin(ctx), jobs: makeJobsBuiltin(ctx, jobRegistry), fg: makeFgBuiltin(ctx, jobRegistry), bg: makeBgBuiltin(ctx, jobRegistry), disown: makeDisownBuiltin(ctx), exec: makeExecBuiltin(ctx, ctx.fdTable), nohup: makeNohupBuiltin(ctx), nc: makeNetcatStub(ctx), curl: makeCurlBuiltin(ctx) });
   ctx.runScript = text => runScript(text, run, ctx);
   ctx.expand = token => fullExpand(token, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays);
   const npmCmd = makeNpm(ctx);
   ctx.nodeEval = createNodeEnv({ ctx, term });
 
-  function expandGlob(token) {
-    if (!token.includes('*') && !token.includes('?')) return [token];
-    const prefix = toKey(resolvePath(ctx.cwd, ''));
-    const keys = Object.keys(snap()).map(k => prefix && k.startsWith(prefix + '/') ? k.slice(prefix.length + 1) : k);
-    const re = globToRe(token);
-    const matches = keys.filter(k => re.test(k));
-    return matches.length ? matches.sort() : [token];
-  }
-
-  function expandTokens(tokens) {
-    return tokens.flatMap(t => {
-      const tilde = expandTilde(t, ctx.env);
-      const braces = expandBraces(tilde);
-      return braces.flatMap(b => expandGlob(fullExpand(b, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays)));
-    });
-  }
-
-  function captureRun(line) {
-    const raw = tokenize(line); if (!raw.length) return '';
-    let out = ''; const orig = term.write.bind(term); term.write = s => { out += s; };
-    try { const [cmd, ...args] = parseRedirect(expandTokens(raw)).args; BUILTINS[cmd]?.(args, actor); } finally { term.write = orig; }
-    return out.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-  }
+  let expandTokens, captureRun;
 
   async function captureFn(fn) {
     let out = ''; const orig = term.write.bind(term); term.write = s => { out += s; };
@@ -157,11 +151,12 @@ export function createShell({ term, onPreviewWrite }) {
       if (ctx.loopFlag) break;
       if (sep === '&&' && !lastOk) continue;
       if (sep === '||' && lastOk) { lastOk = true; continue; }
-      if (sep === '&') { const id = String(Object.keys(ctx.bgJobs).length + 1); const p = runPipeline(cmd).catch(e => term.write('\x1b[31m' + e.message + '\x1b[0m\r\n')); ctx.bgJobs[id] = { cmd, promise: p.finally(() => { ctx.bgJobs[id].done = true; }) }; ctx.env['!'] = id; continue; }
+      if (sep === '&') { const id = jobRegistry.spawnJob(cmd, runPipeline); ctx.env['!'] = id; term.write('[' + id + '] spawned\r\n'); continue; }
       actor.send({ type: 'RUN' });
       try { ctx.lastExitCode = 0; await runPipeline(cmd); lastOk = ctx.lastExitCode === 0; actor.send({ type: 'DONE' }); }
       catch (e) { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); ctx.lastExitCode = 1; lastOk = false; actor.send({ type: 'ERROR' }); }
       if (ctx.opts.errexit && !lastOk) break;
+      if (ctx.signals) await ctx.signals.check(l => run(l));
     }
     if (onData) drainQueue(onData);
   }
@@ -190,6 +185,8 @@ export function createShell({ term, onPreviewWrite }) {
   rl.showPrompt();
   return {
     run: line => run(line, onData), onPreviewWrite, httpHandlers,
+    procsubRead: id => readStream(id),
+    fdRead: fd => ctx.fdTable.readFd(fd),
     get state() { return actor.getSnapshot().value; }, get cwd() { return ctx.cwd; },
     get env() { return ctx.env; }, get history() { return ctx.history; },
     get lastExitCode() { return ctx.lastExitCode; }, get inputQueue() { return inputQueue.slice(); },

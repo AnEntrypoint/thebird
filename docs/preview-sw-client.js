@@ -22,6 +22,23 @@ export async function registerPreviewSW() {
 }
 
 navigator.serviceWorker?.addEventListener('message', e => {
+  if (e.data?.type === 'SW_STREAM_READ') {
+    const path = e.data.path;
+    const procsub = path.match(/^\/procsub\/(\d+)$/);
+    if (procsub && window.__debug?.shell?.procsubRead) {
+      const data = window.__debug.shell.procsubRead(procsub[1]);
+      e.ports[0]?.postMessage({ data: data || '', found: data != null });
+      return;
+    }
+    const fdM = path.match(/^\/dev\/fd\/(\d+)$/);
+    if (fdM && window.__debug?.shell?.fdRead) {
+      try { const data = window.__debug.shell.fdRead(fdM[1]); e.ports[0]?.postMessage({ data: data || '', found: true }); }
+      catch { e.ports[0]?.postMessage({ data: '', found: false }); }
+      return;
+    }
+    e.ports[0]?.postMessage({ found: false });
+    return;
+  }
   if (e.data?.type !== 'EXPRESS_REQUEST') return;
   const { path, method, body: reqBody, headers: reqHeaders } = e.data;
   const replyPort = e.ports[0];
