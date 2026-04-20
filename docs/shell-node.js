@@ -24,6 +24,8 @@ import { detectRuntime, registerRuntime, switchRuntime, logRuntimeSwitch } from 
 import { makeDenoGlobal } from './shell-deno.js'; import { makeBunGlobal } from './shell-bun.js';
 import { makePmDispatcher, detectPm, makeCorepackStub } from './shell-pm.js';
 import { isTsFile, preprocessSource } from './shell-ts.js'; import { installPosixFs, installFds, installTmpAndMisc } from './shell-posix.js';
+import { makeTestRunner, makeTapReporter } from './shell-node-testrunner.js'; import { makeForkIpc } from './shell-node-ipc.js';
+import { styleText, stripVTControlCharacters, getCallSites, MIMEType, MIMEParams, makeConsoleExtras } from './shell-node-util-extras.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = extendPath(createPath());
@@ -49,12 +51,12 @@ export function createNodeEnv({ ctx, term }) {
   if (browserInfo.capabilities.webCodecs) registerPolyfill(debugReg, 'webCodecs', 'native', 'WebCodecs available');
   const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
   proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem; proc.storage = storage; proc.storageBuckets = storage.buckets;
-  proc.cwd = () => ctx.cwd; proc.chdir = p => { ctx.cwd = p.startsWith('/') ? p : pathmod.resolve(ctx.cwd, p); }; proc.umask = m => { const prev = ctx.umask || 0o022; if (m != null) ctx.umask = m; return prev; };
+  proc.cwd = () => ctx.cwd; proc.chdir = p => { ctx.cwd = p.startsWith('/') ? p : pathmod.resolve(ctx.cwd, p); }; proc.umask = m => { const prev = ctx.umask || 0o022; if (m != null) ctx.umask = m; return prev; }; makeForkIpc(proc);
   const denoGlobal = makeDenoGlobal(fsmod, proc, cpMod, ctx.httpHandlers || {}, Buf); const bunGlobal = makeBunGlobal(fsmod, proc, cpMod, ctx.httpHandlers || {}, Buf, streamMod, cryptoMod);
   const MODULES = {
     path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrlExt(), querystring: () => createQuerystring(),
     os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}), loadavg: () => [0, 0, 0], userInfo: () => ({ username: ctx.env.USER || 'root', uid: 0, gid: 0, shell: ctx.env.SHELL, homedir: ctx.env.HOME }), endianness: () => 'LE', version: () => '#1 SMP', machine: () => 'x86_64', devNull: '/dev/null', availableParallelism: () => 1, constants: { signals: {}, errno: {} } }),
-    util: () => ({ inspect, format, promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), callbackify: fn => (...a) => { const cb = a.pop(); fn(...a).then(v => cb(null, v), e => cb(e)); }, types: { isPromise: p => p instanceof Promise, isDate: v => v instanceof Date, isRegExp: v => v instanceof RegExp, isBuffer: v => v instanceof Uint8Array, isTypedArray: v => ArrayBuffer.isView(v) && !(v instanceof DataView), isAsyncFunction: f => f?.constructor?.name === 'AsyncFunction', isNativeError: e => e instanceof Error }, deprecate: fn => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); }, debuglog: () => () => {}, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b), styleText: (s, t) => t, parseArgs: ({ args = [], options = {} }) => { const values = {}, positionals = []; for (let i = 0; i < args.length; i++) { const a = args[i]; if (a.startsWith('--')) { const [k, v] = a.slice(2).split('='); if (v !== undefined) values[k] = v; else if (options[k]?.type === 'string') values[k] = args[++i]; else values[k] = true; } else positionals.push(a); } return { values, positionals }; } }),
+    util: () => ({ inspect, format, promisify: fn => (...a) => new Promise((r, j) => fn(...a, (e, v) => e ? j(e) : r(v))), callbackify: fn => (...a) => { const cb = a.pop(); fn(...a).then(v => cb(null, v), e => cb(e)); }, types: { isPromise: p => p instanceof Promise, isDate: v => v instanceof Date, isRegExp: v => v instanceof RegExp, isBuffer: v => v instanceof Uint8Array, isTypedArray: v => ArrayBuffer.isView(v) && !(v instanceof DataView), isAsyncFunction: f => f?.constructor?.name === 'AsyncFunction', isNativeError: e => e instanceof Error }, deprecate: fn => fn, inherits: (a, b) => { Object.setPrototypeOf(a.prototype, b.prototype); }, debuglog: () => () => {}, isDeepStrictEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b), styleText, stripVTControlCharacters, getCallSites, MIMEType, MIMEParams, parseArgs: ({ args = [], options = {} }) => { const values = {}, positionals = []; for (let i = 0; i < args.length; i++) { const a = args[i]; if (a.startsWith('--')) { const [k, v] = a.slice(2).split('='); if (v !== undefined) values[k] = v; else if (options[k]?.type === 'string') values[k] = args[++i]; else values[k] = true; } else positionals.push(a); } return { values, positionals }; } }),
     crypto: () => cryptoMod,
     stream: () => streamMod, 'stream/promises': () => streamMod.promises, 'stream/consumers': () => makeStreamConsumers(), 'stream/web': () => ({ ReadableStream, WritableStream, TransformStream }),
     http: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }), https: () => ({ ...httpClient, Agent: FetchAgent, globalAgent: new FetchAgent() }),
@@ -70,17 +72,15 @@ export function createNodeEnv({ ctx, term }) {
     v8: () => ({ ...makeV8Mod(), ...v8Real, ...heapSnap }), async_hooks: () => makeAsyncHooks(),
     inspector: () => inspector, cluster: () => clusterReal || stubs.cluster,
     codecs: () => { if (!webCodecs) throw makeModuleNotFoundError('codecs', []); return webCodecs; }, 'web-push': () => webPush,
-    sea: () => stubs.sea, 'node:sea': () => stubs.sea, test: () => stubs.test_runner, 'node:test': () => stubs.test_runner,
-    'node:test/reporters': () => ({ spec: class {}, tap: class {}, dot: class {} }), tty: () => stubs.tty, domain: () => stubs.domain,
+    sea: () => stubs.sea, 'node:sea': () => stubs.sea, test: () => makeTestRunner(term), 'node:test': () => makeTestRunner(term),
+    'node:test/reporters': () => ({ tap: makeTapReporter(term), spec: class {}, dot: class {} }), tty: () => stubs.tty, domain: () => stubs.domain,
     diagnostics_channel: () => diagCh, punycode: () => stubs.punycode, errors: () => errorCodes, trace_events: () => traceEv,
-    wasi: () => wasiMod,
-    module: () => ({ ...makeModuleModule(() => {}, MODULES), register: moduleRegister.register, _registerHooks: moduleRegister._hooks }),
-    express: () => createExpress(term, fsmod),
-    'better-sqlite3': createSqlite,
+    wasi: () => wasiMod, module: () => ({ ...makeModuleModule(() => {}, MODULES), register: moduleRegister.register, _registerHooks: moduleRegister._hooks }), express: () => createExpress(term, fsmod),
+    'better-sqlite3': createSqlite, sqlite: () => ({ DatabaseSync: createSqlite, StatementSync: class {} }), 'node:sqlite': () => ({ DatabaseSync: createSqlite, StatementSync: class {} }),
   };
   for (const k of Object.keys(MODULES)) if (!k.startsWith('node:')) MODULES['node:' + k] = MODULES[k];
   const cons = createConsole(term);
-  cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log; cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n'); cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n'); cons.debug = cons.log;
+  cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log; cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n'); cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n'); cons.debug = cons.log; Object.assign(cons, makeConsoleExtras(cons, term));
   const pkgCache = {}; const reqCache = {}; let requireStack = [];
   function loadDotEnv() { const envFile = snapFn()[ctx.cwd.replace(/^\//, '').replace(/\/$/, '') + '/.env'] || snapFn()['.env']; if (!envFile) return; for (const [k, v] of Object.entries(parseDotEnv(envFile))) if (!(k in ctx.env)) ctx.env[k] = v; }
 

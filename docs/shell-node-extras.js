@@ -47,23 +47,33 @@ export function makeStringDecoder(){
 
 export function makeReadline(term,proc){
   return {
-    createInterface:({input,output,prompt='> '}={})=>{
-      const handlers={line:[],close:[]};
+    createInterface:({input,output,prompt='> ',terminal:useTerm}={})=>{
+      const handlers={line:[],close:[],history:[]};
+      const useXterm=useTerm!==false&&term&&(!input||input===proc?.stdin);
+      let buf='';
       const rl={
         on:(ev,fn)=>{(handlers[ev]=handlers[ev]||[]).push(fn);return rl;},
         once:(ev,fn)=>rl.on(ev,(...a)=>{rl.off(ev,fn);fn(...a);}),
         off:(ev,fn)=>{handlers[ev]=(handlers[ev]||[]).filter(f=>f!==fn);return rl;},
-        write:s=>output?.write?.(s),
-        prompt:()=>output?.write?.(prompt),
-        question:(q,cb)=>{output?.write?.(q);handlers.line.push(function onLine(l){cb(l);rl.off('line',onLine);});},
+        write:s=>(output||term)?.write?.(s),
+        prompt:()=>(output||term)?.write?.(prompt),
+        question:(q,cb)=>{(output||term)?.write?.(q);return new Promise(resolve=>{const handler=l=>{rl.off('line',handler);resolve(l);cb?.(l);};handlers.line.push(handler);});},
         close:()=>{for(const h of handlers.close)h();},
         setPrompt:p=>{prompt=p;},
         pause:()=>rl,resume:()=>rl,
+        [Symbol.asyncIterator](){return{next(){return new Promise(r=>{handlers.line.push(function on(l){handlers.line=handlers.line.filter(f=>f!==on);r({value:l,done:false});});});}};}
       };
-      input?._onLine?.(l=>{for(const h of handlers.line)h(l);});
+      if(useXterm){
+        const sink=d=>{if(d==='\r'||d==='\n'){const l=buf;buf='';term.write('\r\n');for(const h of handlers.line)h(l);}else if(d==='\x7f'){if(buf.length){buf=buf.slice(0,-1);term.write('\b \b');}}else if(d>=' '){buf+=d;term.write(d);}};
+        if(proc?.stdin?.on)proc.stdin.on('data',sink);
+      }else if(input?._onLine)input._onLine(l=>{for(const h of handlers.line)h(l);});
       return rl;
     },
-    cursorTo:(s,x,y)=>{},clearLine:()=>{},clearScreenDown:()=>{},moveCursor:()=>{},emitKeypressEvents:()=>{},
+    cursorTo:(s,x,y)=>{if(s?.write)s.write(`\x1b[${(y||0)+1};${(x||0)+1}H`);},
+    clearLine:s=>s?.write?.('\x1b[2K'),
+    clearScreenDown:s=>s?.write?.('\x1b[J'),
+    moveCursor:(s,dx,dy)=>{if(s?.write){if(dx>0)s.write(`\x1b[${dx}C`);else if(dx<0)s.write(`\x1b[${-dx}D`);if(dy>0)s.write(`\x1b[${dy}B`);else if(dy<0)s.write(`\x1b[${-dy}A`);}},
+    emitKeypressEvents:(stream,rl)=>{if(!stream?.on)return;stream.on('data',d=>{const name=d==='\r'?'return':d==='\x1b[A'?'up':d==='\x1b[B'?'down':d==='\x7f'?'backspace':d.length===1?d:'';stream.emit?.('keypress',d,{name,ctrl:false,meta:false,shift:false,sequence:d});});},
   };
 }
 

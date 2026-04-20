@@ -1,4 +1,17 @@
 
+## [unreleased] 2026-04-21 node parity pass 10 — test runner + util extras + IPC
+- feat: node:test real runner — test/describe/it execute, report pass/fail/skip with colors and timing
+- feat: node:test mock.fn / mock.method with calls recording
+- feat: node:test/reporters TAP reporter (ok/not ok/plan)
+- feat: util.styleText (named styles: red/green/bold/italic/etc)
+- feat: util.stripVTControlCharacters removes ANSI escapes
+- feat: util.getCallSites frame extractor
+- feat: util.MIMEType + util.MIMEParams (RFC-compliant parse/serialize)
+- feat: console.table/group/groupEnd/time/timeEnd/timeLog/count/countReset/dir/trace/assert/clear — full console surface
+- feat: readline.createInterface — real interactive question/answer via xterm, asyncIterator, cursorTo/clearLine
+- feat: fork IPC via BroadcastChannel — process.send/process.on('message')
+- feat: node:sqlite module alias (DatabaseSync) — Node 22+ API
+
 ## [unreleased] 2026-04-21 node parity pass 9 — pnpm/yarn wired, workspaces, dlx
 - feat: shell dispatches pnpm/yarn/bun/deno/corepack/dlx commands (previously shell-pm.js existed but wasn't wired)
 - feat: workspaces resolution — package.json 'workspaces' field + pnpm-workspace.yaml packages:- syntax
