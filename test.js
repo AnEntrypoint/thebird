@@ -23,29 +23,15 @@ assert(terminalJs.includes('1000'));
 assert(fs.statSync(path.join(__dirname, 'docs/defaults.json')).size < 100 * 1024 * 1024);
 console.log('✓ bootstrap/msgs/tools/__debug/size OK\n');
 
-console.log('=== node builtins: http, https, child_process, buffer, zlib, assert resolvable ===');
 const nodeEnv = fs.readFileSync(path.join(__dirname, 'docs/shell-node.js'), 'utf8');
-['http:', 'https:', 'buffer:', 'child_process:', 'net:', 'zlib:', 'assert:'].forEach(m => {
-  assert(nodeEnv.includes(m), 'builtin ' + m + ' missing from MODULES');
-});
+['http:','https:','buffer:','child_process:','net:','zlib:','assert:'].forEach(m => assert(nodeEnv.includes(m), m));
 const modsJs = fs.readFileSync(path.join(__dirname, 'docs/shell-node-modules.js'), 'utf8');
-assert(modsJs.includes('createHttp'), 'createHttp factory missing');
-assert(modsJs.includes('httpHandlers[port] = { routes'), 'http.createServer must register httpHandlers');
-console.log('✓ core node builtins exposed\n');
-
-console.log('=== esm.sh async package loading ===');
+assert(modsJs.includes('createHttp') && modsJs.includes('httpHandlers[port] = { routes'));
 const npmJs = fs.readFileSync(path.join(__dirname, 'docs/shell-npm.js'), 'utf8');
-assert(npmJs.includes('esm.sh'), 'npm install must fetch from esm.sh');
-assert(npmJs.includes('?bundle'), 'esm.sh must use bundle flag');
-assert(nodeEnv.includes('preloadAsyncPkgs'), 'preloadAsyncPkgs missing');
-assert(nodeEnv.includes('pkgCache'), 'pkgCache missing');
-console.log('✓ npm install → esm.sh → preloadAsyncPkgs → pkgCache → sync require\n');
-
-console.log('=== npm subcommands: install/uninstall/ls/run/init ===');
-['install', 'uninstall', 'ls', 'run', 'init'].forEach(sub => assert(npmJs.includes("'" + sub + "'"), 'npm ' + sub + ' missing'));
-assert(npmJs.includes('devDependencies'), 'npm --save-dev must update devDependencies');
-assert(npmJs.includes('writePkgJson'), 'npm must persist package.json changes');
-console.log('✓ npm has install, uninstall, ls, run, init subcommands\n');
+assert(npmJs.includes('esm.sh') && npmJs.includes('?bundle') && nodeEnv.includes('preloadAsyncPkgs') && nodeEnv.includes('pkgCache'));
+['install','uninstall','ls','run','init'].forEach(s => assert(npmJs.includes("'" + s + "'"), s));
+assert(npmJs.includes('devDependencies') && npmJs.includes('writePkgJson'));
+console.log('✓ node builtins + npm subcommands + esm.sh loading\n');
 
 console.log('=== shell parser: tokenize/quotes/pipes/redirects/chains ===');
 const parserJs = fs.readFileSync(path.join(__dirname, 'docs/shell-parser.js'), 'utf8');
@@ -175,4 +161,37 @@ assert(sxJs.includes('makeNodeRunner') && sxJs.includes('NODE_VERSION'), 'node r
 assert(shellMain.includes("'npx'") && shellMain.includes('runNpmResult'), 'npx wired');
 console.log('✓ v23.10.0, npm 10.9.2, process.exit propagation, stdin, env injection, hooks, npx\n');
 
-console.log('=== all checks passed ===');
+console.log('=== node parity: util.inspect, crypto, Buffer, fs, ESM, stack, dotenv ===');
+global.window = global.window || { __debug: { idbSnapshot: {}, idbPersist: () => {} } };
+const stdlibP = 'file:///' + path.resolve('docs/shell-node-stdlib.js').replace(/\\/g, '/');
+const ioP = 'file:///' + path.resolve('docs/shell-node-io.js').replace(/\\/g, '/');
+const nbP = 'file:///' + path.resolve('docs/node-builtins.js').replace(/\\/g, '/');
+(async () => {
+  const stdlib = await import(stdlibP); const io = await import(ioP); const nb = await import(nbP);
+  assert(stdlib.inspect({a:1,b:[2,3]}) === '{ a: 1, b: [ 2, 3 ] }', 'inspect obj');
+  assert(stdlib.inspect([1,2,3]) === '[ 1, 2, 3 ]', 'inspect arr');
+  assert(stdlib.inspect(new Map([[1,2]])) === 'Map(1) { 1 => 2 }', 'inspect map');
+  assert(stdlib.inspect(null) === 'null' && stdlib.inspect(undefined) === 'undefined' && stdlib.inspect('hi') === "'hi'", 'inspect prim');
+  assert(stdlib.format('hi %s %d', 'a', 5) === 'hi a 5', 'format');
+  assert(stdlib.createHash('sha256').update('hi').digest('hex') === '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4', 'sha256 hi');
+  const Buf = nb.createBuffer();
+  assert(Buf.from('hello').toString('hex') === '68656c6c6f', 'hex');
+  assert(Buf.concat([Buf.from('ab'), Buf.from('cd')]).toString() === 'abcd', 'concat');
+  assert(Buf.alloc(3, 'x').toString() === 'xxx', 'alloc fill');
+  const a = Buf.from('hello'), b = Buf.from('hello'), c = Buf.from('world');
+  assert(a.equals(b) && !a.equals(c) && a.compare(c) === -1 && a.indexOf('ll') === 2 && a.includes('ell'), 'buffer ops');
+  const fs2 = nb.createFs();
+  fs2.writeFileSync('t', 'x'); assert(fs2.existsSync('t')); fs2.rmSync('t'); assert(!fs2.existsSync('t'), 'rmSync');
+  let threw = false; try { fs2.accessSync('nope'); } catch { threw = true; } assert(threw, 'accessSync');
+  assert(io.isEsmCode("import x from 'y'") && io.isEsmCode('export const x=1') && !io.isEsmCode("require('x')"), 'esm detect');
+  assert(JSON.stringify(io.parseDotEnv('A=1\nB="two"\n#c\nD=')) === '{"A":"1","B":"two","D":""}', 'dotenv');
+  const ctx = { env: {} }; const proc = io.extendProcess({}, ctx);
+  assert(proc.execPath === '/usr/local/bin/node' && proc.argv0 === 'node' && ctx.env.PATH && ctx.env.HOME, 'proc extend');
+  const stackOut = io.rewriteStack(new Error('boom'), '[eval]');
+  assert(stackOut.includes('Error: boom') && stackOut.endsWith('Node.js v23.10.0'), 'stack trailer');
+  const sn = fs.readFileSync('docs/shell-node.js', 'utf8');
+  assert(sn.includes('isEsmCode') && sn.includes('unhandledrejection') && sn.includes('rewriteStack') && sn.includes('loadDotEnv') && sn.includes("'node:fs'"), 'shell-node wiring');
+  ['shell-node-stdlib.js', 'shell-node-io.js'].forEach(k => assert(defaults[k], k + ' in defaults'));
+  console.log('✓ util.inspect, Buffer full API, fs.rmSync/accessSync, ESM detect, dotenv, stack trailer, node: prefixed specifiers\n');
+  console.log('=== all checks passed ===');
+})().catch(e => { console.error(e); process.exit(1); });

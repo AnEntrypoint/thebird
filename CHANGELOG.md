@@ -1,4 +1,21 @@
 
+## [unreleased] 2026-04-20 node parity pass 2
+- feat: util.inspect matches node format (braces-with-spaces, Map(N){k=>v}, arrays, circular, <Buffer ...>)
+- feat: console.log/info/warn/error use util.format (printf-style %s/%d/%o)
+- feat: crypto.createHash pure-JS sha256 — matches node hex output byte-for-byte
+- feat: Buffer.write/compare/equals/indexOf/includes/subarray/readUIntXX/Buffer.compare/allocUnsafe
+- feat: fs.rmSync/rmdirSync/accessSync/realpathSync
+- feat: child_process.spawn/exec route through shell runPipeline, EventEmitter-style stdout/stderr/exit
+- feat: http.request/http.get via fetch, return IncomingMessage-style with statusCode/headers/on(data,end)
+- feat: process.execPath/argv0/title/memoryUsage/uptime/getuid/umask/release; env defaults PATH/HOME/USER/SHELL/TERM/LANG
+- feat: ESM detection — code with import/export wrapped in Blob URL + dynamic import
+- feat: unhandledrejection → lastExitCode=1 + node-style stack
+- feat: stack trace trailer "Node.js v23.10.0" on error
+- feat: .env loading at script start
+- feat: node: prefixed specifiers (node:fs, node:path, etc.)
+- feat: zlib.gzip/gunzip via pako (async, auto-loaded from esm.sh)
+- new: shell-node-stdlib.js (util/crypto/zlib), shell-node-io.js (cp/http/proc env/ESM/stack/dotenv)
+
 ## [unreleased] 2026-04-20 node/npm CLI parity
 - feat: node reports v23.10.0 + full process.versions map (27 fields, matches real CLI)
 - feat: npm reports 10.9.2, npm_lifecycle_event/npm_package_name/npm_package_version env injection, pre/post<script> lifecycle hooks

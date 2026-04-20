@@ -103,6 +103,16 @@ export function createFs() {
       snap()[toKey(resolveP(d))] = src;
       persist();
     },
+    rmSync: (p, opts = {}) => {
+      const key = toKey(resolveP(p)); const s = snap();
+      if (key in s) { delete s[key]; persist(); return; }
+      if (opts.recursive) { for (const k of Object.keys(s)) if (k === key || k.startsWith(key + '/')) delete s[k]; persist(); return; }
+      if (!opts.force) throw Object.assign(new Error('ENOENT: ' + p), { code: 'ENOENT' });
+    },
+    rmdirSync: (p, opts = {}) => { const key = toKey(resolveP(p)); for (const k of Object.keys(snap())) if (k.startsWith(key + '/')) delete snap()[k]; persist(); },
+    accessSync: p => { if (!(toKey(resolveP(p)) in snap())) throw Object.assign(new Error('ENOENT: ' + p), { code: 'ENOENT' }); },
+    realpathSync: p => resolveP(p),
+    promises: null,
   };
 }
 
@@ -153,6 +163,17 @@ export function createBuffer() {
     }
     toJSON() { return { type: 'Buffer', data: [...this] }; }
     slice(s, e) { return Buf.from(super.slice(s, e)); }
+    subarray(s, e) { return Buf.from(super.subarray(s, e)); }
+    equals(o) { if (!(o instanceof Uint8Array) || o.length !== this.length) return false; for (let i = 0; i < this.length; i++) if (this[i] !== o[i]) return false; return true; }
+    compare(o) { const l = Math.min(this.length, o.length); for (let i = 0; i < l; i++) { if (this[i] < o[i]) return -1; if (this[i] > o[i]) return 1; } return this.length === o.length ? 0 : this.length < o.length ? -1 : 1; }
+    indexOf(v, fromIdx = 0) { const bytes = typeof v === 'string' ? new TextEncoder().encode(v) : v instanceof Uint8Array ? v : new Uint8Array([v]); outer: for (let i = fromIdx; i <= this.length - bytes.length; i++) { for (let j = 0; j < bytes.length; j++) if (this[i + j] !== bytes[j]) continue outer; return i; } return -1; }
+    includes(v) { return this.indexOf(v) !== -1; }
+    write(str, offset = 0, length, encoding) { if (typeof offset === 'string') { encoding = offset; offset = 0; } const bytes = new TextEncoder().encode(str); const n = Math.min(bytes.length, this.length - offset, length ?? bytes.length); this.set(bytes.subarray(0, n), offset); return n; }
+    readUInt8(o = 0) { return this[o]; }
+    readUInt16BE(o = 0) { return (this[o] << 8) | this[o + 1]; }
+    readUInt16LE(o = 0) { return this[o] | (this[o + 1] << 8); }
+    readUInt32BE(o = 0) { return ((this[o] * 0x1000000) + (this[o + 1] << 16) | (this[o + 2] << 8) | this[o + 3]) >>> 0; }
+    writeUInt8(v, o = 0) { this[o] = v & 0xff; return o + 1; }
   }
   Buf.from = (d, enc) => {
     if (d instanceof Uint8Array) return new Buf(d);
@@ -166,5 +187,8 @@ export function createBuffer() {
   Buf.concat = list => { const t = list.reduce((s, b) => s + b.length, 0); const r = new Buf(t); let o = 0; for (const b of list) { r.set(b, o); o += b.length; } return r; };
   Buf.isBuffer = o => o instanceof Buf;
   Buf.byteLength = (s, enc) => Buf.from(s, enc).length;
+  Buf.compare = (a, b) => a.compare(b);
+  Buf.allocUnsafe = n => new Buf(n);
+  Buf.poolSize = 8192;
   return Buf;
 }
