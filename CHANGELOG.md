@@ -1,4 +1,23 @@
 
+## [unreleased] 2026-04-20 node parity pass 8 — Deno/Bun/pnpm/yarn + POSIX
+- feat: runtime detection (Deno, Bun, Node, browser) with capability flags
+- feat: Deno global namespace — readTextFile/writeTextFile/mkdir/remove/stat/serve/Command/permissions/env
+- feat: Bun global namespace — file/write/serve/spawn/shell(\`\`)/hash/password/TOML/nanoseconds/deepEquals
+- feat: package manager dispatcher — auto-detects bun.lock/pnpm-lock.yaml/yarn.lock/package-lock.json + packageManager field
+- feat: pm install/add/remove/run/ls/init/task unified across npm/pnpm/yarn/bun
+- feat: deno task, deno.json/jsonc parsing, bunfig.toml parser, workspaces enumeration hooks
+- feat: jsr: and npm: specifier rewriting to esm.sh
+- feat: TypeScript direct execution — .ts/.tsx strip via regex (sucrase lazy-loaded)
+- feat: shebang dispatch — #!/usr/bin/env deno|bun|node sets matching globals
+- feat: corepack stub (no-op)
+- feat: POSIX symlinks via sentinel entries — symlinkSync/readlinkSync/lstatSync/realpathSync with ELOOP at 40 hops
+- feat: hard links + inode refcounting — linkSync, stat.nlink, stat.ino
+- feat: file mode bits — chmodSync, S_IFREG/S_IFDIR/S_IFLNK/S_IFIFO constants
+- feat: file descriptors — openSync/closeSync/readSync/writeSync/fstatSync/ftruncate
+- feat: process.umask/cwd/chdir
+- feat: mkdtempSync, cpSync(recursive), fs.mkfifoSync stub
+- feat: Stats with isFile/isDirectory/isSymbolicLink/isFIFO, atime/mtime/ctime/birthtime Dates
+
 ## [unreleased] 2026-04-20 node parity pass 7 — Firefox maximization + polyfills
 - feat: browser detection (vendor, version, 10+ capabilities) + window.__debug.node.polyfills registry
 - feat: OPFS-backed fs.promises when available — real persistence (readFile/writeFile/mkdir/rm/stat/list) via SyncAccessHandle in worker, IDB fallback

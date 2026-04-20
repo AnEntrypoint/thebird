@@ -20,6 +20,10 @@ import { makeInspector } from './shell-node-inspector.js';
 import { makeV8Profiler, makeHeapSnapshot } from './shell-node-profiler.js';
 import { makeCluster } from './shell-node-cluster.js';
 import { preloadX509 } from './shell-node-keyobject.js';
+import { detectRuntime, registerRuntime, switchRuntime } from './shell-runtime.js';
+import { makeDenoGlobal } from './shell-deno.js'; import { makeBunGlobal } from './shell-bun.js';
+import { makePmDispatcher, detectPm, makeCorepackStub } from './shell-pm.js';
+import { isTsFile, preprocessSource } from './shell-ts.js'; import { installPosixFs, installFds, installTmpAndMisc } from './shell-posix.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = extendPath(createPath());
@@ -27,20 +31,15 @@ export function createNodeEnv({ ctx, term }) {
   const debugReg = makeDebugRegistry();
   const browserInfo = detectBrowser(); debugReg.browser = browserInfo;
   const snapFn = () => window.__debug?.idbSnapshot || {};
-  const fsmod = extendFsStreams(createFs(), Buf);
+  const fsmod = installTmpAndMisc(installFds(installPosixFs(extendFsStreams(createFs(), Buf), Buf, ctx), Buf), Buf, ctx);
   const opfs = makeOpfsBackend(Buf); if (opfs) wireOpfsIntoFs(fsmod, opfs, debugReg);
-  fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatchReal(snapFn);
+  const runtime = detectRuntime(); registerRuntime(debugReg, runtime); fsmod.promises = makeFsPromises(fsmod); fsmod.watch = makeFsWatchReal(snapFn);
   fsmod.glob = (pat, opts, cb) => { if (typeof opts === 'function') { cb = opts; opts = {}; } const matches = Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k)); queueMicrotask(() => cb?.(null, matches)); };
   fsmod.globSync = pat => Object.keys(window.__debug?.idbSnapshot || {}).filter(k => new RegExp('^' + pat.replace(/\*\*/g, '.+').replace(/\*/g, '[^/]*') + '$').test(k));
-  const zlibMod = createZlib(Buf);
-  const httpClient = createHttpClient(Buf);
-  const cpMod = createChildProcess(ctx);
-  const streamMod = makeStream();
-  const cpReal = makeChildProcessReal(Buf, streamMod);
-  Object.assign(cpMod, { exec: cpReal.exec.bind(cpReal), spawn: cpReal.spawn.bind(cpReal), execFile: cpReal.execFile.bind(cpReal), execSync: cpReal.execSync, spawnSync: cpReal.spawnSync, fork: cpReal.fork });
+  const zlibMod = createZlib(Buf); const httpClient = createHttpClient(Buf); const cpMod = createChildProcess(ctx); const streamMod = makeStream();
+  const cpReal = makeChildProcessReal(Buf, streamMod); Object.assign(cpMod, { exec: cpReal.exec.bind(cpReal), spawn: cpReal.spawn.bind(cpReal), execFile: cpReal.execFile.bind(cpReal), execSync: cpReal.execSync, spawnSync: cpReal.spawnSync, fork: cpReal.fork });
   let cryptoMod = { createHash, createHmac, pbkdf2Sync, pbkdf2: (pw, salt, iter, len, dig, cb) => queueMicrotask(() => { try { cb(null, Buf.from(pbkdf2Sync(pw, salt, iter, len, dig))); } catch (e) { cb(e); } }), randomBytes: n => Buf.from(randomBytes(n)), randomUUID: () => crypto.randomUUID(), randomInt: (a, b) => Math.floor(Math.random() * (b - a) + a), webcrypto: globalThis.crypto, constants: {} };
-  cryptoMod = extendKeys(extendCrypto(cryptoMod, Buf));
-  cryptoMod._ops = () => ++debugReg.cryptoOps;
+  cryptoMod = extendKeys(extendCrypto(cryptoMod, Buf)); cryptoMod._ops = () => ++debugReg.cryptoOps;
   const errorCodes = makeErrorCodes(); const stubs = makeStubs(ctx); const diagCh = makeDiagnosticsChannel(); const traceEv = makeTraceEvents(debugReg);
   const vmMod = makeVmModule(); const http2Mod = makeHttp2(); const wasiMod = makeWasi(); const moduleRegister = makeModuleRegister(); const workerThreads = makeWorkerThreads(snapFn, Buf);
   const getMem = makePerfMemory(performance); const FetchAgent = makeFetchPool(); const netMod = makeNet(Buf); const tlsMod = makeTls(netMod, Buf); const dgramMod = makeDgram(Buf);
@@ -50,6 +49,8 @@ export function createNodeEnv({ ctx, term }) {
   if (browserInfo.capabilities.webCodecs) registerPolyfill(debugReg, 'webCodecs', 'native', 'WebCodecs available');
   const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
   proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem; proc.storage = storage; proc.storageBuckets = storage.buckets;
+  proc.cwd = () => ctx.cwd; proc.chdir = p => { ctx.cwd = p.startsWith('/') ? p : pathmod.resolve(ctx.cwd, p); }; proc.umask = m => { const prev = ctx.umask || 0o022; if (m != null) ctx.umask = m; return prev; };
+  const denoGlobal = makeDenoGlobal(fsmod, proc, cpMod, ctx.httpHandlers || {}, Buf); const bunGlobal = makeBunGlobal(fsmod, proc, cpMod, ctx.httpHandlers || {}, Buf, streamMod, cryptoMod);
   const MODULES = {
     path: () => pathmod, fs: () => fsmod, events: () => createEvents(), url: () => createUrlExt(), querystring: () => createQuerystring(),
     os: () => ({ platform: () => 'linux', arch: () => 'x64', homedir: () => ctx.env.HOME || '/root', tmpdir: () => '/tmp', cpus: () => [{ model: 'jsh', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } }], totalmem: () => 1073741824, freemem: () => 536870912, hostname: () => 'thebird', EOL: '\n', release: () => '6.0.0', type: () => 'Linux', uptime: () => performance.now() / 1000, networkInterfaces: () => ({}), loadavg: () => [0, 0, 0], userInfo: () => ({ username: ctx.env.USER || 'root', uid: 0, gid: 0, shell: ctx.env.SHELL, homedir: ctx.env.HOME }), endianness: () => 'LE', version: () => '#1 SMP', machine: () => 'x86_64', devNull: '/dev/null', availableParallelism: () => 1, constants: { signals: {}, errno: {} } }),
@@ -79,9 +80,7 @@ export function createNodeEnv({ ctx, term }) {
   };
   for (const k of Object.keys(MODULES)) if (!k.startsWith('node:')) MODULES['node:' + k] = MODULES[k];
   const cons = createConsole(term);
-  cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log;
-  cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n');
-  cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n'); cons.debug = cons.log;
+  cons.log = (...a) => term.write(format(...a) + '\r\n'); cons.info = cons.log; cons.error = (...a) => term.write('\x1b[31m' + format(...a) + '\x1b[0m\r\n'); cons.warn = (...a) => term.write('\x1b[33m' + format(...a) + '\x1b[0m\r\n'); cons.debug = cons.log;
   const pkgCache = {}; const reqCache = {}; let requireStack = [];
   function loadDotEnv() { const envFile = snapFn()[ctx.cwd.replace(/^\//, '').replace(/\/$/, '') + '/.env'] || snapFn()['.env']; if (!envFile) return; for (const [k, v] of Object.entries(parseDotEnv(envFile))) if (!(k in ctx.env)) ctx.env[k] = v; }
 
@@ -164,11 +163,15 @@ export function createNodeEnv({ ctx, term }) {
     loadDotEnv();
     globalThis.__fflate = await preloadFflate().catch(() => ({}));
     if (proc.sourceMapsEnabled) { await preloadSourceMap().catch(() => {}); installSourceMapStacks(snapFn); }
+    const rtName = switchRuntime(code.startsWith('#!') ? code.slice(0, code.indexOf('\n')) : ''); debugReg.runtime.active = rtName;
+    if (isTsFile(fpath)) code = await preprocessSource(fpath, code);
     await preloadAsyncPkgs(code, dir);
     const reqFn = makeRequire(dir);
     const scope = { process: proc, console: cons, require: reqFn, Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, module: { exports: {} }, exports: {}, global: globalThis, URL, URLSearchParams, TextEncoder, TextDecoder };
-    const prevGlobals = { process: globalThis.process, Buffer: globalThis.Buffer };
+    const prevGlobals = { process: globalThis.process, Buffer: globalThis.Buffer, Deno: globalThis.Deno, Bun: globalThis.Bun };
     globalThis.process = proc; globalThis.Buffer = Buf;
+    if (rtName === 'deno') globalThis.Deno = denoGlobal; else delete globalThis.Deno;
+    if (rtName === 'bun') globalThis.Bun = bunGlobal; else delete globalThis.Bun;
     installCaptureStackTrace(); installPrepareStackTraceHook();
     const unhandledH = e => { e.preventDefault?.(); const err = e.reason || e; term.write('\x1b[31m' + rewriteStack(err, fpath) + '\x1b[0m\r\n'); ctx.lastExitCode = 1; };
     window.addEventListener('unhandledrejection', unhandledH);
@@ -189,6 +192,8 @@ export function createNodeEnv({ ctx, term }) {
       window.removeEventListener('unhandledrejection', unhandledH);
       if (prevGlobals.process !== undefined) globalThis.process = prevGlobals.process; else delete globalThis.process;
       if (prevGlobals.Buffer !== undefined) globalThis.Buffer = prevGlobals.Buffer; else delete globalThis.Buffer;
+      if (prevGlobals.Deno !== undefined) globalThis.Deno = prevGlobals.Deno; else delete globalThis.Deno;
+      if (prevGlobals.Bun !== undefined) globalThis.Bun = prevGlobals.Bun; else delete globalThis.Bun;
     }
   };
 }

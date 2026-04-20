@@ -24,6 +24,13 @@ export function resolveExports(pkgJson, subpath) {
   for (const pk of Object.keys(exp)) { const m = matchPattern(pk, key); if (m !== null) { const t = pickCondition(exp[pk]); return t ? t.replace('*', m) : null; } }
   return null;
 }
+export function rewriteSpecifier(id) {
+  if (id.startsWith('jsr:')) return 'https://esm.sh/jsr/' + id.slice(4);
+  if (id.startsWith('npm:')) return 'https://esm.sh/' + id.slice(4);
+  if (id.startsWith('https://') || id.startsWith('http://')) return id;
+  return null;
+}
+
 export function resolveImports(pkgJson, subpath) {
   const imps = pkgJson.imports;
   if (!imps || !subpath.startsWith('#')) return null;
