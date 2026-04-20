@@ -1,4 +1,5 @@
 import { resolvePath } from './shell-builtins.js';
+import { runSed } from './shell-sed.js';
 
 const toKey = p => p.replace(/^\//, '');
 const snap = () => window.__debug.idbSnapshot || {};
@@ -36,17 +37,24 @@ export function makeTextBuiltins(ctx, readFile, writeFile) {
       if (!matched) ctx.lastExitCode = 1;
     },
     sed: args => {
-      const positional = args.filter(a => !a.startsWith('-'));
-      const { stdin, rest } = readStdinFirst(positional);
-      const [expr, ...fileArgs] = rest;
-      if (!expr) throw new Error('sed: missing expression');
-      const m = expr.match(/^s(.)(.+?)\1(.*?)\1([gig]*)$/);
-      if (!m) throw new Error('sed: unsupported expression: ' + expr);
-      const re = new RegExp(m[2], m[4].includes('g') ? 'g' : '');
+      const exprs = [];
+      const files = [];
+      let inplace = false;
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-e') { exprs.push(args[++i]); continue; }
+        if (args[i] === '-i') { inplace = true; continue; }
+        if (args[i].startsWith('-')) continue;
+        if (!exprs.length) exprs.push(args[i]); else files.push(args[i]);
+      }
+      const { stdin, rest } = readStdinFirst(files);
+      const fileArgs = rest;
+      if (!exprs.length) throw new Error('sed: missing expression');
       const pairs = fileArgs.length ? fileArgs.map(f => [f, readFile(f)]) : [['', stdin || '']];
       for (const [name, text] of pairs) {
-        const out = text.split('\n').map(l => l.replace(re, m[3])).join('\n');
-        if (name) { writeFile(name, out); } else { w(out.replace(/\n/g, '\r\n')); }
+        const out = runSed(exprs, text);
+        if (name && inplace) writeFile(name, out);
+        else if (name) w(out.replace(/\n/g, '\r\n') + '\r\n');
+        else w(out.replace(/\n/g, '\r\n'));
       }
     },
     sort: args => {

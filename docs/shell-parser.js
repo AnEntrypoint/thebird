@@ -95,8 +95,23 @@ export function parsePipes(line) {
 }
 
 export function globToRe(pattern) {
-  const escaped = pattern.replace(/[-[\]{}()*+?.,\\^$|#]/g, (c) => (c === '*' || c === '?') ? c : '\\' + c);
-  const re = escaped.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
+  let re = '';
+  let i = 0;
+  while (i < pattern.length) {
+    const c = pattern[i];
+    if (c === '[') {
+      const close = pattern.indexOf(']', i + 1);
+      if (close < 0) { re += '\\['; i++; continue; }
+      let cls = pattern.slice(i + 1, close);
+      if (cls[0] === '!') cls = '^' + cls.slice(1);
+      re += '[' + cls + ']';
+      i = close + 1; continue;
+    }
+    if (c === '*') { re += pattern[i + 1] === '*' ? ((i += 2), '.*') : ((i++), '[^/]*'); continue; }
+    if (c === '?') { re += '[^/]'; i++; continue; }
+    if ('-{}()+.,\\^$|#'.includes(c)) { re += '\\' + c; i++; continue; }
+    re += c; i++;
+  }
   return new RegExp('^' + re + '$');
 }
 

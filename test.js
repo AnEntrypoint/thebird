@@ -4,33 +4,15 @@ const assert = require('assert');
 
 console.log('=== thebird browser integration test ===\n');
 
-console.log('bootstrap: defaults.json');
+console.log('bootstrap: defaults.json / index.html / preview-sw.js');
 const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, 'docs/defaults.json'), 'utf8'));
-assert(defaults['app.js'], 'app.js missing');
-assert(defaults['terminal.js'], 'terminal.js missing');
-assert(defaults['agent-chat.js'], 'agent-chat.js missing');
-assert(defaults['shell.js'], 'shell.js missing');
-assert(defaults['vendor/thebird-browser.js'], 'thebird-browser.js missing');
-assert(defaults['shell-node.js'], 'shell-node.js missing');
-assert(defaults['shell-node-modules.js'], 'shell-node-modules.js missing');
-assert(Object.keys(defaults).length > 10, 'insufficient files');
-console.log('✓ defaults.json has', Object.keys(defaults).length, 'files\n');
-
-console.log('bootstrap: index.html');
+['app.js', 'terminal.js', 'agent-chat.js', 'shell.js', 'vendor/thebird-browser.js', 'shell-node.js', 'shell-node-modules.js'].forEach(k => assert(defaults[k], k + ' missing'));
+assert(Object.keys(defaults).length > 10, 'too few files');
 const indexHtml = fs.readFileSync(path.join(__dirname, 'docs/index.html'), 'utf8');
-assert(indexHtml.includes('pane-chat'), 'chat pane missing');
-assert(indexHtml.includes('pane-term'), 'term pane missing');
-assert(indexHtml.includes('pane-preview'), 'preview pane missing');
-assert(indexHtml.includes('app.js'), 'app.js import missing');
-assert(indexHtml.includes('terminal.js'), 'terminal.js import missing');
-assert(indexHtml.includes('preview-sw-client.js'), 'preview-sw-client.js import missing');
-console.log('✓ index.html has 3 tabs and all module imports\n');
-
-console.log('bootstrap: preview-sw.js');
+['pane-chat', 'pane-term', 'pane-preview', 'app.js', 'terminal.js', 'preview-sw-client.js'].forEach(s => assert(indexHtml.includes(s), s + ' missing from index.html'));
 const previewSw = fs.readFileSync(path.join(__dirname, 'docs/preview-sw.js'), 'utf8');
-assert(previewSw.includes('addEventListener'), 'service worker event listeners missing');
-assert(previewSw.includes('EXPRESS_REQUEST'), 'express request handling missing');
-console.log('✓ preview-sw.js has fetch handler\n');
+assert(previewSw.includes('addEventListener') && previewSw.includes('EXPRESS_REQUEST'), 'preview-sw.js bad');
+console.log('✓ defaults.json/index.html/preview-sw.js OK (' + Object.keys(defaults).length + ' files)\n');
 
 console.log('message format: normalization check');
 const normalizeMsg = msg => ({
@@ -62,11 +44,7 @@ console.log('✓ errors throw with context\n');
 console.log('observability: window.__debug structure');
 const appJs = fs.readFileSync(path.join(__dirname, 'docs/app.js'), 'utf8');
 const terminalJs = fs.readFileSync(path.join(__dirname, 'docs/terminal.js'), 'utf8');
-assert(appJs.includes('window.__debug'), 'app.js no debug');
-assert(terminalJs.includes('window.__debug'), 'terminal.js no debug');
-assert(toolsCode.includes('window.__debug.agent'), 'agent state missing');
-assert(terminalJs.includes('window.__debug.shell'), 'shell state missing');
-assert(terminalJs.includes('window.__debug.idbSnapshot'), 'idb state missing');
+assert(appJs.includes('window.__debug') && terminalJs.includes('window.__debug') && toolsCode.includes('window.__debug.agent') && terminalJs.includes('window.__debug.shell') && terminalJs.includes('window.__debug.idbSnapshot'), 'debug wiring missing');
 console.log('✓ window.__debug initialized by all modules\n');
 
 console.log('performance: debounce timing');
@@ -79,27 +57,13 @@ const sizeMB = (stat.size / 1024 / 1024).toFixed(2);
 assert(stat.size < 100 * 1024 * 1024, 'defaults.json > 100MB');
 console.log('✓ defaults.json', sizeMB, 'MB (< 100MB limit)\n');
 
-console.log('=== end-to-end app creation flow ===');
-const msgNorm = m => ({ ...m, content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content });
-const snap1 = {};
-snap1['index.html'] = '<h1>Hello World</h1>';
-const refreshed = snap1['index.html'] ? { status: 'success', body: snap1['index.html'] } : { status: 'fallback' };
-assert(refreshed.status === 'success', 'preview failed');
-assert(refreshed.body === '<h1>Hello World</h1>', 'preview content wrong');
-console.log('✓ user input → normalize → tool execute → preview refresh\n');
-
-console.log('=== error paths ===');
-const errorCases = [
-  { desc: 'missing API key', check: () => { throw new Error('Enter an API key'); } },
-  { desc: 'file not found', check: () => { if (!snap1['missing.txt']) throw new Error('not found'); } },
-  { desc: 'terminal not ready', check: () => { throw new Error('terminal not ready'); } }
-];
+console.log('=== e2e flow + error paths ===');
+const snap1 = { 'index.html': '<h1>Hello World</h1>' };
+assert(snap1['index.html'] === '<h1>Hello World</h1>', 'snap');
 let errorsHandled = 0;
-errorCases.forEach(c => {
-  try { c.check(); } catch (e) { errorsHandled++; }
-});
-assert(errorsHandled === 3, 'some errors not thrown');
-console.log('✓ all error paths throw (no silent failures)\n');
+[() => { throw new Error('x'); }, () => { if (!snap1.m) throw new Error('nf'); }, () => { throw new Error('nr'); }].forEach(c => { try { c(); } catch { errorsHandled++; } });
+assert(errorsHandled === 3, 'not all errors thrown');
+console.log('✓ e2e + error paths OK\n');
 
 console.log('=== node builtins: http, https, child_process, buffer, zlib, assert resolvable ===');
 const nodeEnv = fs.readFileSync(path.join(__dirname, 'docs/shell-node.js'), 'utf8');
@@ -129,7 +93,7 @@ console.log('=== shell parser: tokenize/quotes/pipes/redirects/chains ===');
 const parserJs = fs.readFileSync(path.join(__dirname, 'docs/shell-parser.js'), 'utf8');
 ['tokenize', 'expand', 'parsePipes', 'splitTopLevel', 'parseRedirects'].forEach(fn => assert(parserJs.includes('export function ' + fn), fn + ' missing'));
 const shellMain = fs.readFileSync(path.join(__dirname, 'docs/shell.js'), 'utf8');
-assert(shellMain.includes("splitTopLevel(line, ['&&', '||', ';']"), 'shell must chain via && || ;');
+assert(shellMain.includes("splitTopLevel(line, ['&&', '||', ';'"), 'shell must chain via && || ;');
 assert(shellMain.includes('parseRedirect'), 'shell must handle > / >>');
 console.log('✓ parser exports tokenize, expand, pipes, redirects, chains\n');
 
@@ -203,5 +167,29 @@ assert(controlJs.includes('elif'), 'elif missing');
 assert(defaults['shell-expand.js'], 'shell-expand.js missing from defaults');
 assert(defaults['shell-builtins-util.js'], 'shell-builtins-util.js missing from defaults');
 console.log('✓ arithmetic, braces, tilde, backticks, param-op, basename/dirname/date/find/awk/eval/command/getopts/[[/wait, elif, until present\n');
+
+console.log('=== richer shell: awk, sed multi, arrays, bracket-glob, bang-history, &, select, trap ===');
+const awk = require('./docs/shell-awk.js');
+assert(awk.runAwk('{print $1}', 'a b\nc d\n') === 'a\nc', 'awk print $1');
+assert(awk.runAwk('BEGIN{print "s"} END{print "e"}', '') === 's\ne', 'awk BEGIN/END');
+assert(awk.runAwk('{print NR}', 'x\ny\nz\n') === '1\n2\n3', 'awk NR');
+const sed = require('./docs/shell-sed.js');
+assert(sed.runSed(['/^#/d'], '#c\nkeep') === 'keep', 'sed d addr');
+assert(sed.runSed(['s/a/A/', 's/A/B/'], 'a') === 'B', 'sed multi -e');
+assert(exp.fullExpand('${arr[@]}', {}, 0, [], null, { arr: ['a', 'b'] }) === 'a b', 'array @');
+assert(exp.fullExpand('${arr[1]}', {}, 0, [], null, { arr: ['a', 'b'] }) === 'b', 'array idx');
+assert(exp.fullExpand('${#arr[@]}', {}, 0, [], null, { arr: ['a', 'b', 'c'] }) === '3', 'array len');
+const parser = require('./docs/shell-parser.js');
+assert(parser.globToRe('f[abc]').test('fa') && !parser.globToRe('f[abc]').test('fz'), 'bracket glob');
+assert(parser.globToRe('[0-9].js').test('3.js'), 'bracket range');
+const rlJs2 = fs.readFileSync(path.join(__dirname, 'docs/shell-readline.js'), 'utf8');
+assert(rlJs2.includes('expandBang'), 'bang history missing');
+assert(shellMain.includes('bgJobs'), 'bg jobs missing');
+assert(shellMain.includes("'&'"), 'background & missing');
+assert(controlJs.includes('runSelect'), 'select missing');
+assert(utilJs.includes('trap:'), 'trap missing');
+assert(utilJs.includes('jobs:'), 'jobs missing');
+['shell-awk.js', 'shell-sed.js'].forEach(k => assert(defaults[k], k + ' missing from defaults'));
+console.log('✓ awk BEGIN/END/NR/pattern, sed multi -e/d/p, arrays, bracket-glob, bang-history, &, select, trap/jobs\n');
 
 console.log('=== all checks passed ===');

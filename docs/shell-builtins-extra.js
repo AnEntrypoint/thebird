@@ -22,8 +22,16 @@ export function makeExtraBuiltins(ctx, readFile, writeFile) {
       await invokeBuiltin(args[0], [...args.slice(1), ...parts], false);
     },
     read: (args, _a, stdin) => {
-      if (!args[0]) return;
-      ctx.env[args[0]] = (stdin || '').split('\n')[0].replace(/\r$/, '');
+      const flags = args.filter(a => a.startsWith('-')).join('');
+      const names = args.filter(a => !a.startsWith('-'));
+      if (!names.length) names.push('REPLY');
+      let line = (stdin || '').split('\n')[0];
+      if (!flags.includes('r')) line = line.replace(/\\(.)/g, '$1');
+      line = line.replace(/\r$/, '');
+      const nIdx = flags.indexOf('n');
+      if (nIdx >= 0) { const n = parseInt(flags.slice(nIdx + 1), 10); if (!isNaN(n)) line = line.slice(0, n); }
+      const parts = line.split(/\s+/);
+      for (let i = 0; i < names.length; i++) ctx.env[names[i]] = i === names.length - 1 ? parts.slice(i).join(' ') : parts[i] || '';
     },
     printf: args => {
       if (!args.length) return;
@@ -69,7 +77,7 @@ export function makeExtraBuiltins(ctx, readFile, writeFile) {
       if (content == null) throw new Error('source: ' + args[0] + ': No such file');
       const savedArgv = ctx.argv;
       ctx.argv = [args[0], ...args.slice(1)];
-      try { for (const ln of content.split('\n')) if (ln.trim()) await runLine(ln); }
+      try { if (ctx.runScript) await ctx.runScript(content); else for (const ln of content.split('\n')) if (ln.trim()) await runLine(ln); }
       finally { ctx.argv = savedArgv; }
     },
     '.': async (args, actor, stdin, invokeBuiltin, runLine) => {

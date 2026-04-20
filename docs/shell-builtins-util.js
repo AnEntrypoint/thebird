@@ -1,4 +1,5 @@
 import { resolvePath } from './shell-builtins.js';
+import { runAwk } from './shell-awk.js';
 
 const toKey = p => p.replace(/^\//, '');
 const snap = () => window.__debug.idbSnapshot || {};
@@ -32,22 +33,16 @@ export function makeUtilBuiltins(ctx, readFile, writeFile) {
       for (const m of matches.sort((a, b) => a.path.localeCompare(b.path))) wl('/' + m.path);
     },
     awk: (args, _a, stdin) => {
-      const prog = args.find(a => !a.startsWith('-'));
+      let fs = null;
+      const rest = [];
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-F') { fs = args[++i]; continue; }
+        rest.push(args[i]);
+      }
+      const prog = rest.find(a => !a.startsWith('-')) || '';
       if (!prog) { ctx.lastExitCode = 1; return; }
-      const printM = prog.match(/^\s*\{\s*print\s+(.+?)\s*\}\s*$/);
-      if (!printM) { w(stdin || ''); return; }
-      const expr = printM[1];
-      const out = (stdin || '').split('\n').filter(l => l !== '' || l === '').map(line => {
-        const fields = line.split(/\s+/).filter(Boolean);
-        return expr.split(',').map(p => p.trim()).map(part => {
-          const m = part.match(/^\$(\d+)$/);
-          if (m) return +m[1] === 0 ? line : fields[+m[1] - 1] || '';
-          if (part === 'NF') return String(fields.length);
-          if (part === 'NR') return '1';
-          return part.replace(/^["']|["']$/g, '');
-        }).join(' ');
-      });
-      wl(out.join('\r\n'));
+      const out = runAwk(prog, stdin || '', fs);
+      if (out) w(out.replace(/\n/g, '\r\n') + '\r\n');
     },
     eval: async (args, _a, _s, invokeBuiltin, runLine) => {
       const line = args.join(' ');
@@ -59,7 +54,7 @@ export function makeUtilBuiltins(ctx, readFile, writeFile) {
     },
     '[[': args => {
       const inner = args[args.length - 1] === ']]' ? args.slice(0, -1) : args;
-      ctx.lastExitCode = evalDoubleBracket(inner) ? 0 : 1;
+      ctx.lastExitCode = evalCompound(inner) ? 0 : 1;
     },
     getopts: (args, _a, _s, _ib) => {
       const spec = args[0] || '';
@@ -74,17 +69,42 @@ export function makeUtilBuiltins(ctx, readFile, writeFile) {
       if (needsArg) { ctx.env.OPTARG = argv[idx] || ''; ctx.optind = idx + 2; } else { ctx.optind = idx + 1; }
       ctx.lastExitCode = spec.includes(flag) ? 0 : 1;
     },
-    wait: () => {},
+    wait: async args => {
+      const id = args[0];
+      const job = (ctx.bgJobs || {})[id];
+      if (job) await job.promise;
+    },
+    trap: args => {
+      if (!args.length) { wl(Object.entries(ctx.traps || {}).map(([k, v]) => 'trap -- "' + v + '" ' + k).join('\r\n')); return; }
+      ctx.traps = ctx.traps || {};
+      const [cmd, ...sigs] = args;
+      for (const s of sigs) ctx.traps[s] = cmd;
+    },
+    jobs: () => wl(Object.entries(ctx.bgJobs || {}).map(([k, v]) => '[' + k + ']  ' + (v.done ? 'Done' : 'Running') + '  ' + v.cmd).join('\r\n')),
   };
 }
 
-function evalDoubleBracket(args) {
+function evalCompound(args) {
+  const groups = []; let cur = []; const ops = [];
+  for (const a of args) { if (a === '&&' || a === '||') { groups.push(cur); ops.push(a); cur = []; } else cur.push(a); }
+  groups.push(cur);
+  let result = evalSimple(groups[0]);
+  for (let i = 0; i < ops.length; i++) {
+    if (ops[i] === '&&') result = result && evalSimple(groups[i + 1]);
+    else result = result || evalSimple(groups[i + 1]);
+  }
+  return result;
+}
+
+function evalSimple(args) {
+  if (!args.length) return false;
+  if (args[0] === '!') return !evalSimple(args.slice(1));
   if (args.length === 3 && args[1] === '=~') { try { return new RegExp(args[2]).test(args[0]); } catch { return false; } }
   const OPS = { '-z': v => !v, '-n': v => !!v, '-f': v => v in (window.__debug.idbSnapshot || {}), '-d': v => Object.keys(window.__debug.idbSnapshot || {}).some(k => k.startsWith(v + '/')), '-e': v => v in (window.__debug.idbSnapshot || {}) };
   if (args.length === 2) return OPS[args[0]]?.(args[1]) ?? false;
   if (args.length === 3) {
     const [a, op, b] = args;
-    const CMP = { '=': (x, y) => x === y, '==': (x, y) => x === y, '!=': (x, y) => x !== y, '<': (x, y) => x < y, '>': (x, y) => x > y, '-eq': (x, y) => +x === +y, '-lt': (x, y) => +x < +y, '-gt': (x, y) => +x > +y };
+    const CMP = { '=': (x, y) => x === y, '==': (x, y) => x === y, '!=': (x, y) => x !== y, '<': (x, y) => x < y, '>': (x, y) => x > y, '-eq': (x, y) => +x === +y, '-ne': (x, y) => +x !== +y, '-lt': (x, y) => +x < +y, '-gt': (x, y) => +x > +y };
     return CMP[op]?.(a, b) ?? false;
   }
   return !!args[0];

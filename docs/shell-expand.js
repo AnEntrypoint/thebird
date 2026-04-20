@@ -1,21 +1,33 @@
-export function expandParam(name, env, argv, lastExit) {
+export function expandParam(name, env, argv, lastExit, arrays) {
   if (name === '?') return String(lastExit ?? 0);
+  if (name === '!') return env['!'] || '';
+  if (name === '$') return env.$ || '0';
   if (name === '#') return String((argv || []).length > 0 ? (argv || []).length - 1 : 0);
   if (name === '@' || name === '*') return (argv || []).slice(1).join(' ');
   if (name === '0') return (argv || [])[0] || '';
   if (/^[1-9]$/.test(name)) return (argv || [])[parseInt(name)] || '';
+  const arrM = name.match(/^([A-Za-z_][A-Za-z0-9_]*)\[(.+?)\]$/);
+  if (arrM && arrays) {
+    const arr = arrays[arrM[1]] || [];
+    if (arrM[2] === '@' || arrM[2] === '*') return arr.join(' ');
+    return arr[parseInt(arrM[2], 10)] || '';
+  }
+  const lenArrM = name.match(/^#([A-Za-z_][A-Za-z0-9_]*)\[@\]$/);
+  if (lenArrM && arrays) return String((arrays[lenArrM[1]] || []).length);
   return env[name] ?? '';
 }
 
-export function expandParamOp(expr, env, argv, lastExit) {
+export function expandParamOp(expr, env, argv, lastExit, arrays) {
+  const lenArrM = expr.match(/^#([A-Za-z_]\w*)\[[@*]\]$/);
+  if (lenArrM) return String(((arrays || {})[lenArrM[1]] || []).length);
   const lenM = expr.match(/^#(.+)$/);
-  if (lenM) return String(expandParam(lenM[1], env, argv, lastExit).length);
+  if (lenM) return String(expandParam(lenM[1], env, argv, lastExit, arrays).length);
   const sliceM = expr.match(/^([^:]+):(\d+)(?::(\d+))?$/);
-  if (sliceM) { const v = expandParam(sliceM[1], env, argv, lastExit); const s = +sliceM[2]; return sliceM[3] !== undefined ? v.slice(s, s + (+sliceM[3])) : v.slice(s); }
+  if (sliceM) { const v = expandParam(sliceM[1], env, argv, lastExit, arrays); const s = +sliceM[2]; return sliceM[3] !== undefined ? v.slice(s, s + (+sliceM[3])) : v.slice(s); }
   const defM = expr.match(/^([A-Za-z_][A-Za-z0-9_]*|\?|#|@|[0-9])(:-|:=|:\?|:\+|-|=|\+)(.*)$/s);
   if (defM) {
     const [, name, op, def] = defM;
-    const v = expandParam(name, env, argv, lastExit);
+    const v = expandParam(name, env, argv, lastExit, arrays);
     const defined = v !== '' && v != null;
     if (op === ':-' || op === '-') return defined ? v : def;
     if (op === ':=' || op === '=') { if (!defined) env[name] = def; return defined ? v : def; }
@@ -25,7 +37,7 @@ export function expandParamOp(expr, env, argv, lastExit) {
   const sufM = expr.match(/^([A-Za-z_][A-Za-z0-9_]*|@|#)(%%?|##?)(.+)$/s);
   if (sufM) {
     const [, name, op, pat] = sufM;
-    const v = expandParam(name, env, argv, lastExit);
+    const v = expandParam(name, env, argv, lastExit, arrays);
     const bare = globReLine(pat).replace(/^\^|\$$/g, '');
     if (op === '#') { const m = v.match(new RegExp('^' + bare)); return m ? v.slice(m[0].length) : v; }
     if (op === '##') { const m = v.match(new RegExp('^' + bare.replace(/\.\*/g, '.*?') + '.*')); return m ? '' : v; }
@@ -35,10 +47,10 @@ export function expandParamOp(expr, env, argv, lastExit) {
   const subM = expr.match(/^([A-Za-z_][A-Za-z0-9_]*|@)\/(\/?)(.+?)\/(.*)$/s);
   if (subM) {
     const [, name, all, pat, rep] = subM;
-    const v = expandParam(name, env, argv, lastExit);
+    const v = expandParam(name, env, argv, lastExit, arrays);
     return v.replace(new RegExp(globReLine(pat).replace(/^\^|\$$/g, ''), all ? 'g' : ''), rep);
   }
-  return expandParam(expr, env, argv, lastExit);
+  return expandParam(expr, env, argv, lastExit, arrays);
 }
 
 function globReLine(pat) { return '^' + pat.replace(/[-[\]{}()+.,\\^$|#]/g, (c) => (c === '*' || c === '?') ? c : '\\' + c).replace(/\*/g, '.*').replace(/\?/g, '.') + '$'; }
@@ -74,7 +86,7 @@ export function expandTilde(token, env) {
   return token;
 }
 
-export function fullExpand(token, env, lastExit, argv, runCap) {
+export function fullExpand(token, env, lastExit, argv, runCap, arrays) {
   let out = '';
   let i = 0;
   while (i < token.length) {
@@ -99,12 +111,12 @@ export function fullExpand(token, env, lastExit, argv, runCap) {
     if (token[i] === '$' && token[i + 1] === '{') {
       const end = token.indexOf('}', i + 2);
       if (end < 0) { out += token[i++]; continue; }
-      out += expandParamOp(token.slice(i + 2, end), env, argv, lastExit);
+      out += expandParamOp(token.slice(i + 2, end), env, argv, lastExit, arrays);
       i = end + 1; continue;
     }
     if (token[i] === '$') {
-      const m = token.slice(i + 1).match(/^(\?|#|@|\*|[0-9]|[A-Za-z_][A-Za-z0-9_]*)/);
-      if (m) { out += expandParam(m[1], env, argv, lastExit); i += 1 + m[1].length; continue; }
+      const m = token.slice(i + 1).match(/^(\?|!|#|@|\*|[0-9]|[A-Za-z_][A-Za-z0-9_]*)/);
+      if (m) { out += expandParam(m[1], env, argv, lastExit, arrays); i += 1 + m[1].length; continue; }
     }
     out += token[i++];
   }
@@ -112,10 +124,15 @@ export function fullExpand(token, env, lastExit, argv, runCap) {
 }
 
 function findMatch(s, start, open, close) {
-  let depth = 0;
+  let depth = 0; let inSingle = false, inDouble = false;
   for (let i = start; i < s.length; i++) {
-    if (s[i] === open) depth++;
-    else if (s[i] === close) { depth--; if (depth === 0) return i; }
+    const c = s[i];
+    if (c === "'" && !inDouble) inSingle = !inSingle;
+    else if (c === '"' && !inSingle) inDouble = !inDouble;
+    else if (!inSingle && !inDouble) {
+      if (c === open) depth++;
+      else if (c === close) { depth--; if (depth === 0) return i; }
+    }
   }
   return -1;
 }

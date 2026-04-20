@@ -103,11 +103,13 @@ export function createReadline({ term, getCompletions, onLine, getPrompt, isBloc
       return;
     }
     const hist = getHistory();
-    if (line.trim()) hist.unshift(line);
+    const expanded = expandBang(line, hist);
+    if (expanded !== line) { write('\x1b[33m' + expanded + '\x1b[0m\r\n'); }
+    if (expanded.trim()) hist.unshift(expanded);
     buf = '';
     pos = 0;
     histIdx = -1;
-    onLine(line);
+    onLine(expanded);
   }
 
   function getHistory() { return window.__debug?.shell?.history || []; }
@@ -160,4 +162,14 @@ export function createReadline({ term, getCompletions, onLine, getPrompt, isBloc
   function showContinuation() { write('\x1b[32m> \x1b[0m'); }
 
   return { onData, showPrompt, showContinuation };
+}
+
+function expandBang(line, hist) {
+  if (!line.includes('!') || !hist.length) return line;
+  return line.replace(/!(!|-?\d+|[A-Za-z]\w*)/g, (m, ref) => {
+    if (ref === '!') return hist[0] || m;
+    if (/^-?\d+$/.test(ref)) { const n = +ref; return (n < 0 ? hist[-n - 1] : hist[hist.length - n]) || m; }
+    const found = hist.find(h => h.startsWith(ref));
+    return found || m;
+  });
 }

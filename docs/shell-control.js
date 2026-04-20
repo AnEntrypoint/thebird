@@ -1,7 +1,15 @@
+export async function runScript(text, run, ctx) {
+  let block = [];
+  for (const s of text.split('\n').flatMap(l => l.split(';')).map(x => x.trim()).filter(Boolean)) {
+    if (block.length || isControlStart(s)) { block.push(s); if (!isBlockOpen(block)) { await runControl(block.slice(), run, ctx); block = []; } continue; }
+    await run(s);
+  }
+}
+
 export function isControlStart(cmd) {
   const t = cmd.trim();
   const first = t.split(/\s+/)[0];
-  if (first === 'if' || first === 'while' || first === 'for' || first === 'case' || first === 'until') return true;
+  if (first === 'if' || first === 'while' || first === 'for' || first === 'case' || first === 'until' || first === 'select') return true;
   if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)/.test(t)) return true;
   return false;
 }
@@ -11,7 +19,7 @@ export function isBlockOpen(lines) {
   let depth = 0;
   const tokens = joined.split(/\s+/);
   for (const t of tokens) {
-    if (t === 'if' || t === 'while' || t === 'for' || t === 'case' || t === 'until') depth++;
+    if (t === 'if' || t === 'while' || t === 'for' || t === 'case' || t === 'until' || t === 'select') depth++;
     if (t === 'fi' || t === 'done' || t === 'esac') depth--;
   }
   const fnOpen = /\{\s*$/.test(joined) || /\(\s*\)\s*$/.test(joined);
@@ -37,6 +45,16 @@ export async function runControl(block, run, ctx) {
   if (joined.startsWith('until ')) return runWhile(joined.replace(/^until /, 'while '), run, ctx, true);
   if (joined.startsWith('for ')) return runFor(joined, run, ctx);
   if (joined.startsWith('case ')) return runCase(joined, run, ctx);
+  if (joined.startsWith('select ')) return runSelect(joined, run, ctx);
+}
+
+async function runSelect(text, run, ctx) {
+  const m = text.match(/^select\s+(\w+)\s+in\s+(.+?)\s*;\s*do\s+(.+?)\s*;\s*done$/s);
+  if (!m) throw new Error('select: parse error: ' + text);
+  const [, varName, listExpr, body] = m;
+  const items = listExpr.split(/\s+/).filter(Boolean);
+  for (let i = 0; i < items.length; i++) ctx.term.write((i + 1) + ') ' + items[i] + '\r\n');
+  for (const it of items) { ctx.env[varName] = it; await run(body); if (ctx.loopFlag === 'break') { ctx.loopFlag = null; break; } }
 }
 
 function defineFn(text, ctx) {
