@@ -16,6 +16,7 @@ export function parseDenoJson(src){try{return JSON.parse(stripJsonc(src));}catch
 
 export function makePmDispatcher(term,fs,persist,ctx){
   const snap=()=>globalThis.window?.__debug?.idbSnapshot||{};
+  const log=(pm,cmd,args)=>{const reg=globalThis.window?.__debug?.node;if(!reg)return;reg.pm=reg.pm||{history:[]};reg.pm.history.push({ts:Date.now(),pm,cmd,args,cwd:ctx.cwd});if(reg.pm.history.length>200)reg.pm.history.shift();reg.pm.lastPm=pm;};
   const pkgPath=()=>{const d=ctx.cwd.replace(/^\//,'').replace(/\/$/,'');return(d?d+'/':'')+'package.json';};
   const readPj=()=>{const p=snap()[pkgPath()];return p?JSON.parse(p):{name:'pkg',version:'0.0.0',dependencies:{}};};
   const writePj=o=>{snap()[pkgPath()]=JSON.stringify(o,null,2);persist();};
@@ -30,7 +31,7 @@ export function makePmDispatcher(term,fs,persist,ctx){
     async init(pm,args){writePj({name:'pkg',version:'0.1.0',type:'module',scripts:{test:'echo test'}});term.write(`${pm} init — package.json created\r\n`);return 0;},
   };
   cmds.i=cmds.install;cmds.uninstall=cmds.remove;cmds.rm=cmds.remove;
-  return async(pm,subcmd,args=[])=>{const fn=cmds[subcmd];if(!fn){term.write(`${pm}: unknown subcommand '${subcmd}'\r\n`);return 1;}return fn(pm,args);};
+  return async(pm,subcmd,args=[])=>{log(pm,subcmd,args);const fn=cmds[subcmd];if(!fn){term.write(`${pm}: unknown subcommand '${subcmd}'\r\n`);return 1;}return fn(pm,args);};
 }
 
 export function makeCorepackStub(term){

@@ -3,6 +3,8 @@ import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
 import { makeNpm, makeNpx } from './shell-npm.js';
+import { makePmDispatcher, makeCorepackStub, detectPm } from './shell-pm.js';
+import { makeDlx } from './shell-pm-layout.js';
 import { tokenize, splitTopLevel, parsePipes } from './shell-parser.js';
 import { fullExpand } from './shell-expand.js';
 import { isControlStart, isBlockOpen, runControl, runScript } from './shell-control.js';
@@ -47,8 +49,8 @@ export function createShell({ term, onPreviewWrite }) {
   Object.assign(BUILTINS, { kill: makeKillBuiltin(ctx), trap: makeTrapBuiltin(ctx), jobs: makeJobsBuiltin(ctx, jobRegistry), fg: makeFgBuiltin(ctx, jobRegistry), bg: makeBgBuiltin(ctx, jobRegistry), disown: makeDisownBuiltin(ctx), exec: makeExecBuiltin(ctx, ctx.fdTable), nohup: makeNohupBuiltin(ctx), nc: makeNetcatStub(ctx), curl: makeCurlBuiltin(ctx) });
   ctx.runScript = text => runScript(text, run, ctx);
   ctx.expand = token => fullExpand(token, ctx.env, ctx.lastExitCode, ctx.argv, captureRun, ctx.arrays);
-  const npmCmd = makeNpm(ctx);
-  const npxCmd = makeNpx(npmCmd);
+  const npmCmd = makeNpm(ctx); const npxCmd = makeNpx(npmCmd); ctx.exec = line => run(line);
+  const pmDispatch = makePmDispatcher(term, null, () => window.__debug.idbPersist?.(), ctx); const corepackCmd = makeCorepackStub(term); const dlxCmd = makeDlx(term, null, ctx, run);
   ctx.nodeEval = createNodeEnv({ ctx, term });
   const runNode = makeNodeRunner(ctx, actor);
   const runNpmResult = makeNpmResultRunner(ctx, line => run(line));
@@ -100,6 +102,9 @@ export function createShell({ term, onPreviewWrite }) {
     try {
       if (cmd === 'npm') { if (writeOut) { writeOut(await captureFn(async () => { await runNpmResult(await npmCmd(args)); })); return; } await runNpmResult(await npmCmd(args)); return; }
       if (cmd === 'npx') { await runNpmResult(await npxCmd(args)); return; }
+      if (cmd === 'pnpm' || cmd === 'yarn' || cmd === 'bun') { ctx.lastExitCode = args[0] === 'dlx' || args[0] === 'x' ? await dlxCmd(args.slice(1)) : await pmDispatch(cmd, args[0] || 'install', args.slice(1)); return; }
+      if (cmd === 'deno') { if (args[0] === 'run') { await runNode(args.slice(1)); return; } ctx.lastExitCode = await pmDispatch('deno', args[0] || 'task', args.slice(1)); return; }
+      if (cmd === 'corepack') { ctx.lastExitCode = await corepackCmd(args); return; }
       if (cmd === 'node') { await runNode(args); return; }
       if (cmd === 'exit') { BUILTINS.exit([], actor); return; }
       if (writeOut) { writeOut(await invokeBuiltin(cmd, args, true)); return; }
@@ -165,14 +170,11 @@ export function createShell({ term, onPreviewWrite }) {
     if (onData) drainQueue(onData);
   }
 
-  const getCompletions = (line, word) => (line.trim().split(/\s+/).length <= 1 && !line.includes(' '))
-    ? Object.keys(BUILTINS).concat(['npm', 'node']).filter(c => c.startsWith(word))
-    : Object.keys(snap()).filter(f => f.startsWith(word));
+  const getCompletions = (line, word) => (line.trim().split(/\s+/).length <= 1 && !line.includes(' ')) ? Object.keys(BUILTINS).concat(['npm', 'node', 'pnpm', 'yarn', 'bun', 'deno', 'npx', 'corepack']).filter(c => c.startsWith(word)) : Object.keys(snap()).filter(f => f.startsWith(word));
 
   const handleLine = line => {
     if (blockLines.length > 0 || isControlStart(line)) {
-      blockLines.push(line);
-      if (isBlockOpen(blockLines)) { rl.showContinuation(); return; }
+      blockLines.push(line); if (isBlockOpen(blockLines)) { rl.showContinuation(); return; }
       const block = blockLines.slice(); blockLines = [];
       runControl(block, run, ctx).then(() => rl.showPrompt()).catch(e => { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); rl.showPrompt(); });
       return;
@@ -188,11 +190,8 @@ export function createShell({ term, onPreviewWrite }) {
   term.onData(onData);
   rl.showPrompt();
   return {
-    run: line => run(line, onData), onPreviewWrite, httpHandlers,
-    procsubRead: id => readStream(id),
-    fdRead: fd => ctx.fdTable.readFd(fd),
-    get state() { return actor.getSnapshot().value; }, get cwd() { return ctx.cwd; },
-    get env() { return ctx.env; }, get history() { return ctx.history; },
+    run: line => run(line, onData), onPreviewWrite, httpHandlers, procsubRead: id => readStream(id), fdRead: fd => ctx.fdTable.readFd(fd),
+    get state() { return actor.getSnapshot().value; }, get cwd() { return ctx.cwd; }, get env() { return ctx.env; }, get history() { return ctx.history; },
     get lastExitCode() { return ctx.lastExitCode; }, get inputQueue() { return inputQueue.slice(); },
   };
 }

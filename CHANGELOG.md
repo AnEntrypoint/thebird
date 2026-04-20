@@ -1,4 +1,16 @@
 
+## [unreleased] 2026-04-21 node parity pass 9 — pnpm/yarn wired, workspaces, dlx
+- feat: shell dispatches pnpm/yarn/bun/deno/corepack/dlx commands (previously shell-pm.js existed but wasn't wired)
+- feat: workspaces resolution — package.json 'workspaces' field + pnpm-workspace.yaml packages:- syntax
+- feat: Yarn Classic v1 lockfile writer + parser (real format, not JSON placeholder)
+- feat: pnpm dlx / yarn dlx / bun x / npx — unified dlx runner via esm.sh
+- feat: runtime observability — window.__debug.node.runtime.history tracks node→deno→bun switches
+- feat: window.__debug.node.pm — pm command history (200 entries, cwd, ts, args)
+- feat: Deno.stdin/stdout/stderr with ReadableStream/WritableStream surfaces
+- feat: Bun.stdin/stdout/stderr .stream()/.text()/.writer() API
+- feat: tab completion includes pnpm/yarn/bun/deno/npx/corepack
+- feat: pnpm layout scaffold (.pnpm/<name>@<ver>/node_modules/<name> + symlinks) via shell-pm-layout.js
+
 ## [unreleased] 2026-04-20 node parity pass 8 — Deno/Bun/pnpm/yarn + POSIX
 - feat: runtime detection (Deno, Bun, Node, browser) with capability flags
 - feat: Deno global namespace — readTextFile/writeTextFile/mkdir/remove/stat/serve/Command/permissions/env

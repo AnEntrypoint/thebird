@@ -20,7 +20,7 @@ import { makeInspector } from './shell-node-inspector.js';
 import { makeV8Profiler, makeHeapSnapshot } from './shell-node-profiler.js';
 import { makeCluster } from './shell-node-cluster.js';
 import { preloadX509 } from './shell-node-keyobject.js';
-import { detectRuntime, registerRuntime, switchRuntime } from './shell-runtime.js';
+import { detectRuntime, registerRuntime, switchRuntime, logRuntimeSwitch } from './shell-runtime.js';
 import { makeDenoGlobal } from './shell-deno.js'; import { makeBunGlobal } from './shell-bun.js';
 import { makePmDispatcher, detectPm, makeCorepackStub } from './shell-pm.js';
 import { isTsFile, preprocessSource } from './shell-ts.js'; import { installPosixFs, installFds, installTmpAndMisc } from './shell-posix.js';
@@ -163,7 +163,7 @@ export function createNodeEnv({ ctx, term }) {
     loadDotEnv();
     globalThis.__fflate = await preloadFflate().catch(() => ({}));
     if (proc.sourceMapsEnabled) { await preloadSourceMap().catch(() => {}); installSourceMapStacks(snapFn); }
-    const rtName = switchRuntime(code.startsWith('#!') ? code.slice(0, code.indexOf('\n')) : ''); debugReg.runtime.active = rtName;
+    const rtName = switchRuntime(code.startsWith('#!') ? code.slice(0, code.indexOf('\n')) : ''); logRuntimeSwitch(debugReg, debugReg.runtime.active, rtName, fpath);
     if (isTsFile(fpath)) code = await preprocessSource(fpath, code);
     await preloadAsyncPkgs(code, dir);
     const reqFn = makeRequire(dir);

@@ -38,5 +38,8 @@ export function makeBunGlobal(fs,proc,cpMod,httpHandlers,Buf,streamMod,cryptoMod
     resolveSync:(id,root)=>id,resolve:async(id,root)=>id,
     TOML:{parse:s=>{const o={};for(const line of s.split('\n')){const m=line.match(/^(\w+)\s*=\s*(.+)$/);if(m)o[m[1]]=m[2].replace(/^["']|["']$/g,'');}return o;},stringify:o=>Object.entries(o).map(([k,v])=>`${k} = ${typeof v==='string'?'"'+v+'"':v}`).join('\n')},
     color:(c,t)=>`<${c}>${t}</${c}>`,
+    stdin:{stream(){const s=new streamMod.Readable();proc.stdin?.on?.('data',d=>s.push(d));proc.stdin?.on?.('end',()=>s.push(null));return s;},async text(){return new Promise(r=>{let b='';proc.stdin?.on?.('data',d=>b+=d);proc.stdin?.on?.('end',()=>r(b));});}},
+    stdout:{writer(){return{write:d=>proc.stdout.write(d),end(){}};}},
+    stderr:{writer(){return{write:d=>proc.stderr.write(d),end(){}};}},
   };
 }

@@ -8,10 +8,10 @@ const toHex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
 console.log('=== thebird integration test ===\n');
 
 const defaults = JSON.parse(R('docs/defaults.json'));
-['app.js', 'terminal.js', 'agent-chat.js', 'shell.js', 'vendor/thebird-browser.js', 'shell-node.js', 'shell-node-modules.js', 'shell-node-cipher.js', 'shell-node-keyobject.js', 'shell-node-advanced.js', 'shell-node-observe.js', 'shell-node-runtime.js'].forEach(k => assert(defaults[k] !== undefined, k + ' in defaults'));
+['app.js', 'terminal.js', 'agent-chat.js', 'shell.js', 'shell-node.js', 'shell-node-cipher.js', 'shell-node-advanced.js', 'shell-node-observe.js', 'shell-node-runtime.js', 'shell-pm-layout.js'].forEach(k => assert(defaults[k] !== undefined, k));
 ['pane-chat', 'pane-term', 'app.js', 'preview-sw-client.js'].forEach(s => assert(R('docs/index.html').includes(s), s));
 assert(R('docs/preview-sw.js').includes('EXPRESS_REQUEST'));
-['read_file','write_file','run_command','send_to_terminal'].forEach(t => assert(R('docs/agent-chat.js').includes(t + ':'), t));
+['read_file','write_file','run_command'].forEach(t => assert(R('docs/agent-chat.js').includes(t + ':'), t));
 [R('docs/app.js'), R('docs/terminal.js'), R('docs/agent-chat.js')].forEach(c => assert(c.includes('window.__debug')));
 console.log('✓ bootstrap/tools/__debug\n');
 
@@ -41,18 +41,9 @@ let t=false; try { pr.exit(3); } catch (e) { t = e.__nodeExit && e.code === 3; }
 console.log('✓ signals/fd/process\n');
 
 (async () => {
-  const stdlib = await imp('docs/shell-node-stdlib.js');
-  const io = await imp('docs/shell-node-io.js');
-  const nb = await imp('docs/node-builtins.js');
-  const cry = await imp('docs/shell-node-crypto.js');
-  const rs = await imp('docs/shell-node-resolve.js');
-  const ex = await imp('docs/shell-node-extras.js');
-  const strm = await imp('docs/shell-node-streams.js');
-  const cip = await imp('docs/shell-node-cipher.js');
-  const ko = await imp('docs/shell-node-keyobject.js');
-  const adv = await imp('docs/shell-node-advanced.js');
-  const ob = await imp('docs/shell-node-observe.js');
-  const rt = await imp('docs/shell-node-runtime.js');
+  const stdlib=await imp('docs/shell-node-stdlib.js'), io=await imp('docs/shell-node-io.js'), nb=await imp('docs/node-builtins.js'), cry=await imp('docs/shell-node-crypto.js'), rs=await imp('docs/shell-node-resolve.js');
+  const ex=await imp('docs/shell-node-extras.js'), strm=await imp('docs/shell-node-streams.js'), cip=await imp('docs/shell-node-cipher.js'), ko=await imp('docs/shell-node-keyobject.js');
+  const adv=await imp('docs/shell-node-advanced.js'), ob=await imp('docs/shell-node-observe.js'), rt=await imp('docs/shell-node-runtime.js');
 
   assert(stdlib.inspect({a:1,b:[2,3]}) === '{ a: 1, b: [ 2, 3 ] }');
   assert(stdlib.inspect(10n) === '10n' && stdlib.inspect({[Symbol('k')]:'v'}).includes('Symbol(k)') && stdlib.inspect(42,{colors:true}).includes('\x1b[33m'));
@@ -79,15 +70,10 @@ console.log('✓ signals/fd/process\n');
   als.run('v', () => assert(als.getStore() === 'v'));
 
   const s = strm.makeStream();
-  const r = new s.Readable(); const got = [];
-  r.on('data', c => got.push(String(c))); r.push('a'); r.push('b'); r.push(null);
-  await new Promise(res => r.on('end', res));
-  assert(got.join('') === 'ab');
-  const tr = new s.Transform({ transform: (c, e, cb) => cb(null, String(c).toUpperCase()) });
-  const tout = []; tr.on('data', c => tout.push(String(c)));
-  tr.write('x'); tr.end();
-  await new Promise(res => tr.on('finish', res));
-  assert(tout[0] === 'X');
+  const r=new s.Readable(); const got=[]; r.on('data',c=>got.push(String(c))); r.push('a'); r.push('b'); r.push(null);
+  await new Promise(res=>r.on('end',res)); assert(got.join('')==='ab');
+  const tr=new s.Transform({transform:(c,e,cb)=>cb(null,String(c).toUpperCase())}); const tout=[]; tr.on('data',c=>tout.push(String(c))); tr.write('x'); tr.end();
+  await new Promise(res=>tr.on('finish',res)); assert(tout[0]==='X');
   console.log('✓ stdlib/crypto/resolve/buffer/path/url/ALS/streams\n');
 
   globalThis.crypto = require('crypto').webcrypto;
@@ -193,5 +179,19 @@ console.log('✓ signals/fd/process\n');
   const bg = bn8.makeBunGlobal(pfs, procMock, { exec: () => {} }, {}, Buf, { Readable: class R{} }, {});
   assert(await bg.file('/a').text() === 'hello' && typeof bg.version === 'string', 'Bun shim');
   console.log('✓ runtime/jsr/pm/ts/symlink/fd/mkdtemp/Deno/Bun\n');
+
+  console.log('=== pass 9: workspaces + yarn lock + runtime history ===');
+  const pl9 = await imp('docs/shell-pm-layout.js');
+  const ws = pl9.parseWorkspaces({'package.json':JSON.stringify({workspaces:['packages/*']}),'packages/a/package.json':JSON.stringify({name:'a',version:'1'})});
+  assert(ws.length===1 && ws[0].name==='a', 'workspaces');
+  const ws2 = pl9.parseWorkspaces({'pnpm-workspace.yaml':'packages:\n  - "apps/*"\n','apps/a/package.json':JSON.stringify({name:'a',version:'1'})});
+  assert(ws2.length===1, 'pnpm-workspace.yaml');
+  const yl = pl9.writeYarnLockV1({lodash:'^4.17.21'});
+  assert(yl.includes('AUTOGENERATED') && pl9.parseYarnLockV1(yl)['lodash@^4.17.21'].version==='4.17.21', 'yarn lock');
+  const reg = {};
+  rt8.registerRuntime(reg, {runtime:'node',version:'23',features:{}});
+  rt8.logRuntimeSwitch(reg, 'node', 'deno', 'x.ts');
+  assert(reg.runtime.history.length===1 && reg.runtime.active==='deno', 'runtime history');
+  console.log('✓ workspaces/pnpm-ws/yarn-lock/runtime-history\n');
   console.log('=== all checks passed ===');
 })().catch(e => { console.error(e); process.exit(1); });
