@@ -140,7 +140,14 @@ export function createShell({ term, onPreviewWrite }) {
     if (!line.trim()) return;
     ctx.history.push(line);
     const st = actor.getSnapshot().value;
-    if (st === 'node-repl' && line.trim() !== 'exit') { await ctx.nodeEval(line); return; }
+    if (st === 'node-repl') {
+      const t = line.trim();
+      if (t === 'exit' || t === '.exit' || t === '.quit') { actor.send({ type: 'EXIT_REPL' }); return; }
+      if (t === '.help') { term.write('.exit    Exit the REPL\r\n.help    Show this list\r\n.clear   Break out of current expression\r\n'); return; }
+      if (t === '.clear') return;
+      const exprCode = 'try { const __r = (' + line + '); if (__r !== undefined) console.log(require("util").inspect(__r)); } catch (__e1) { try {\n' + line + '\n} catch (__e2) { console.error(__e2.message); } }';
+      await ctx.nodeEval(exprCode); return;
+    }
     if (ctx.opts.xtrace) term.write('\x1b[90m+ ' + line + '\x1b[0m\r\n');
     const chain = splitTopLevel(line, ['&&', '||', ';', '&']);
     let lastOk = true;
@@ -172,7 +179,7 @@ export function createShell({ term, onPreviewWrite }) {
     }
     run(line, onData).then(() => rl.showPrompt());
   };
-  const rl = createReadline({ term, getCompletions, getPrompt: () => ctx.cwd, isBlockOpen: () => blockLines.length > 0, onLine: handleLine });
+  const rl = createReadline({ term, getCompletions, getPrompt: () => actor.getSnapshot().value === 'node-repl' ? '> ' : ctx.cwd, isBlockOpen: () => blockLines.length > 0, onLine: handleLine });
   function onData(data) {
     if (data === '\x03') { actor.send({ type: 'ERROR' }); inputQueue = []; blockLines = []; term.write('^C'); rl.showPrompt(); return; }
     const st = actor.getSnapshot().value;

@@ -9,26 +9,26 @@ function inspectPrimitive(v) {
   return null;
 }
 
-export function inspect(v, opts = {}, depth = 0, seen = new WeakSet()) {
+export function inspect(v, opts = {}, depth = 0, seen = new Map(), refCount = { n: 0 }) {
   const prim = inspectPrimitive(v);
   if (prim !== null) return prim;
   if (v instanceof Date) return v.toISOString();
   if (v instanceof RegExp) return v.toString();
   if (v instanceof Error) return v.stack || (v.name + ': ' + v.message);
-  if (seen.has(v)) return '[Circular]';
-  seen.add(v);
+  if (seen.has(v)) { const id = seen.get(v); if (id.ref == null) id.ref = ++refCount.n; return '[Circular *' + id.ref + ']'; }
+  const entry = { ref: null }; seen.set(v, entry);
   const maxDepth = opts.depth ?? 2;
   if (depth > maxDepth) return Array.isArray(v) ? '[Array]' : '[Object]';
   if (Array.isArray(v)) {
     if (!v.length) return '[]';
-    return '[ ' + v.map(x => inspect(x, opts, depth + 1, seen)).join(', ') + ' ]';
+    return '[ ' + v.map(x => inspect(x, opts, depth + 1, seen, refCount)).join(', ') + ' ]';
   }
   if (v instanceof Map) {
-    const entries = [...v.entries()].map(([k, val]) => inspect(k, opts, depth + 1, seen) + ' => ' + inspect(val, opts, depth + 1, seen));
+    const entries = [...v.entries()].map(([k, val]) => inspect(k, opts, depth + 1, seen, refCount) + ' => ' + inspect(val, opts, depth + 1, seen, refCount));
     return 'Map(' + v.size + ')' + (v.size ? ' { ' + entries.join(', ') + ' }' : ' {}');
   }
   if (v instanceof Set) {
-    const items = [...v].map(x => inspect(x, opts, depth + 1, seen));
+    const items = [...v].map(x => inspect(x, opts, depth + 1, seen, refCount));
     return 'Set(' + v.size + ')' + (v.size ? ' { ' + items.join(', ') + ' }' : ' {}');
   }
   if (v instanceof Uint8Array) {
@@ -39,10 +39,11 @@ export function inspect(v, opts = {}, depth = 0, seen = new WeakSet()) {
   if (!keys.length) return '{}';
   const parts = keys.map(k => {
     const ks = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : "'" + k + "'";
-    return ks + ': ' + inspect(v[k], opts, depth + 1, seen);
+    return ks + ': ' + inspect(v[k], opts, depth + 1, seen, refCount);
   });
   const ctor = v.constructor && v.constructor !== Object ? v.constructor.name + ' ' : '';
-  return ctor + '{ ' + parts.join(', ') + ' }';
+  const body = ctor + '{ ' + parts.join(', ') + ' }';
+  return entry.ref != null ? '<ref *' + entry.ref + '> ' + body : body;
 }
 
 export function format(...args) {

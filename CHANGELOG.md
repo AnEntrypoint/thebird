@@ -1,4 +1,19 @@
 
+## [unreleased] 2026-04-20 node parity pass 3
+- feat: crypto sha1/sha512/md5 pure-JS + hmac (RFC 2104) + pbkdf2Sync + randomBytes via Web Crypto — all byte-for-byte match with real node
+- feat: util.inspect circular refs use node format '<ref *N> { ... [Circular *N] }' exactly
+- feat: package.json exports field resolution + node_modules walk-up parent dirs
+- feat: require('module') with builtinModules, createRequire, _resolveFilename, Module, wrap, wrapper
+- feat: require throws Error with .code='MODULE_NOT_FOUND' and requireStack
+- feat: fs.promises mirrors sync API; fs.watch FSWatcher stub
+- feat: net/dgram throw descriptive errors on use (not silent stubs)
+- feat: worker_threads throws descriptive; execSync throws with explanation
+- feat: process.stdin.setRawMode no-op (inquirer compatibility)
+- feat: globalThis.process/Buffer set during eval (real node globals)
+- feat: __filename/__dirname injected into ESM preamble
+- feat: REPL eval loop — input → try-expr-then-stmt → util.inspect result; .exit/.help/.clear commands; prompt '> ' during REPL
+- new: shell-node-crypto.js (sha1/256/512/md5/hmac/pbkdf2), shell-node-resolve.js (exports/walk-up/module/fs.promises/net/dgram/worker_threads stubs)
+
 ## [unreleased] 2026-04-20 node parity pass 2
 - feat: util.inspect matches node format (braces-with-spaces, Map(N){k=>v}, arrays, circular, <Buffer ...>)
 - feat: console.log/info/warn/error use util.format (printf-style %s/%d/%o)
