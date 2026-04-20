@@ -22,7 +22,7 @@ export function makeNet(Buf){
     Socket,
     createConnection(...args){const s=new Socket();s.connect(...args);return s;},
     connect(...args){return this.createConnection(...args);},
-    createServer(){throw new Error('net.createServer: server sockets require a relay with server support — not implemented (clients work via window.__plugkit_tcp_relay)');},
+    createServer(onConn){const bn=globalThis.__busnet;if(!bn)throw new Error('net.createServer: busnet not initialized');const handlers={connection:onConn?[onConn]:[]};let bnHandle=null;return{listen(port,host,cb){if(typeof host==='function'){cb=host;host=null;}bnHandle=bn.listen(port,'tcp',c=>{for(const h of handlers.connection)h(c);});cb?.();return this;},close(cb){bnHandle?.close();cb?.();},on(ev,fn){(handlers[ev]=handlers[ev]||[]).push(fn);return this;},address(){return bnHandle?{address:'127.0.0.1',family:'IPv4',port:bnHandle.port}:null;},unref(){return this;},ref(){return this;}};},
     isIP:ip=>/^\d+\.\d+\.\d+\.\d+$/.test(ip)?4:ip.includes(':')?6:0,
     isIPv4:ip=>/^\d+\.\d+\.\d+\.\d+$/.test(ip),
     isIPv6:ip=>ip.includes(':'),

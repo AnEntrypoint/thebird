@@ -81,6 +81,7 @@ export function makeUtilBuiltins(ctx, readFile, writeFile) {
       for (const s of sigs) ctx.traps[s] = cmd;
     },
     jobs: () => wl(Object.entries(ctx.bgJobs || {}).map(([k, v]) => '[' + k + ']  ' + (v.done ? 'Done' : 'Running') + '  ' + v.cmd).join('\r\n')),
+    netstat: async args => { const bn = globalThis.__busnet; if (!bn) { wl('netstat: busnet not initialized'); return 1; } const all = args.includes('-a'); wl('Proto  Local Address           State       Service'); for (const port of bn.getListeners()) wl(('tcp    0.0.0.0:' + port).padEnd(40) + 'LISTEN      bus'); if (all || args.includes('-p')) { const peers = await bn.discover(); for (const p of peers) wl(('tcp    peer://' + p.origin + ':' + p.port).padEnd(40) + 'PEER        ' + p.service); } return 0; },
   };
 }
 

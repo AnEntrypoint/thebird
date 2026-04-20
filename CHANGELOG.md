@@ -1,4 +1,13 @@
 
+## [unreleased] 2026-04-21 node parity pass 12 — internal listen infrastructure
+- feat: busnet — in-browser TCP-like listen/connect via BroadcastChannel cross-tab fabric
+- feat: net.createServer now uses busnet — apps listen on ports other in-browser apps can connect to
+- feat: busHttp — HTTP request/response framing over busnet
+- feat: service discovery — busnet.discover() returns [{port,service,origin}] from peer tabs
+- feat: netstat builtin — lists local listeners + peer services
+- feat: window.__debug.node.busnet exposes full state
+- feat: same-tab listen+connect works instantly without BroadcastChannel round-trip
+
 ## [unreleased] 2026-04-21 node parity pass 11 — virtualization + polyfills wave 3
 - feat: virtual /proc filesystem — /proc/self/{cmdline,environ,stat,status,maps,limits}, /proc/{cpuinfo,meminfo,uptime,loadavg,version,stat,mounts,filesystems}
 - feat: virtual /etc — hosts, resolv.conf, passwd, group, os-release, hostname, machine-id, shells

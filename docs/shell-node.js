@@ -27,6 +27,7 @@ import { isTsFile, preprocessSource } from './shell-ts.js'; import { installPosi
 import { makeTestRunner, makeTapReporter } from './shell-node-testrunner.js'; import { makeForkIpc } from './shell-node-ipc.js';
 import { styleText, stripVTControlCharacters, getCallSites, MIMEType, MIMEParams, makeConsoleExtras } from './shell-node-util-extras.js';
 import { makeProcFs, wireProcFs } from './shell-node-procfs.js'; import { makeGit } from './shell-node-git.js'; import { makeTar } from './shell-node-tar.js'; import { makeDns } from './shell-node-dns.js'; import { makeNativeLoader } from './shell-node-native.js'; import { makeRegistry } from './shell-node-registry.js';
+import { makeBusnet, makeBusHttp } from './shell-node-busnet.js';
 
 export function createNodeEnv({ ctx, term }) {
   const pathmod = extendPath(createPath()); const Buf = makeBufferPool(extendBuffer(createBuffer())); const debugReg = makeDebugRegistry();
@@ -45,7 +46,7 @@ export function createNodeEnv({ ctx, term }) {
   const getMem = makePerfMemory(performance); const FetchAgent = makeFetchPool(); const netMod = makeNet(Buf); const tlsMod = makeTls(netMod, Buf); const dgramMod = makeDgram(Buf);
   const v8Real = makeV8Profiler(debugReg); const heapSnap = makeHeapSnapshot(); const clusterReal = makeCluster(); const inspector = makeInspector(debugReg);
   const nativeCS = makeCompressionStreamZlib(streamMod, Buf); const webCodecs = makeWebCodecs(); const webPush = makeWebPush(); const storage = makeStorageHelpers();
-  const gitMod = makeGit(fsmod); const tarMod = makeTar(fsmod, null, Buf); const dnsMod = makeDns(); const nativeLoader = makeNativeLoader(); const registryMod = makeRegistry();
+  const gitMod = makeGit(fsmod); const tarMod = makeTar(fsmod, null, Buf); const dnsMod = makeDns(); const nativeLoader = makeNativeLoader(); const registryMod = makeRegistry(); const busnet = makeBusnet(); globalThis.__busnet = busnet; const busHttp = makeBusHttp(busnet); debugReg.busnet = busnet;
   if (nativeCS) registerPolyfill(debugReg, 'compressionStream', 'native', 'CompressionStream available'); if (browserInfo.capabilities.webCodecs) registerPolyfill(debugReg, 'webCodecs', 'native', 'WebCodecs available');
   const proc = extendProcessExtras(extendProcess(createProcess(term, ctx), ctx), ctx);
   proc.stdin.setRawMode = () => proc.stdin; proc.stdin.isRaw = false; proc.binding = makeProcessBindings(); proc.memoryUsage = getMem; proc.storage = storage; proc.storageBuckets = storage.buckets; proc.cwd = () => ctx.cwd; proc.chdir = p => { ctx.cwd = p.startsWith('/') ? p : pathmod.resolve(ctx.cwd, p); }; proc.umask = m => { const prev = ctx.umask || 0o022; if (m != null) ctx.umask = m; return prev; }; makeForkIpc(proc); proc.dlopen = (t, p) => nativeLoader.dlopen(t, p); proc.resourceUsage = () => { const m = performance.memory || {}; return { userCPUTime: performance.now() * 1000 | 0, systemCPUTime: 0, maxRSS: (m.totalJSHeapSize || 0) / 1024 | 0, sharedMemorySize: 0, unsharedDataSize: 0, unsharedStackSize: 0, minorPageFault: 0, majorPageFault: 0, swappedOut: 0, fsRead: 0, fsWrite: 0, ipcSent: 0, ipcReceived: 0, signalsCount: 0, voluntaryContextSwitches: 0, involuntaryContextSwitches: 0 }; };
@@ -75,6 +76,7 @@ export function createNodeEnv({ ctx, term }) {
     wasi: () => wasiMod, module: () => ({ ...makeModuleModule(() => {}, MODULES), register: moduleRegister.register, _registerHooks: moduleRegister._hooks }), express: () => createExpress(term, fsmod),
     'better-sqlite3': createSqlite, sqlite: () => ({ DatabaseSync: createSqlite, StatementSync: class {} }), 'node:sqlite': () => ({ DatabaseSync: createSqlite, StatementSync: class {} }),
     dns: () => dnsMod, 'dns/promises': () => dnsMod.promises, 'node:dns': () => dnsMod, 'isomorphic-git': () => gitMod, git: () => gitMod, tar: () => tarMod, 'npm-registry-fetch': () => registryMod,
+    busnet: () => busnet, 'bus-http': () => busHttp,
   };
   for (const k of Object.keys(MODULES)) if (!k.startsWith('node:')) MODULES['node:' + k] = MODULES[k];
   const cons = createConsole(term);
