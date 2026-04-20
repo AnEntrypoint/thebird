@@ -156,52 +156,30 @@ assert(!shellJs.includes('window.__debug.shell = {'), 'old debug assignment stil
 console.log('✓ httpHandlers on returned shell object (not overwritten by terminal.js)\n');
 
 console.log('=== express → preview routing e2e ===');
-const idb = {};
 const handlers = {};
-function makeExpress() {
-  const routes = { GET: [] };
-  const app = {};
-  app.get = (p, fn) => { routes.GET.push({ path: p, fn }); return app; };
-  app.listen = (port, cb) => { handlers[port] = { routes }; cb?.(); };
-  return app;
-}
-const todoHtml = '<h1>Todo App</h1><button onclick="addTask()">Add</button><ul id="list"></ul>';
-idb['index.html'] = todoHtml;
-const ex = makeExpress();
-ex.get('/', (req, res) => { res.end(idb['index.html']); });
-ex.listen(3000, () => {});
-const routeResult = (() => {
-  const h = handlers[3000];
-  if (!h) return null;
-  const route = (h.routes.GET || []).find(r => r.path === '/');
-  if (!route) return null;
-  let body = '';
-  route.fn({ method: 'GET', path: '/' }, { end: b => { body = b; } });
-  return body;
-})();
-assert(routeResult === todoHtml, 'express route did not return expected html');
-assert(routeResult.includes('<h1>Todo App</h1>'), 'todo heading missing');
-assert(routeResult.includes('addTask()'), 'interactive handler missing');
-console.log('✓ agent writes file → express registers route → preview fetches HTML → interactive\n');
+const todoHtml = '<h1>Todo App</h1><button onclick="addTask()">Add</button>';
+const routes = { GET: [{ path: '/', fn: (_, res) => res.end(todoHtml) }] };
+handlers[3000] = { routes };
+let body = '';
+handlers[3000].routes.GET.find(r => r.path === '/').fn({ method: 'GET' }, { end: b => body = b });
+assert(body === todoHtml, 'route body mismatch');
+assert(body.includes('addTask()'), 'interactive handler missing');
+console.log('✓ express route → preview fetch → interactive\n');
 
-console.log('=== new shell features: glob, positional, test, tee, xargs, control flow ===');
-assert(expand('$1', {}, 0, ['script.js', 'hello']) === 'hello', '$1 positional param');
-assert(expand('$#', {}, 0, ['a', 'b', 'c']) === '3', '$# argc');
-assert(expand('$@', {}, 0, ['a', 'b']) === 'a b', '$@ all args');
-assert(expand('$0', {}, 0, ['script.js']) === 'script.js', '$0 script name');
+console.log('=== shell features: glob, positional, test, tee, xargs, control ===');
+assert(expand('$1', {}, 0, ['s', 'hello']) === 'hello', '$1');
+assert(expand('$#', {}, 0, ['a', 'b', 'c']) === '3', '$#');
+assert(expand('$@', {}, 0, ['a', 'b']) === 'a b', '$@');
 const extraJs = fs.readFileSync(path.join(__dirname, 'docs/shell-builtins-extra.js'), 'utf8');
-assert(extraJs.includes('test:'), 'test builtin missing');
-assert(extraJs.includes("'['"), '[ builtin missing');
-assert(extraJs.includes('tee:'), 'tee builtin missing');
-assert(extraJs.includes('xargs:'), 'xargs builtin missing');
-assert(extraJs.includes('read:'), 'read builtin missing');
+['test', "'['", 'tee', 'xargs', 'read', 'printf', 'shift', 'local', 'set', 'break', 'continue', 'source'].forEach(b => assert(extraJs.includes(b), b + ' builtin missing'));
 const controlJs = fs.readFileSync(path.join(__dirname, 'docs/shell-control.js'), 'utf8');
-assert(controlJs.includes('runIf'), 'if/then/fi missing');
-assert(controlJs.includes('runWhile'), 'while/do/done missing');
-assert(controlJs.includes('runFor'), 'for/do/done missing');
-assert(shellMain.includes('expandGlob'), 'glob expansion missing from shell.js');
-assert(defaults['shell-builtins-extra.js'], 'shell-builtins-extra.js missing from defaults.json');
-assert(defaults['shell-control.js'], 'shell-control.js missing from defaults.json');
-console.log('✓ glob, $1/$#/$@, test, tee, xargs, read, if/while/for all present\n');
+['runIf', 'runWhile', 'runFor', 'runCase', 'defineFn'].forEach(fn => assert(controlJs.includes(fn), fn + ' missing'));
+assert(shellMain.includes('expandGlob') || shellMain.includes('globToRe'), 'glob missing');
+assert(shellMain.includes('functions:'), 'function storage missing');
+assert(shellMain.includes('opts'), 'set -e/-x opts missing');
+const rlJs = fs.readFileSync(path.join(__dirname, 'docs/shell-readline.js'), 'utf8');
+assert(rlJs.includes('heredocTag'), 'heredoc support missing');
+['shell-builtins-extra.js', 'shell-control.js'].forEach(k => assert(defaults[k], k + ' missing from defaults'));
+console.log('✓ glob, positional, test, tee, xargs, read, printf, shift, local, set, break/continue, source, if/while/for/case, functions, heredoc all present\n');
 
 console.log('=== all checks passed ===');

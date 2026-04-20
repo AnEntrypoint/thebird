@@ -3,7 +3,7 @@ import { createNodeEnv } from './shell-node.js';
 import { createReadline } from './shell-readline.js';
 import { makeBuiltins, resolvePath } from './shell-builtins.js';
 import { makeNpm } from './shell-npm.js';
-import { tokenize, expand, expandCmdSub, splitTopLevel, parsePipes } from './shell-parser.js';
+import { tokenize, expand, expandCmdSub, splitTopLevel, parsePipes, globToRe } from './shell-parser.js';
 import { isControlStart, isBlockOpen, runControl } from './shell-control.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
@@ -13,17 +13,8 @@ const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   'node-repl': { on: { EXIT_REPL: 'idle', RUN: 'node-repl' } },
 }});
 
-function globToRe(pattern) {
-  const escaped = pattern.replace(/[-[\]{}()*+?.,\\^$|#]/g, (c) => {
-    if (c === '*' || c === '?') return c;
-    return '\\' + c;
-  });
-  const re = escaped.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
-  return new RegExp('^' + re + '$');
-}
-
 export function createShell({ term, onPreviewWrite }) {
-  const ctx = { term, cwd: '/', prevCwd: '/', env: {}, history: [], lastExitCode: 0, argv: [] };
+  const ctx = { term, cwd: '/', prevCwd: '/', env: {}, history: [], lastExitCode: 0, argv: [], functions: {}, opts: {}, localStack: [], loopFlag: null };
   const actor = createActor(machine);
   actor.start();
   const httpHandlers = {};
@@ -36,6 +27,8 @@ export function createShell({ term, onPreviewWrite }) {
   const snap = () => window.__debug.idbSnapshot || {};
 
   const BUILTINS = makeBuiltins(ctx, actor, invokeBuiltin);
+  ctx.builtinsRef = BUILTINS;
+  ctx.expand = token => expandCmdSub(token, ctx.env, ctx.lastExitCode, captureRun, ctx.argv);
   const npmCmd = makeNpm(ctx);
   ctx.nodeEval = createNodeEnv({ ctx, term });
 
@@ -68,11 +61,25 @@ export function createShell({ term, onPreviewWrite }) {
     return out;
   }
 
+  async function runFunction(name, args) {
+    const savedArgv = ctx.argv; ctx.argv = [name, ...args]; ctx.localStack.push({});
+    try { for (const ln of ctx.functions[name].split(/;|\n/)) if (ln.trim()) await run(ln.trim()); }
+    finally {
+      const locals = ctx.localStack.pop();
+      for (const k of Object.keys(locals)) { if (locals[k] === undefined) delete ctx.env[k]; else ctx.env[k] = locals[k]; }
+      ctx.argv = savedArgv;
+    }
+  }
+
   async function invokeBuiltin(name, args, withCaptureInto, stdinBuf) {
+    if (ctx.functions[name]) {
+      if (!withCaptureInto) { await runFunction(name, args); return ''; }
+      return captureFn(() => runFunction(name, args));
+    }
     const fn = BUILTINS[name];
     if (!fn) throw new Error('command not found: ' + name);
-    if (!withCaptureInto) { await fn(args, actor, stdinBuf, invokeBuiltin); return ''; }
-    return captureFn(() => fn(args, actor, stdinBuf, invokeBuiltin));
+    if (!withCaptureInto) { await fn(args, actor, stdinBuf, invokeBuiltin, run); return ''; }
+    return captureFn(() => fn(args, actor, stdinBuf, invokeBuiltin, run));
   }
 
   function evalKV(kv) { const eq = kv.indexOf('='); return [kv.slice(0, eq), expandCmdSub(kv.slice(eq + 1), ctx.env, ctx.lastExitCode, captureRun, ctx.argv)]; }
@@ -98,8 +105,8 @@ export function createShell({ term, onPreviewWrite }) {
   function parseRedirect(tokens) {
     const out = { args: [], stdout: null, append: false };
     for (let i = 0; i < tokens.length; i++) {
-      if (tokens[i] === '>' || tokens[i] === '>>') { out.stdout = tokens[++i]; out.append = tokens[i - 1] === '>>'; continue; }
-      out.args.push(tokens[i]);
+      const t = tokens[i];
+      if (t === '>' || t === '>>') { out.stdout = tokens[++i]; out.append = t === '>>'; } else out.args.push(t);
     }
     return out;
   }
@@ -111,7 +118,8 @@ export function createShell({ term, onPreviewWrite }) {
     if (args[0] === '-p' || args[0] === '--print') { await ctx.nodeEval('console.log(' + args.slice(1).join(' ') + ')'); return; }
     const code = snap()[toKey(resolvePath(ctx.cwd, args[0]))];
     if (code == null) throw new Error('node: no such file: ' + args[0]);
-    actor.send({ type: 'NODE_START' }); ctx.argv = args; await ctx.nodeEval(code, args[0], args.slice(1)); ctx.argv = [];
+    actor.send({ type: 'NODE_START' }); ctx.argv = args;
+    try { await ctx.nodeEval(code, args[0], args.slice(1)); } finally { ctx.argv = []; }
   }
 
   async function runPipeline(line) {
@@ -120,14 +128,11 @@ export function createShell({ term, onPreviewWrite }) {
     let buf = '';
     for (let i = 0; i < pipes.length; i++) {
       const isLast = i === pipes.length - 1;
-      const raw = tokenize(pipes[i]);
-      const expanded = expandTokens(raw);
-      const redir = parseRedirect(expanded);
-      const [cmd, ...args] = redir.args;
-      const stdinArgs = i === 0 ? args : (buf ? [buf, ...args] : args);
-      if (isLast && !redir.stdout) { await invokeBuiltin(cmd, stdinArgs, false, buf); buf = ''; continue; }
-      const out = await invokeBuiltin(cmd, stdinArgs, true, buf);
-      if (redir.stdout) { const k = toKey(resolvePath(ctx.cwd, redir.stdout)); snap()[k] = redir.append ? (snap()[k] || '') + out : out; window.__debug.idbPersist?.(); buf = ''; } else { buf = out; }
+      const { args: [cmd, ...args], stdout: rout, append } = parseRedirect(expandTokens(tokenize(pipes[i])));
+      const sArgs = i === 0 ? args : (buf ? [buf, ...args] : args);
+      if (isLast && !rout) { await invokeBuiltin(cmd, sArgs, false, buf); buf = ''; continue; }
+      const out = await invokeBuiltin(cmd, sArgs, true, buf);
+      if (rout) { const k = toKey(resolvePath(ctx.cwd, rout)); snap()[k] = append ? (snap()[k] || '') + out : out; window.__debug.idbPersist?.(); buf = ''; } else { buf = out; }
     }
   }
 
@@ -138,40 +143,36 @@ export function createShell({ term, onPreviewWrite }) {
     ctx.history.push(line);
     const st = actor.getSnapshot().value;
     if (st === 'node-repl' && line.trim() !== 'exit') { await ctx.nodeEval(line); return; }
+    if (ctx.opts.xtrace) term.write('\x1b[90m+ ' + line + '\x1b[0m\r\n');
     const chain = splitTopLevel(line, ['&&', '||', ';']);
     let lastOk = true;
     for (const { cmd, sep } of chain) {
+      if (ctx.loopFlag) break;
       if (sep === '&&' && !lastOk) continue;
       if (sep === '||' && lastOk) { lastOk = true; continue; }
       actor.send({ type: 'RUN' });
       try { ctx.lastExitCode = 0; await runPipeline(cmd); lastOk = ctx.lastExitCode === 0; actor.send({ type: 'DONE' }); }
       catch (e) { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); ctx.lastExitCode = 1; lastOk = false; actor.send({ type: 'ERROR' }); }
+      if (ctx.opts.errexit && !lastOk) break;
     }
     if (onData) drainQueue(onData);
   }
 
-  function getCompletions(line, word) {
-    const tokens = line.trim().split(/\s+/);
-    const files = Object.keys(snap());
-    if (tokens.length <= 1 && !line.includes(' ')) return Object.keys(BUILTINS).concat(['npm', 'node']).filter(c => c.startsWith(word));
-    return files.filter(f => f.startsWith(word));
-  }
+  const getCompletions = (line, word) => (line.trim().split(/\s+/).length <= 1 && !line.includes(' '))
+    ? Object.keys(BUILTINS).concat(['npm', 'node']).filter(c => c.startsWith(word))
+    : Object.keys(snap()).filter(f => f.startsWith(word));
 
-  const rl = createReadline({
-    term, getCompletions, getPrompt: () => ctx.cwd,
-    isBlockOpen: () => blockLines.length > 0,
-    onLine: line => {
-      if (blockLines.length > 0 || isControlStart(line)) {
-        blockLines.push(line);
-        if (isBlockOpen(blockLines)) { rl.showContinuation(); return; }
-        const block = blockLines.slice();
-        blockLines = [];
-        runControl(block, run, ctx).then(() => rl.showPrompt()).catch(e => { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); rl.showPrompt(); });
-        return;
-      }
-      run(line, onData).then(() => rl.showPrompt());
+  const handleLine = line => {
+    if (blockLines.length > 0 || isControlStart(line)) {
+      blockLines.push(line);
+      if (isBlockOpen(blockLines)) { rl.showContinuation(); return; }
+      const block = blockLines.slice(); blockLines = [];
+      runControl(block, run, ctx).then(() => rl.showPrompt()).catch(e => { term.write('\x1b[31m' + e.message + '\x1b[0m\r\n'); rl.showPrompt(); });
+      return;
     }
-  });
+    run(line, onData).then(() => rl.showPrompt());
+  };
+  const rl = createReadline({ term, getCompletions, getPrompt: () => ctx.cwd, isBlockOpen: () => blockLines.length > 0, onLine: handleLine });
   function onData(data) {
     if (data === '\x03') { actor.send({ type: 'ERROR' }); inputQueue = []; blockLines = []; term.write('^C'); rl.showPrompt(); return; }
     const st = actor.getSnapshot().value;

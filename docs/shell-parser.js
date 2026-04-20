@@ -94,6 +94,12 @@ export function parsePipes(line) {
   return splitTopLevel(line, ['|']).map(p => p.cmd);
 }
 
+export function globToRe(pattern) {
+  const escaped = pattern.replace(/[-[\]{}()*+?.,\\^$|#]/g, (c) => (c === '*' || c === '?') ? c : '\\' + c);
+  const re = escaped.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
+  return new RegExp('^' + re + '$');
+}
+
 export function parseCommand(line, env) {
   const raw = tokenize(line);
   const expanded = raw.map(t => expand(t, env));

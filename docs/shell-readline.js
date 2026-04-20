@@ -4,6 +4,9 @@ export function createReadline({ term, getCompletions, onLine, getPrompt, isBloc
   let histIdx = -1;
   let escBuf = '';
   let inEsc = false;
+  let heredocTag = null;
+  let heredocBody = '';
+  let heredocPrefix = '';
 
   const write = s => term.write(s);
 
@@ -71,6 +74,28 @@ export function createReadline({ term, getCompletions, onLine, getPrompt, isBloc
   function commit() {
     const line = buf;
     write('\r\n');
+    if (heredocTag !== null) {
+      if (line === heredocTag) {
+        const full = heredocPrefix + " '" + heredocBody.replace(/'/g, "'\\''") + "'";
+        heredocTag = null; heredocBody = ''; heredocPrefix = '';
+        buf = ''; pos = 0; histIdx = -1;
+        onLine(full);
+        return;
+      }
+      heredocBody += line + '\n';
+      buf = ''; pos = 0;
+      write('\x1b[32m> \x1b[0m');
+      return;
+    }
+    const hd = line.match(/^(.*?)<<-?\s*(['"]?)(\w+)\2\s*$/);
+    if (hd) {
+      heredocPrefix = hd[1].trim();
+      heredocTag = hd[3];
+      heredocBody = '';
+      buf = ''; pos = 0;
+      write('\x1b[32m> \x1b[0m');
+      return;
+    }
     if (line.endsWith('\\')) {
       buf = line.slice(0, -1) + '\n';
       pos = buf.length;
