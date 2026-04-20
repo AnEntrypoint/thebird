@@ -1,4 +1,11 @@
 
+## [unreleased] 2026-04-20 node parity pass 5
+- feat: zlib sync (fflate via esm.sh /es2022 bundle) — gzipSync/gunzipSync/deflateSync/inflateSync
+- feat: crypto.sign/verify + createSign/createVerify with PEM key import (RSA-SHA256 via webcrypto pkcs8/spki)
+- feat: module resolution — full conditional exports (node/import/require/default/browser), subpath patterns (*), #internal imports map, type:module ESM detection
+- feat: util.inspect — BigInt 'n' suffix, Symbol keys, colors:true ANSI, showHidden for non-enumerable
+- feat: Error.captureStackTrace polyfill, process.execArgv from NODE_OPTIONS, --enable-source-maps flag, expanded allowedNodeEnvironmentFlags, process.features
+
 ## [unreleased] 2026-04-20 node parity pass 3
 - feat: crypto sha1/sha512/md5 pure-JS + hmac (RFC 2104) + pbkdf2Sync + randomBytes via Web Crypto — all byte-for-byte match with real node
 - feat: util.inspect circular refs use node format '<ref *N> { ... [Circular *N] }' exactly

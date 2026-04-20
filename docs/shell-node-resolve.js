@@ -1,14 +1,35 @@
 const toKey = p => p.replace(/^\//, '');
 
+const CONDITIONS = ['node', 'import', 'require', 'default', 'browser'];
+function pickCondition(cond) {
+  if (typeof cond === 'string') return cond;
+  if (Array.isArray(cond)) { for (const c of cond) { const r = pickCondition(c); if (r) return r; } return null; }
+  if (!cond || typeof cond !== 'object') return null;
+  for (const k of CONDITIONS) if (k in cond) { const r = pickCondition(cond[k]); if (r) return r; }
+  return null;
+}
+function matchPattern(patternKey, target) {
+  if (!patternKey.includes('*')) return null;
+  const [pre, post] = patternKey.split('*');
+  if (target.startsWith(pre) && target.endsWith(post)) return target.slice(pre.length, target.length - post.length);
+  return null;
+}
 export function resolveExports(pkgJson, subpath) {
   const exp = pkgJson.exports;
   if (!exp) return null;
   if (typeof exp === 'string') return subpath === '.' ? exp : null;
   const key = subpath === '.' ? '.' : './' + subpath.replace(/^\.\//, '');
-  const cond = exp[key] ?? (subpath === '.' && typeof exp === 'object' && !('.' in exp) ? exp : null);
-  if (!cond) return null;
-  if (typeof cond === 'string') return cond;
-  return cond.import || cond.require || cond.default || cond.node || null;
+  if (exp[key]) return pickCondition(exp[key]);
+  if (subpath === '.' && !('.' in exp) && !Object.keys(exp).some(k => k.startsWith('.'))) return pickCondition(exp);
+  for (const pk of Object.keys(exp)) { const m = matchPattern(pk, key); if (m !== null) { const t = pickCondition(exp[pk]); return t ? t.replace('*', m) : null; } }
+  return null;
+}
+export function resolveImports(pkgJson, subpath) {
+  const imps = pkgJson.imports;
+  if (!imps || !subpath.startsWith('#')) return null;
+  if (imps[subpath]) return pickCondition(imps[subpath]);
+  for (const pk of Object.keys(imps)) { const m = matchPattern(pk, subpath); if (m !== null) { const t = pickCondition(imps[pk]); return t ? t.replace('*', m) : null; } }
+  return null;
 }
 
 export function walkUpNodeModules(snap, startDir, pkgName) {

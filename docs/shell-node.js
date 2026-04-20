@@ -1,9 +1,9 @@
 import { createPath, createFs, createEvents, createUrl, createQuerystring, createBuffer } from './node-builtins.js';
 import { createExpress, createHttp, createSqlite, createConsole, createProcess, NODE_VERSION, NODE_VERSIONS, NodeExit } from './shell-node-modules.js';
-import { inspect, format, createZlib } from './shell-node-stdlib.js';
+import { inspect, format, createZlib, preloadFflate } from './shell-node-stdlib.js';
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from './shell-node-crypto.js';
 import { createChildProcess, createHttpClient, extendProcess, rewriteStack, isEsmCode, runEsm, parseDotEnv } from './shell-node-io.js';
-import { resolveExports, walkUpNodeModules, resolvePackageEntry, makeModuleModule, makeModuleNotFoundError, makeFsPromises, makeFsWatch, makeNetStub, makeDgramStub, makeWorkerThreadsStub } from './shell-node-resolve.js';
+import { resolveExports, resolveImports, walkUpNodeModules, resolvePackageEntry, makeModuleModule, makeModuleNotFoundError, makeFsPromises, makeFsWatch, makeNetStub, makeDgramStub, makeWorkerThreadsStub } from './shell-node-resolve.js';
 import { extendBuffer, extendPath, createUrlExt, makeStringDecoder, makeReadline, makeTimersMod, makePerfHooks, makeV8Mod, makeAsyncHooks, makeStubs, makeErrorCodes, extendProcessExtras, makeStreamConsumers } from './shell-node-extras.js';
 import { makeStream, extendFsStreams } from './shell-node-streams.js';
 import { extendCrypto } from './shell-node-cipher.js';
@@ -83,15 +83,20 @@ export function createNodeEnv({ ctx, term }) {
     for (const [k, v] of Object.entries(parseDotEnv(envFile))) if (!(k in ctx.env)) ctx.env[k] = v;
   }
 
-  function resolveCandidates(dir, id) {
-    return [pathmod.resolve(dir, id) + '.js', pathmod.resolve(dir, id), pathmod.resolve(dir, id) + '/index.js', pathmod.resolve(dir, id, 'index.js')];
-  }
+  const resolveCandidates = (dir, id) => [pathmod.resolve(dir, id) + '.js', pathmod.resolve(dir, id), pathmod.resolve(dir, id) + '/index.js', pathmod.resolve(dir, id, 'index.js')];
+  function findPkgJsonDir(s, dir) { let d = dir.replace(/^\//, '').replace(/\/$/, ''); while (true) { const k = (d ? d + '/' : '') + 'package.json'; if (k in s) return d; if (!d) return null; const up = d.slice(0, d.lastIndexOf('/')); if (up === d) return null; d = up; } }
+  function isEsmPkg(s, filePath) { const pjDir = findPkgJsonDir(s, pathmod.dirname(filePath)); try { const pj = JSON.parse(s[(pjDir || '') + (pjDir ? '/' : '') + 'package.json']); return pj.type === 'module'; } catch { return false; } }
 
   function makeRequire(dir) {
     const req = function require(id) {
       if (id === 'module') return makeModuleModule(req, MODULES);
       if (MODULES[id]) return MODULES[id]();
       const s = snap();
+      if (id.startsWith('#')) {
+        const pjRoot = findPkgJsonDir(s, dir);
+        if (pjRoot) { const pj = JSON.parse(s[pjRoot + '/package.json']); const target = resolveImports(pj, id); if (target) { const resolved = pathmod.resolve('/' + pjRoot, target); return loadFile(resolved.replace(/^\//, ''), s); } }
+        throw makeModuleNotFoundError(id, requireStack);
+      }
       if (!id.startsWith('.')) {
         if (pkgCache[id]) return pkgCache[id];
         const pkgDir = walkUpNodeModules(s, dir, id);
@@ -111,7 +116,11 @@ export function createNodeEnv({ ctx, term }) {
       reqCache[key] = mod;
       const modDir = pathmod.dirname('/' + key);
       requireStack.push('/' + key);
-      try { new Function('module', 'exports', 'require', '__filename', '__dirname', 'process', 'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'fetch', s[key])(mod, mod.exports, makeRequire(modDir), '/' + key, modDir, proc, cons, Buf, setTimeout, setInterval, clearTimeout, clearInterval, fetch); }
+      try {
+        const src = s[key]; const esm = key.endsWith('.mjs') || (key.endsWith('.js') && isEsmPkg(s, '/' + key)) || isEsmCode(src);
+        if (esm) throw new Error("ESM module '" + key + "' requested via require() — use dynamic import() or run entry as ESM");
+        new Function('module', 'exports', 'require', '__filename', '__dirname', 'process', 'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'fetch', src)(mod, mod.exports, makeRequire(modDir), '/' + key, modDir, proc, cons, Buf, setTimeout, setInterval, clearTimeout, clearInterval, fetch);
+      }
       finally { requireStack.pop(); }
       mod.loaded = true;
       return mod.exports;
@@ -151,11 +160,14 @@ export function createNodeEnv({ ctx, term }) {
     proc.argv = filename ? ['node', fpath, ...(argv || [])] : ['node'];
     proc.exitCode = 0;
     loadDotEnv();
+    await preloadFflate().catch(() => {});
     await preloadAsyncPkgs(code, dir);
     const reqFn = makeRequire(dir);
     const scope = { process: proc, console: cons, require: reqFn, Buffer: Buf, __filename: fpath, __dirname: dir, setTimeout, setInterval, clearTimeout, clearInterval, fetch, module: { exports: {} }, exports: {}, global: globalThis, URL, URLSearchParams, TextEncoder, TextDecoder };
     const prevGlobals = { process: globalThis.process, Buffer: globalThis.Buffer };
     globalThis.process = proc; globalThis.Buffer = Buf;
+    if (!Error.captureStackTrace) Error.captureStackTrace = (target, ctor) => { const e = new Error(); const lines = (e.stack || '').split('\n'); target.stack = (ctor?.name ? ctor.name : 'Error') + (target.message ? ': ' + target.message : '') + '\n' + lines.slice(2).join('\n'); };
+    if (!('prepareStackTrace' in Error)) Error.prepareStackTrace = null;
     const unhandledH = e => { e.preventDefault?.(); const err = e.reason || e; term.write('\x1b[31m' + rewriteStack(err, fpath) + '\x1b[0m\r\n'); ctx.lastExitCode = 1; };
     window.addEventListener('unhandledrejection', unhandledH);
     try {

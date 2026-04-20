@@ -112,7 +112,11 @@ export function extendProcessExtras(proc,ctx){
   proc.stdin.isTTY=true;
   proc.resourceUsage=()=>({userCPUTime:0,systemCPUTime:0,maxRSS:50000,sharedMemorySize:0,unsharedDataSize:0,unsharedStackSize:0,minorPageFault:0,majorPageFault:0,swappedOut:0,fsRead:0,fsWrite:0,ipcSent:0,ipcReceived:0,signalsCount:0,voluntaryContextSwitches:0,involuntaryContextSwitches:0});
   proc.binding=name=>{throw new Error(`process.binding('${name}'): internal bindings not available`);};
-  proc.allowedNodeEnvironmentFlags=new Set(['--experimental-vm-modules','--no-warnings','--loader','--import','--require','-r']);
+  proc.allowedNodeEnvironmentFlags=new Set(['--experimental-vm-modules','--no-warnings','--loader','--import','--require','-r','--enable-source-maps','--inspect','--inspect-brk','--trace-warnings','--unhandled-rejections','--preserve-symlinks','--no-deprecation','--throw-deprecation']);
+  const nodeOpts=(ctx.env.NODE_OPTIONS||'').split(/\s+/).filter(Boolean);
+  proc.execArgv=nodeOpts;
+  proc.sourceMapsEnabled=nodeOpts.includes('--enable-source-maps');
+  proc.features={inspector:false,debug:false,uv:false,ipv6:true,tls_alpn:false,tls_sni:false,tls_ocsp:false,tls:false,cached_builtins:true};
   proc.report={getReport:()=>({}),writeReport:()=>'report.json'};
   proc.availableMemory=()=>1073741824;
   proc.constrainedMemory=()=>0;

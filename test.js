@@ -194,5 +194,15 @@ const nbP = 'file:///' + path.resolve('docs/node-builtins.js').replace(/\\/g, '/
   const stubs = ex.makeStubs({}); assert(stubs.cluster.isPrimary === true && stubs.tty.isatty() === true && stubs.sea.isSea() === false, 'stubs');
   console.log('✓ buffer64/path.win32/pathToFileURL/StringDecoder/ALS/Readable/Transform/cipher-roundtrip/errorCodes/stubs\n');
 
+  console.log('=== pass 5: inspect/exports/sign-verify ===');
+  const sl5 = await import('file:///' + path.resolve('docs/shell-node-stdlib.js').replace(/\\/g, '/'));
+  const rs5 = await import('file:///' + path.resolve('docs/shell-node-resolve.js').replace(/\\/g, '/'));
+  [[sl5.inspect(10n) === '10n','bigint'],[sl5.inspect({[Symbol('k')]:'v'}).includes('Symbol(k)'),'sym'],[sl5.inspect(42,{colors:true}).includes('\x1b[33m'),'colors'],[rs5.resolveExports({exports:{'.':{import:'./e.js',require:'./c.js'}}},'.')==='./e.js','cond-exports'],[rs5.resolveImports({imports:{'#i/*':'./l/*.js'}},'#i/x')==='./l/x.js','imports-pat'],[new Error('x',{cause:new Error('y')}).cause.message==='y','cause'],[new AggregateError([new Error('a')],'m').errors.length===1,'aggregate']].forEach(([v,n])=>assert(v,n));
+  globalThis.crypto = require('crypto').webcrypto;
+  const cry3 = cip.extendCrypto({}, Buf2);
+  const kp = await cry3.generateKeyPairAsync('rsa', { modulusLength: 2048 });
+  const sig = await cry3.signAsync('RSA-SHA256', 'data', kp.privateKey);
+  assert(await cry3.verifyAsync('RSA-SHA256', 'data', kp.publicKey, sig), 'RSA-PEM');
+  console.log('✓ inspect/exports/imports/cause/aggregate/RSA-PEM\n');
   console.log('=== all checks passed ===');
 })().catch(e => { console.error(e); process.exit(1); });
