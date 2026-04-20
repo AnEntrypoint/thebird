@@ -2,3 +2,14 @@
 .env
 node_modules
 .prd
+.plugkit-browser-profile/
+.plugkit-browser-profile-*/
+.plugkit-agent-worktree/
+.code-search/
+.codeinsight
+*.stackdump
+.browser-test.mjs
+.pw-test.js
+cerebras-integration-chat.png
+preview-todo-*.png
+todo-app.html
