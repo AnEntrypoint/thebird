@@ -12,7 +12,6 @@ const PROVIDERS = {
   deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
   cerebras: { label: 'Cerebras',        baseUrl: 'https://api.cerebras.ai/v1',                      keyPlaceholder: 'CEREBRAS_API_KEY', models: ['gpt-oss-120b', 'llama3.1-8b'] },
   kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
-  opencode: { label: 'opencode',               baseUrl: 'http://localhost:4790',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
   custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 
