@@ -1,5 +1,4 @@
 import { mirrorFromSandbox } from './kilo-fs-mirror.js';
-import { extractCodeBlocks, applyExtracted } from './extract-code-blocks.js';
 
 export async function* streamKiloHTTP({ url, model, messages, providerType, agent }) {
   yield { type: 'start-step' };
@@ -19,12 +18,8 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
   ).join('\n');
 
   const modelId = model || (isOpencode ? 'minimax-m2.5-free' : 'x-ai/grok-code-fast-1:optimized:free');
-  const codingIntent = /\b(write|create|make|build|generate|save|file|html|css|script|app|page|code)\b/i.test(userText);
-  const prompt = codingIntent
-    ? userText + '\n\nRespond ONLY with one or more markdown code blocks. Each block MUST have the filename after the language tag, e.g. ```html index.html\\n...```. No prose outside code blocks.'
-    : userText;
-  const agentName = agent || (isOpencode ? 'general' : 'ask');
-  const body = { parts: [{ type: 'text', text: prompt }], agent: agentName };
+  const body = { parts: [{ type: 'text', text: userText }] };
+  if (agent) body.agent = agent;
   if (isOpencode) body.model = { providerID: 'opencode', modelID: modelId };
   else { body.providerID = 'kilo'; body.modelID = modelId; }
 
@@ -75,11 +70,8 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
     for (const tp of (result.parts || []).filter(p => p.type === 'text')) { text += tp.text; yield { type: 'text-delta', textDelta: tp.text }; }
   }
   const mirrored = await mirrorFromSandbox(fsBase);
-  const blocks = extractCodeBlocks(text);
-  const extracted = blocks.length ? applyExtracted(blocks) : [];
-  const all = [...new Set([...mirrored, ...extracted])];
-  if (all.length) {
-    window.__debug[dbgKey].writes = all;
+  if (mirrored.length) {
+    window.__debug[dbgKey].writes = mirrored;
     window.showPreview?.();
     window.refreshPreview?.();
   }

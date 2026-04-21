@@ -14,6 +14,14 @@ const sandbox = path.resolve(get('--sandbox', '.sandbox'));
 fs.mkdirSync(sandbox, { recursive: true });
 try { fs.writeFileSync(path.join(sandbox, '.gitignore'), '*\n!.gitignore\n'); } catch (e) {}
 
+const cfgRoot = path.resolve('.thebird-cfg');
+for (const sub of ['kilo', 'opencode']) {
+  const dir = path.join(cfgRoot, sub);
+  fs.mkdirSync(dir, { recursive: true });
+  const cfgFile = path.join(dir, sub + '.json');
+  if (!fs.existsSync(cfgFile)) fs.writeFileSync(cfgFile, JSON.stringify({ $schema: 'https://' + sub + '.ai/config.json' }, null, 2));
+}
+
 const isWin = os.platform() === 'win32';
 const kiloBin = isWin ? process.env.USERPROFILE + '\\AppData\\Roaming\\npm\\node_modules\\@kilocode\\cli\\node_modules\\@kilocode\\cli-windows-x64\\bin\\kilo.exe' : 'kilo';
 const ocBin = isWin ? process.env.USERPROFILE + '\\AppData\\Roaming\\npm\\node_modules\\opencode-windows-x64\\bin\\opencode.exe' : 'opencode';
@@ -22,7 +30,8 @@ const procs = [];
 const launch = (name, bin, port) => {
   if (args.includes('--no-' + name)) return;
   if (!fs.existsSync(bin)) { console.log(`[${name}] skip (${bin} not found)`); return; }
-  const p = spawn(bin, ['serve', '--port', port, '--hostname', '127.0.0.1', '--cors', origin], { stdio: 'inherit', env: process.env, cwd: sandbox });
+  const env = { ...process.env, XDG_CONFIG_HOME: cfgRoot };
+  const p = spawn(bin, ['serve', '--port', port, '--hostname', '127.0.0.1', '--cors', origin], { stdio: 'inherit', env, cwd: sandbox });
   procs.push(p);
   console.log(`[${name}] serve --port ${port} pid ${p.pid}`);
 };

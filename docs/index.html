@@ -74,8 +74,10 @@ async function refreshPreview() {
   const result = await callExpressRoute('/');
   if (result) { iframe.srcdoc = result.body; return; }
   const snap = window.__debug?.idbSnapshot || {};
-  if (snap['index.html']) { iframe.srcdoc = snap['index.html']; return; }
-  iframe.srcdoc = '<pre style="color:#33ff33;padding:1ch;font-family:monospace">No express app running.\nRun: node server.js</pre>';
+  const htmlFiles = Object.keys(snap).filter(k => k.endsWith('.html'));
+  const pick = htmlFiles.find(k => k === 'index.html') || htmlFiles[0];
+  if (pick) { iframe.srcdoc = snap[pick]; return; }
+  iframe.srcdoc = '<pre style="color:#0B0B09;background:#EFE9DD;padding:1ch;font-family:monospace">no files yet</pre>';
 }
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {
