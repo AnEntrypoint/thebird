@@ -1,4 +1,5 @@
 import { mirrorFromSandbox } from './kilo-fs-mirror.js';
+import { extractCodeBlocks, applyExtracted } from './extract-code-blocks.js';
 
 export async function* streamKiloHTTP({ url, model, messages, providerType, agent }) {
   yield { type: 'start-step' };
@@ -19,8 +20,11 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
 
   const modelId = model || (isOpencode ? 'minimax-m2.5-free' : 'x-ai/grok-code-fast-1:optimized:free');
   const codingIntent = /\b(write|create|make|build|generate|save|file|html|css|script|app|page|code)\b/i.test(userText);
-  const agentName = agent || (isOpencode ? (codingIntent ? 'build' : 'general') : (codingIntent ? 'code' : 'ask'));
-  const body = { parts: [{ type: 'text', text: userText }], agent: agentName };
+  const prompt = codingIntent
+    ? userText + '\n\nRespond ONLY with one or more markdown code blocks. Each block MUST have the filename after the language tag, e.g. ```html index.html\\n...```. No prose outside code blocks.'
+    : userText;
+  const agentName = agent || (isOpencode ? 'general' : 'ask');
+  const body = { parts: [{ type: 'text', text: prompt }], agent: agentName };
   if (isOpencode) body.model = { providerID: 'opencode', modelID: modelId };
   else { body.providerID = 'kilo'; body.modelID = modelId; }
 
@@ -29,26 +33,24 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
     const es = new EventSource(base + '/event');
     const textByPart = new Map();
     const assistantMsgs = new Set();
-    let done = false;
+    let stepFinished = false;
     const pending = [];
     let resolveNext = null;
-    const push = ev => { pending.push(ev); if (resolveNext) { const r = resolveNext; resolveNext = null; r(); } };
+    const wake = () => { if (resolveNext) { const r = resolveNext; resolveNext = null; r(); } };
     es.onmessage = e => {
       try {
         const m = JSON.parse(e.data);
         if (m.type === 'message.updated') {
           const info = m.properties?.info;
-          if (info?.sessionID === sessionId && info.role === 'assistant') {
-            assistantMsgs.add(info.id);
-            if (info.time?.completed) { done = true; if (resolveNext) { const r = resolveNext; resolveNext = null; r(); } }
-          }
+          if (info?.sessionID === sessionId && info.role === 'assistant') assistantMsgs.add(info.id);
         } else if (m.type === 'message.part.updated') {
           const part = m.properties?.part;
-          if (part?.sessionID === sessionId && part.type === 'text' && assistantMsgs.has(part.messageID)) {
+          if (part?.sessionID !== sessionId || !assistantMsgs.has(part.messageID)) return;
+          if (part.type === 'text') {
             const prior = textByPart.get(part.id) || '';
             const txt = part.text || '';
-            if (txt.length > prior.length) { push({ type:'text-delta', textDelta: txt.slice(prior.length) }); textByPart.set(part.id, txt); }
-          }
+            if (txt.length > prior.length) { pending.push({ type:'text-delta', textDelta: txt.slice(prior.length) }); textByPart.set(part.id, txt); wake(); }
+          } else if (part.type === 'step-finish') { stepFinished = true; wake(); }
         }
       } catch (_) {}
     };
@@ -56,10 +58,12 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
     window.__debug[dbgKey].lastStatus = msgRes.status;
     if (!msgRes.ok) { es.close(); throw new Error('message ' + msgRes.status + ': ' + await msgRes.text()); }
     const deadline = Date.now() + 180000;
-    while (!done || pending.length) {
-      if (pending.length) { const ev = pending.shift(); if (ev.type === 'text-delta') text += ev.textDelta; yield ev; continue; }
+    let graceUntil = 0;
+    while (true) {
+      if (pending.length) { const ev = pending.shift(); text += ev.textDelta; yield ev; continue; }
+      if (stepFinished) { if (!graceUntil) graceUntil = Date.now() + 1500; if (Date.now() > graceUntil) break; }
       if (Date.now() > deadline) break;
-      await new Promise(r => { resolveNext = r; setTimeout(r, 5000); });
+      await new Promise(r => { resolveNext = r; setTimeout(r, 500); });
     }
     es.close();
   } else {
@@ -71,6 +75,13 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
     for (const tp of (result.parts || []).filter(p => p.type === 'text')) { text += tp.text; yield { type: 'text-delta', textDelta: tp.text }; }
   }
   const mirrored = await mirrorFromSandbox(fsBase);
-  if (mirrored.length) { window.__debug[dbgKey].writes = mirrored; window.refreshPreview?.(); }
+  const blocks = extractCodeBlocks(text);
+  const extracted = blocks.length ? applyExtracted(blocks) : [];
+  const all = [...new Set([...mirrored, ...extracted])];
+  if (all.length) {
+    window.__debug[dbgKey].writes = all;
+    window.showPreview?.();
+    window.refreshPreview?.();
+  }
   yield { type: 'finish-step', finishReason: 'stop' };
 }

@@ -11,7 +11,12 @@ export async function mirrorFromSandbox(fsBase) {
       const content = await r.text();
       if (snap[rel] !== content) { snap[rel] = content; mirrored.push(rel); }
     }
-    if (mirrored.length) { window.__debug.idbPersist?.(); window.__debug.shell?.onPreviewWrite?.(); }
+    if (mirrored.length) {
+      window.__debug.idbPersist?.();
+      window.__debug.shell?.onPreviewWrite?.();
+      window.showPreview?.();
+      window.refreshPreview?.();
+    }
     return mirrored;
   } catch (e) { return []; }
 }

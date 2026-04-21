@@ -10,8 +10,8 @@
 </head>
 <body>
 <div style="display:flex;flex-direction:column;height:100%">
-  <div class="tui-header"><pre class="logo" style="margin:0;padding:2px 1ch">  ▀█▀ █░█ █▀▀ █▄▄ █ █▀█ █▀▄   <span class="ver">v1.2</span>
-   █  █▀█ ██▄ █▄█ █ █▀▄ █▄▀   <span style="color:#1a9a1a">instant posix js</span></pre></div>
+  <div class="tui-header"><pre class="logo" style="margin:0">  ▀█▀ █░█ █▀▀ █▄▄ █ █▀█ █▀▄   <span class="ver">v1.2</span>
+   █  █▀█ ██▄ █▄█ █ █▀▄ █▄▀   <span style="color:#247420">instant posix js</span></pre></div>
   <div class="tui-tabs">
     <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">Chat</button>
     <button id="tab-term" class="tui-tab" onclick="switchTab('term')">Terminal</button>
@@ -30,7 +30,6 @@
     <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:#000" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   </div>
 </div>
-<div class="tui-scanline"></div>
 <script>
 function callExpressRoute(path, method) {
   const handlers = window.__debug?.shell?.httpHandlers || {};
@@ -86,6 +85,7 @@ function switchTab(t) {
   });
   if (t === 'preview') refreshPreview();
 }
+window.showPreview = () => switchTab('preview');
 </script>
 <script type="module" src="app.js"></script>
 <script type="module" src="terminal.js"></script>
