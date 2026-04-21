@@ -71,13 +71,13 @@ export async function* streamACP({ url, model, messages, system, tools, maxOutpu
   }), stream);
 
   await client.initialize({ protocolVersion: 1, capabilities: {}, clientInfo: { name: 'thebird', version: '1.0' } });
-  const { sessionId } = await client.newSession({ cwd: '/' });
+  const { sessionId } = await client.newSession({ cwd: '/', mcpServers: [] });
 
   const userText = messages.filter(m => m.role === 'user').map(m =>
     typeof m.content === 'string' ? m.content : m.content.filter(b => b.type === 'text').map(b => b.text).join('')
   ).join('\n');
 
-  const promptPromise = client.prompt({ sessionId, message: { role: 'user', content: [{ type: 'text', text: userText }] } });
+  const promptPromise = client.prompt({ sessionId, prompt: [{ type: 'text', text: userText }] });
 
   const getUpdate = () => new Promise(res => {
     if (sessionUpdates.length) { res(sessionUpdates.shift()); return; }
@@ -90,8 +90,11 @@ export async function* streamACP({ url, model, messages, system, tools, maxOutpu
   while (!done) {
     const update = await getUpdate();
     if (!update) break;
-    for (const item of (update.updates || [])) {
-      if (item.type === 'message_chunk' && item.chunk?.type === 'text') {
+    const items = update.update ? [update.update] : (update.updates || []);
+    for (const item of items) {
+      if (item.sessionUpdate === 'agent_message_chunk' && item.content?.type === 'text') {
+        yield { type: 'text-delta', textDelta: item.content.text };
+      } else if (item.type === 'message_chunk' && item.chunk?.type === 'text') {
         yield { type: 'text-delta', textDelta: item.chunk.text };
       }
     }
