@@ -19,7 +19,7 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
 
   const modelId = model || 'x-ai/grok-code-fast-1:optimized:free';
   const codingIntent = /\b(write|create|make|build|generate|save|file|html|css|script|app|page|code)\b/i.test(userText);
-  const agentName = agent || (codingIntent ? 'build' : 'hermes-llm');
+  const agentName = agent || (codingIntent ? 'code' : 'ask');
   const body = { parts: [{ type: 'text', text: userText }], agent: agentName };
   if (isOpencode) body.model = { providerID: 'kilo', modelID: modelId };
   else { body.providerID = 'kilo'; body.modelID = modelId; }
