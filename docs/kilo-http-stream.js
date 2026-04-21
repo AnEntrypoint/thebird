@@ -21,7 +21,7 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
   const codingIntent = /\b(write|create|make|build|generate|save|file|html|css|script|app|page|code)\b/i.test(userText);
   const agentName = agent || (codingIntent ? 'code' : 'ask');
   const body = { parts: [{ type: 'text', text: userText }], agent: agentName };
-  if (isOpencode) body.model = { providerID: 'kilo', modelID: modelId };
+  if (isOpencode) body.model = { providerID: 'opencode', modelID: modelId };
   else { body.providerID = 'kilo'; body.modelID = modelId; }
 
   let text = '';
