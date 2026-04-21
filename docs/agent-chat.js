@@ -91,8 +91,8 @@ function buildStream(provider) {
   if (provider.type === 'gemini') {
     return streamGemini({ model: provider.model, messages: provider.messages, tools: TOOLS, apiKey: provider.apiKey, maxOutputTokens: 8192 }).fullStream;
   }
-  if (provider.type === 'kilo') {
-    return streamKiloHTTP({ url: provider.baseUrl, model: provider.model, messages: provider.messages });
+  if (provider.type === 'kilo' || provider.type === 'opencode') {
+    return streamKiloHTTP({ url: provider.baseUrl, model: provider.model, messages: provider.messages, providerType: provider.type });
   }
   const url = (provider.baseUrl || '').replace(/\/$/, '') + '/chat/completions';
   return streamOpenAI({ url, apiKey: provider.apiKey, messages: provider.messages, model: provider.model, tools: TOOLS, maxOutputTokens: 8192 });

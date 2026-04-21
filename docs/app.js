@@ -12,6 +12,7 @@ const PROVIDERS = {
   deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
   cerebras: { label: 'Cerebras',        baseUrl: 'https://api.cerebras.ai/v1',                      keyPlaceholder: 'CEREBRAS_API_KEY', models: ['gpt-oss-120b', 'llama3.1-8b'] },
   kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
+  opencode: { label: 'opencode',               baseUrl: 'http://localhost:4790',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
   custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 
@@ -95,6 +96,21 @@ class BirdChat extends HTMLElement {
     this.setState({ providerType: type, baseUrl, model, models: [], apiKey: localStorage.getItem('provider_api_key') || '' });
   }
 
+  renderBaseUrlInput() {
+    const { providerType, baseUrl } = this.state;
+    if (providerType !== 'custom' && providerType !== 'kilo' && providerType !== 'opencode') return null;
+    const ph = providerType === 'kilo' ? 'http://localhost:4780' : (providerType === 'opencode' ? 'http://localhost:4790' : 'https://your-endpoint/v1');
+    return html`<input type="text" class="tui-input" style="flex:1;min-width:140px" placeholder=${ph} value=${baseUrl}
+      onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />`;
+  }
+  renderApiKeyInput() {
+    const { providerType, apiKey } = this.state;
+    if (providerType === 'kilo' || providerType === 'opencode') return null;
+    const provDef = PROVIDERS[providerType] || PROVIDERS.custom;
+    return html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px" placeholder=${provDef.keyPlaceholder} value=${apiKey}
+      onchange=${e => { const v = e.target.value.trim(); localStorage.setItem('provider_api_key', v); this.setState({ apiKey: v }); if (v) this.loadModels(); }} />`;
+  }
+
   render() {
     const { messages, streaming, model, apiKey, models, modelsLoading, status, providerType, baseUrl, streamingText } = this.state;
     const provDef = PROVIDERS[providerType] || PROVIDERS.custom;
@@ -108,18 +124,8 @@ class BirdChat extends HTMLElement {
         <div class="tui-toolbar">
           <label>provider:</label>
           <select class="tui-select" onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
-          ${(providerType === 'custom' || providerType === 'kilo') ? html`
-            <input type="text" class="tui-input" style="flex:1;min-width:140px"
-              placeholder=${providerType === 'kilo' ? 'http://localhost:4780' : 'https://your-endpoint/v1'} value=${baseUrl}
-              onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
-          ${providerType !== 'kilo' ? html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px"
-            placeholder=${provDef.keyPlaceholder} value=${apiKey}
-            onchange=${e => {
-              const v = e.target.value.trim();
-              localStorage.setItem('provider_api_key', v);
-              this.setState({ apiKey: v });
-              if (v) this.loadModels();
-            }} />` : ''}
+          ${this.renderBaseUrlInput()}
+          ${this.renderApiKeyInput()}
           ${modelsLoading
             ? html`<span class="tui-spinner"></span>`
             : html`<select class="tui-select" value=${model}
@@ -129,7 +135,7 @@ class BirdChat extends HTMLElement {
 
         <div id="msg-list" class="tui-msglist">
           ${messages.map((m, i) => html`
-            <div key=${i} class=${'tui-msg ' + m.role}>${m.content}</div>`)}
+            <div key=${i} class=${'tui-msg ' + m.role}>${typeof m.content === 'string' ? m.content : (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('')}</div>`)}
           ${streaming && !streamingText && html`<div class="tui-msg assistant"><span class="tui-spinner"></span> thinking...</div>`}
         </div>
 
@@ -152,7 +158,7 @@ class BirdChat extends HTMLElement {
     const text = input?.value.trim();
     if (!text || this.state.streaming) return;
     const { apiKey, model, providerType, baseUrl } = this.state;
-    if (!apiKey && providerType !== 'kilo') { this.setState({ status: 'Enter an API key above.' }); return; }
+    if (!apiKey && providerType !== 'kilo' && providerType !== 'opencode') { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
     const normalizedMessages = [...this.state.messages, { role: 'user', content: text }].map(m => ({
