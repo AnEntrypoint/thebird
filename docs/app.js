@@ -29,7 +29,7 @@ class BirdChat extends HTMLElement {
   connectedCallback() {
     this.render();
     Object.assign(window.__debug, { acp: { baseUrl: this.state.baseUrl, provider: this.state.providerType } });
-    if (this.state.apiKey) this.loadModels();
+    if (this.state.apiKey || ['kilo','opencode','acp2openai'].includes(this.state.providerType)) this.loadModels();
     this.statsTimer = setInterval(() => this.updateStats(), 250);
   }
   disconnectedCallback() { if (this.statsTimer) clearInterval(this.statsTimer); }
@@ -62,6 +62,7 @@ class BirdChat extends HTMLElement {
     localStorage.setItem('provider_base_url', baseUrl);
     localStorage.setItem('provider_model', model);
     this.setState({ providerType: type, baseUrl, model, models: [], apiKey: localStorage.getItem('provider_api_key') || '' });
+    if (['kilo','opencode','acp2openai'].includes(type)) this.loadModels();
   }
 
   renderBaseUrlInput() {
