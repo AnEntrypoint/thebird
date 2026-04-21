@@ -17,9 +17,9 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
     typeof m.content === 'string' ? m.content : (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
   ).join('\n');
 
-  const modelId = model || 'x-ai/grok-code-fast-1:optimized:free';
+  const modelId = model || (isOpencode ? 'minimax-m2.5-free' : 'x-ai/grok-code-fast-1:optimized:free');
   const codingIntent = /\b(write|create|make|build|generate|save|file|html|css|script|app|page|code)\b/i.test(userText);
-  const agentName = agent || (codingIntent ? 'code' : 'ask');
+  const agentName = agent || (isOpencode ? (codingIntent ? 'build' : 'general') : (codingIntent ? 'code' : 'ask'));
   const body = { parts: [{ type: 'text', text: userText }], agent: agentName };
   if (isOpencode) body.model = { providerID: 'opencode', modelID: modelId };
   else { body.providerID = 'kilo'; body.modelID = modelId; }
