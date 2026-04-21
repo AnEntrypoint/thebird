@@ -11,9 +11,7 @@ const PROVIDERS = {
   mistral:  { label: 'Mistral',         baseUrl: 'https://api.mistral.ai/v1',                        keyPlaceholder: 'MISTRAL_API_KEY', models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
   deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
   cerebras: { label: 'Cerebras',        baseUrl: 'https://api.cerebras.ai/v1',                      keyPlaceholder: 'CEREBRAS_API_KEY', models: ['gpt-oss-120b', 'llama3.1-8b'] },
-  acp:      { label: 'ACP Agent',             baseUrl: 'ws://localhost:3000',                       keyPlaceholder: '(no key needed)', models: ['default'] },
-  kilo:     { label: 'Kilo Code (ACP)',        baseUrl: 'ws://localhost:3000/acp',                   keyPlaceholder: '(no key needed)', models: ['default'] },
-  kilohttp: { label: 'Kilo Code (HTTP)',       baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
+  kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'openrouter/free', 'kilo-auto/free'] },
   custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 
@@ -47,7 +45,8 @@ async function fetchModels(providerType, baseUrl, apiKey) {
 class BirdChat extends HTMLElement {
   constructor() {
     super();
-    const savedProvider = localStorage.getItem('provider_type') || 'gemini';
+    const rawSaved = localStorage.getItem('provider_type') || 'gemini';
+    const savedProvider = PROVIDERS[rawSaved] ? rawSaved : (rawSaved === 'acp' || rawSaved === 'kilohttp' ? 'kilo' : 'gemini');
     const savedBaseUrl = localStorage.getItem('provider_base_url') || PROVIDERS[savedProvider]?.baseUrl || '';
     this.state = {
       messages: [], streaming: false,
@@ -109,11 +108,11 @@ class BirdChat extends HTMLElement {
         <div class="tui-toolbar">
           <label>provider:</label>
           <select class="tui-select" onchange=${e => this.setProvider(e.target.value)}>${provOpts}</select>
-          ${(providerType === 'custom' || providerType === 'acp' || providerType === 'kilo' || providerType === 'kilohttp') ? html`
+          ${(providerType === 'custom' || providerType === 'kilo') ? html`
             <input type="text" class="tui-input" style="flex:1;min-width:140px"
-              placeholder=${providerType === 'kilohttp' ? 'http://localhost:4780' : ((providerType === 'acp' || providerType === 'kilo') ? 'ws://localhost:3000' : 'https://your-endpoint/v1')} value=${baseUrl}
+              placeholder=${providerType === 'kilo' ? 'http://localhost:4780' : 'https://your-endpoint/v1'} value=${baseUrl}
               onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />` : ''}
-          ${(providerType !== 'acp' && providerType !== 'kilo' && providerType !== 'kilohttp') ? html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px"
+          ${providerType !== 'kilo' ? html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px"
             placeholder=${provDef.keyPlaceholder} value=${apiKey}
             onchange=${e => {
               const v = e.target.value.trim();
@@ -153,7 +152,7 @@ class BirdChat extends HTMLElement {
     const text = input?.value.trim();
     if (!text || this.state.streaming) return;
     const { apiKey, model, providerType, baseUrl } = this.state;
-    if (!apiKey && providerType !== 'acp' && providerType !== 'kilo' && providerType !== 'kilohttp') { this.setState({ status: 'Enter an API key above.' }); return; }
+    if (!apiKey && providerType !== 'kilo') { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
     const normalizedMessages = [...this.state.messages, { role: 'user', content: text }].map(m => ({

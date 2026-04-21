@@ -1,7 +1,9 @@
 export async function* streamKiloHTTP({ url, model, messages }) {
   yield { type: 'start-step' };
   const base = (url || 'http://localhost:4780').replace(/\/$/, '');
-  const sessRes = await fetch(base + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  let sessRes;
+  try { sessRes = await fetch(base + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); }
+  catch (e) { throw new Error('kilo serve not reachable at ' + base + ' — start it with: kilo serve --port ' + (new URL(base).port || 4780) + ' --cors ' + location.origin); }
   if (!sessRes.ok) throw new Error('kilo /session ' + sessRes.status + ': ' + await sessRes.text());
   const { id: sessionId } = await sessRes.json();
   Object.assign(window.__debug = window.__debug || {}, { kilo: { sessionId, url: base, lastStatus: null } });
