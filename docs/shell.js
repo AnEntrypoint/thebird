@@ -35,6 +35,7 @@ export function createShell({ term, onPreviewWrite }) {
   const toKey = p => p.replace(/^\//, '');
   const snap = () => window.__debug.idbSnapshot || {};
 
+  let expandTokens, captureRun;
   const BUILTINS = makeBuiltins(ctx, actor, invokeBuiltin);
   ctx.builtinsRef = BUILTINS;
   const _exp = makeExpander(ctx, l => captureRun(l), t => parseRedirect(t));
@@ -54,8 +55,6 @@ export function createShell({ term, onPreviewWrite }) {
   ctx.nodeEval = createNodeEnv({ ctx, term });
   const runNode = makeNodeRunner(ctx, actor);
   const runNpmResult = makeNpmResultRunner(ctx, line => run(line));
-
-  let expandTokens, captureRun;
 
   async function captureFn(fn) {
     let out = ''; const orig = term.write.bind(term); term.write = s => { out += s; };
