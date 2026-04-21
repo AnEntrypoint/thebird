@@ -29,13 +29,15 @@ jobs:
       - name: Bump patch version
         run: |
           git fetch --tags --force
-          for i in 1 2 3 4 5; do
+          HIGHEST=$(git tag -l 'v[0-9]*' | sort -V | tail -1 | sed 's/^v//')
+          CURRENT=$(node -p "require('./package.json').version")
+          BASE="$HIGHEST"
+          if [ -z "$BASE" ] || [ "$(printf '%s\n%s' "$CURRENT" "$BASE" | sort -V | tail -1)" = "$CURRENT" ]; then BASE="$CURRENT"; fi
+          node -e "const p=require('./package.json');p.version='$BASE';require('fs').writeFileSync('./package.json', JSON.stringify(p,null,2)+'\n')"
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          while git rev-parse "$NEW_VERSION" >/dev/null 2>&1; do
+            echo "tag $NEW_VERSION exists, bumping again"
             NEW_VERSION=$(npm version patch --no-git-tag-version)
-            if git rev-parse "${NEW_VERSION}" >/dev/null 2>&1; then
-              echo "Tag ${NEW_VERSION} already exists, bumping again (attempt $i)"
-              continue
-            fi
-            break
           done
           git add package.json
           git commit -m "chore: bump to ${NEW_VERSION}"
