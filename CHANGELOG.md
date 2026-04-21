@@ -1,4 +1,12 @@
 
+## [unreleased] 2026-04-21 chat observability — rich ACP/kilo/opencode event stream
+- feat: kilo-http-stream emits status, model-info, reasoning-delta, tool-event, file-event, step-start/finish, file-mirrored, unknown-part
+- feat: PART_HANDLERS dispatch table replaces part-type branching (kilo + opencode unified)
+- feat: agent-chat forwards full event stream via onEvent callback; window.__debug.agent.events rolling log (300 cap)
+- feat: agent stats strip in chat UI — provider·model·duration·txt·rsn·tool·file·step counters, live 4Hz
+- feat: inline event badges in stream ([i] status/model/unknown, [t] tool, [f] file, [s] step)
+- refactor: extracted PROVIDERS + fetchModels + renderEvent + formatStats to docs/chat-providers.js (app.js 229→166)
+
 ## [unreleased] 2026-04-21 node parity pass 12 — internal listen infrastructure
 - feat: busnet — in-browser TCP-like listen/connect via BroadcastChannel cross-tab fabric
 - feat: net.createServer now uses busnet — apps listen on ports other in-browser apps can connect to

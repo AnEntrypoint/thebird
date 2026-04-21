@@ -123,6 +123,21 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   font-size: 12px;
 }
 .tui-toolbar label { color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+.tui-agent-stats {
+  padding: 4px 2ch;
+  border-bottom: 1px solid var(--ink-hair);
+  background: var(--surface);
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-height: 18px;
+  font-family: var(--ff-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tui-agent-stats:empty { display: none; }
 .tui-msglist {
   flex: 1;
   overflow-y: auto;

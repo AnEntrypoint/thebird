@@ -98,22 +98,39 @@ function buildStream(provider) {
   return streamOpenAI({ url, apiKey: provider.apiKey, messages: provider.messages, model: provider.model, tools: TOOLS, maxOutputTokens: 8192 });
 }
 
-export async function agentGenerate(provider, messages, onChunk, onTool) {
-  Object.assign(window.__debug = window.__debug || {}, {
-    agent: { provider: provider.type, model: provider.model, active: true, lastTool: null, lastError: null },
-  });
+const EVENT_LOG_MAX = 300;
+
+export async function agentGenerate(provider, messages, onChunk, onTool, onEvent) {
+  const agentState = {
+    provider: provider.type, model: provider.model, active: true,
+    startedAt: Date.now(), lastTool: null, lastError: null,
+    events: [], textChars: 0, reasoningChars: 0, toolCalls: 0, files: 0, steps: 0,
+    modelActual: null, providerActual: null,
+  };
+  Object.assign(window.__debug = window.__debug || {}, { agent: agentState });
   try {
     for await (const ev of buildStream({ ...provider, messages })) {
-      if (ev.type === 'text-delta') onChunk(ev.textDelta);
-      else if (ev.type === 'tool-call') {
-        window.__debug.agent.lastTool = { name: ev.toolName, args: ev.args };
-        onTool(ev.toolName, ev.args);
-      } else if (ev.type === 'error') throw ev.error;
+      const rec = { ...ev, t: Date.now() };
+      agentState.events.push(rec);
+      if (agentState.events.length > EVENT_LOG_MAX) agentState.events.splice(0, agentState.events.length - EVENT_LOG_MAX);
+      onEvent?.(ev);
+      if (ev.type === 'text-delta') { agentState.textChars += ev.textDelta.length; onChunk(ev.textDelta); }
+      else if (ev.type === 'reasoning-delta') { agentState.reasoningChars += ev.textDelta.length; }
+      else if (ev.type === 'tool-call' || ev.type === 'tool-event') {
+        agentState.toolCalls++;
+        agentState.lastTool = { name: ev.toolName, args: ev.args || ev.input, status: ev.status };
+        onTool(ev.toolName, ev.args || ev.input || {});
+      } else if (ev.type === 'file-event' || ev.type === 'file-mirrored') { agentState.files++; }
+      else if (ev.type === 'start-step' || ev.type === 'step-start') { agentState.steps++; }
+      else if (ev.type === 'model-info') { agentState.modelActual = ev.modelID; agentState.providerActual = ev.providerID; }
+      else if (ev.type === 'error') throw ev.error;
     }
   } catch (e) {
-    window.__debug.agent.lastError = { message: e.message, stack: e.stack, timestamp: Date.now() };
+    agentState.lastError = { message: e.message, stack: e.stack, timestamp: Date.now() };
     throw e;
   } finally {
-    window.__debug.agent.active = false;
+    agentState.active = false;
+    agentState.finishedAt = Date.now();
+    agentState.durationMs = agentState.finishedAt - agentState.startedAt;
   }
 }

@@ -1,47 +1,8 @@
 import { createElement, applyDiff, htm } from './vendor/ui-libs.js';
 import { agentGenerate } from './agent-chat.js';
+import { PROVIDERS, fetchModels, renderEvent, formatStats } from './chat-providers.js';
 
 const html = htm.bind(createElement);
-
-const PROVIDERS = {
-  gemini:   { label: 'Google Gemini',   baseUrl: 'https://generativelanguage.googleapis.com/v1beta', keyPlaceholder: 'GEMINI_API_KEY', models: [] },
-  openai:   { label: 'OpenAI',          baseUrl: 'https://api.openai.com/v1',                        keyPlaceholder: 'OPENAI_API_KEY', models: ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'] },
-  xai:      { label: 'xAI Grok',        baseUrl: 'https://api.x.ai/v1',                              keyPlaceholder: 'XAI_API_KEY',    models: ['grok-3', 'grok-3-mini', 'grok-3-fast'] },
-  groq:     { label: 'Groq',            baseUrl: 'https://api.groq.com/openai/v1',                   keyPlaceholder: 'GROQ_API_KEY',   models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'] },
-  mistral:  { label: 'Mistral',         baseUrl: 'https://api.mistral.ai/v1',                        keyPlaceholder: 'MISTRAL_API_KEY', models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
-  deepseek: { label: 'DeepSeek',        baseUrl: 'https://api.deepseek.com/v1',                      keyPlaceholder: 'DEEPSEEK_API_KEY', models: ['deepseek-chat', 'deepseek-reasoner'] },
-  cerebras: { label: 'Cerebras',        baseUrl: 'https://api.cerebras.ai/v1',                      keyPlaceholder: 'CEREBRAS_API_KEY', models: ['gpt-oss-120b', 'llama3.1-8b'] },
-  kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'kilo-auto/free', 'openrouter/free', 'stepfun/step-3.5-flash:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'bytedance-seed/dola-seed-2.0-pro:free'] },
-  opencode: { label: 'opencode (zen)',         baseUrl: 'http://localhost:4790',                     keyPlaceholder: '(needs opencode auth login)', models: ['minimax-m2.5-free', 'nemotron-3-super-free'] },
-  custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
-};
-
-async function fetchGeminiModels(apiKey) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-  if (!res.ok) throw new Error(`Models API ${res.status}`);
-  const { models = [] } = await res.json();
-  return models
-    .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-    .map(m => ({ id: m.name.replace('models/', ''), label: m.displayName || m.name }));
-}
-
-async function fetchOpenAIModels(baseUrl, apiKey) {
-  const url = baseUrl.replace(/\/$/, '') + '/models';
-  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-  if (!res.ok) throw new Error(`Models API ${res.status}`);
-  const { data = [] } = await res.json();
-  return data.map(m => ({ id: m.id, label: m.id })).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-async function fetchModels(providerType, baseUrl, apiKey) {
-  if (providerType === 'gemini') return fetchGeminiModels(apiKey);
-  const staticModels = PROVIDERS[providerType]?.models || [];
-  try {
-    return await fetchOpenAIModels(baseUrl, apiKey);
-  } catch {
-    return staticModels.map(id => ({ id, label: id }));
-  }
-}
 
 class BirdChat extends HTMLElement {
   constructor() {
@@ -69,6 +30,13 @@ class BirdChat extends HTMLElement {
     this.render();
     Object.assign(window.__debug, { acp: { baseUrl: this.state.baseUrl, provider: this.state.providerType } });
     if (this.state.apiKey) this.loadModels();
+    this.statsTimer = setInterval(() => this.updateStats(), 250);
+  }
+  disconnectedCallback() { if (this.statsTimer) clearInterval(this.statsTimer); }
+  updateStats() {
+    const el = this.querySelector('#agent-stats');
+    if (!el) return;
+    el.textContent = formatStats(window.__debug?.agent);
   }
 
   setState(patch) { Object.assign(this.state, patch); this.render(); }
@@ -133,6 +101,8 @@ class BirdChat extends HTMLElement {
           <button class="tui-btn" onclick=${() => this.setState({ messages: [], status: '' })}>[clear]</button>
         </div>
 
+        <div id="agent-stats" class="tui-agent-stats"></div>
+
         <div id="msg-list" class="tui-msglist">
           ${messages.map((m, i) => html`
             <div key=${i} class=${'tui-msg ' + m.role}>${typeof m.content === 'string' ? m.content : (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('')}</div>`)}
@@ -178,14 +148,15 @@ class BirdChat extends HTMLElement {
       wrap.appendChild(cursor);
       const list = this.querySelector('#msg-list');
       if (list) list.appendChild(wrap);
+      const scroll = () => { const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; };
       await agentGenerate(provider, normalizedMessages,
-        chunk => { full += chunk; streamEl.textContent = full; const l = this.querySelector('#msg-list'); if (l) l.scrollTop = l.scrollHeight; },
-        (name, args) => { full += `\n[tool: ${name}(${JSON.stringify(args)})]\n`; streamEl.textContent = full; }
+        chunk => { full += chunk; streamEl.textContent = full; scroll(); },
+        () => {},
+        ev => { const rendered = renderEvent(ev); if (rendered) { full += rendered; streamEl.textContent = full; scroll(); } }
       );
       wrap.remove();
       this.setState({ messages: [...normalizedMessages, { role: 'assistant', content: [{ type: 'text', text: full || '(empty)' }] }], streaming: false, streamingText: '' });
-      const l2 = this.querySelector('#msg-list');
-      if (l2) l2.scrollTop = l2.scrollHeight;
+      scroll();
     } catch (err) {
       this.setState({ streaming: false, streamingText: '', status: 'Error: ' + (err?.message || String(err)) });
     }
