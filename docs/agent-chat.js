@@ -91,7 +91,7 @@ function buildStream(provider) {
   if (provider.type === 'gemini') {
     return streamGemini({ model: provider.model, messages: provider.messages, tools: TOOLS, apiKey: provider.apiKey, maxOutputTokens: 8192 }).fullStream;
   }
-  if (provider.type === 'acp') {
+  if (provider.type === 'acp' || provider.type === 'kilo') {
     return streamACP({ url: provider.baseUrl, model: provider.model, messages: provider.messages, tools: TOOLS, maxOutputTokens: 8192 });
   }
   const url = (provider.baseUrl || '').replace(/\/$/, '') + '/chat/completions';
