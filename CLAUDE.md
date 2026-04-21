@@ -171,6 +171,24 @@ Run examples against real Gemini API to validate message translation.
 - `stripUnsupported(params, caps)` — removes unsupported features, returns warnings
 - Defaults: streaming, toolUse, vision, systemMessage = true; jsonMode = false
 
+## Chat Observability (docs/)
+
+`docs/kilo-http-stream.js` emits rich events via `PART_HANDLERS` dispatch table (kilo HTTP + opencode SSE unified):
+- `status` — lifecycle (connecting, session id, POST status, mirror step)
+- `model-info` — { providerID, modelID } actually routed to (may differ from requested when gm agent plugin hijacks)
+- `text-delta` / `reasoning-delta` — accumulating growth
+- `tool-event` — { toolName, status, input, output, error, id } from `part.type === 'tool'` state
+- `file-event` / `file-mirrored` — agent file writes / sandbox mirror results
+- `step-start` / `step-finish` — { id, tokens?, cost? } boundaries
+- `unknown-part` — diagnostic for unhandled part.type
+
+`window.__debug.agent` permanent registry (populated by `agent-chat.js`):
+`{ provider, model, modelActual, providerActual, active, startedAt, finishedAt, durationMs, textChars, reasoningChars, toolCalls, files, steps, lastTool, lastError, events: [...rolling 300] }`
+
+Per-provider rolling logs: `window.__debug.kilo.events`, `window.__debug.opencode.events`.
+
+UI consumes via 3 channels: `onChunk(delta)` text streaming | `onEvent(ev)` badge rendering via `renderEvent()` dispatch table in `docs/chat-providers.js` | 4Hz poll on `window.__debug.agent` → `#agent-stats` strip (live counters).
+
 ## Files
 
 - `lib/convert.js`: Message/tool translation logic
