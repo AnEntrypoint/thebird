@@ -7,6 +7,22 @@
 <title>thebird — TUI</title>
 <link rel="stylesheet" href="vendor/xterm.css" />
 <link rel="stylesheet" href="tui.css" />
+<script>
+(() => {
+  const saved = localStorage.getItem('tui_theme');
+  const prefDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  window.setTheme = t => {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('tui_theme', t);
+    window.dispatchEvent(new CustomEvent('tui-theme-change', { detail: t }));
+  };
+  window.toggleTheme = () => window.setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', e => { if (!localStorage.getItem('tui_theme')) window.setTheme(e.matches ? 'dark' : 'light'); });
+  (window.__debug = window.__debug || {}).theme = { get current() { return document.documentElement.getAttribute('data-theme'); }, set: window.setTheme, toggle: window.toggleTheme };
+})();
+</script>
 </head>
 <body>
 <div style="display:flex;flex-direction:column;height:100%">
@@ -16,6 +32,7 @@
     <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">Chat</button>
     <button id="tab-term" class="tui-tab" onclick="switchTab('term')">Terminal</button>
     <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">Preview</button>
+    <button class="tui-tab" style="margin-left:auto" onclick="toggleTheme()" title="Toggle dark/light">◐</button>
   </div>
   <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
     <bird-chat></bird-chat>
@@ -27,7 +44,7 @@
     <div class="tui-toolbar">
       <button class="tui-btn" onclick="refreshPreview()">[reload]</button>
     </div>
-    <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:#000" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--paper)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
   </div>
 </div>
 <script>
@@ -77,7 +94,9 @@ async function refreshPreview() {
   const htmlFiles = Object.keys(snap).filter(k => k.endsWith('.html'));
   const pick = htmlFiles.find(k => k === 'index.html') || htmlFiles[0];
   if (pick) { iframe.srcdoc = snap[pick]; return; }
-  iframe.srcdoc = '<pre style="color:#0B0B09;background:#EFE9DD;padding:1ch;font-family:monospace">no files yet</pre>';
+  const cs = getComputedStyle(document.documentElement);
+  const fg = cs.getPropertyValue('--ink').trim(), bg = cs.getPropertyValue('--paper').trim();
+  iframe.srcdoc = `<pre style="color:${fg};background:${bg};padding:1ch;font-family:monospace">no files yet</pre>`;
 }
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {

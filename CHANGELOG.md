@@ -1,4 +1,14 @@
 
+## [unreleased] 2026-04-21 theme system + richer chat output
+- feat: dark/light theme via [data-theme] attribute; pre-paint boot script respects localStorage + prefers-color-scheme
+- feat: theme toggle button (◐) in tabs row; window.setTheme / toggleTheme / __debug.theme
+- feat: xterm terminal re-themes live on tui-theme-change event (reads CSS vars)
+- feat: preview iframe + "no files yet" placeholder inherit current theme
+- fix: select arrow uses CSS gradients instead of hardcoded-fill SVG — theme-reactive
+- feat: tool-event now renders output + error inline (not just input)
+- feat: tool-event sig includes input length + output presence — multiple state snapshots during streaming
+- feat: unknown-part carries raw part.text for diagnostic visibility
+
 ## [unreleased] 2026-04-21 chat observability — rich ACP/kilo/opencode event stream
 - feat: kilo-http-stream emits status, model-info, reasoning-delta, tool-event, file-event, step-start/finish, file-mirrored, unknown-part
 - feat: PART_HANDLERS dispatch table replaces part-type branching (kilo + opencode unified)

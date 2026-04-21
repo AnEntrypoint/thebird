@@ -18,9 +18,9 @@ const PART_HANDLERS = {
     }
   },
   tool: (part, st, emit) => {
-    const key = part.id + ':' + (part.state?.status || '');
-    if (st.seenTool.has(key)) return;
-    st.seenTool.add(key);
+    const sig = part.id + ':' + (part.state?.status || '') + ':' + JSON.stringify(part.state?.input || '').length + ':' + (part.state?.output ? 1 : 0);
+    if (st.seenTool.has(sig)) return;
+    st.seenTool.add(sig);
     emit({ type: 'tool-event', toolName: part.tool || part.state?.tool, status: part.state?.status, input: part.state?.input, output: part.state?.output, error: part.state?.error, id: part.id });
   },
   file: (part, st, emit) => {
@@ -80,7 +80,7 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
           if (part?.sessionID !== sessionId || !assistantMsgs.has(part.messageID)) return;
           const h = PART_HANDLERS[part.type];
           if (h) h(part, st, push);
-          else push({ type: 'unknown-part', partType: part.type, id: part.id });
+          else push({ type: 'unknown-part', partType: part.type, id: part.id, text: part.text, raw: part });
         }
       } catch (_) {}
     };
@@ -113,7 +113,7 @@ export async function* streamKiloHTTP({ url, model, messages, providerType, agen
       const pending = [];
       const pushLocal = ev => { emit(ev); pending.push(ev); };
       if (h) h(part, st, pushLocal);
-      else pushLocal({ type: 'unknown-part', partType: part.type, id: part.id });
+      else pushLocal({ type: 'unknown-part', partType: part.type, id: part.id, text: part.text, raw: part });
       for (const ev of pending) yield ev;
     }
   }

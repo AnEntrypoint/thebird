@@ -57,12 +57,22 @@ async function boot() {
   window.__debug = window.__debug || {};
   window.__debug.terminal = { get state() { return bootActor.getSnapshot().value; } };
 
-  const term = new Terminal({ theme: { background: '#000000', foreground: '#33ff33' }, convertEol: true });
+  const readTermTheme = () => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      background: cs.getPropertyValue('--paper').trim() || '#000',
+      foreground: cs.getPropertyValue('--ink').trim() || '#ccc',
+      cursor: cs.getPropertyValue('--green').trim() || '#3FA93A',
+      selectionBackground: cs.getPropertyValue('--green').trim() || '#3FA93A',
+    };
+  };
+  const term = new Terminal({ theme: readTermTheme(), convertEol: true });
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(el);
   fit.fit();
   window.addEventListener('resize', () => fit.fit());
+  window.addEventListener('tui-theme-change', () => { term.options.theme = readTermTheme(); });
 
   const saved = await idbLoad();
   let files;

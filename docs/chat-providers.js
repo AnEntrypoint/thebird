@@ -37,17 +37,24 @@ export async function fetchModels(providerType, baseUrl, apiKey) {
 const fmtArgs = a => { try { const s = JSON.stringify(a); return s.length > 140 ? s.slice(0, 137) + '...' : s; } catch { return '?'; } };
 const badge = (label, cls) => `\n\n[${cls}] ${label}\n`;
 
+const fmtOut = o => { if (o == null) return ''; const s = typeof o === 'string' ? o : JSON.stringify(o); return s.length > 400 ? s.slice(0, 397) + '...' : s; };
+
 const RENDERERS = {
   status: ev => badge('status: ' + ev.message, 'i'),
   'model-info': ev => badge('model: ' + (ev.providerID || '') + '/' + ev.modelID, 'i'),
-  'tool-event': ev => badge('tool ' + (ev.status || '') + ': ' + ev.toolName + ' ' + fmtArgs(ev.input), 't'),
+  'tool-event': ev => {
+    const head = badge('tool ' + (ev.status || '') + ': ' + ev.toolName + ' ' + fmtArgs(ev.input), 't');
+    const out = ev.output != null ? '\n  → ' + fmtOut(ev.output).replace(/\n/g, '\n    ') + '\n' : '';
+    const err = ev.error ? '\n  ✗ ' + fmtOut(ev.error) + '\n' : '';
+    return head + out + err;
+  },
   'tool-call': ev => badge('tool: ' + ev.toolName + ' ' + fmtArgs(ev.args), 't'),
   'file-event': ev => badge('file: ' + (ev.filename || ev.url || '?'), 'f'),
   'file-mirrored': ev => badge('wrote: ' + ev.path, 'f'),
   'reasoning-delta': ev => ev.textDelta,
   'step-start': () => badge('step start', 's'),
   'step-finish': ev => badge('step finish' + (ev.tokens ? ' tokens=' + JSON.stringify(ev.tokens) : ''), 's'),
-  'unknown-part': ev => badge('?part ' + ev.partType, 'i'),
+  'unknown-part': ev => badge('?part ' + ev.partType + (ev.text ? ' text=' + fmtOut(ev.text) : ''), 'i'),
 };
 
 export function renderEvent(ev) { const r = RENDERERS[ev.type]; return r ? r(ev) : ''; }
