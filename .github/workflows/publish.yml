@@ -28,7 +28,15 @@ jobs:
 
       - name: Bump patch version
         run: |
-          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          git fetch --tags --force
+          for i in 1 2 3 4 5; do
+            NEW_VERSION=$(npm version patch --no-git-tag-version)
+            if git rev-parse "${NEW_VERSION}" >/dev/null 2>&1; then
+              echo "Tag ${NEW_VERSION} already exists, bumping again (attempt $i)"
+              continue
+            fi
+            break
+          done
           git add package.json
           git commit -m "chore: bump to ${NEW_VERSION}"
           git tag "${NEW_VERSION}"
