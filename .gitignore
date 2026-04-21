@@ -13,3 +13,4 @@ node_modules
 cerebras-integration-chat.png
 preview-todo-*.png
 todo-app.html
+.sandbox/
