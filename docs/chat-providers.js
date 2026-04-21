@@ -8,6 +8,7 @@ export const PROVIDERS = {
   cerebras: { label: 'Cerebras',        baseUrl: 'https://api.cerebras.ai/v1',                      keyPlaceholder: 'CEREBRAS_API_KEY', models: ['gpt-oss-120b', 'llama3.1-8b'] },
   kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'kilo-auto/free', 'openrouter/free', 'stepfun/step-3.5-flash:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'bytedance-seed/dola-seed-2.0-pro:free'] },
   opencode: { label: 'opencode (zen)',         baseUrl: 'http://localhost:4790',                     keyPlaceholder: '(needs opencode auth login)', models: ['minimax-m2.5-free', 'nemotron-3-super-free'] },
+  acp2openai: { label: 'acp2openai (OpenAI-compat)', baseUrl: 'http://localhost:4800/v1',             keyPlaceholder: '(no key needed)', models: ['kilo/x-ai/grok-code-fast-1:optimized:free', 'kilo/kilo-auto/free', 'kilo/openrouter/free', 'opencode/minimax-m2.5-free'] },
   custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 

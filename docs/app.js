@@ -66,14 +66,15 @@ class BirdChat extends HTMLElement {
 
   renderBaseUrlInput() {
     const { providerType, baseUrl } = this.state;
-    if (providerType !== 'custom' && providerType !== 'kilo' && providerType !== 'opencode') return null;
-    const ph = providerType === 'kilo' ? 'http://localhost:4780' : (providerType === 'opencode' ? 'http://localhost:4790' : 'https://your-endpoint/v1');
+    if (providerType !== 'custom' && providerType !== 'kilo' && providerType !== 'opencode' && providerType !== 'acp2openai') return null;
+    const phMap = { kilo: 'http://localhost:4780', opencode: 'http://localhost:4790', acp2openai: 'http://localhost:4800/v1', custom: 'https://your-endpoint/v1' };
+    const ph = phMap[providerType] || phMap.custom;
     return html`<input type="text" class="tui-input" style="flex:1;min-width:140px" placeholder=${ph} value=${baseUrl}
       onchange=${e => { localStorage.setItem('provider_base_url', e.target.value); this.setState({ baseUrl: e.target.value }); }} />`;
   }
   renderApiKeyInput() {
     const { providerType, apiKey } = this.state;
-    if (providerType === 'kilo' || providerType === 'opencode') return null;
+    if (providerType === 'kilo' || providerType === 'opencode' || providerType === 'acp2openai') return null;
     const provDef = PROVIDERS[providerType] || PROVIDERS.custom;
     return html`<input id="api-key-input" type="password" class="tui-input" style="flex:1;min-width:120px" placeholder=${provDef.keyPlaceholder} value=${apiKey}
       onchange=${e => { const v = e.target.value.trim(); localStorage.setItem('provider_api_key', v); this.setState({ apiKey: v }); if (v) this.loadModels(); }} />`;
@@ -128,7 +129,7 @@ class BirdChat extends HTMLElement {
     const text = input?.value.trim();
     if (!text || this.state.streaming) return;
     const { apiKey, model, providerType, baseUrl } = this.state;
-    if (!apiKey && providerType !== 'kilo' && providerType !== 'opencode') { this.setState({ status: 'Enter an API key above.' }); return; }
+    if (!apiKey && providerType !== 'kilo' && providerType !== 'opencode' && providerType !== 'acp2openai') { this.setState({ status: 'Enter an API key above.' }); return; }
     input.value = '';
     input.style.height = 'auto';
     const normalizedMessages = [...this.state.messages, { role: 'user', content: text }].map(m => ({
