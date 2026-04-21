@@ -99,5 +99,6 @@ const { streamRouter, generateRouter, createRouter } = require('./lib/router-str
 const { cloudGenerate, streamCloud, cloudStream } = require('./lib/cloud-generate');
 const { ensureAuth, login: oauthLogin } = require('./lib/oauth');
 const { BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError, classifyError, redactKeys } = require('./lib/errors');
+const { streamACP, generateACP } = require('./lib/providers/acp');
 
-module.exports = { streamGemini, createFullStream, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError, classifyError, redactKeys, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin };
+module.exports = { streamGemini, createFullStream, generateGemini, streamRouter, generateRouter, createRouter, convertMessages, convertTools, cleanSchema, GeminiError, BridgeError, AuthError, RateLimitError, TimeoutError, ContextWindowError, ContentPolicyError, ProviderError, classifyError, redactKeys, cloudGenerate, streamCloud, cloudStream, ensureAuth, oauthLogin, streamACP, generateACP };

@@ -14,3 +14,8 @@ cerebras-integration-chat.png
 preview-todo-*.png
 todo-app.html
 .sandbox/
+.klog
+.kpid
+.wpid
+.events.log
+.stream-test.log
