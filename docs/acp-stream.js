@@ -70,7 +70,7 @@ export async function* streamACP({ url, model, messages, system, tools, maxOutpu
     },
   }), stream);
 
-  await client.initialize({ protocolVersion: '0.1', capabilities: {}, clientInfo: { name: 'thebird', version: '1.0' } });
+  await client.initialize({ protocolVersion: 1, capabilities: {}, clientInfo: { name: 'thebird', version: '1.0' } });
   const { sessionId } = await client.newSession({ cwd: '/' });
 
   const userText = messages.filter(m => m.role === 'user').map(m =>
