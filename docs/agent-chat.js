@@ -1,5 +1,6 @@
 import { streamGemini, streamOpenAI } from './vendor/thebird-browser.js';
 import { streamACP } from './acp-stream.js';
+import { streamKiloHTTP } from './kilo-http-stream.js';
 
 function idbRead(path) {
   const snap = window.__debug.idbSnapshot;
@@ -93,6 +94,9 @@ function buildStream(provider) {
   }
   if (provider.type === 'acp' || provider.type === 'kilo') {
     return streamACP({ url: provider.baseUrl, model: provider.model, messages: provider.messages, tools: TOOLS, maxOutputTokens: 8192 });
+  }
+  if (provider.type === 'kilohttp') {
+    return streamKiloHTTP({ url: provider.baseUrl, model: provider.model, messages: provider.messages });
   }
   const url = (provider.baseUrl || '').replace(/\/$/, '') + '/chat/completions';
   return streamOpenAI({ url, apiKey: provider.apiKey, messages: provider.messages, model: provider.model, tools: TOOLS, maxOutputTokens: 8192 });
