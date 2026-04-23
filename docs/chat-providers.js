@@ -23,9 +23,7 @@ export const PROVIDERS = {
   github:     { label: 'GitHub Models', baseUrl: 'https://models.github.ai/inference',              keyPlaceholder: 'GITHUB_TOKEN',      models: ['openai/gpt-4.1', 'openai/gpt-4o-mini', 'meta/llama-3.3-70b-instruct', 'deepseek/deepseek-v3'] },
   vercel:     { label: 'Vercel AI Gateway', baseUrl: 'https://ai-gateway.vercel.sh/v1',             keyPlaceholder: 'AI_GATEWAY_API_KEY', models: ['anthropic/claude-sonnet-4.5', 'openai/gpt-4.1', 'google/gemini-2.5-flash', 'xai/grok-code-fast-1'] },
   cohere:     { label: 'Cohere',        baseUrl: 'https://api.cohere.com/compatibility/v1',         keyPlaceholder: 'COHERE_API_KEY',    models: ['command-a-03-2025', 'command-r-plus-08-2024', 'command-r-08-2024'] },
-  kilo:     { label: 'Kilo Code',              baseUrl: 'http://localhost:4780',                     keyPlaceholder: '(no key needed)', models: ['x-ai/grok-code-fast-1:optimized:free', 'kilo-auto/free', 'openrouter/free', 'stepfun/step-3.5-flash:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'bytedance-seed/dola-seed-2.0-pro:free'] },
-  opencode: { label: 'opencode (zen)',         baseUrl: 'http://localhost:4790',                     keyPlaceholder: '(needs opencode auth login)', models: ['minimax-m2.5-free', 'nemotron-3-super-free'] },
-  acp2openai: { label: 'acp2openai (OpenAI-compat)', baseUrl: 'http://localhost:4800/v1',             keyPlaceholder: '(no key needed)', models: ['kilo/x-ai/grok-code-fast-1:optimized:free', 'kilo/kilo-auto/free', 'kilo/openrouter/free', 'opencode/minimax-m2.5-free'] },
+  acptoapi: { label: 'acptoapi (Kilo/opencode via OpenAI-compat)', baseUrl: 'http://localhost:4800/v1', keyPlaceholder: '(run: npx acptoapi)', models: ['kilo/x-ai/grok-code-fast-1:optimized:free', 'kilo/kilo-auto/free', 'kilo/openrouter/free', 'opencode/minimax-m2.5-free'] },
   custom:   { label: 'Custom (OpenAI-compat)', baseUrl: '',                                          keyPlaceholder: 'API_KEY',        models: [] },
 };
 
