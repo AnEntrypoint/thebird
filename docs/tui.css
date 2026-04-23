@@ -44,15 +44,33 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
 .tui-header {
   border-bottom: 1px solid var(--ink-hair);
   background: var(--paper);
-  padding: 6px 2ch;
-  white-space: pre;
-  font-size: 10px;
-  line-height: 1.1;
+  padding: 10px 2ch;
   color: var(--ink);
   overflow: hidden;
+  display: flex;
+  align-items: baseline;
+  gap: 2ch;
+  flex-wrap: wrap;
 }
-.tui-header .logo { color: var(--ink); font-family: var(--ff-mono); font-weight: 700; }
-.tui-header .ver { color: var(--green); font-weight: 600; }
+.tui-header .brand {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: baseline;
+}
+.tui-header .brand .slash { color: var(--ink-dim); font-weight: 400; padding: 0 0.3ch; }
+.tui-header .brand .leaf { color: var(--green); }
+.tui-header .tagline {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  color: var(--ink-dim);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
 .tui-tabs {
   display: flex;
   gap: 0;

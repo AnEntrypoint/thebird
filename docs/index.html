@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="version" content="1.2.23">
-<title>thebird — TUI</title>
+<meta name="theme-color" content="#247420" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#3FA93A" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<title>acptoapi / chat</title>
+<meta name="description" content="openai-compatible chat console — bring any provider, stream any model.">
+<meta name="author" content="247420 / AnEntrypoint">
 <link rel="stylesheet" href="vendor/xterm.css" />
 <link rel="stylesheet" href="tui.css" />
 <script>
@@ -26,12 +30,14 @@
 </head>
 <body>
 <div style="display:flex;flex-direction:column;height:100%">
-  <div class="tui-header"><pre class="logo" style="margin:0">  ▀█▀ █░█ █▀▀ █▄▄ █ █▀█ █▀▄   <span class="ver">v1.2</span>
-   █  █▀█ ██▄ █▄█ █ █▀▄ █▄▀   <span style="color:#247420">instant posix js</span></pre></div>
+  <div class="tui-header">
+    <span class="brand">247420<span class="slash"> / </span>acptoapi<span class="slash"> / </span><span class="leaf">chat</span></span>
+    <span class="tagline">openai-compatible chat console · any provider, any model</span>
+  </div>
   <div class="tui-tabs">
-    <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">Chat</button>
-    <button id="tab-term" class="tui-tab" onclick="switchTab('term')">Terminal</button>
-    <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">Preview</button>
+    <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">chat</button>
+    <button id="tab-term" class="tui-tab" onclick="switchTab('term')">terminal</button>
+    <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">preview</button>
     <button class="tui-tab" style="margin-left:auto" onclick="toggleTheme()" title="Toggle dark/light">◐</button>
   </div>
   <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
