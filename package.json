@@ -38,7 +38,8 @@
     "url": "https://github.com/AnEntrypoint/thebird.git"
   },
   "dependencies": {
-    "acptoapi": "file:../acptoapi"
+    "acptoapi": "file:../acptoapi",
+    "floosie": "^0.6.4"
   },
   "engines": {
     "node": ">=18"
