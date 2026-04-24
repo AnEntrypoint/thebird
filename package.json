@@ -38,8 +38,7 @@
     "url": "https://github.com/AnEntrypoint/thebird.git"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.88.0",
-    "@google/genai": "^1.0.0"
+    "acptoapi": "file:../acptoapi"
   },
   "engines": {
     "node": ">=18"

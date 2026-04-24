@@ -1,5 +1,5 @@
 const http = require('http');
-const { streamGemini, generateGemini } = require('./index.js');
+const { streamGemini, generateGemini } = require('acptoapi');
 
 const PORT = process.env.PORT || 3456;
 const state = { requests: 0, errors: 0, active: 0 };
