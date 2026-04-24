@@ -1,3 +1,7 @@
+## 2026-04-24
+- feat(docs): full 247420-design landing page with hero, 8-feature grid, architecture diagram, project receipt, and embedded live app
+- refactor: acptoapi extracted to separate package; thebird re-exports it via index.js
+
 
 ## [unreleased] 2026-04-21 theme system + richer chat output
 - feat: dark/light theme via [data-theme] attribute; pre-paint boot script respects localStorage + prefers-color-scheme
