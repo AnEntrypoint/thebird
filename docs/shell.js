@@ -14,6 +14,7 @@ import { createFdTable, makeExecBuiltin } from './shell-fd.js';
 import { readStream } from './shell-procsub.js';
 import { makeExpander, makeCaptureRun, makeNodeRunner, makeNpmResultRunner } from './shell-exec.js';
 import { createSwJobs, makeNohupBuiltin, makeNetcatStub, makeCurlBuiltin } from './shell-sw-jobs.js';
+import { makeGitBuiltin } from './shell-git.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NODE_START: 'node-running' } },
@@ -53,6 +54,7 @@ export function createShell({ term, onPreviewWrite }) {
   const npmCmd = makeNpm(ctx); const npxCmd = makeNpx(npmCmd); ctx.exec = line => run(line);
   const pmDispatch = makePmDispatcher(term, null, () => window.__debug.idbPersist?.(), ctx); const corepackCmd = makeCorepackStub(term); const dlxCmd = makeDlx(term, null, ctx, run);
   ctx.nodeEval = createNodeEnv({ ctx, term });
+  const gitCmd = makeGitBuiltin(ctx);
   const runNode = makeNodeRunner(ctx, actor);
   const runNpmResult = makeNpmResultRunner(ctx, line => run(line));
 
@@ -105,6 +107,7 @@ export function createShell({ term, onPreviewWrite }) {
       if (cmd === 'deno') { if (args[0] === 'run') { await runNode(args.slice(1)); return; } ctx.lastExitCode = await pmDispatch('deno', args[0] || 'task', args.slice(1)); return; }
       if (cmd === 'corepack') { ctx.lastExitCode = await corepackCmd(args); return; }
       if (cmd === 'node') { await runNode(args); return; }
+      if (cmd === 'git') { await gitCmd(args); return; }
       if (cmd === 'exit') { BUILTINS.exit([], actor); return; }
       if (writeOut) { writeOut(await invokeBuiltin(cmd, args, true)); return; }
       await invokeBuiltin(cmd, args, false);
@@ -169,7 +172,7 @@ export function createShell({ term, onPreviewWrite }) {
     if (onData) drainQueue(onData);
   }
 
-  const getCompletions = (line, word) => (line.trim().split(/\s+/).length <= 1 && !line.includes(' ')) ? Object.keys(BUILTINS).concat(['npm', 'node', 'pnpm', 'yarn', 'bun', 'deno', 'npx', 'corepack']).filter(c => c.startsWith(word)) : Object.keys(snap()).filter(f => f.startsWith(word));
+  const getCompletions = (line, word) => (line.trim().split(/\s+/).length <= 1 && !line.includes(' ')) ? Object.keys(BUILTINS).concat(['npm', 'node', 'pnpm', 'yarn', 'bun', 'deno', 'npx', 'corepack', 'git']).filter(c => c.startsWith(word)) : Object.keys(snap()).filter(f => f.startsWith(word));
 
   const handleLine = line => {
     if (blockLines.length > 0 || isControlStart(line)) {

@@ -645,7 +645,11 @@
         <button id="tab-chat" class="tui-tab active" onclick="switchTab('chat')">chat</button>
         <button id="tab-term" class="tui-tab" onclick="switchTab('term')">terminal</button>
         <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">preview</button>
-        <span style="margin-left:auto;padding:0 2ch;font-size:10px;color:var(--ink-dim);line-height:36px">api key in localStorage · no server · <a href="https://github.com/AnEntrypoint/thebird" style="color:var(--ink-dim)">source ↗</a></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:1ch;padding:0 2ch">
+        <span id="gh-user-badge" style="font-size:10px;color:var(--ink-dim)"></span>
+        <button id="gh-login-btn" onclick="githubLogin()" style="font-size:10px;font-family:var(--ff-mono);background:none;border:1px solid var(--ink-hair);color:var(--ink-dim);padding:2px 8px;cursor:pointer;transition:color 80ms,border-color 80ms" onmouseover="this.style.color='var(--ink)';this.style.borderColor='var(--ink)'" onmouseout="this.style.color='var(--ink-dim)';this.style.borderColor='var(--ink-hair)'">github login</button>
+        <span style="font-size:10px;color:var(--ink-dim)">· no server · <a href="https://github.com/AnEntrypoint/thebird" style="color:var(--ink-dim)">source ↗</a></span>
+      </span>
       </div>
       <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
         <bird-chat></bird-chat>
@@ -751,6 +755,59 @@ function switchTab(t) {
   if (t === 'preview') refreshPreview();
 }
 window.showPreview = () => switchTab('preview');
+
+const GH_TOKEN_KEY = 'thebird_github_token';
+const GH_USER_KEY = 'thebird_github_user';
+
+function updateGhBadge() {
+  const user = localStorage.getItem(GH_USER_KEY);
+  const badge = document.getElementById('gh-user-badge');
+  const btn = document.getElementById('gh-login-btn');
+  if (!badge || !btn) return;
+  if (user) { badge.textContent = '● ' + user; badge.style.color = 'var(--green)'; btn.textContent = 'logout'; btn.onclick = githubLogout; }
+  else { badge.textContent = ''; badge.style.color = ''; btn.textContent = 'github login'; btn.onclick = githubLogin; }
+}
+
+function githubLogout() {
+  localStorage.removeItem(GH_TOKEN_KEY); localStorage.removeItem(GH_USER_KEY);
+  updateGhBadge();
+}
+
+async function githubLogin() {
+  const clientId = window.__debug?.githubClientId || prompt('GitHub OAuth App Client ID (create at github.com/settings/developers):');
+  if (!clientId) return;
+  window.__debug = window.__debug || {};
+  window.__debug.githubClientId = clientId;
+  const btn = document.getElementById('gh-login-btn');
+  try {
+    btn.disabled = true; btn.textContent = 'requesting...';
+    const codeRes = await fetch('https://github.com/login/device/code', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, scope: 'repo' }) });
+    if (!codeRes.ok) throw new Error('device code failed: ' + codeRes.status);
+    const { device_code, user_code, verification_uri, interval } = await codeRes.json();
+    if (window.open(verification_uri, '_blank')) {}
+    btn.textContent = 'enter: ' + user_code;
+    let wait = (interval || 5) * 1000; const start = Date.now();
+    while (Date.now() - start < 300000) {
+      await new Promise(r => setTimeout(r, wait));
+      const res = await fetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId, device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }) });
+      const data = await res.json();
+      if (data.access_token) {
+        const meRes = await fetch('https://api.github.com/user', { headers: { Authorization: 'Bearer ' + data.access_token, 'User-Agent': 'thebird' } });
+        const me = meRes.ok ? await meRes.json() : {};
+        localStorage.setItem(GH_TOKEN_KEY, data.access_token);
+        if (me.login) { localStorage.setItem(GH_USER_KEY, me.login); window.__debug.githubUser = me.login; }
+        updateGhBadge(); return;
+      }
+      if (data.error === 'slow_down') wait = ((data.interval || 5) + 5) * 1000;
+      else if (data.error !== 'authorization_pending') throw new Error(data.error_description || data.error);
+    }
+    throw new Error('timed out');
+  } catch(e) { alert('GitHub login failed: ' + e.message); }
+  finally { btn.disabled = false; updateGhBadge(); }
+}
+
+window.updateGhBadge = updateGhBadge;
+document.addEventListener('DOMContentLoaded', updateGhBadge);
 </script>
 <script type="module" src="app.js"></script>
 <script type="module" src="terminal.js"></script>
