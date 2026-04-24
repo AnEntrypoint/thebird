@@ -2,9 +2,22 @@
 
 ## Architecture Overview
 
-**thebird** is an Anthropic SDK adapter that translates message format and tool calls to multiple LLM providers (Gemini, OpenAI-compatible APIs). It's a drop-in bridge — you write Anthropic-format code, thebird routes to any provider.
+**thebird** is the web OS shell — browser-native terminal, agentic chat, and file system. All Anthropic-format message translation, routing, streaming, and tool calling is owned by **[acptoapi](https://github.com/AnEntrypoint/acptoapi)** (`node_modules/acptoapi`). thebird depends on acptoapi as an npm package (`file:../acptoapi` locally, npm in CI).
 
-### Message Translation
+```
+thebird (web OS)
+  ├── docs/          — browser UI (chat, terminal, preview, shell)
+  ├── serve.js       — static file server for docs/
+  ├── server.js      — Anthropic-compat HTTP proxy (uses acptoapi)
+  ├── index.js       — re-exports acptoapi
+  └── node_modules/acptoapi/
+        ├── lib/convert.js     — Anthropic↔Gemini message translation
+        ├── lib/providers/     — OpenAI-compat + ACP providers
+        ├── lib/router-stream.js — multi-provider routing
+        └── index.js           — streamGemini, generateGemini, createRouter, ...
+```
+
+### Message Translation (in acptoapi)
 
 Anthropic format:
 ```js
@@ -18,14 +31,14 @@ Translates to provider-native format:
 - **Gemini**: `parts: [{ text: '...' }, { inlineData: { mimeType: '...', data: '...' } }]`
 - **OpenAI**: `content: [{ type: 'text', text: '...' }, { type: 'image_url', image_url: { url: '...' } }]`
 
-### Tool Calling
+### Tool Calling (in acptoapi)
 
 Anthropic tool schema → provider native → normalized response back to Anthropic format.
 
 Streaming events (all events are Anthropic-compatible):
 - `text-delta`, `tool-use-start`, `tool-use-delta`, `message-start`, `message-stop`
 
-### Routing (Multi-Provider)
+### Routing (Multi-Provider, in acptoapi)
 
 `createRouter()` picks provider+model per request based on:
 1. `taskType` (e.g., 'think', 'background', 'longContext')
@@ -191,6 +204,14 @@ UI consumes via 3 channels: `onChunk(delta)` text streaming | `onEvent(ev)` badg
 
 ## Files
 
+- `index.js`: Re-exports all of acptoapi
+- `server.js`: Anthropic-compatible HTTP proxy using acptoapi (streamGemini/generateGemini)
+- `serve.js`: Static file server for docs/ (COEP/COOP headers for WebContainer)
+- `package.json`: depends on `acptoapi` (file:../acptoapi locally, npm in CI)
+- `docs/shell-builtins.js`: FS/IO builtins (ls/cat/echo/cd/mkdir/rm/cp/mv/touch/head/tail/wc) — imports makeTextBuiltins
+- `docs/shell-builtins-text.js`: Text-processing builtins (grep/sed/sort/uniq/tr) + env/export/clear/history/which/exit/true/false/printenv
+
+**acptoapi** (owned by `c:/dev/acptoapi`, installed as npm dep):
 - `lib/convert.js`: Message/tool translation logic
 - `lib/client.js`: Provider client factory
 - `lib/errors.js`: Typed error hierarchy (BridgeError, AuthError, RateLimitError, etc.), classifyError, redactKeys, withRetry
@@ -202,10 +223,6 @@ UI consumes via 3 channels: `onChunk(delta)` text streaming | `onEvent(ev)` badg
 - `index.js`: Main entry point, Gemini streaming/generation, re-exports
 - `index.d.ts`: TypeScript type definitions
 - `examples/`: Working examples using Anthropic SDK format
-- `wasi/cli.ts`: Deno streaming CLI — `deno run --allow-net --allow-env wasi/cli.ts [--model M] [--system S] <prompt>`
-- `deno.json`: tasks `cli` (run) and `cli:compile` (→ `dist/thebird` binary)
-- `docs/shell-builtins.js`: FS/IO builtins (ls/cat/echo/cd/mkdir/rm/cp/mv/touch/head/tail/wc) — imports makeTextBuiltins
-- `docs/shell-builtins-text.js`: Text-processing builtins (grep/sed/sort/uniq/tr) + env/export/clear/history/which/exit/true/false/printenv
 
 ## WebContainer Terminal in docs/
 
