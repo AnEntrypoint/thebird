@@ -25,14 +25,34 @@ export function makeTextBuiltins(ctx, readFile, writeFile) {
       if (!pat) throw new Error('grep: missing pattern');
       const re = new RegExp(pat, flags.includes('i') ? 'gi' : 'g');
       const lineNos = flags.includes('n');
-      const sources = fileArgs.length ? fileArgs.map(f => ({ name: f, text: readFile(f) })) : [{ name: '', text: stdin || '' }];
+      const countOnly = flags.includes('c');
+      const invertMatch = flags.includes('v');
+      const recursive = flags.includes('r') || flags.includes('R');
+      let sources = [];
+      if (fileArgs.length) {
+        for (const f of fileArgs) {
+          if (recursive) {
+            const prefix = toKey(resolvePath(ctx.cwd, f));
+            for (const k of Object.keys(snap())) {
+              if (k === prefix || k.startsWith(prefix + '/')) sources.push({ name: '/' + k, text: snap()[k] });
+            }
+          } else {
+            sources.push({ name: f, text: readFile(f) });
+          }
+        }
+      } else {
+        sources = [{ name: '', text: stdin || '' }];
+      }
       const showFile = sources.length > 1 || flags.includes('H');
       let matched = 0;
       for (const { name, text } of sources) {
-        text.split('\n').forEach((l, i) => {
+        let count = 0;
+        (typeof text === 'string' ? text : '').split('\n').forEach((l, i) => {
           re.lastIndex = 0;
-          if (re.test(l)) { wl((showFile && name ? name + ':' : '') + (lineNos ? (i + 1) + ':' : '') + l); matched++; }
+          const hit = re.test(l);
+          if (hit !== invertMatch) { count++; matched++; if (!countOnly) wl((showFile && name ? name + ':' : '') + (lineNos ? (i + 1) + ':' : '') + l); }
         });
+        if (countOnly) wl((showFile && name ? name + ':' : '') + count);
       }
       if (!matched) ctx.lastExitCode = 1;
     },

@@ -1,4 +1,3 @@
-.gm-stop-verified
 .env
 node_modules
 .prd
@@ -27,3 +26,14 @@ todo-app.html
 .kilo.log
 .start-kilo.log
 .thebird-cfg/
+# >>> gm managed (do not edit between markers)
+.gm-stop-verified
+.gm/rslearn-counter.json
+.gm/git-block-counter.json
+.gm/learning-state.md
+.gm/trajectory-drafts/
+.gm/ingest-drafts/
+.gm/needs-gm
+.gm/lastskill
+# tracked: .gm/rs-learn.db, .gm/code-search/, AGENTS.md, .gm/prd.yml
+# <<< gm managed

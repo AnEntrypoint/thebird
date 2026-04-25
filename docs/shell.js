@@ -24,7 +24,7 @@ const machine = createMachine({ id: 'shell', initial: 'idle', states: {
 }});
 
 export function createShell({ term, onPreviewWrite }) {
-  const ctx = { term, cwd: '/', prevCwd: '/', env: {}, history: [], lastExitCode: 0, argv: [], functions: {}, opts: {}, localStack: [], loopFlag: null, arrays: {}, bgJobs: {}, traps: {} };
+  const ctx = { term, cwd: '/home', prevCwd: '/home', env: {}, history: [], lastExitCode: 0, argv: [], functions: {}, opts: {}, localStack: [], loopFlag: null, arrays: {}, bgJobs: {}, traps: {} };
   const actor = createActor(machine);
   actor.start();
   const httpHandlers = {};
@@ -97,7 +97,12 @@ export function createShell({ term, onPreviewWrite }) {
     while (i < raw.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(raw[i])) varAssigns.push(raw[i++]);
     const rest = raw.slice(i);
     if (!rest.length) { for (const kv of varAssigns) { const [k, v] = evalKV(kv); ctx.env[k] = v; } return; }
-    const { args: [cmd, ...args], stdout: rout, append } = parseRedirect(expandTokens(rest));
+    const expanded = expandTokens(rest);
+    if (expanded.length && ctx.aliases?.[expanded[0]]) {
+      const aliasTokens = tokenize(ctx.aliases[expanded[0]]);
+      expanded.splice(0, 1, ...aliasTokens);
+    }
+    const { args: [cmd, ...args], stdout: rout, append } = parseRedirect(expanded);
     const writeOut = rout ? buf => { const k = toKey(resolvePath(ctx.cwd, rout)); snap()[k] = append ? (snap()[k] || '') + buf : buf; window.__debug.idbPersist?.(); } : null;
     const prevEnv = {}; for (const kv of varAssigns) { const [k, v] = evalKV(kv); prevEnv[k] = ctx.env[k]; ctx.env[k] = v; }
     try {

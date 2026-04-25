@@ -36,12 +36,14 @@ const TOOLS = {
     },
   },
   list_files: {
-    description: 'List files available in the filesystem',
+    description: 'List project files in /home (the working directory). Pass prefix="sys/" to inspect system internals (rarely needed).',
     parameters: { type: 'object', properties: { prefix: { type: 'string' } }, required: [] },
     execute: async ({ prefix }) => {
       const snap = window.__debug.idbSnapshot || {};
       const keys = Object.keys(snap).sort();
-      return (prefix ? keys.filter(k => k.startsWith(prefix)) : keys).join('\n') || '(empty)';
+      const scope = prefix || 'home/';
+      const filtered = keys.filter(k => k.startsWith(scope) && !k.endsWith('/.keep'));
+      return filtered.join('\n') || '(empty)';
     },
   },
   run_command: {

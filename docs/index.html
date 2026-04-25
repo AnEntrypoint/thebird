@@ -654,8 +654,11 @@
       <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
         <bird-chat></bird-chat>
       </div>
-      <div id="pane-term" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div id="pane-term" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative">
         <div id="term-container" style="flex:1"></div>
+        <div id="term-image-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.82);z-index:10;align-items:center;justify-content:center;cursor:pointer" onclick="this.style.display='none'">
+          <img id="term-image-el" style="max-width:90%;max-height:90%;object-fit:contain;border:1px solid var(--ink-hair)" src="" alt="">
+        </div>
       </div>
       <div id="pane-preview" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
         <div class="tui-toolbar">
@@ -738,8 +741,8 @@ async function refreshPreview() {
   const result = await callExpressRoute('/');
   if (result) { iframe.srcdoc = result.body; return; }
   const snap = window.__debug?.idbSnapshot || {};
-  const htmlFiles = Object.keys(snap).filter(k => k.endsWith('.html'));
-  const pick = htmlFiles.find(k => k === 'index.html') || htmlFiles[0];
+  const htmlFiles = Object.keys(snap).filter(k => k.endsWith('.html') && !k.startsWith('sys/'));
+  const pick = htmlFiles.find(k => k === 'home/index.html') || htmlFiles.find(k => k === 'index.html') || htmlFiles[0];
   if (pick) { iframe.srcdoc = snap[pick]; return; }
   const cs = getComputedStyle(document.documentElement);
   const fg = cs.getPropertyValue('--ink').trim(), bg = cs.getPropertyValue('--paper').trim();
@@ -808,6 +811,16 @@ async function githubLogin() {
 
 window.updateGhBadge = updateGhBadge;
 document.addEventListener('DOMContentLoaded', updateGhBadge);
+document.addEventListener('term-image', e => {
+  const ov = document.getElementById('term-image-overlay');
+  const img = document.getElementById('term-image-el');
+  if (!ov || !img) return;
+  img.src = e.detail.src;
+  img.alt = e.detail.path;
+  ov.style.display = 'flex';
+  const pane = document.getElementById('pane-term');
+  if (pane && pane.classList.contains('hidden')) switchTab('term');
+});
 </script>
 <script type="module" src="app.js"></script>
 <script type="module" src="terminal.js"></script>

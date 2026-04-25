@@ -1,6 +1,8 @@
 import { makeTextBuiltins } from './shell-builtins-text.js';
 import { makeExtraBuiltins } from './shell-builtins-extra.js';
 import { makeUtilBuiltins } from './shell-builtins-util.js';
+import { makePythonBuiltin } from './shell-python.js';
+import { makeFsBuiltins } from './shell-builtins-fs.js';
 
 export function resolvePath(cwd, p) {
   if (!p || p === '~') return '/';
@@ -59,6 +61,8 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
   const text = makeTextBuiltins(ctx, readFile, writeFile);
   const extra = makeExtraBuiltins(ctx, readFile, writeFile);
   const util = makeUtilBuiltins(ctx, readFile, writeFile);
+  const pyBuiltins = makePythonBuiltin(ctx);
+  const fsExtra = makeFsBuiltins(ctx, readFile, writeFile);
   const b = {
     ls: args => {
       const flags = args.filter(a => a.startsWith('-')).join('');
@@ -143,6 +147,16 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
       persist();
     },
     touch: args => { for (const f of args) { const k = toKey(resolvePath(ctx.cwd, f)); if (!(k in snap())) snap()[k] = ''; } persist(); },
+    imgcat: args => {
+      if (!args.length) throw new Error('imgcat: missing file operand');
+      const path = args[0];
+      const content = readFile(path);
+      const ext = path.split('.').pop().toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const src = content.startsWith('data:') ? content : 'data:' + mime + ';base64,' + btoa(unescape(encodeURIComponent(content)));
+      document.dispatchEvent(new CustomEvent('term-image', { detail: { src, path } }));
+      wl('\x1b[32m[image: ' + path + ']\x1b[0m');
+    },
     head: args => {
       const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
       const rest = args[0] === '-n' ? args.slice(2) : args;
@@ -174,6 +188,8 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
     ...text,
     ...extra,
     ...util,
+    ...pyBuiltins,
+    ...fsExtra,
     which: args => text.which(args, b),
     exit: (args, ac) => text.exit(args, ac || actor),
   };
