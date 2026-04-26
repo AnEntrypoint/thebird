@@ -20,6 +20,7 @@ export async function loadPyodide(onStdout) {
       stderr: line => onStdout?.(line + '\n'),
     });
     pyInstance = inst;
+    await setupRuntime(inst, onStdout);
     if (typeof window !== 'undefined') {
       window.__debug = window.__debug || {};
       window.__debug.py = { loaded: true, pyodide: inst, runPython: (code) => inst.runPythonAsync(code) };
@@ -28,6 +29,24 @@ export async function loadPyodide(onStdout) {
     return inst;
   })();
   return pyPromise;
+}
+
+async function setupRuntime(inst, onStdout) {
+  const SHIM_NAMES = ['subprocess', 'psutil', 'fcntl', 'termios', 'pwd', 'grp', 'select', 'msvcrt', 'curses', 'winpty', 'ptyprocess', 'sounddevice', 'soundfile', 'wave'];
+  const shimBase = new URL('./vendor/python-shims/', import.meta.url).href;
+  inst.FS.mkdir('/vendor-shims');
+  inst.FS.mkdir('/vendor-apps');
+  for (const name of SHIM_NAMES) {
+    try {
+      const r = await fetch(shimBase + name + '.py');
+      if (!r.ok) { onStdout?.(`shim:${name} fetch ${r.status}\n`); continue; }
+      const src = await r.text();
+      inst.FS.writeFile('/vendor-shims/' + name + '.py', src);
+    } catch (e) { onStdout?.(`shim:${name} ${e.message}\n`); }
+  }
+  const bootUrl = new URL('./python-runtime.py', import.meta.url).href;
+  const bootSrc = await (await fetch(bootUrl)).text();
+  await inst.runPythonAsync(bootSrc);
 }
 
 export async function runPython(code, argv, onStdout) {

@@ -146,18 +146,63 @@ async def _drive(scope, recv, send):
 
   s = t0();
   try {
-    await inst.runPythonAsync(`
-import sys
-try:
-    import hermes_cli
-    print('hermes_cli imported, version', getattr(hermes_cli, '__version__', '?'))
-except ImportError as e:
-    raise ImportError('hermes_cli not on sys.path. Drop hermes sources into IDB at sys/lib/python/ or load via micropip-from-url. Reason: ' + str(e))
-`);
-    step('hermes:import', true, 'hermes_cli on path', dur(s));
+    const manifestUrl = new URL('./vendor/hermes/manifest.json', import.meta.url).href;
+    const manifest = await (await fetch(manifestUrl)).json();
+    try { inst.FS.mkdir('/vendor-apps/hermes'); } catch {}
+    const baseUrl = new URL('./vendor/hermes/', import.meta.url).href;
+    let copied = 0;
+    for (const src of manifest.sources) {
+      const r = await fetch(baseUrl + src);
+      if (!r.ok) continue;
+      const text = await r.text();
+      const dst = '/vendor-apps/hermes/' + src;
+      const dir = dst.substring(0, dst.lastIndexOf('/'));
+      try { inst.FS.mkdirTree(dir); } catch {}
+      try { inst.FS.writeFile(dst, text); copied++; } catch {}
+    }
+    inst.runPython(`import sys; sys.path.insert(0, '/vendor-apps/hermes')`);
+    step('hermes:bundle-unpack', true, copied + '/' + manifest.sources.length + ' files', dur(s));
   } catch (e) {
-    step('hermes:import', null, e.message.slice(0, 240), dur(s),
-      'Hermes source must be available to Pyodide. Options: (a) bundle hermes_cli/* into docs/vendor/hermes/ and unpack into Pyodide FS, (b) micropip.install_from_url with an sdist tarball.');
+    step('hermes:bundle-unpack', false, e.message.slice(0, 200), dur(s));
+    return { steps, ok: false };
+  }
+
+  s = t0();
+  try {
+    await inst.runPythonAsync(`import hermes_cli; ver = getattr(hermes_cli, '__version__', '?')`);
+    const ver = inst.globals.get('ver');
+    step('hermes:import-pkg', true, 'v' + ver, dur(s));
+  } catch (e) {
+    step('hermes:import-pkg', false, String(e.message).split('\\n').slice(-3).join(' | ').slice(0, 280), dur(s),
+      'Some Hermes module failed at import. Add the missing native shim to docs/vendor/python-shims/ or extend the stub finder safe-prefix list in python-runtime.py.');
+    return { steps, ok: false };
+  }
+
+  s = t0();
+  try {
+    await inst.runPythonAsync(`from hermes_cli.web_server import app as _hermes_app`);
+    const pyApp = inst.globals.get('_hermes_app');
+    if (!pyApp) throw new Error('hermes_cli.web_server.app not in globals');
+    inst.globals.set('__hermes_app', pyApp);
+    await inst.runPythonAsync(`
+async def _drive_hermes(scope, recv, send):
+    pyscope = scope.to_py() if hasattr(scope, 'to_py') else dict(scope)
+    async def _r():
+        msg = await recv()
+        return msg.to_py() if hasattr(msg, 'to_py') else msg
+    async def _s(msg):
+        return await send(msg)
+    await __hermes_app(pyscope, _r, _s)
+`);
+    const driver2 = inst.globals.get('_drive_hermes');
+    const { mountAsgi, dispatchAsgi } = await import('./asgi-bridge.js');
+    mountAsgi(async (sc, rcv, snd) => { await driver2(sc, rcv, snd); }, '/hermes');
+    const r = await dispatchAsgi('GET', '/hermes/', { 'host': 'thebird' }, null);
+    const bodyLen = String(r.body || '').length;
+    step('hermes:mount', true, 'GET / → ' + r.status + ' (' + bodyLen + ' bytes)', dur(s));
+  } catch (e) {
+    step('hermes:mount', false, String(e.message).split('\\n').slice(-3).join(' | ').slice(0, 280), dur(s),
+      'web_server.app failed to load or respond. Check hermes:import-pkg detail and add shims as needed.');
   }
 
   return { steps, ok: steps.every(r => r.ok !== false) };
