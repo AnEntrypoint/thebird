@@ -159,8 +159,8 @@ async def _drive(scope, recv, send):
 
   s = t0();
   try {
-    const manifestUrl = new URL('./vendor/hermes/manifest.json', import.meta.url).href;
-    const manifest = await (await fetch(manifestUrl)).json();
+    const manifestUrl = new URL('./vendor/hermes/manifest.json', import.meta.url).href + '?_=' + Date.now();
+    const manifest = await (await fetch(manifestUrl, { cache: 'no-cache' })).json();
     try { inst.FS.mkdir('/vendor-apps/hermes'); } catch {}
     const baseUrl = new URL('./vendor/hermes/', import.meta.url).href;
     let copied = 0;
