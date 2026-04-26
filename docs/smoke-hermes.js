@@ -234,6 +234,44 @@ async def _drive_hermes(scope, recv, send):
   } catch (e) {
     step('hermes:mount', false, String(e.message).split('\\n').slice(-3).join(' | ').slice(0, 280), dur(s),
       'web_server.app failed to load or respond. Check hermes:import-pkg detail and add shims as needed.');
+    return { steps, ok: false };
+  }
+
+  const ROUTES = [
+    { method: 'GET', path: '/', name: 'spa-root', expectStatus: 200 },
+    { method: 'GET', path: '/api/status', name: 'api-status', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/config', name: 'api-config', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/config/defaults', name: 'api-config-defaults', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/config/schema', name: 'api-config-schema', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/env', name: 'api-env', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/sessions', name: 'api-sessions', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/cron/jobs', name: 'api-cron-jobs', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/providers/oauth', name: 'api-oauth-providers', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/skills', name: 'api-skills', expectStatus: 200, expectJson: true },
+    { method: 'GET', path: '/api/dashboard/themes', name: 'api-themes', expectStatus: 200, expectJson: true },
+  ];
+  const { dispatchAsgi: dispatch2 } = await import('./asgi-bridge.js');
+  for (const r of ROUTES) {
+    s = t0();
+    try {
+      const resp = await dispatch2(r.method, '/hermes' + r.path, { 'host': 'thebird', 'accept': r.expectJson ? 'application/json' : 'text/html' }, null);
+      const body = String(resp.body || '');
+      const okStatus = resp.status === r.expectStatus;
+      const bodyLen = body.length;
+      let detail = r.method + ' ' + r.path + ' → ' + resp.status + ' (' + bodyLen + 'B)';
+      if (!okStatus) {
+        const err = body.slice(0, 280).replace(/\s+/g, ' ');
+        step('route:' + r.name, false, detail + ' — ' + err, dur(s));
+        continue;
+      }
+      if (r.expectJson) {
+        try { JSON.parse(body); detail += ' json✓'; }
+        catch { step('route:' + r.name, false, detail + ' — body is not JSON: ' + body.slice(0, 100), dur(s)); continue; }
+      }
+      step('route:' + r.name, true, detail, dur(s));
+    } catch (e) {
+      step('route:' + r.name, false, String(e.message).split('\\n').slice(-2).join(' | ').slice(0, 280), dur(s));
+    }
   }
 
   return { steps, ok: steps.every(r => r.ok !== false) };
