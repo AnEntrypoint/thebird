@@ -112,7 +112,7 @@ await micropip.install(__pkg)
 from fastapi import FastAPI
 _app = FastAPI(title="hermes-smoke-stub")
 @_app.get("/")
-def _r(): return {"ok": True, "preflight": "stub"}
+async def _r(): return {"ok": True, "preflight": "stub"}
 `);
     const pyApp = inst.globals.get('_app');
     if (!pyApp) throw new Error('FastAPI app not in globals');
