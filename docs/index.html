@@ -195,6 +195,7 @@
           <button class="tui-btn" onclick="loadPreviewUrl('')" title="back to in-browser preview from idb">[idb]</button>
           <span id="asgi-launchers" style="display:flex;gap:1ch"></span>
           <button class="tui-btn" onclick="window.open(location.pathname+'?smoke=1&net=1','_blank')" title="Run in-browser smoke harness">[smoke]</button>
+          <button class="tui-btn" onclick="window.open(location.pathname+'?smoke=hermes','_blank')" title="Run Hermes preflight (Pyodide + wheels + ASGI)">[hermes-smoke]</button>
         </div>
         <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--panel-0)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
@@ -320,6 +321,11 @@ window.renderAsgiLaunchers = renderAsgiLaunchers;
   await new Promise(r => (document.readyState === 'complete' ? r() : window.addEventListener('load', r)));
   await new Promise(r => setTimeout(r, 800));
   try {
+    if (params.get('smoke') === 'hermes') {
+      const m = await import('./smoke-hermes.js');
+      await m.autoRunIfRequested();
+      return;
+    }
     const m = await import('./smoke.js');
     await m.autoRunIfRequested();
   } catch (e) {

@@ -191,6 +191,10 @@ ok('renderSmokePanel exported', typeof smokeMod.renderSmokePanel === 'function')
 ok('autoRunIfRequested exported', typeof smokeMod.autoRunIfRequested === 'function');
 const netMod = await import('./docs/smoke-network.js');
 ok('runNetworkSmoke exported', typeof netMod.runNetworkSmoke === 'function');
+const hermesSmoke = await import('./docs/smoke-hermes.js');
+ok('runHermesPreflight exported', typeof hermesSmoke.runHermesPreflight === 'function');
+ok('renderHermesPanel exported', typeof hermesSmoke.renderHermesPanel === 'function');
+ok('hermes autoRunIfRequested exported', typeof hermesSmoke.autoRunIfRequested === 'function');
 
 console.log('# vendor: pyodide URL points at vendor');
 const fs2 = await import('node:fs');

@@ -123,6 +123,38 @@ Network tier (`docs/smoke-network.js`):
 Each result row: `✓ name — detail   ms` (red ✗ on fail). Full report
 is also stored at `window.__smokeReport` for programmatic inspection.
 
+## Hermes Preflight (`?smoke=hermes`)
+
+Browser-side validator specifically for "can Hermes run inside thebird's
+Pyodide?" Each step renders one row with timing + a remediation hint
+when it fails. No host process, no Hermes modification.
+
+Steps (in order):
+
+1. **pyodide:load** — lazy Pyodide cold-load (≈10 MB; first time ~15s,
+   subsequent ms). Hint on failure: run `node scripts/vendor-fetch.mjs`.
+2. **micropip:loaded** — Pyodide's `micropip` package available.
+3. **wheel:pyyaml / pydantic / fastapi** — core wheels Hermes hard-needs.
+   Each is a separate row so partial failure is visible.
+4. **wheel-opt:httpx / jinja2 / requests / pyjwt / tenacity / rich /
+   prompt_toolkit** — optional wheels; failures degrade rather than block.
+   Hints flag known Pyodide gaps (`fal-client`, `firecrawl-py`,
+   `parallel-web`, `exa-py`, `edge-tts` — no wheels in Pyodide repo).
+5. **imports:core** — `import fastapi; import pydantic; import yaml`.
+6. **asgi:fastapi-stub** — defines a 1-route FastAPI app inside Pyodide,
+   mounts via `asgi-bridge.mountAsgi`, dispatches `GET /`, asserts 200.
+   Proves the FastAPI ↔ ASGI ↔ same-origin-bridge chain works before
+   we point it at Hermes itself.
+7. **hermes:import** — try `import hermes_cli`. If sources aren't on
+   Pyodide's `sys.path`, the row goes amber with a hint:
+   - bundle `hermes_cli/`, `gateway/`, `agent/`, `tools/` into
+     `docs/vendor/hermes/` and unpack into Pyodide FS at boot, OR
+   - publish/use an sdist tarball with `micropip.install_from_url`.
+
+Trigger: `[hermes-smoke]` button in the preview toolbar, or hit
+`?smoke=hermes` directly. Full report stored at
+`window.__hermesPreflight` for programmatic inspection.
+
 ## Vendor Localization
 
 All heavy CDN imports have a vendored fallback under `docs/vendor/`.
