@@ -37,7 +37,7 @@ export async function runSmoke({ skipNet = true } = {}) {
 
   await check('ls /home runs without error', async () => { await window.__debug.shell.run('ls /home'); });
   await check('echo + cat pipe', async () => { await window.__debug.shell.run('echo smoketest > /home/.smoke && cat /home/.smoke'); });
-  await check('IDB write persisted', () => { if (window.__debug.idbSnapshot['home/.smoke'] !== 'smoketest\n' && window.__debug.idbSnapshot['home/.smoke'] !== 'smoketest') throw new Error('expected "smoketest", got ' + JSON.stringify(window.__debug.idbSnapshot['home/.smoke'])); });
+  await check('IDB write persisted', () => { const v = (window.__debug.idbSnapshot['home/.smoke'] || '').replace(/[\r\n]+$/, ''); if (v !== 'smoketest') throw new Error('expected "smoketest", got ' + JSON.stringify(window.__debug.idbSnapshot['home/.smoke'])); });
   await check('cd nonexistent throws', async () => { try { await window.__debug.shell.run('cd /nope'); } catch { return 'caught'; } if (window.__debug.shell.cwd === '/nope') throw new Error('cd accepted nonexistent'); });
   await check('cd ~ resolves to /home', async () => { await window.__debug.shell.run('cd ~'); if (window.__debug.shell.cwd !== '/home') throw new Error(window.__debug.shell.cwd); });
 
