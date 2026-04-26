@@ -1,3 +1,4 @@
+const HERMES_PRELOAD_PACKAGES = ['ssl'];
 const HERMES_PREFLIGHT_UPGRADES = ['typing-extensions>=4.12'];
 const HERMES_CORE_WHEELS = ['pyyaml', 'pydantic', 'fastapi'];
 const HERMES_OPTIONAL_WHEELS = ['httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit'];
@@ -45,14 +46,32 @@ export async function runHermesPreflight({ onStep } = {}) {
     return { steps, ok: false };
   }
 
+  for (const pkg of HERMES_PRELOAD_PACKAGES) {
+    s = t0();
+    try {
+      await inst.loadPackage(pkg);
+      step('preload:' + pkg, true, '', dur(s));
+    } catch (e) {
+      step('preload:' + pkg, false, e.message.slice(0, 200), dur(s),
+        'pyodide-bundled package — should not fail');
+    }
+  }
+
   for (const pkg of HERMES_PREFLIGHT_UPGRADES) {
     s = t0();
     try {
+      const base = pkg.split(/[<>=!~]/)[0].trim();
+      inst.globals.set('__base', base);
       inst.globals.set('__pkg', pkg);
-      await inst.runPythonAsync(`import micropip; await micropip.install(__pkg, deps=False)`);
-      step('upgrade:' + pkg, true, '', dur(s));
+      await inst.runPythonAsync(`
+import micropip
+try: micropip.uninstall(__base)
+except Exception: pass
+await micropip.install(__pkg, deps=False)
+`);
+      step('upgrade:' + pkg, true, 'uninstalled+reinstalled', dur(s));
     } catch (e) {
-      step('upgrade:' + pkg, null, e.message.slice(0, 160), dur(s), 'pre-upgrade — pyodide ships older pin');
+      step('upgrade:' + pkg, null, e.message.slice(0, 200), dur(s), 'pre-upgrade — pyodide ships older pin');
     }
   }
   for (const pkg of HERMES_CORE_WHEELS) {
