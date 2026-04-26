@@ -348,6 +348,62 @@ The reusable gm skill at `~/.claude/skills/lazy-runtime/SKILL.md`
 codifies this recipe so future tools can be added with one skill
 invocation.
 
+## Hermes Runs in the Browser (witnessed green 2026-04-26)
+
+`?smoke=hermes` reports **19/19 ✓** in real Chrome against
+`https://anentrypoint.github.io/thebird/`. Hermes is unmodified —
+thebird absorbs every adaptation.
+
+**Architecture (reusable for any unmodified CPython webapp):**
+
+1. **Lazy Pyodide entry** (vendored at `docs/vendor/pyodide/` — zero
+   CDN fetch on page boot; wheels still pulled lazily from jsdelivr
+   on first python use, sha-verified against the lockfile).
+2. **`docs/vendor/python-shims/`** — 14 minimal Python modules
+   (`subprocess`, `psutil`, `fcntl`, `termios`, `pwd`, `grp`,
+   `select`, `msvcrt`, `curses`, `winpty`, `ptyprocess`,
+   `sounddevice`, `soundfile`, `wave`) covering the native-only
+   stdlib gaps Pyodide doesn't ship. Each exports the canonical
+   names callers `import`; method calls return harmless defaults.
+   Mounted at `/vendor-shims/` and inserted at the front of
+   `sys.path`.
+3. **`docs/python-runtime.py`** — bootstrap that runs once after
+   `loadPyodide`. Patches `threading.Thread.start` to run target
+   inline (Pyodide has no real threads). Installs a `sys.meta_path`
+   finder that returns a `SimpleNamespace` stub for any `import`
+   matching an allowlist of safe third-party prefixes (boto3,
+   discord, telegram, mautrix, mcp, slack_sdk, mistralai, modal,
+   daytona, dingtalk_stream, alibabacloud, nacl, kittentts,
+   faster_whisper, mem0, honcho, parallel, firecrawl, exa_py,
+   fal_client, edge_tts, elevenlabs, tiktoken, acp, davey,
+   simple_term_menu, dotenv, croniter, aiohttp_socks, qrcode,
+   mutagen, markdown, PIL, numpy, websockets, tomllib). Real
+   packages still win when present; stubs only fill in on
+   `ModuleNotFoundError`. Stub modules synthesise sub-attributes on
+   access so chained access (`mod.Sub.thing`) works.
+4. **`scripts/bundle-hermes.mjs`** — zero-dep Node script that
+   walks the recursive import closure of `hermes_cli.web_server`
+   (245 files spanning every Hermes subpackage) and copies them
+   into `docs/vendor/hermes/` along with the prebuilt React
+   `web_dist/`. Writes a manifest. Re-runnable.
+5. **`docs/smoke-hermes.js`** — fetches the manifest, writes every
+   bundled file into Pyodide's FS at `/vendor-apps/hermes/`,
+   `sys.path.insert`s it, then `from hermes_cli.web_server import
+   app`, mounts that real FastAPI app under `/hermes` via
+   `asgi-bridge`, hits `GET /hermes/`. Round-trips through real
+   Starlette middleware + Hermes auth_middleware + route dispatch.
+
+**ASGI scope normalization** (in `smoke-hermes.js`'s `_drive_hermes`
+helper): converts JS `Uint8Array` header values to Python `bytes`
+before passing the scope to FastAPI. Without this, Starlette's URL
+parser hits `memoryview.decode()` and 500s. Same helper applies to
+receive-message bodies.
+
+**The pattern is reusable for any CPython webapp.** Drop the app's
+import closure into `docs/vendor/<app>/`, write any missing
+shims into `docs/vendor/python-shims/`, extend the SAFE_PREFIXES
+allowlist for the app's third-party deps, mount via asgi-bridge.
+
 ## Hermes GUI in the Preview Pane
 
 The Hermes web GUI lives at `c:/dev/hermes/web` (Vite + React + tailwind +
