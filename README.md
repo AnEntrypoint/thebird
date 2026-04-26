@@ -1,42 +1,55 @@
 # thebird
 
-Web OS — browser-native terminal, agentic chat, and file system powered by WebContainer and IndexedDB. Anthropic-format message routing is handled by [acptoapi](https://github.com/AnEntrypoint/acptoapi).
+Browser-native web OS — agentic chat, POSIX terminal, live preview, IndexedDB filesystem. **No server. No install. No build.**
 
-## Live Demo
+## Live
 
 **[anentrypoint.github.io/thebird](https://anentrypoint.github.io/thebird/)**
 
-- **Chat tab** — Agentic chat via `acptoapi` running in-browser (`docs/vendor/thebird-browser.js`). Tools: `read_file`, `write_file`, `list_files` (IDB-backed), `run_command`, `read_terminal`, `send_to_terminal`. No proxy server required. API key stored in localStorage.
-- **Terminal tab** — Browser-native POSIX shell (xstate v5 state machine, V8 eval) backed by IndexedDB filesystem. Built-in: `ls`, `cat`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`, `echo`, `env`, `export`, `node`, `npm install`. Node REPL with persistent scope, `require()` from IDB node_modules, `http.createServer` polyfill.
-- **Preview tab** — iframe served by a service worker reading files from IDB at `/preview/*`. Hot-reloads 5s after any file write.
+- **Chat** — agentic AI with tool calling. Provider key stored in localStorage, never proxied.
+- **Terminal** — POSIX shell (xstate v5) over IndexedDB. `ls`, `cat`, `cd`, `mkdir`, `rm`, `cp`, `mv`, `echo`, `env`, `export`, `node`, `npm install`, `git`. Node REPL with `require()` from IDB `node_modules`.
+- **Preview** — service worker serves files from IDB at `/preview/*`. Hot-reloads on write.
 
-All JS and CSS dependencies are vendored locally in `docs/vendor/` — no CDN required at runtime.
+All deps vendored to `docs/vendor/`. No CDN at runtime.
 
-## Architecture
+## Folder layout
 
 ```
-thebird (web OS shell)
-  └── acptoapi (npm)        ← Anthropic format → Gemini / OpenAI-compat bridge
-        └── @google/genai   ← Gemini native streaming
+thebird/
+├── docs/              # the entire product — static GH Pages site
+│   ├── index.html     # landing + live app (overview / live-app modes)
+│   ├── app.js         # bird-chat custom element
+│   ├── terminal.js    # xterm + xstate boot
+│   ├── shell-*.js     # POSIX shell builtins / parser / exec
+│   ├── tui.css        # component styles (tabs, msg, toolbar)
+│   ├── defaults.json  # virtual FS seed (sys/* infra · home/* user)
+│   └── vendor/        # design-tokens.css, app-shell.css, xterm, webjsx, ...
+└── .github/workflows/pages.yml   # auto-deploy docs/ on push to main
 ```
 
-thebird is the web OS. `acptoapi` owns all Anthropic↔provider translation, streaming, routing, transformers, and TypeScript types. `server.js` exposes a local Anthropic-compatible proxy backed by acptoapi.
+No `package.json`, no `node_modules`, no `serve.js`. The site **is** the project.
 
-## Local Dev
+## Local dev
 
 ```bash
-npm install
-node serve.js      # serves docs/ at http://localhost:8080
-node server.js     # Anthropic-compat proxy at http://localhost:3456 (needs GEMINI_API_KEY)
+bunx serve docs        # or: npx serve docs · python -m http.server -d docs
 ```
+
+Any static server works. WebContainer features that need cross-origin isolation degrade gracefully via `coi-serviceworker.js`.
 
 ## acptoapi
 
-For the Anthropic-to-provider bridge (streaming, routing, tool calls, vision, retry logic, TypeScript types), see [acptoapi](https://github.com/AnEntrypoint/acptoapi).
+Anthropic-format streaming, multi-provider routing, tool calling — everything model-side — lives in [acptoapi](https://github.com/AnEntrypoint/acptoapi).
 
 ```bash
-npm install acptoapi
+bunx acptoapi          # one-shot CLI
+npx acptoapi           # same, npm
+npm install acptoapi   # SDK in your own project
 ```
+
+## Design system
+
+Chrome (topbar, status bar, panels, cards, kv tables, chips) follows [247420 / design](https://github.com/AnEntrypoint/design). Tokens vendored at `docs/vendor/design-tokens.css` + `docs/vendor/app-shell.css`.
 
 ## License
 

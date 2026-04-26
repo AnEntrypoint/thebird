@@ -2,20 +2,25 @@
 
 ## Architecture Overview
 
-**thebird** is the web OS shell — browser-native terminal, agentic chat, and file system. All Anthropic-format message translation, routing, streaming, and tool calling is owned by **[acptoapi](https://github.com/AnEntrypoint/acptoapi)** (`node_modules/acptoapi`). thebird depends on acptoapi as an npm package (`file:../acptoapi` locally, npm in CI).
+**thebird** is the web OS shell — browser-native terminal, agentic chat, and file system. The repo has **no `package.json`, no `node_modules`, no server**. The entire product is the static `docs/` directory deployed to GitHub Pages. All Anthropic-format message translation, routing, streaming, and tool calling is owned by **[acptoapi](https://github.com/AnEntrypoint/acptoapi)**, vendored into the browser as `docs/vendor/thebird-browser.js`. Consumers of acptoapi outside the browser run `bunx acptoapi` / `npx acptoapi` / `npm install acptoapi`.
 
 ```
-thebird (web OS)
-  ├── docs/          — browser UI (chat, terminal, preview, shell)
-  ├── serve.js       — static file server for docs/
-  ├── server.js      — Anthropic-compat HTTP proxy (uses acptoapi)
-  ├── index.js       — re-exports acptoapi
-  └── node_modules/acptoapi/
-        ├── lib/convert.js     — Anthropic↔Gemini message translation
-        ├── lib/providers/     — OpenAI-compat + ACP providers
-        ├── lib/router-stream.js — multi-provider routing
-        └── index.js           — streamGemini, generateGemini, createRouter, ...
+thebird/
+  ├── docs/                    — the entire product (GH Pages static site)
+  │   ├── index.html           — landing + live app (overview/live-app modes)
+  │   ├── app.js               — bird-chat custom element
+  │   ├── terminal.js          — xterm + xstate boot
+  │   ├── shell-*.js           — POSIX shell builtins / parser / exec
+  │   ├── tui.css              — component styles (tabs, msg, toolbar)
+  │   ├── defaults.json        — virtual FS seed (sys/* infra · home/* user)
+  │   └── vendor/
+  │       ├── design-tokens.css, app-shell.css   — 247420 design system
+  │       ├── thebird-browser.js                 — vendored acptoapi (browser bundle)
+  │       └── xterm-bundle.js, ui-libs.js, ...   — xterm, webjsx, etc.
+  └── .github/workflows/pages.yml   — auto-deploy docs/ on push to main
 ```
+
+Local dev = any static server: `bunx serve docs` / `npx serve docs` / `python -m http.server -d docs`.
 
 ### Message Translation (in acptoapi)
 
@@ -204,14 +209,13 @@ UI consumes via 3 channels: `onChunk(delta)` text streaming | `onEvent(ev)` badg
 
 ## Files
 
-- `index.js`: Re-exports all of acptoapi
-- `server.js`: Anthropic-compatible HTTP proxy using acptoapi (streamGemini/generateGemini)
-- `serve.js`: Static file server for docs/ (COEP/COOP headers for WebContainer)
-- `package.json`: depends on `acptoapi` (file:../acptoapi locally, npm in CI)
+- `docs/index.html`: landing + live app, classed against the 247420 design system (`vendor/design-tokens.css` + `vendor/app-shell.css`)
+- `docs/tui.css`: terminal/chat component styles, aliased onto design tokens
 - `docs/shell-builtins.js`: FS/IO builtins (ls/cat/echo/cd/mkdir/rm/cp/mv/touch/head/tail/wc) — imports makeTextBuiltins
 - `docs/shell-builtins-text.js`: Text-processing builtins (grep/sed/sort/uniq/tr) + env/export/clear/history/which/exit/true/false/printenv
+- `docs/vendor/thebird-browser.js`: vendored acptoapi bundle (browser entry: lib/client + lib/errors + lib/convert)
 
-**acptoapi** (owned by `c:/dev/acptoapi`, installed as npm dep):
+**acptoapi** (owned by `c:/dev/acptoapi`, vendored as `docs/vendor/thebird-browser.js`):
 - `lib/convert.js`: Message/tool translation logic
 - `lib/client.js`: Provider client factory
 - `lib/errors.js`: Typed error hierarchy (BridgeError, AuthError, RateLimitError, etc.), classifyError, redactKeys, withRetry
@@ -244,6 +248,5 @@ Interactive terminal in docs/index.html runs thebird + Node.js server in WebCont
 ## Environment Notes
 
 - Repo remote: `https://github.com/AnEntrypoint/thebird.git` (capital A)
-- Deno 2.1.3 available; `exec:bash` uses PowerShell — use `exec:cmd` with `set KEY=val && cmd` syntax for env vars
-- Windows `KEY=val cmd` inline env syntax fails in PowerShell
-- CI workflow commits version bump after every push to main — always `git pull --rebase origin main` before pushing to avoid fast-forward rejection
+- No `package.json`, no `node_modules`, no server. Local dev is any static server on `docs/` (`bunx serve docs`).
+- Only CI workflow is `pages.yml` — auto-deploys `docs/` on push to main when files under `docs/**` change. Bump-and-publish was retired with `package.json`.

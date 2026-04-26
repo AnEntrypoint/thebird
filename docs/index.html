@@ -1,376 +1,56 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#247420" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#3FA93A" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <title>thebird / web os</title>
-<meta name="description" content="thebird — browser-native web OS. agentic AI, POSIX terminal, live preview, IDB filesystem. serverless. no Docker. no server. powered by acptoapi.">
+<meta name="description" content="thebird — browser-native web OS. agentic AI, POSIX terminal, live preview, IDB filesystem. serverless. powered by acptoapi.">
 <meta name="author" content="247420 / AnEntrypoint">
 <meta name="keywords" content="thebird, web os, browser terminal, anthropic, gemini, openai, acptoapi, serverless, anentrypoint">
 <link rel="canonical" href="https://anentrypoint.github.io/thebird/">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='0' fill='%23247420'/><text x='16' y='22' font-family='monospace' font-size='13' font-weight='700' fill='%23EFE9DD' text-anchor='middle'>tb</text></svg>">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta property="og:type" content="website">
 <meta property="og:title" content="thebird / web os">
-<meta property="og:description" content="browser-native web OS — agentic AI, POSIX terminal, live preview. no server. no Docker. serverless.">
+<meta property="og:description" content="browser-native web OS — agentic AI, POSIX terminal, live preview. no server. serverless.">
 <meta property="og:url" content="https://anentrypoint.github.io/thebird/">
 <meta property="og:site_name" content="247420 / thebird">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@AnEntrypoint">
 <meta name="robots" content="index, follow">
-<link rel="stylesheet" href="vendor/xterm.css" />
-<link rel="stylesheet" href="tui.css" />
+<link rel="stylesheet" href="vendor/design-tokens.css">
+<link rel="stylesheet" href="vendor/app-shell.css">
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="tui.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
-.land {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--ff-mono);
-  font-size: 13px;
-  line-height: 1.5;
-  height: 100dvh;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── topbar ── */
-.land-bar {
-  position: sticky;
-  top: 0;
-  z-index: 200;
-  background: var(--paper);
-  border-bottom: 1px solid var(--ink-hair);
-  display: flex;
-  align-items: center;
-  padding: 0 2ch;
-  height: 40px;
-  gap: 0;
-}
-.land-bar .brand {
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-  margin-right: 2ch;
-  flex-shrink: 0;
-}
-.land-bar .slash { color: var(--ink-dim); padding: 0 0.3ch; font-weight: 400; }
-.land-bar .brand-tabs {
-  display: flex;
-  height: 40px;
-  gap: 0;
-}
-.brand-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  color: var(--ink-dim);
-  font-family: var(--ff-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0 1.5ch;
-  height: 40px;
-  transition: color 80ms, border-color 80ms;
-  white-space: nowrap;
-}
-.brand-tab:hover { color: var(--ink); }
-.brand-tab.active { color: var(--green); border-bottom-color: var(--green); }
-.brand-tab .live-dot {
-  display: inline-block;
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--green);
-  margin-left: 6px;
-  vertical-align: middle;
-  animation: pulse 2s infinite;
-}
-.land-bar .bar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-.land-bar .bar-right a {
-  color: var(--ink-dim);
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0 1.5ch;
-  line-height: 40px;
-  transition: color 80ms;
-}
-.land-bar .bar-right a:hover { color: var(--ink); }
-.land-bar .theme-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--ink-dim);
-  font-size: 16px;
-  padding: 0 1ch;
-  line-height: 40px;
-}
-.land-bar .theme-btn:hover { color: var(--ink); }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-/* ── page panels ── */
-.page-panel { display: none; flex: 1 1 auto; flex-direction: column; min-height: 0; }
-.page-panel.active { display: flex; }
-
-/* ── overview page ── */
-#page-overview { overflow-y: auto; }
-
-/* ── live app sizing — flex-fill all the way down ── */
-#page-app .app-embed { flex: 1 1 auto; min-height: 0; }
-#page-app .tui-tabs { flex: 0 0 auto; }
-#page-app #pane-chat,
-#page-app #pane-term,
-#page-app #pane-preview { flex: 1 1 auto; min-height: 0; }
-bird-chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; height: 100%; }
-#term-container { width: 100%; height: 100%; min-height: 0; }
-#term-container .xterm,
-#term-container .xterm-viewport,
-#term-container .xterm-screen { width: 100% !important; height: 100% !important; }
-
-/* ── hero ── */
-.hero {
-  padding: 64px 2ch 48px 2ch;
-  border-bottom: 1px solid var(--ink-hair);
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.hero-eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--green);
-  margin-bottom: 16px;
-}
-.hero h1 {
-  font-family: var(--ff-display, 'Archivo Black', sans-serif);
-  font-size: clamp(36px, 6vw, 80px);
-  line-height: 1.0;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  margin: 0 0 24px 0;
-  max-width: 18ch;
-}
-.hero h1 em { font-style: normal; color: var(--green); }
-.hero .lede {
-  font-size: 15px;
-  color: var(--ink-dim);
-  max-width: 66ch;
-  line-height: 1.65;
-  margin: 0 0 12px 0;
-}
-.hero .motivation {
-  font-size: 13px;
-  color: var(--ink-dim);
-  max-width: 66ch;
-  line-height: 1.6;
-  margin: 0 0 32px 0;
-  border-left: 2px solid var(--green);
-  padding-left: 1.5ch;
-}
-.hero .motivation strong { color: var(--ink); }
-.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.btn-primary {
-  background: var(--green);
-  color: var(--green-fg, #fff);
-  font-family: var(--ff-mono);
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 10px 20px;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  transition: opacity 80ms;
-  display: inline-block;
-}
-.btn-primary:hover { opacity: 0.85; }
-.btn-ghost {
-  background: none;
-  color: var(--ink);
-  font-family: var(--ff-mono);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 10px 20px;
-  text-decoration: none;
-  border: 1px solid var(--ink-hair);
-  cursor: pointer;
-  transition: border-color 80ms, background 80ms;
-  display: inline-block;
-}
-.btn-ghost:hover { border-color: var(--ink); background: var(--surface-2); }
-.install-strip {
-  display: inline-flex;
-  align-items: center;
-  gap: 1ch;
-  background: var(--surface, rgba(11,11,9,0.04));
-  border: 1px solid var(--ink-hair);
-  padding: 8px 14px;
-  font-size: 12px;
-}
-.install-strip .prompt { color: var(--green); font-weight: 700; }
-.install-strip .copy-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--ink-dim); font-size: 11px; font-family: var(--ff-mono);
-  letter-spacing: 0.04em; text-transform: uppercase; padding: 0;
-  transition: color 80ms;
-}
-.install-strip .copy-btn:hover { color: var(--green); }
-
-/* ── serverless callout ── */
-.serverless-strip {
-  background: var(--surface, rgba(11,11,9,0.04));
-  border-top: 1px solid var(--ink-hair);
-  border-bottom: 1px solid var(--ink-hair);
-  padding: 20px 2ch;
-}
-.serverless-strip .inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0;
-}
-.sl-item {
-  padding: 16px 20px;
-  border-right: 1px solid var(--ink-hair);
-}
-.sl-item:last-child { border-right: 0; }
-.sl-item .sl-icon { font-size: 18px; display: block; margin-bottom: 6px; color: var(--green); }
-.sl-item .sl-label {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink); margin-bottom: 4px;
-}
-.sl-item .sl-desc { font-size: 11px; color: var(--ink-dim); line-height: 1.5; }
-@media (max-width: 600px) { .sl-item { border-right: 0; border-bottom: 1px solid var(--ink-hair); } }
-
-/* ── motivation section ── */
-.motivation-section {
-  padding: 48px 2ch 40px 2ch;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  border-bottom: 1px solid var(--ink-hair);
-}
-.section-head {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink-dim); margin-bottom: 24px; padding-bottom: 8px;
-  border-bottom: 1px solid var(--ink-hair);
-}
-.mot-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
-}
-@media (max-width: 700px) { .mot-grid { grid-template-columns: 1fr; } }
-.mot-block h3 {
-  font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 8px 0;
-  text-transform: lowercase; letter-spacing: 0.02em;
-}
-.mot-block p { font-size: 12px; color: var(--ink-dim); line-height: 1.6; margin: 0; }
-
-/* ── features grid ── */
-.features {
-  padding: 48px 2ch;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.feat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0;
-}
-.feat-card {
-  padding: 24px;
-  border: 1px solid var(--ink-hair);
-  margin: -1px 0 0 -1px;
-  transition: background 80ms;
-}
-.feat-card:hover { background: var(--surface-2); }
-.feat-card .glyph {
-  font-size: 20px; margin-bottom: 12px; display: block; color: var(--green); font-style: normal;
-}
-.feat-card h3 {
-  font-family: var(--ff-mono); font-size: 13px; font-weight: 700; color: var(--ink);
-  margin: 0 0 8px 0; text-transform: lowercase; letter-spacing: 0.02em;
-}
-.feat-card p { font-size: 12px; color: var(--ink-dim); line-height: 1.55; margin: 0 0 12px 0; }
-.feat-tag {
-  display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--green); border: 1px solid var(--green);
-  padding: 1px 6px; margin: 2px 2px 0 0;
-}
-
-/* ── receipt panel ── */
-.receipt-section {
-  padding: 0 2ch 48px 2ch;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  align-items: start;
-}
-@media (max-width: 700px) { .receipt-section { grid-template-columns: 1fr; } }
-.kv-panel { border: 1px solid var(--ink-hair); }
-.kv-panel .panel-head {
-  border-bottom: 1px solid var(--ink-hair); padding: 8px 16px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-dim); display: flex; justify-content: space-between;
-}
-.kv-panel table { width: 100%; border-collapse: collapse; }
-.kv-panel td {
-  padding: 7px 16px; font-size: 12px; border-bottom: 1px solid var(--ink-hair); vertical-align: top;
-}
-.kv-panel td:first-child { color: var(--ink-dim); width: 40%; white-space: nowrap; }
-.kv-panel td:last-child { color: var(--ink); font-weight: 500; }
-.kv-panel tr:last-child td { border-bottom: 0; }
-.providers { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 3px 8px; border: 1px solid var(--ink-hair); color: var(--ink-dim); white-space: nowrap;
-}
-.chip.green { border-color: var(--green); color: var(--green); }
-.arch {
-  background: var(--surface, rgba(11,11,9,0.04)); border: 1px solid var(--ink-hair);
-  padding: 20px; font-size: 12px; line-height: 1.7; white-space: pre; overflow-x: auto;
-  font-family: var(--ff-mono); color: var(--ink);
-}
-.arch .hl { color: var(--green); font-weight: 700; }
-
-/* ── live app panel ── */
-#page-app {
-  overflow: hidden;
-}
-.app-embed {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-}
+  /* Page-mode toggle (overview vs live app), in design-system idiom. */
+  .app { height: 100dvh; min-height: 100vh; }
+  .page-panel { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+  .page-panel.active { display: flex; }
+  #page-overview .app-main { padding: 24px 32px 48px 32px; }
+  #page-overview h1 { font-family: var(--ff-display); font-size: clamp(40px, 6vw, 72px); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 12px 0; }
+  #page-overview h1 em { font-style: normal; color: var(--panel-accent); }
+  #page-overview .lede { font-size: 15px; max-width: 66ch; }
+  #page-overview .arch { white-space: pre; font-family: var(--ff-mono); font-size: 12px; line-height: 1.7; }
+  #page-overview .arch .hl { color: var(--panel-accent); font-weight: 700; }
+  /* Live-app pane: design-system shell already provides chrome; only the inner panes need flex sizing. */
+  #page-app .app-embed { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  #page-app .tui-tabs { flex: 0 0 auto; }
+  #page-app #pane-chat,
+  #page-app #pane-term,
+  #page-app #pane-preview { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  bird-chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; height: 100%; }
+  #term-container { width: 100%; height: 100%; min-height: 0; }
+  #term-container .xterm,
+  #term-container .xterm-viewport,
+  #term-container .xterm-screen { width: 100% !important; height: 100% !important; }
+  /* Topbar — page-mode tabs as nav links */
+  .app-topbar nav .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--panel-accent); margin-left: 6px; vertical-align: middle; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .theme-btn { background: none; cursor: pointer; color: var(--panel-text-2); font-size: 16px; padding: 0 1ch; line-height: 40px; }
+  .theme-btn:hover { color: var(--panel-text); }
 </style>
 <script>
 (() => {
@@ -389,269 +69,105 @@ bird-chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0
 })();
 </script>
 </head>
-<body>
+<body data-screen-label="thebird">
+<div class="app">
 
-<div class="land">
-
-  <!-- topbar with top-level tabs -->
-  <header class="land-bar">
-    <span class="brand">247420<span class="slash">/</span>thebird</span>
-    <div class="brand-tabs">
-      <button class="brand-tab active" id="ptab-overview" onclick="switchPage('overview')">overview</button>
-      <button class="brand-tab" id="ptab-app" onclick="switchPage('app')">live app <span class="live-dot"></span></button>
-    </div>
-    <div class="bar-right">
+  <header class="app-topbar">
+    <span class="brand">247420<span class="slash"> / </span>thebird</span>
+    <nav>
+      <a href="#" id="ptab-overview" class="active" onclick="event.preventDefault();switchPage('overview')">overview</a>
+      <a href="#" id="ptab-app" onclick="event.preventDefault();switchPage('app')">live app <span class="live-dot"></span></a>
       <a href="https://github.com/AnEntrypoint/thebird">source ↗</a>
+      <a href="https://github.com/AnEntrypoint/acptoapi">acptoapi ↗</a>
       <button class="theme-btn" onclick="toggleTheme()" title="Toggle theme">◐</button>
-    </div>
+    </nav>
   </header>
+  <div class="app-crumb">
+    <span>thebird</span><span class="sep">›</span>
+    <span class="leaf" id="crumb-leaf">overview</span>
+  </div>
 
-  <!-- OVERVIEW PAGE -->
+  <!-- OVERVIEW -->
   <div class="page-panel active" id="page-overview">
+    <div class="app-body no-side">
+      <main class="app-main">
+        <h1>web os, in <em>your browser</em></h1>
+        <p class="lede">agentic AI · POSIX terminal · live preview · IndexedDB filesystem. no server. no Docker. no install. powered by <a href="https://github.com/AnEntrypoint/acptoapi">acptoapi</a> for multi-provider streaming + tool calling.</p>
 
-    <!-- hero -->
-    <section class="hero">
-      <div class="hero-eyebrow">247420 / anentrypoint</div>
-      <h1>agentic os.<br>zero <em>server.</em></h1>
-      <p class="lede">
-        thebird is a browser-native operating system — agentic AI chat, a full POSIX terminal,
-        live preview, and an IndexedDB filesystem. loads in the browser like a webpage.
-        no Docker. no server. no install.
-      </p>
-      <p class="motivation">
-        <strong>why?</strong> safe agentic orchestration needs an isolated runtime —
-        traditionally that means a Docker container per user. thebird replaces that with the browser:
-        <strong>POSIX + Node.js in V8</strong>, sandboxed by design, spun up in milliseconds,
-        accessible anywhere. your api key never leaves localStorage.
-      </p>
-      <div class="hero-actions">
-        <button class="btn-primary" onclick="switchPage('app')">try it live →</button>
-        <a href="https://github.com/AnEntrypoint/thebird" class="btn-ghost">source ↗</a>
-        <div class="install-strip" id="install-strip">
+        <div class="cli">
           <span class="prompt">$</span>
-          <span class="cmd">npm install acptoapi</span>
-          <button class="copy-btn" onclick="copyInstall()">copy</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- serverless callout strip -->
-    <div class="serverless-strip">
-      <div class="inner">
-        <div class="sl-item">
-          <em class="sl-icon">⚡</em>
-          <div class="sl-label">zero cold start</div>
-          <div class="sl-desc">browser loads in ms. no container spin-up. no provisioning.</div>
-        </div>
-        <div class="sl-item">
-          <em class="sl-icon">🔒</em>
-          <div class="sl-label">sandboxed by default</div>
-          <div class="sl-desc">V8 isolate + browser security model. no root access. no escape.</div>
-        </div>
-        <div class="sl-item">
-          <em class="sl-icon">🌐</em>
-          <div class="sl-label">works anywhere</div>
-          <div class="sl-desc">any device with a browser. phones, tablets, locked-down corp laptops.</div>
-        </div>
-        <div class="sl-item">
-          <em class="sl-icon">🗄️</em>
-          <div class="sl-label">persistent storage</div>
-          <div class="sl-desc">IndexedDB filesystem survives reloads. install npm packages. write files.</div>
-        </div>
-        <div class="sl-item">
-          <em class="sl-icon">🔑</em>
-          <div class="sl-label">api key stays local</div>
-          <div class="sl-desc">stored in localStorage. never sent to any proxy. zero server trust required.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- motivation -->
-    <section class="motivation-section">
-      <div class="section-head">why browser-native?</div>
-      <div class="mot-grid">
-        <div class="mot-block">
-          <h3>the docker problem</h3>
-          <p>every agentic AI workflow needs a safe place to run code — read files, execute shell commands, install dependencies. the default answer is Docker: one container per user, per session. that means servers, provisioning, cost, latency, and ops burden. thebird eliminates all of it by moving the sandbox into the browser tab.</p>
-        </div>
-        <div class="mot-block">
-          <h3>browser as runtime</h3>
-          <p>V8 already implements a full JavaScript engine. xstate v5 provides a state machine for orchestrating shell execution. IndexedDB gives you a persistent filesystem. a service worker intercepts HTTP to serve files from that filesystem. thebird wires these four primitives together into a real POSIX shell + Node REPL, no native dependencies required.</p>
-        </div>
-        <div class="mot-block">
-          <h3>fast agentic loop</h3>
-          <p>when an AI agent wants to run a command, it calls <code>run_command</code>. the shell executes it in V8, returns stdout. no HTTP round trip to a backend, no container spawn, no SSH. latency is measured in microseconds. the agent can iterate 100x faster than any remote sandbox.</p>
-        </div>
-        <div class="mot-block">
-          <h3>acptoapi: any provider</h3>
-          <p>the AI routing layer (acptoapi) translates any Anthropic-format message to Gemini, OpenAI, or 20+ providers in-browser. no proxy server needed. the format registry × provider registry design means adding a new provider is one file. circuit breaker, retry, stream guards, capability stripping — all in-browser.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- features grid -->
-    <section class="features" id="features">
-      <div class="section-head">capabilities</div>
-      <div class="feat-grid">
-
-        <div class="feat-card">
-          <em class="glyph">⬡</em>
-          <h3>agentic chat</h3>
-          <p>tool-calling AI chat running entirely in-browser via acptoapi. tools: read_file, write_file, list_files (idb-backed), run_command, read_terminal, send_to_terminal. no proxy server required. streaming events.</p>
-          <span class="feat-tag">in-browser</span>
-          <span class="feat-tag">tool-use</span>
-          <span class="feat-tag">streaming</span>
+          <span class="cmd">bunx acptoapi</span>
+          <span class="copy" onclick="copyInstall()">copy</span>
         </div>
 
-        <div class="feat-card">
-          <em class="glyph">▶</em>
-          <h3>posix terminal</h3>
-          <p>browser-native shell (xstate v5 state machine, V8 eval) backed by IndexedDB. built-ins: ls, cat, cd, mkdir, rm, cp, mv, echo, env, export, node, npm install, grep, sed, sort, uniq, tr. node repl with persistent scope + require() from idb node_modules.</p>
-          <span class="feat-tag">posix</span>
-          <span class="feat-tag">node repl</span>
-          <span class="feat-tag">idb-fs</span>
+        <h3>what's inside</h3>
+        <div class="cards">
+          <div class="card-item"><span class="code">01</span><span class="name">agentic chat</span></div>
+          <div class="card-item"><span class="code">02</span><span class="name">POSIX terminal</span></div>
+          <div class="card-item"><span class="code">03</span><span class="name">node REPL</span></div>
+          <div class="card-item"><span class="code">04</span><span class="name">live preview SW</span></div>
+          <div class="card-item"><span class="code">05</span><span class="name">IDB filesystem</span></div>
+          <div class="card-item"><span class="code">06</span><span class="name">multi-provider routing</span></div>
+          <div class="card-item"><span class="code">07</span><span class="name">browser xstate v5</span></div>
+          <div class="card-item"><span class="code">08</span><span class="name">github device-flow auth</span></div>
         </div>
 
-        <div class="feat-card">
-          <em class="glyph">◈</em>
-          <h3>live preview</h3>
-          <p>iframe served by a service worker reading files from IndexedDB at /preview/*. hot-reloads 5s after any file write. build and run html/css/js apps entirely in-browser, no webpack, no vite, no bundler needed.</p>
-          <span class="feat-tag">service worker</span>
-          <span class="feat-tag">hot reload</span>
-          <span class="feat-tag">serverless</span>
-        </div>
-
-        <div class="feat-card">
-          <em class="glyph">⟐</em>
-          <h3>acptoapi bridge</h3>
-          <p>translate any Anthropic-format message to Gemini, OpenAI-compat, or any configured provider. format registry × provider registry. xstate streaming actor. flowie transform pipelines. normalized event stream.</p>
-          <span class="feat-tag">multi-provider</span>
-          <span class="feat-tag">streaming</span>
-          <span class="feat-tag">zero-config</span>
-        </div>
-
-        <div class="feat-card">
-          <em class="glyph">◧</em>
-          <h3>idb filesystem</h3>
-          <p>persistent IndexedDB-backed virtual filesystem. files survive page reloads. npm packages install and require() from idb node_modules. http.createServer polyfill for running express-style servers entirely in-browser.</p>
-          <span class="feat-tag">persistent</span>
-          <span class="feat-tag">node compat</span>
-          <span class="feat-tag">serverless</span>
-        </div>
-
-        <div class="feat-card">
-          <em class="glyph">⊞</em>
-          <h3>sdk clients</h3>
-          <p>drop-in Anthropic and OpenAI SDK clients via acptoapi. <code>new Anthropic({provider,apiKey})</code> backed by any provider. works in-browser and in node. circuit breaker, capability stripping, stream guards included.</p>
-          <span class="feat-tag">anthropic sdk</span>
-          <span class="feat-tag">openai sdk</span>
-          <span class="feat-tag">browser</span>
-        </div>
-
-        <div class="feat-card">
-          <em class="glyph">⚙</em>
-          <h3>http proxy server</h3>
-          <p>server.js exposes a local Anthropic-compatible proxy at localhost:3456 backed by acptoapi. route /v1/messages to any provider. /debug/state endpoint for live circuit-breaker and provider state inspection.</p>
-          <span class="feat-tag">local proxy</span>
-          <span class="feat-tag">observability</span>
-        </div>
-
-        <div class="feat-card">
-          <em class="glyph">◎</em>
-          <h3>multi-provider routing</h3>
-          <p>createRouter() picks provider+model per request based on taskType and token count. circuit breaker per provider, capability registry, retry with backoff. gemini, openai-compat, 20+ providers. failover automatic.</p>
-          <span class="feat-tag">routing</span>
-          <span class="feat-tag">circuit breaker</span>
-          <span class="feat-tag">retry</span>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- receipt + architecture -->
-    <section class="receipt-section">
-      <div class="kv-panel">
-        <div class="panel-head"><span>project receipt</span><span style="color:var(--green)">● live</span></div>
-        <table>
+        <h3>project receipt</h3>
+        <table class="kv">
           <tr><td>status</td><td>live · ships continuously</td></tr>
           <tr><td>license</td><td>MIT</td></tr>
-          <tr><td>runtime</td><td>browser (V8) + node ≥18</td></tr>
-          <tr><td>server required</td><td><strong style="color:var(--green)">none</strong> — 100% serverless</td></tr>
-          <tr><td>deps</td><td>acptoapi, floosie, @google/genai, xstate</td></tr>
-          <tr><td>frontend</td><td>no framework · vanilla js + webjsx</td></tr>
-          <tr><td>storage</td><td>IndexedDB (no server, no cloud)</td></tr>
-          <tr><td>api key</td><td>localStorage only · never leaves browser</td></tr>
-          <tr><td>providers</td>
-            <td>
-              <div class="providers">
-                <span class="chip green">gemini</span>
-                <span class="chip">openai</span>
-                <span class="chip">together</span>
-                <span class="chip">fireworks</span>
-                <span class="chip">perplexity</span>
-                <span class="chip">groq</span>
-                <span class="chip">ollama</span>
-                <span class="chip">openrouter</span>
-                <span class="chip">20+ more</span>
-              </div>
-            </td>
-          </tr>
+          <tr><td>runtime</td><td>browser only</td></tr>
+          <tr><td>server required</td><td><span class="chip accent">none</span></td></tr>
+          <tr><td>frontend</td><td>vanilla js + webjsx (no framework)</td></tr>
+          <tr><td>storage</td><td>IndexedDB</td></tr>
+          <tr><td>api key</td><td>localStorage only · never proxied</td></tr>
+          <tr><td>providers</td><td>
+            <span class="chip accent">gemini</span>
+            <span class="chip">openai</span>
+            <span class="chip">together</span>
+            <span class="chip">fireworks</span>
+            <span class="chip">groq</span>
+            <span class="chip">openrouter</span>
+            <span class="chip dim">20+ more</span>
+          </td></tr>
         </table>
-      </div>
 
-      <div>
-        <div class="kv-panel" style="margin-bottom:24px">
-          <div class="panel-head"><span>architecture</span></div>
-          <pre class="arch" style="border:0;margin:0"><span class="hl">thebird</span>  (browser web os)
-  ├── docs/          browser UI (GH Pages)
-  │     ├── chat     agentic AI · tool calling
-  │     ├── terminal posix shell · node repl · idb-fs
-  │     └── preview  service worker · hot reload
-  ├── serve.js       local static file server
-  └── server.js      anthropic-compat proxy
+        <h3>architecture</h3>
+        <div class="panel">
+          <div class="panel-head"><span>browser web os</span><span>no server</span></div>
+          <pre class="arch"><span class="hl">thebird</span>  (browser web os · GH Pages)
+  ├── chat       agentic AI · tool calling
+  ├── terminal   posix shell · node repl · idb-fs
+  ├── preview    service worker · hot reload
+  └── shell-fs   IndexedDB virtual filesystem
 
 <span class="hl">acptoapi</span>  (npm — runs in browser + node)
-  ├── lib/formats/   anthropic · openai · gemini · acp
-  ├── lib/providers/ gemini · openai-compat · router
-  ├── lib/machine.js xstate v5 streaming actor
-  ├── lib/translate  any format → any provider
-  └── lib/sdk/       Anthropic + OpenAI SDK clients
+  ├── formats    anthropic · openai · gemini · acp
+  ├── providers  gemini · openai-compat · router
+  ├── machine    xstate v5 streaming actor
+  └── translate  any format → any provider
 
 <span class="hl">browser sandbox</span>  (replaces Docker)
-  ├── V8             javascript execution engine
-  ├── xstate v5      shell state machine orchestrator
-  ├── IndexedDB      persistent virtual filesystem
+  ├── V8           javascript execution engine
+  ├── xstate v5    shell state machine
+  ├── IndexedDB    persistent virtual filesystem
   └── ServiceWorker  HTTP server from IDB files</pre>
         </div>
 
-        <div class="kv-panel">
-          <div class="panel-head"><span>quick start</span></div>
-          <table>
-            <tr><td>open in browser</td><td><a href="https://anentrypoint.github.io/thebird/" style="color:var(--green)">anentrypoint.github.io/thebird ↗</a></td></tr>
-            <tr><td>local dev</td><td><code>node serve.js</code> → localhost:8080</td></tr>
-            <tr><td>proxy server</td><td><code>node server.js</code> → localhost:3456</td></tr>
-            <tr><td>acptoapi sdk</td><td><code>npm install acptoapi</code></td></tr>
-            <tr><td>source</td><td><a href="https://github.com/AnEntrypoint/thebird" style="color:var(--green)">github.com/AnEntrypoint/thebird ↗</a></td></tr>
-          </table>
-        </div>
-      </div>
-    </section>
+        <h3>quickstart</h3>
+        <table class="kv">
+          <tr><td>open in browser</td><td><a href="https://anentrypoint.github.io/thebird/">anentrypoint.github.io/thebird ↗</a></td></tr>
+          <tr><td>local dev</td><td><code>bunx serve docs</code></td></tr>
+          <tr><td>acptoapi cli</td><td><code>bunx acptoapi</code> or <code>npx acptoapi</code></td></tr>
+          <tr><td>acptoapi sdk</td><td><code>npm install acptoapi</code></td></tr>
+          <tr><td>source</td><td><a href="https://github.com/AnEntrypoint/thebird">github.com/AnEntrypoint/thebird ↗</a></td></tr>
+        </table>
 
-    <!-- footer -->
-    <footer style="border-top:1px solid var(--ink-hair);padding:16px 2ch;display:flex;gap:2ch;align-items:center;font-size:11px;color:var(--ink-dim);margin-top:auto">
-      <span>247420 / anentrypoint</span>
-      <span style="color:var(--ink-hair)">·</span>
-      <span>thebird</span>
-      <span style="color:var(--ink-hair)">·</span>
-      <a href="https://github.com/AnEntrypoint/thebird" style="color:var(--ink-dim);text-decoration:none">source ↗</a>
-      <span style="color:var(--ink-hair)">·</span>
-      <a href="https://github.com/AnEntrypoint/acptoapi" style="color:var(--ink-dim);text-decoration:none">acptoapi ↗</a>
-      <span style="margin-left:auto;color:var(--green)">probably emerging 🌀</span>
-    </footer>
+      </main>
+    </div>
+  </div>
 
-  </div><!-- /page-overview -->
-
-  <!-- LIVE APP PAGE -->
+  <!-- LIVE APP -->
   <div class="page-panel" id="page-app">
     <div class="app-embed">
       <div class="tui-tabs">
@@ -659,30 +175,35 @@ bird-chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0
         <button id="tab-term" class="tui-tab" onclick="switchTab('term')">terminal</button>
         <button id="tab-preview" class="tui-tab" onclick="switchTab('preview')">preview</button>
         <span style="margin-left:auto;display:flex;align-items:center;gap:1ch;padding:0 2ch">
-        <span id="gh-user-badge" style="font-size:10px;color:var(--ink-dim)"></span>
-        <button id="gh-login-btn" onclick="githubLogin()" style="font-size:10px;font-family:var(--ff-mono);background:none;border:1px solid var(--ink-hair);color:var(--ink-dim);padding:2px 8px;cursor:pointer;transition:color 80ms,border-color 80ms" onmouseover="this.style.color='var(--ink)';this.style.borderColor='var(--ink)'" onmouseout="this.style.color='var(--ink-dim)';this.style.borderColor='var(--ink-hair)'">github login</button>
-        <span style="font-size:10px;color:var(--ink-dim)">· no server · <a href="https://github.com/AnEntrypoint/thebird" style="color:var(--ink-dim)">source ↗</a></span>
-      </span>
+          <span id="gh-user-badge" style="font-size:10px;color:var(--panel-text-3)"></span>
+          <button id="gh-login-btn" onclick="githubLogin()" class="btn-ghost" style="font-size:10px;padding:2px 8px">github login</button>
+        </span>
       </div>
-      <div id="pane-chat" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
-        <bird-chat></bird-chat>
-      </div>
-      <div id="pane-term" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative">
-        <div id="term-container" style="flex:1"></div>
+      <div id="pane-chat"><bird-chat></bird-chat></div>
+      <div id="pane-term" class="hidden" style="position:relative">
+        <div id="term-container"></div>
         <div id="term-image-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.82);z-index:10;align-items:center;justify-content:center;cursor:pointer" onclick="this.style.display='none'">
-          <img id="term-image-el" style="max-width:90%;max-height:90%;object-fit:contain;border:1px solid var(--ink-hair)" src="" alt="">
+          <img id="term-image-el" style="max-width:90%;max-height:90%;object-fit:contain" src="" alt="">
         </div>
       </div>
-      <div id="pane-preview" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
-        <div class="tui-toolbar">
-          <button class="tui-btn" onclick="refreshPreview()">[reload]</button>
-        </div>
-        <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--paper)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+      <div id="pane-preview" class="hidden">
+        <div class="tui-toolbar"><button class="tui-btn" onclick="refreshPreview()">[reload]</button></div>
+        <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--panel-0)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
     </div>
-  </div><!-- /page-app -->
+  </div>
 
-</div><!-- /land -->
+  <footer class="app-status">
+    <span class="item">main</span>
+    <span class="item">• utf-8</span>
+    <span class="item">• no server</span>
+    <span class="spread"></span>
+    <span class="item">247420 / mmxxvi</span>
+    <span class="item">• <a href="https://github.com/AnEntrypoint/thebird">source ↗</a></span>
+    <span class="item">• probably emerging 🌀</span>
+  </footer>
+
+</div>
 
 <script>
 function switchPage(p) {
@@ -690,16 +211,17 @@ function switchPage(p) {
     document.getElementById('page-' + id).classList.toggle('active', id === p);
     document.getElementById('ptab-' + id).classList.toggle('active', id === p);
   });
+  document.getElementById('crumb-leaf').textContent = p === 'app' ? 'live app' : 'overview';
   if (p === 'app') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
 }
 
 function copyInstall() {
-  navigator.clipboard?.writeText('npm install acptoapi');
-  const btn = document.querySelector('#install-strip .copy-btn');
-  if (!btn) return;
-  const orig = btn.textContent;
-  btn.textContent = 'copied';
-  setTimeout(() => { btn.textContent = orig; }, 1200);
+  navigator.clipboard?.writeText('bunx acptoapi');
+  const el = document.querySelector('.cli .copy');
+  if (!el) return;
+  const orig = el.textContent;
+  el.textContent = 'copied';
+  setTimeout(() => { el.textContent = orig; }, 1200);
 }
 
 function callExpressRoute(path, method) {
@@ -750,7 +272,7 @@ async function refreshPreview() {
   const pick = htmlFiles.find(k => k === 'home/index.html') || htmlFiles.find(k => k === 'index.html') || htmlFiles[0];
   if (pick) { iframe.srcdoc = snap[pick]; return; }
   const cs = getComputedStyle(document.documentElement);
-  const fg = cs.getPropertyValue('--ink').trim(), bg = cs.getPropertyValue('--paper').trim();
+  const fg = cs.getPropertyValue('--panel-text').trim(), bg = cs.getPropertyValue('--panel-0').trim();
   iframe.srcdoc = `<pre style="color:${fg};background:${bg};padding:1ch;font-family:monospace">no files yet</pre>`;
 }
 
@@ -773,7 +295,7 @@ function updateGhBadge() {
   const badge = document.getElementById('gh-user-badge');
   const btn = document.getElementById('gh-login-btn');
   if (!badge || !btn) return;
-  if (user) { badge.textContent = '● ' + user; badge.style.color = 'var(--green)'; btn.textContent = 'logout'; btn.onclick = githubLogout; }
+  if (user) { badge.textContent = '● ' + user; badge.style.color = 'var(--panel-accent)'; btn.textContent = 'logout'; btn.onclick = githubLogout; }
   else { badge.textContent = ''; badge.style.color = ''; btn.textContent = 'github login'; btn.onclick = githubLogin; }
 }
 

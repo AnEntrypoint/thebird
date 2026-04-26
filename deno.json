@@ -1,6 +1,0 @@
-{
-  "tasks": {
-    "cli": "deno run --allow-net --allow-env wasi/cli.ts",
-    "cli:compile": "deno compile --allow-net --allow-env --output dist/thebird wasi/cli.ts"
-  }
-}

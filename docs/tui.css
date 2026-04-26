@@ -1,87 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-:root, [data-theme="light"] {
-  --paper: #EFE9DD;
-  --ink: #0B0B09;
+/* Terminal/chat component styles. Design tokens come from vendor/design-tokens.css. */
+:root {
   --ink-rgb: 11,11,9;
   --paper-rgb: 239,233,221;
-  --ink-dim: rgba(11,11,9,0.55);
+  --ink-dim: var(--panel-text-3);
   --ink-hair: rgba(11,11,9,0.18);
-  --surface: #F6F1E7;
-  --surface-2: rgba(11,11,9,0.04);
-  --green: #247420;
-  --green-fg: #FFFFFF;
-  --green-deep: #18794E;
-  --sun: #FFD100;
-  --flame: #FF3B1F;
-  --link: #1F4DFF;
-  --user: #1F4DFF;
-  --ff-display: 'Archivo Black', system-ui, sans-serif;
-  --ff-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --dur-snap: 80ms;
-  --dur-base: 160ms;
-  --ease: cubic-bezier(0.2,0,0,1);
+  --surface: var(--panel-1);
+  --surface-2: var(--panel-2);
+  --user: var(--link);
 }
 [data-theme="dark"] {
-  --paper: #0B0B09;
-  --ink: #EFE9DD;
   --ink-rgb: 239,233,221;
   --paper-rgb: 11,11,9;
-  --ink-dim: rgba(239,233,221,0.55);
   --ink-hair: rgba(239,233,221,0.18);
-  --surface: #17160F;
-  --surface-2: rgba(239,233,221,0.04);
-  --green: #3FA93A;
-  --green-fg: #0B0B09;
-  --green-deep: #6CE06A;
-  --flame: #FF6B4A;
-  --link: #7FA2FF;
-  --user: #7FA2FF;
 }
-*, *::before, *::after { box-sizing: border-box; border: 0; outline: 0; border-radius: 0; font-family: var(--ff-mono); }
-:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 0; font-size: 13px; line-height: 1.45; }
+*, *::before, *::after { font-family: var(--ff-mono); }
 ::selection { background: var(--green); color: var(--green-fg); }
-.tui-header {
-  border-bottom: 1px solid var(--ink-hair);
-  background: var(--paper);
-  padding: 10px 2ch;
-  color: var(--ink);
-  overflow: hidden;
-  display: flex;
-  align-items: baseline;
-  gap: 2ch;
-  flex-wrap: wrap;
-}
-.tui-header .brand {
-  font-family: var(--ff-mono);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
-  color: var(--ink);
-  display: inline-flex;
-  align-items: baseline;
-}
-.tui-header .brand .slash { color: var(--ink-dim); font-weight: 400; padding: 0 0.3ch; }
-.tui-header .brand .leaf { color: var(--green); }
-.tui-header .tagline {
-  font-family: var(--ff-mono);
-  font-size: 10px;
-  color: var(--ink-dim);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-}
+
 .tui-tabs {
   display: flex;
   gap: 0;
-  background: var(--paper);
-  border-bottom: 1px solid var(--ink);
+  background: var(--panel-0);
+  border-bottom: 1px solid var(--panel-text);
   padding: 0 2ch;
 }
 .tui-tab {
   background: transparent;
   border-bottom: 2px solid transparent;
-  color: var(--ink-dim);
+  color: var(--panel-text-3);
   padding: 8px 2ch;
   cursor: pointer;
   font-size: 11px;
@@ -90,15 +35,13 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   letter-spacing: 0.08em;
   transition: color var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease);
 }
-.tui-tab:hover { color: var(--ink); }
-.tui-tab.active {
-  color: var(--ink);
-  border-bottom-color: var(--green);
-}
+.tui-tab:hover { color: var(--panel-text); }
+.tui-tab.active { color: var(--panel-text); border-bottom-color: var(--green); }
+
 .tui-input, .tui-select, .tui-textarea {
   background: var(--surface);
   border-bottom: 1px solid var(--ink-hair);
-  color: var(--ink);
+  color: var(--panel-text);
   padding: 4px 1ch;
   font-size: 12px;
   font-family: var(--ff-mono);
@@ -110,15 +53,16 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
 .tui-select {
   appearance: none;
   padding-right: 3ch;
-  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(-45deg, transparent 50%, var(--ink) 50%);
+  background-image: linear-gradient(45deg, transparent 50%, var(--panel-text) 50%), linear-gradient(-45deg, transparent 50%, var(--panel-text) 50%);
   background-position: right 1.2ch center, right 0.6ch center;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
 .tui-select::-ms-expand { display: none; }
+
 .tui-btn {
   background: transparent;
-  color: var(--ink);
+  color: var(--panel-text);
   padding: 4px 1.5ch;
   cursor: pointer;
   font-size: 11px;
@@ -127,16 +71,17 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   letter-spacing: 0.06em;
   transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
 }
-.tui-btn:hover { background: var(--ink); color: var(--paper); }
+.tui-btn:hover { background: var(--panel-text); color: var(--panel-0); }
 .tui-btn.primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--panel-text);
+  color: var(--panel-0);
   box-shadow: 3px 3px 0 var(--green);
   transition: transform var(--dur-snap) var(--ease), box-shadow var(--dur-snap) var(--ease);
 }
 .tui-btn.primary:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 var(--green); background: var(--green); color: var(--green-fg); }
 .tui-btn.primary:active { transform: translate(3px,3px); box-shadow: 0 0 0 var(--green); }
 .tui-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .tui-msg {
   max-width: 78ch;
   padding: 6px 1ch;
@@ -147,8 +92,9 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
 }
 .tui-msg.user { color: var(--user); border-left: 2px solid var(--user); padding-left: 1.5ch; }
 .tui-msg.user::before { content: 'you / '; color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; font-weight: 600; }
-.tui-msg.assistant { color: var(--ink); border-left: 2px solid var(--green); padding-left: 1.5ch; }
+.tui-msg.assistant { color: var(--panel-text); border-left: 2px solid var(--green); padding-left: 1.5ch; }
 .tui-msg.assistant::before { content: 'agent / '; color: var(--green); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; font-weight: 600; }
+
 .tui-status { color: var(--green-deep); font-size: 11px; }
 .tui-error-text { color: var(--flame); font-size: 11px; font-weight: 600; }
 .tui-spinner::after { content: '⠋'; animation: tui-spin 0.6s steps(6) infinite; color: var(--green); }
@@ -156,17 +102,19 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   0% { content: '⠋'; } 16% { content: '⠙'; } 33% { content: '⠹'; }
   50% { content: '⠸'; } 66% { content: '⠼'; } 83% { content: '⠴'; }
 }
+
 .tui-toolbar {
   display: flex;
   gap: 1ch;
   padding: 6px 2ch;
   border-bottom: 1px solid var(--ink-hair);
-  background: var(--paper);
+  background: var(--panel-0);
   align-items: center;
   flex-wrap: wrap;
   font-size: 12px;
 }
 .tui-toolbar label { color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+
 .tui-agent-stats {
   padding: 4px 2ch;
   border-bottom: 1px solid var(--ink-hair);
@@ -182,6 +130,7 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   text-overflow: ellipsis;
 }
 .tui-agent-stats:empty { display: none; }
+
 .tui-msglist {
   flex: 1;
   overflow-y: auto;
@@ -189,16 +138,16 @@ html, body { background: var(--paper); color: var(--ink); height: 100%; margin: 
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--paper);
+  background: var(--panel-0);
 }
 .tui-compose {
   display: flex;
   gap: 1ch;
   padding: 8px 2ch;
-  border-top: 1px solid var(--ink);
+  border-top: 1px solid var(--panel-text);
   background: var(--surface);
 }
 @keyframes blink { 50% { opacity: 0; } }
-#pane-term { background: var(--paper); }
+#pane-term { background: var(--panel-0); }
 #pane-term .xterm { padding: 1ch; }
 .hidden { display: none !important; }

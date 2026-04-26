@@ -1,6 +1,8 @@
 .env
 node_modules
 .prd
+rs-learn.db
+.gm/ui-*.png
 .plugkit-browser-profile/
 .plugkit-browser-profile-*/
 .plugkit-agent-worktree/
