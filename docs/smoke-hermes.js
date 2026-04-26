@@ -306,7 +306,9 @@ async def _drive_hermes(scope, recv, send):
 
   s = t0();
   try {
-    const { openWebSocket } = await import('./asgi-bridge.js?v=' + Date.now());
+    const asgiMod = await import('./asgi-bridge.js');
+    const openWebSocket = asgiMod.openWebSocket;
+    if (typeof openWebSocket !== 'function') throw new Error('asgi-bridge has no openWebSocket; cache-stale module');
     const got = await new Promise((resolve, reject) => {
       let opened = false;
       const ws = openWebSocket('/hermes/api/events', {
