@@ -148,8 +148,10 @@ export async function dispatchAsgi(method, path, headers, body) {
   const ct = respHeaders['content-type'] || '';
   const isText = ct.startsWith('text/') || ct.includes('json') || ct.includes('xml') || ct.includes('javascript');
   let bodyOut = isText ? new TextDecoder().decode(merged) : merged;
-  // For SPA HTML responses served at the prefix root, inject <base href> so
-  // root-relative asset paths (/assets/...) resolve under the prefix.
+  // For SPA HTML responses served at the prefix root, rewrite root-relative
+  // asset URLs to base-relative so they resolve under the iframe's prefix
+  // path instead of the server root. Root-relative (/foo) bypasses <base>;
+  // path-relative (./foo) honours it.
   if (isText && ct.includes('text/html') && bodyOut.includes('<head')) {
     const reqPath = scope.path;
     if (reqPath === '/' || reqPath.endsWith('/index.html')) {
@@ -158,6 +160,8 @@ export async function dispatchAsgi(method, path, headers, body) {
       if (!/<base\b/i.test(bodyOut)) {
         bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  ${baseTag}`);
       }
+      // Rewrite src/href that start with single / (root-relative) to ./
+      bodyOut = bodyOut.replace(/(\b(?:src|href)=["'])\/(?!\/)/g, '$1./');
     }
   }
   return { status, headers: respHeaders, body: bodyOut };
