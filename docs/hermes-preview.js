@@ -24,27 +24,42 @@ async function unpackHermes(inst, onLog) {
     window.__debug.appDistFiles['/hermes'] = distSet;
     window.__debug.appDistBase['/hermes'] = baseUrl + DIST_PREFIX;
   }
-  let copied = 0;
-  for (const src of manifest.sources) {
-    const r = await fetch(baseUrl + src);
-    if (!r.ok) continue;
-    const text = await r.text();
-    const dst = '/vendor-apps/hermes/' + src;
-    const dir = dst.substring(0, dst.lastIndexOf('/'));
-    try { inst.FS.mkdirTree(dir); } catch {}
-    try { inst.FS.writeFile(dst, text); copied++; } catch {}
+  // Parallel fetch in chunks; sequential FS writes because Emscripten FS isn't thread-safe.
+  async function fetchChunked(items, kind) {
+    const CHUNK = 16;
+    const fetched = [];
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const slice = items.slice(i, i + CHUNK);
+      const results = await Promise.all(slice.map(async f => {
+        try {
+          const r = await fetch(baseUrl + f);
+          if (!r.ok) return null;
+          return { rel: f, payload: kind === 'text' ? await r.text() : new Uint8Array(await r.arrayBuffer()) };
+        } catch { return null; }
+      }));
+      for (const it of results) if (it) fetched.push(it);
+      if (i % (CHUNK * 4) === 0) onLog?.(`hermes: ${kind} ${Math.min(i + CHUNK, items.length)}/${items.length}\n`);
+    }
+    return fetched;
   }
-  for (const rel of (manifest.distFiles || [])) {
-    const r = await fetch(baseUrl + rel);
-    if (!r.ok) continue;
-    const buf = new Uint8Array(await r.arrayBuffer());
-    const dst = '/vendor-apps/hermes/' + rel;
+  const srcResults = await fetchChunked(manifest.sources, 'text');
+  let copied = 0;
+  for (const it of srcResults) {
+    const dst = '/vendor-apps/hermes/' + it.rel;
     const dir = dst.substring(0, dst.lastIndexOf('/'));
     try { inst.FS.mkdirTree(dir); } catch {}
-    try { inst.FS.writeFile(dst, buf); } catch {}
+    try { inst.FS.writeFile(dst, it.payload); copied++; } catch {}
+  }
+  const distResults = await fetchChunked(manifest.distFiles || [], 'binary');
+  let distCopied = 0;
+  for (const it of distResults) {
+    const dst = '/vendor-apps/hermes/' + it.rel;
+    const dir = dst.substring(0, dst.lastIndexOf('/'));
+    try { inst.FS.mkdirTree(dir); } catch {}
+    try { inst.FS.writeFile(dst, it.payload); distCopied++; } catch {}
   }
   inst.runPython(`import sys; sys.path.insert(0, '/vendor-apps/hermes') if '/vendor-apps/hermes' not in sys.path else None`);
-  onLog?.(`hermes: ${copied} src + ${manifest.distFiles?.length || 0} dist files unpacked\n`);
+  onLog?.(`hermes: ${copied} src + ${distCopied} dist files unpacked\n`);
 }
 
 export async function mountHermes(onLog = () => {}) {
