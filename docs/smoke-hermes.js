@@ -306,7 +306,7 @@ async def _drive_hermes(scope, recv, send):
 
   s = t0();
   try {
-    const { openWebSocket } = await import('./asgi-bridge.js');
+    const { openWebSocket } = await import('./asgi-bridge.js?v=' + Date.now());
     const got = await new Promise((resolve, reject) => {
       let opened = false;
       const ws = openWebSocket('/hermes/api/events', {
