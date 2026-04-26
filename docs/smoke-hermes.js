@@ -67,7 +67,7 @@ export async function runHermesPreflight({ onStep } = {}) {
 import micropip
 try: micropip.uninstall(__base)
 except Exception: pass
-await micropip.install(__pkg, deps=False)
+await micropip.install(__pkg)
 `);
       step('upgrade:' + pkg, true, 'uninstalled+reinstalled', dur(s));
     } catch (e) {
