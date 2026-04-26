@@ -1,5 +1,5 @@
 {
-  "bundledAt": "2026-04-26T15:58:14.598Z",
+  "bundledAt": "2026-04-26T19:34:58.668Z",
   "entry": "hermes_cli.web_server",
   "sources": [
     "hermes_cli/web_server.py",
@@ -248,6 +248,7 @@
     "gateway/platforms/feishu_comment_rules.py",
     "acp_adapter/tools.py"
   ],
+  "sourcesPack": "sources.json",
   "distDir": "hermes_cli/web_dist",
   "distFiles": [
     "hermes_cli/web_dist/assets/filler-bg0-Dc7xVfma.jpg",

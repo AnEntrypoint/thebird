@@ -161,7 +161,7 @@ export async function dispatchAsgi(method, path, headers, body) {
       const origin = typeof location !== 'undefined' ? location.origin : '';
       const basePath = (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
       const baseUrl = origin + basePath;
-      const historyScoper = `<script>(function(){var BP=${JSON.stringify(basePath.replace(/\/$/, ''))};function S(u){if(typeof u!=='string')return u;if(/^https?:/i.test(u))return u;if(u.startsWith(BP+'/')||u===BP)return u;if(u.startsWith('/'))return BP+u;return u;}var ps=history.pushState;history.pushState=function(s,t,u){return ps.call(this,s,t,S(u));};var rs=history.replaceState;history.replaceState=function(s,t,u){return rs.call(this,s,t,S(u));};})();</script>`;
+      const historyScoper = `<script>(function(){var BP=${JSON.stringify(basePath.replace(/\/$/, ''))};function S(u){if(typeof u!=='string')return u;if(/^https?:/i.test(u))return u;if(u.startsWith(BP+'/')||u===BP)return u;if(u.startsWith('/'))return BP+u;return u;}var ps=history.pushState;history.pushState=function(s,t,u){return ps.call(this,s,t,S(u));};var rs=history.replaceState;history.replaceState=function(s,t,u){return rs.call(this,s,t,S(u));};addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a');if(!a||!a.getAttribute)return;var h=a.getAttribute('href');if(!h||/^[a-z]+:/i.test(h)||h.startsWith('#'))return;if(h.startsWith('/')&&!h.startsWith(BP+'/')&&h!==BP){e.preventDefault();history.pushState({},'',h);dispatchEvent(new PopStateEvent('popstate'));}},true);})();</script>`;
       if (!/<base\b/i.test(bodyOut)) {
         bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  <base href="${baseUrl}">\n  ${historyScoper}`);
       }

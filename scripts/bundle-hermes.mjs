@@ -101,15 +101,23 @@ async function main() {
     await copyTree(distSrc, join(OUT, 'hermes_cli', 'web_dist'));
     await walkDist(distSrc);
   }
+  // Pack all sources into one JSON blob to avoid 245 individual fetches
+  const sourcesPack = {};
+  for (const src of closure) {
+    const rel = relative(HERMES, src).replace(/\\/g, '/');
+    sourcesPack[rel] = await readFile(src, 'utf8');
+  }
+  await writeFile(join(OUT, 'sources.json'), JSON.stringify(sourcesPack));
   const manifest = {
     bundledAt: new Date().toISOString(),
     entry: 'hermes_cli.web_server',
     sources: closure.map(p => relative(HERMES, p).replace(/\\/g, '/')),
+    sourcesPack: 'sources.json',
     distDir: 'hermes_cli/web_dist',
     distFiles,
   };
   await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
-  console.log(`done. ${closure.length} files + web_dist → docs/vendor/hermes/`);
+  console.log(`done. ${closure.length} files (packed) + web_dist → docs/vendor/hermes/`);
 }
 
 main().catch(e => { console.error('FAIL', e); process.exit(1); });

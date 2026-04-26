@@ -36,10 +36,15 @@ async function unpackHermes(inst, onLog) {
     }
     return fetched;
   }
-  const [srcResults, distResults] = await Promise.all([
-    fetchChunked(manifest.sources, 'text'),
-    fetchChunked(manifest.distFiles || [], 'binary'),
-  ]);
+  // Source pack: one fetch instead of 245
+  let srcResults;
+  if (manifest.sourcesPack) {
+    const pack = await (await fetch(baseUrl + manifest.sourcesPack)).json();
+    srcResults = Object.entries(pack).map(([rel, payload]) => ({ rel, payload }));
+  } else {
+    srcResults = await fetchChunked(manifest.sources, 'text');
+  }
+  const distResults = await fetchChunked(manifest.distFiles || [], 'binary');
   let copied = 0;
   for (const it of srcResults) {
     const dst = '/vendor-apps/hermes/' + it.rel;
