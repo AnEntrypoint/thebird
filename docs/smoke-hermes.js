@@ -116,8 +116,20 @@ def _r(): return {"ok": True, "preflight": "stub"}
 `);
     const pyApp = inst.globals.get('_app');
     if (!pyApp) throw new Error('FastAPI app not in globals');
+    inst.globals.set('__pyapp', pyApp);
+    await inst.runPythonAsync(`
+async def _drive(scope, recv, send):
+    pyscope = scope.to_py() if hasattr(scope, 'to_py') else dict(scope)
+    async def _recv():
+        msg = await recv()
+        return msg.to_py() if hasattr(msg, 'to_py') else msg
+    async def _send(msg):
+        return await send(msg)
+    await __pyapp(pyscope, _recv, _send)
+`);
+    const driver = inst.globals.get('_drive');
     const callable = async (scope, receive, send) => {
-      const r = pyApp(scope, receive, send);
+      const r = driver(scope, receive, send);
       if (r?.then) await r;
     };
     const { mountAsgi, dispatchAsgi, unmountAsgi } = await import('./asgi-bridge.js');
