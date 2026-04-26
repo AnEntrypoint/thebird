@@ -1,5 +1,28 @@
 # thebird Development Notes
 
+## Chat-Tool Provider Wiring
+
+Three external agent CLIs are reachable through the **acptoapi** OpenAI-compat
+gateway at `http://localhost:4800/v1` (start with `bunx acptoapi`):
+
+- **Kilo Code** — `kilo/*` model IDs (e.g. `kilo/x-ai/grok-code-fast-1:optimized:free`,
+  `kilo/kilo-auto/free`, `kilo/openrouter/free`).
+- **opencode** — `opencode/*` (e.g. `opencode/minimax-m2.5-free`).
+- **Claude Code** — reachable via OpenRouter's `anthropic/claude-*` model IDs
+  through the existing `openrouter` provider, or via Vercel's gateway
+  (`vercel` provider exposes `anthropic/claude-sonnet-4.5`).
+
+All three flow through `streamOpenAI` from `docs/vendor/thebird-browser.js`
+(the vendored acptoapi browser bundle). `chat-providers.js` PROVIDERS
+registry is the single source of truth for endpoint URLs and default model
+lists. `test.js` asserts the export surface is intact and the provider
+registry has lanes for kilo, opencode, and claude-class models.
+
+Live end-to-end validation requires the user to run the acptoapi gateway
+locally and supply credentials. The Node-side test harness validates the
+import surface and provider config; in-browser the existing UI exercises
+real prompt round-trips per provider.
+
 ## POSIX Predictability — LLM-Facing Guarantees
 
 The shell is the boundary an LLM sees. Behaviors witnessed by `test.js` (47 assertions, 10 scenario groups):

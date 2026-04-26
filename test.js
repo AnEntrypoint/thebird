@@ -83,5 +83,20 @@ ok('plain is not control', !isControlStart('echo hi'));
 ok('block open after if', isBlockOpen(['if true; then', 'echo a']));
 ok('block closed after fi', !isBlockOpen(['if true; then', 'echo a', 'fi']));
 
+console.log('# acptoapi: vendored bundle surface');
+const browser = await import('./docs/vendor/thebird-browser.js');
+ok('streamGemini exported', typeof browser.streamGemini === 'function');
+ok('streamOpenAI exported', typeof browser.streamOpenAI === 'function');
+ok('generateGemini exported', typeof browser.generateGemini === 'function');
+
+console.log('# acptoapi: provider registry');
+const { PROVIDERS } = await import('./docs/chat-providers.js');
+ok('acptoapi provider registered', !!PROVIDERS.acptoapi);
+eq('acptoapi base url', PROVIDERS.acptoapi.baseUrl, 'http://localhost:4800/v1');
+const acpModels = PROVIDERS.acptoapi.models;
+ok('kilo lane present', acpModels.some(m => m.startsWith('kilo/')));
+ok('opencode lane present', acpModels.some(m => m.startsWith('opencode/')));
+ok('claude-code-compatible: openrouter+anthropic', PROVIDERS.openrouter.models.some(m => m.startsWith('anthropic/claude-')));
+
 console.log(`\nresult: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
