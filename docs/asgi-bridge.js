@@ -157,11 +157,13 @@ export async function dispatchAsgi(method, path, headers, body) {
     if (reqPath === '/' || reqPath.endsWith('/index.html')) {
       // Rewrite root-relative src/href to path-relative FIRST (don't touch base href)
       bodyOut = bodyOut.replace(/(\b(?:src|href)=["'])\/(?!\/)/g, '$1./');
-      // Then inject absolute base href (uses //origin/ so URL rewrite above can't have touched it)
+      // Then inject absolute base href + history scoper (uses //origin/ so URL rewrite above can't have touched it)
       const origin = typeof location !== 'undefined' ? location.origin : '';
-      const baseUrl = origin + (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
+      const basePath = (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
+      const baseUrl = origin + basePath;
+      const historyScoper = `<script>(function(){var BP=${JSON.stringify(basePath.replace(/\/$/, ''))};function S(u){if(typeof u!=='string')return u;if(/^https?:/i.test(u))return u;if(u.startsWith(BP+'/')||u===BP)return u;if(u.startsWith('/'))return BP+u;return u;}var ps=history.pushState;history.pushState=function(s,t,u){return ps.call(this,s,t,S(u));};var rs=history.replaceState;history.replaceState=function(s,t,u){return rs.call(this,s,t,S(u));};})();</script>`;
       if (!/<base\b/i.test(bodyOut)) {
-        bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  <base href="${baseUrl}">`);
+        bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  <base href="${baseUrl}">\n  ${historyScoper}`);
       }
     }
   }
