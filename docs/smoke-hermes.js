@@ -118,14 +118,27 @@ async def _r(): return {"ok": True, "preflight": "stub"}
     if (!pyApp) throw new Error('FastAPI app not in globals');
     inst.globals.set('__pyapp', pyApp);
     await inst.runPythonAsync(`
+def _b(v):
+    if isinstance(v, (bytes, bytearray)): return bytes(v)
+    if isinstance(v, memoryview): return bytes(v)
+    if hasattr(v, 'to_py'): v = v.to_py()
+    if isinstance(v, (list, tuple)): return bytes(v)
+    if isinstance(v, str): return v.encode('latin-1')
+    try: return bytes(v)
+    except Exception: return b''
 async def _drive(scope, recv, send):
-    pyscope = scope.to_py() if hasattr(scope, 'to_py') else dict(scope)
+    if hasattr(scope, 'to_py'): scope = scope.to_py()
+    s = dict(scope)
+    if 'headers' in s: s['headers'] = [(_b(k), _b(v)) for (k,v) in s['headers']]
+    if 'raw_path' in s: s['raw_path'] = _b(s['raw_path'])
+    if 'query_string' in s: s['query_string'] = _b(s['query_string'])
     async def _recv():
         msg = await recv()
-        return msg.to_py() if hasattr(msg, 'to_py') else msg
-    async def _send(msg):
-        return await send(msg)
-    await __pyapp(pyscope, _recv, _send)
+        if hasattr(msg, 'to_py'): msg = msg.to_py()
+        if isinstance(msg, dict) and 'body' in msg: msg['body'] = _b(msg['body'])
+        return msg
+    async def _send(msg): return await send(msg)
+    await __pyapp(s, _recv, _send)
 `);
     const driver = inst.globals.get('_drive');
     const callable = async (scope, receive, send) => {
@@ -185,13 +198,31 @@ async def _drive(scope, recv, send):
     if (!pyApp) throw new Error('hermes_cli.web_server.app not in globals');
     inst.globals.set('__hermes_app', pyApp);
     await inst.runPythonAsync(`
+def _to_bytes(v):
+    if isinstance(v, (bytes, bytearray)): return bytes(v)
+    if isinstance(v, memoryview): return bytes(v)
+    if hasattr(v, 'to_py'): v = v.to_py()
+    if isinstance(v, (list, tuple)): return bytes(v)
+    if isinstance(v, str): return v.encode('latin-1')
+    try: return bytes(v)
+    except Exception: return b''
+def _normalize_scope(scope):
+    if hasattr(scope, 'to_py'): scope = scope.to_py()
+    s = dict(scope)
+    if 'headers' in s:
+        s['headers'] = [(_to_bytes(k), _to_bytes(v)) for (k, v) in s['headers']]
+    if 'raw_path' in s: s['raw_path'] = _to_bytes(s['raw_path'])
+    if 'query_string' in s: s['query_string'] = _to_bytes(s['query_string'])
+    return s
 async def _drive_hermes(scope, recv, send):
-    pyscope = scope.to_py() if hasattr(scope, 'to_py') else dict(scope)
+    pyscope = _normalize_scope(scope)
     async def _r():
         msg = await recv()
-        return msg.to_py() if hasattr(msg, 'to_py') else msg
-    async def _s(msg):
-        return await send(msg)
+        if hasattr(msg, 'to_py'): msg = msg.to_py()
+        if isinstance(msg, dict) and 'body' in msg:
+            msg['body'] = _to_bytes(msg['body'])
+        return msg
+    async def _s(msg): return await send(msg)
     await __hermes_app(pyscope, _r, _s)
 `);
     const driver2 = inst.globals.get('_drive_hermes');
