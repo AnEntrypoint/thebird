@@ -274,6 +274,38 @@ The reusable gm skill at `~/.claude/skills/lazy-runtime/SKILL.md`
 codifies this recipe so future tools can be added with one skill
 invocation.
 
+## Hermes Boot Profile (witnessed 2026-04-26)
+
+Live cold-cache profile in real Chrome (no service worker cache, fresh
+session) after sources-pack optimization:
+
+```
+pyodide-load:   7.8s   Pyodide WASM cold from local vendor/pyodide/
+preload:        0.7s   ssl + sqlite3 + micropip in parallel
+wheels:        12.6s   typing-extensions+upgrade then 10 wheels via asyncio.gather
+unpack:        33.2s   one fetch of sources.json (9.5 MB) + 15 dist files
+theme:          0.6s   read prefers-color-scheme, write dashboard.yaml
+import:         2.3s   from hermes_cli.web_server import app
+mount:          7ms    asgi-bridge mountAsgi
+─────────────────────────
+total:         44.6s   (down from 131s before optimizations; 65% reduction)
+```
+
+Warm-cache total: ~7s (Pyodide cached, sources still re-fetched).
+
+`window.__debug.hermesPhases` exposes the breakdown for inspection
+after each boot.
+
+### Known issue: in-iframe React-Router navigation
+
+Clicking nav links in the Hermes SPA (Sessions, Config, etc.) keeps
+the iframe at the right URL via the asgi-bridge history scoper, but
+React-Router 7 doesn't re-render on the synthetic popstate. Fix
+requires either rebuilding Hermes's web bundle with a basename or a
+deeper monkey-patch of React-Router's internal state. Not blocking
+for direct API access — every endpoint round-trips correctly via
+dispatchAsgi.
+
 ## Hermes Runs in the Browser (witnessed green 2026-04-26)
 
 `?smoke=hermes` reports **19/19 ✓** in real Chrome against
