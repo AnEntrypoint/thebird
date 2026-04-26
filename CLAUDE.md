@@ -1,5 +1,31 @@
 # thebird Development Notes
 
+## Hermes GUI in the Preview Pane
+
+The Hermes web GUI lives at `c:/dev/hermes/web` (Vite + React + tailwind +
+xterm). To render it inside thebird's preview pane:
+
+1. Run thebird locally: `bunx serve docs` — needed because GH Pages (HTTPS)
+   cannot iframe loopback HTTP (Chrome PNA blocks public→loopback regardless
+   of Access-Control-Allow-Private-Network; this is in memory).
+2. In `c:/dev/hermes/web`: `npm install && npm run dev` — Vite serves on
+   `http://localhost:5173`.
+3. In thebird, switch to the **preview** tab. Click **[hermes]** in the
+   preview toolbar (or paste `http://localhost:5173/` into the URL field
+   and press Enter / [go]). The iframe loads the Hermes SPA.
+4. The hermes-theme repo (`c:/dev/hermes-theme`) supplies design tokens
+   (`theme/clean.yaml`, `theme/clean-dark.yaml`) and dashboard assets
+   (`dashboard/dist`) consumed by the Hermes web build via
+   `@nous-research/ui`. No thebird-side wiring needed — the theme is baked
+   into the Hermes build.
+5. Click **[idb]** to switch back to thebird's in-browser preview (rendered
+   from the IDB virtual filesystem).
+
+The iframe carries `sandbox="allow-scripts allow-same-origin allow-forms"`,
+which is sufficient for a Vite dev server on the same origin family.
+Cross-origin localhost iframes from a *deployed* GH-Pages site are blocked;
+this feature is local-dev only.
+
 ## Chat-Tool Provider Wiring
 
 Three external agent CLIs are reachable through the **acptoapi** OpenAI-compat

@@ -187,7 +187,13 @@
         </div>
       </div>
       <div id="pane-preview" class="hidden">
-        <div class="tui-toolbar"><button class="tui-btn" onclick="refreshPreview()">[reload]</button></div>
+        <div class="tui-toolbar">
+          <button class="tui-btn" onclick="refreshPreview()">[reload]</button>
+          <input id="preview-url" class="tui-input" placeholder="external url (e.g. http://localhost:5173/)" style="flex:1;min-width:24ch" onkeydown="if(event.key==='Enter')loadPreviewUrl(this.value)">
+          <button class="tui-btn" onclick="loadPreviewUrl(document.getElementById('preview-url').value)">[go]</button>
+          <button class="tui-btn" onclick="loadPreviewUrl('http://localhost:5173/')" title="Hermes web GUI on default Vite port">[hermes]</button>
+          <button class="tui-btn" onclick="loadPreviewUrl('')" title="back to in-browser preview from idb">[idb]</button>
+        </div>
         <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--panel-0)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
     </div>
@@ -256,6 +262,10 @@ function callExpressRoute(path, method) {
 async function refreshPreview() {
   const iframe = document.getElementById('preview-frame');
   if (!iframe) return;
+  if (iframe.src && !iframe.src.includes('/preview/') && !iframe.src.startsWith('about:')) {
+    iframe.contentWindow?.location.reload();
+    return;
+  }
   const swReady = window.__debug?.sw?.registered;
   const handlers = window.__debug?.shell?.httpHandlers || {};
   const hasServer = Object.keys(handlers).length > 0;
@@ -275,6 +285,22 @@ async function refreshPreview() {
   const fg = cs.getPropertyValue('--panel-text').trim(), bg = cs.getPropertyValue('--panel-0').trim();
   iframe.srcdoc = `<pre style="color:${fg};background:${bg};padding:1ch;font-family:monospace">no files yet</pre>`;
 }
+
+function loadPreviewUrl(url) {
+  const iframe = document.getElementById('preview-frame');
+  const trimmed = (url || '').trim();
+  if (!trimmed) {
+    iframe.removeAttribute('src');
+    iframe.removeAttribute('srcdoc');
+    refreshPreview();
+    return;
+  }
+  iframe.removeAttribute('srcdoc');
+  iframe.src = trimmed;
+  const input = document.getElementById('preview-url');
+  if (input) input.value = trimmed;
+}
+window.loadPreviewUrl = loadPreviewUrl;
 
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {
