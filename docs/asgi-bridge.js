@@ -137,9 +137,20 @@ export async function dispatchAsgi(method, path, headers, body) {
   let off = 0;
   for (const c of chunks) { merged.set(c, off); off += c.byteLength; }
   const ct = respHeaders['content-type'] || '';
-  const bodyOut = ct.startsWith('text/') || ct.includes('json') || ct.includes('xml') || ct.includes('javascript')
-    ? new TextDecoder().decode(merged)
-    : merged;
+  const isText = ct.startsWith('text/') || ct.includes('json') || ct.includes('xml') || ct.includes('javascript');
+  let bodyOut = isText ? new TextDecoder().decode(merged) : merged;
+  // For SPA HTML responses served at the prefix root, inject <base href> so
+  // root-relative asset paths (/assets/...) resolve under the prefix.
+  if (isText && ct.includes('text/html') && bodyOut.includes('<head')) {
+    const reqPath = scope.path;
+    if (reqPath === prefix || reqPath === prefix + '/' || reqPath.endsWith('/index.html')) {
+      const baseUrl = (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
+      const baseTag = `<base href="${baseUrl}">`;
+      if (!/<base\b/i.test(bodyOut)) {
+        bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  ${baseTag}`);
+      }
+    }
+  }
   return { status, headers: respHeaders, body: bodyOut };
 }
 
