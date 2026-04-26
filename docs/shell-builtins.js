@@ -104,6 +104,12 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
       const target = args[0];
       if (target === '-') { const prev = ctx.prevCwd || '/'; ctx.prevCwd = ctx.cwd; ctx.cwd = prev; wl(ctx.cwd); return; }
       const next = resolvePath(ctx.cwd, target || '~');
+      if (next !== '/') {
+        const k = toKey(next);
+        const s = snap();
+        const exists = Object.keys(s).some(key => key === k || key.startsWith(k + '/'));
+        if (!exists) throw new Error('cd: ' + (target || '~') + ': No such file or directory');
+      }
       ctx.prevCwd = ctx.cwd;
       ctx.cwd = next;
     },

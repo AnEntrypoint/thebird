@@ -60,8 +60,8 @@ async function boot() {
   const readTermTheme = () => {
     const cs = getComputedStyle(document.documentElement);
     return {
-      background: cs.getPropertyValue('--paper').trim() || '#000',
-      foreground: cs.getPropertyValue('--ink').trim() || '#ccc',
+      background: cs.getPropertyValue('--panel-0').trim() || cs.getPropertyValue('--paper').trim() || '#000',
+      foreground: cs.getPropertyValue('--panel-text').trim() || cs.getPropertyValue('--ink').trim() || '#ccc',
       cursor: cs.getPropertyValue('--green').trim() || '#3FA93A',
       selectionBackground: cs.getPropertyValue('--green').trim() || '#3FA93A',
     };
