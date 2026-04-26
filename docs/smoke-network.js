@@ -1,11 +1,14 @@
 async function probe(label, url, opts = {}) {
   const t = performance.now();
+  const optional = opts.optional === true;
   try {
     const res = await fetch(url, { method: opts.method || 'GET', headers: opts.headers || {}, signal: AbortSignal.timeout?.(opts.timeoutMs || 4000) });
     const ms = Math.round(performance.now() - t);
     return { name: label, ok: res.ok, detail: res.status + (res.statusText ? ' ' + res.statusText : ''), ms };
   } catch (e) {
-    return { name: label, ok: false, detail: e.name + ': ' + (e.message || ''), ms: Math.round(performance.now() - t) };
+    const ms = Math.round(performance.now() - t);
+    const detail = e.name + ': ' + (e.message || '');
+    return { name: label, ok: optional ? null : false, detail: optional ? 'not running (' + detail + ')' : detail, ms };
   }
 }
 
@@ -23,13 +26,13 @@ export async function runNetworkSmoke() {
     out.push(await probe('provider:' + id, url, { headers }));
   }
 
-  out.push(await probe('local:acptoapi', 'http://localhost:4800/v1/models'));
-  out.push(await probe('local:hermes-vite', 'http://localhost:5173/'));
-  out.push(await probe('local:kilo-serve', 'http://localhost:7000/'));
-  out.push(await probe('local:opencode', 'http://localhost:4096/'));
+  out.push(await probe('local:acptoapi', 'http://localhost:4800/v1/models', { optional: true }));
+  out.push(await probe('local:hermes-vite', 'http://localhost:5173/', { optional: true }));
+  out.push(await probe('local:kilo-serve', 'http://localhost:7000/', { optional: true }));
+  out.push(await probe('local:opencode', 'http://localhost:4096/', { optional: true }));
 
   out.push(await probe('cdn:pyodide-mjs (fallback)', 'https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs'));
-  out.push(await probe('vendor:pyodide-mjs', './vendor/pyodide/pyodide.mjs'));
+  out.push(await probe('vendor:pyodide-mjs', './vendor/pyodide/pyodide.mjs', { optional: true }));
 
   const t = performance.now();
   try {

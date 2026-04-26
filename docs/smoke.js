@@ -105,9 +105,10 @@ export async function runSmoke({ skipNet = true } = {}) {
     for (const r of netResults) results.push(r);
   }
 
-  const passed = results.filter(r => r.ok).length;
-  const failed = results.length - passed;
-  return { passed, failed, total: results.length, results };
+  const passed = results.filter(r => r.ok === true).length;
+  const failed = results.filter(r => r.ok === false).length;
+  const skipped = results.filter(r => r.ok === null).length;
+  return { passed, failed, skipped, total: results.length, results };
 }
 
 export function renderSmokePanel(report) {
@@ -116,14 +117,16 @@ export function renderSmokePanel(report) {
   panel.id = 'smoke-panel';
   panel.style.cssText = 'position:fixed;top:8px;right:8px;width:520px;max-height:90vh;overflow:auto;background:var(--panel-1,#fff);color:var(--panel-text,#111);box-shadow:0 8px 32px rgba(0,0,0,0.25);font:12px/1.5 ui-monospace,monospace;padding:12px;z-index:99999;border-radius:8px';
   const head = document.createElement('div');
-  head.innerHTML = `<strong>smoke</strong> — ${report.passed}/${report.total} ok` + (report.failed ? `, <span style="color:#c33">${report.failed} fail</span>` : '') + ` <button onclick="document.getElementById('smoke-panel').remove()" style="float:right;background:none;border:0;cursor:pointer;font-size:14px">×</button>`;
+  head.innerHTML = `<strong>smoke</strong> — ${report.passed}/${report.total} ok` + (report.failed ? `, <span style="color:#c33">${report.failed} fail</span>` : '') + (report.skipped ? `, <span style="color:#c80">${report.skipped} skip</span>` : '') + ` <button onclick="document.getElementById('smoke-panel').remove()" style="float:right;background:none;border:0;cursor:pointer;font-size:14px">×</button>`;
   panel.appendChild(head);
   const list = document.createElement('div');
   list.style.cssText = 'margin-top:8px';
   for (const r of report.results) {
     const row = document.createElement('div');
     row.style.cssText = 'padding:2px 0;display:flex;gap:8px';
-    row.innerHTML = `<span style="color:${r.ok ? '#3a3' : '#c33'};width:14px">${r.ok ? '✓' : '✗'}</span><span style="flex:1">${r.name}${r.detail ? ' <span style="color:#888">— ' + r.detail.replace(/[<>]/g, '') + '</span>' : ''}</span><span style="color:#888">${r.ms}ms</span>`;
+    const icon = r.ok === true ? '✓' : r.ok === false ? '✗' : '~';
+    const color = r.ok === true ? '#3a3' : r.ok === false ? '#c33' : '#c80';
+    row.innerHTML = `<span style="color:${color};width:14px">${icon}</span><span style="flex:1">${r.name}${r.detail ? ' <span style="color:#888">— ' + r.detail.replace(/[<>]/g, '') + '</span>' : ''}</span><span style="color:#888">${r.ms}ms</span>`;
     list.appendChild(row);
   }
   panel.appendChild(list);
