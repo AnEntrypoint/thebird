@@ -321,12 +321,13 @@ window.renderAsgiLaunchers = renderAsgiLaunchers;
   await new Promise(r => (document.readyState === 'complete' ? r() : window.addEventListener('load', r)));
   await new Promise(r => setTimeout(r, 800));
   try {
+    const v = params.get('v') || Date.now();
     if (params.get('smoke') === 'hermes') {
-      const m = await import('./smoke-hermes.js');
+      const m = await import('./smoke-hermes.js?v=' + v);
       await m.autoRunIfRequested();
       return;
     }
-    const m = await import('./smoke.js');
+    const m = await import('./smoke.js?v=' + v);
     await m.autoRunIfRequested();
   } catch (e) {
     const div = document.createElement('div');
