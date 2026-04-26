@@ -93,8 +93,9 @@ export async function mountHermes(onLog = () => {}) {
     await Promise.all([inst.loadPackage('ssl'), inst.loadPackage('sqlite3'), inst.loadPackage('micropip')]);
     phases.preload = phase('preload', t);
 
-    onLog('hermes: installing wheels in parallel + unpacking bundle…\n');
+    onLog('hermes: installing wheels + unpacking bundle in parallel…\n');
     t = performance.now();
+    const wheelStart = performance.now();
     const wheelTask = inst.runPythonAsync(`
 import micropip, asyncio
 try: micropip.uninstall('typing-extensions')
@@ -104,11 +105,12 @@ async def _go():
     pkgs = ('pyyaml', 'pydantic', 'fastapi', 'httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit')
     await asyncio.gather(*[micropip.install(p, deps=True) for p in pkgs], return_exceptions=True)
 await _go()
-`);
-    const unpackTask = unpackHermes(inst, onLog);
+`).then(() => phases.wheels = Math.round(performance.now() - wheelStart));
+    const unpackStart = performance.now();
+    const unpackTask = unpackHermes(inst, onLog).then(info => { phases.unpack = Math.round(performance.now() - unpackStart); return info; });
     const [, unpackInfo] = await Promise.all([wheelTask, unpackTask]);
     phases.wheels_and_unpack = phase('wheels-and-unpack-parallel', t);
-    onLog(`hermes: ${unpackInfo.srcCount} src + ${unpackInfo.distCount} dist files\n`);
+    onLog(`hermes: wheels ${phases.wheels}ms · unpack ${phases.unpack}ms (${unpackInfo.srcCount} src + ${unpackInfo.distCount} dist)\n`);
 
     t = performance.now();
     const themeInfo = await applyHermesTheme(inst);
