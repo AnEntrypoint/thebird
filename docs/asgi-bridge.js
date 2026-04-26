@@ -85,10 +85,19 @@ export async function dispatchAsgi(method, path, headers, body) {
   let respHeaders = {};
   const chunks = [];
   let started = false;
-  const send = async (msg) => {
+  const toJs = msg => {
+    if (msg && typeof msg.toJs === 'function') return msg.toJs({ dict_converter: Object.fromEntries });
+    if (msg && typeof msg.get === 'function' && typeof msg.has === 'function') {
+      return { type: msg.get('type'), status: msg.get('status'), headers: msg.get('headers'), body: msg.get('body') };
+    }
+    return msg;
+  };
+  const send = async (msgIn) => {
+    const msg = toJs(msgIn);
     if (msg.type === 'http.response.start') {
       status = msg.status || 200;
-      for (const [k, v] of msg.headers || []) {
+      for (const pair of msg.headers || []) {
+        const [k, v] = Array.isArray(pair) ? pair : pair.toJs ? pair.toJs() : pair;
         const kk = (k instanceof Uint8Array ? new TextDecoder().decode(k) : String(k)).toLowerCase();
         const vv = v instanceof Uint8Array ? new TextDecoder().decode(v) : String(v);
         respHeaders[kk] = vv;
