@@ -34,14 +34,52 @@ code (Pydantic v2 core, asyncio in CPython sense, native extensions),
 so it remains the lightweight default for trivial scripts only when
 the user explicitly opts in.
 
-### Future: ASGI Bridge for In-Browser Python Web Apps
+### ASGI Bridge for In-Browser Python Web Apps
 
-`.gm/prd.yml` carries a follow-up item `hermes-pyodide-asgi-bridge`:
-mount any Pyodide-loaded ASGI app (FastAPI/Starlette/Hermes web
-backend at `hermes_cli/web_server.py`) under thebird's preview service
-worker, so requests from the preview iframe answer in-page from
-Pyodide. Foundation for hosting Hermes (and other Python web apps)
-in thebird without any host process.
+`docs/asgi-bridge.js` lets any ASGI app (FastAPI, Starlette, Hermes
+web backend, Django channels) answer requests from the preview pane.
+Pyodide loads on first python use; the app loads on first prefix hit.
+
+API:
+
+```js
+import { mountAsgi, dispatchAsgi, unmountAsgi } from './asgi-bridge.js';
+
+// inside Pyodide (after loadPyodide), build app then bridge it:
+//   await pyodide.runPythonAsync('from hermes_cli.web_server import app');
+//   const app = pyodide.globals.get('app');
+//   const asgiCallable = (scope, receive, send) => app(scope, receive, send);
+mountAsgi(asgiCallable, '/hermes');
+```
+
+Internals (test.js asserts the round-trip):
+
+- `mountAsgi(app, prefix)` registers an app at a path prefix. Multiple
+  apps coexist on different prefixes.
+- `findAsgiApp(path)` returns the longest-prefix match, or `null`.
+- `dispatchAsgi(method, path, headers, body)` builds a valid ASGI
+  HTTP scope (lifespan startup runs once on first call), drives
+  `app(scope, receive, send)`, and returns
+  `{ status, headers, body }`. Body is decoded as text for
+  `text/*`, `*/json`, `*/xml`, `*/javascript`; otherwise raw
+  `Uint8Array`.
+- `preview-sw-client.js` checks ASGI prefixes before falling through
+  to the existing express-style `httpHandlers` registry, so an
+  iframe `fetch('/preview/hermes/api/...')` answers from Pyodide.
+
+To run unmodified Hermes:
+
+1. In thebird's terminal: `python` (lazy-loads Pyodide once).
+2. `pip install hermes-agent` (or import the local sdist via
+   micropip from a packaged URL — Hermes does not publish a Pyodide
+   wheel, so non-pure deps may fail. Each failure is a wheel-availability
+   issue tracked as a separate item, not a bridge issue).
+3. Inside Pyodide: import `hermes_cli.web_server`, mount its ASGI
+   app via the bridge, then point preview at `/preview/hermes/`.
+
+Live browser-side validation requires `bunx serve docs` + a real
+browser; test.js validates bridge surface and JS-side round-trip
+with a stub ASGI app written in JS.
 
 ## Hermes GUI in the Preview Pane
 

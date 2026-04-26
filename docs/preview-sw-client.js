@@ -1,3 +1,5 @@
+import { dispatchAsgi, findAsgiApp } from './asgi-bridge.js';
+
 const SW_PATH = new URL('./preview-sw.js', import.meta.url).href;
 const SCOPE = new URL('./preview/', import.meta.url).href;
 
@@ -42,6 +44,12 @@ navigator.serviceWorker?.addEventListener('message', e => {
   if (e.data?.type !== 'EXPRESS_REQUEST') return;
   const { path, method, body: reqBody, headers: reqHeaders } = e.data;
   const replyPort = e.ports[0];
+  if (findAsgiApp(path)) {
+    dispatchAsgi(method, path, reqHeaders, reqBody)
+      .then(r => replyPort.postMessage({ status: r.status, body: r.body, contentType: r.headers['content-type'] || 'text/plain' }))
+      .catch(err => replyPort.postMessage({ status: 500, body: 'asgi: ' + err.message, contentType: 'text/plain' }));
+    return;
+  }
   const handlers = window.__debug?.shell?.httpHandlers || {};
   const app = Object.values(handlers)[0];
   if (!app?.routes) { replyPort.postMessage({ status: 503, body: '<h1>503</h1><p>no server running — run <code>node server.js</code> in terminal</p>', contentType: 'text/html' }); return; }

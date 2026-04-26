@@ -114,5 +114,38 @@ ok('makePythonBuiltin exported', typeof shellPy.makePythonBuiltin === 'function'
 ok('shell-python import did not fetch', fetchCalls === 0);
 globalThis.fetch = origFetch;
 
+console.log('# asgi-bridge: mount + round-trip');
+const asgi = await import('./docs/asgi-bridge.js');
+ok('mountAsgi exported', typeof asgi.mountAsgi === 'function');
+ok('dispatchAsgi exported', typeof asgi.dispatchAsgi === 'function');
+ok('findAsgiApp exported', typeof asgi.findAsgiApp === 'function');
+ok('buildScope exported', typeof asgi.buildScope === 'function');
+
+const stubApp = async (scope, receive, send) => {
+  if (scope.type === 'lifespan') return;
+  await receive();
+  await send({ type: 'http.response.start', status: 200, headers: [[new TextEncoder().encode('content-type'), new TextEncoder().encode('text/plain')]] });
+  await send({ type: 'http.response.body', body: 'ok ' + scope.method + ' ' + scope.path });
+};
+asgi.mountAsgi(stubApp, '/asgi');
+const found = asgi.findAsgiApp('/asgi/hello');
+ok('findAsgiApp resolves /asgi/hello', !!found && found.prefix === '/asgi');
+const r = await asgi.dispatchAsgi('GET', '/asgi/hello?x=1', { 'host': 'thebird' }, null);
+eq('status 200', r.status, 200);
+eq('body matches', r.body, 'ok GET /asgi/hello');
+eq('content-type', r.headers['content-type'], 'text/plain');
+
+const scope = asgi.buildScope('POST', '/asgi/api?a=b', { 'X-Foo': 'bar' }, '{"k":1}', '/asgi');
+eq('scope method', scope.method, 'POST');
+eq('scope path', scope.path, '/asgi/api');
+eq('scope query', new TextDecoder().decode(scope.query_string), 'a=b');
+eq('scope root_path', scope.root_path, '/asgi');
+ok('scope.headers is array of [Uint8Array, Uint8Array]', Array.isArray(scope.headers) && scope.headers[0][0] instanceof Uint8Array);
+
+const miss = asgi.findAsgiApp('/other/x');
+ok('findAsgiApp returns null for unmounted prefix', miss === null);
+ok('unmount works', asgi.unmountAsgi('/asgi') === true);
+ok('after unmount, findAsgiApp null', asgi.findAsgiApp('/asgi/hello') === null);
+
 console.log(`\nresult: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
