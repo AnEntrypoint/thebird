@@ -117,7 +117,14 @@ export function makeTextBuiltins(ctx, readFile, writeFile) {
     export: args => { for (const kv of args) { const [k, ...v] = kv.split('='); ctx.env[k] = v.join('='); } },
     clear: () => ctx.term.clear(),
     history: () => ctx.history.forEach((l, i) => wl(String(i + 1).padStart(5) + '  ' + l)),
-    which: (args, b) => { const cmd = args[0]; if (!cmd) throw new Error('which: missing operand'); if (b[cmd]) wl('(builtin) ' + cmd); else wl(cmd + ' not found'); },
+    which: (args, b) => {
+      const cmd = args[0];
+      if (!cmd) throw new Error('which: missing operand');
+      const runners = ['node', 'npm', 'npx', 'bun', 'bunx', 'deno', 'python', 'python3', 'awk', 'sed', 'git'];
+      if (b[cmd]) wl('(builtin) ' + cmd);
+      else if (runners.includes(cmd)) wl('(runtime) ' + cmd);
+      else { wl(cmd + ' not found'); ctx.lastExitCode = 1; }
+    },
     exit: (args, actor) => { if (actor.getSnapshot().value === 'node-repl') { actor.send({ type: 'EXIT_REPL' }); wl('[shell]'); } },
     true: () => {},
     false: () => { ctx.lastExitCode = 1; },

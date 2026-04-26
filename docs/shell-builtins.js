@@ -165,20 +165,20 @@ export function makeBuiltins(ctx, actor, invokeBuiltin) {
       wl('\x1b[32m[image: ' + path + ']\x1b[0m');
     },
     head: args => {
-      const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
-      const rest = args[0] === '-n' ? args.slice(2) : args;
-      const stdinFirst = rest.length > 0 && rest[0].includes('\n');
-      const stdin = stdinFirst ? rest[0] : null;
-      const files = stdinFirst ? rest.slice(1) : rest;
+      const stdinFirst = args.length > 0 && args[0].includes('\n');
+      const stdin = stdinFirst ? args[0] : null;
+      const rest0 = stdinFirst ? args.slice(1) : args;
+      const n = rest0[0] === '-n' ? parseInt(rest0[1], 10) : 10;
+      const files = rest0[0] === '-n' ? rest0.slice(2) : rest0;
       const targets = files.length ? files : [null];
       for (const f of targets) wl((f ? readFile(f) : stdin || '').split('\n').slice(0, n).join('\r\n'));
     },
     tail: args => {
-      const n = args[0] === '-n' ? parseInt(args[1], 10) : 10;
-      const rest = args[0] === '-n' ? args.slice(2) : args;
-      const stdinFirst = rest.length > 0 && rest[0].includes('\n');
-      const stdin = stdinFirst ? rest[0] : null;
-      const files = stdinFirst ? rest.slice(1) : rest;
+      const stdinFirst = args.length > 0 && args[0].includes('\n');
+      const stdin = stdinFirst ? args[0] : null;
+      const rest0 = stdinFirst ? args.slice(1) : args;
+      const n = rest0[0] === '-n' ? parseInt(rest0[1], 10) : 10;
+      const files = rest0[0] === '-n' ? rest0.slice(2) : rest0;
       const targets = files.length ? files : [null];
       for (const f of targets) wl((f ? readFile(f) : stdin || '').split('\n').slice(-n).join('\r\n'));
     },
