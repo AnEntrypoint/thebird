@@ -1,25 +1,3 @@
-- id: ui-bg-over-borders
-  subject: Replace borders with bg tints + soft shadows across docs/ UI
-  status: pending
-  description: Audit docs/tui.css, docs/vendor/app-shell.css, docs/vendor/design-tokens.css, docs/index.html. Replace 1px solid borders with subtle background-color shifts (panel-2, panel-3 tokens) and soft box-shadows. Gmail-like — no hairlines on rows, hover = bg shift, selected = stronger bg, focus = ring-shadow not outline.
-  effort: large
-  category: refactor
-  route_family: representation
-  load: 0.7
-  failure_modes: [F2-aesthetic-regression, F8-token-drift, F11-a11y-contrast]
-  route_fit: examined
-  authorization: weak_prior
-  blocking: []
-  blockedBy: []
-  acceptance:
-    - No 'border:' / 'border-top/right/bottom/left:' rules remain in tui.css and app-shell.css except for explicit dividers tagged --divider-bg
-    - All hover/focus/active/disabled states defined for buttons, tabs, list rows, inputs
-    - focus-visible uses box-shadow ring (3px panel-3) not outline
-    - Contrast ratio >= 4.5 for body text on panel surfaces
-  edge_cases:
-    - xterm canvas not affected (terminal renders own glyphs)
-    - rippleui/tailwind utility borders left alone if vendor
-
 - id: acptoapi-wire
   subject: Verify acptoapi vendored bundle drives all 3 providers
   status: pending

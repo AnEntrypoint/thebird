@@ -1,17 +1,29 @@
-/* Terminal/chat component styles. Design tokens come from vendor/design-tokens.css. */
+/* Terminal/chat component styles. Design tokens come from vendor/design-tokens.css.
+   Gmail-like: backgrounds over borders. Hover = bg shift. Focus = soft ring shadow.
+   Selected = stronger bg. No hairlines on rows. */
 :root {
   --ink-rgb: 11,11,9;
   --paper-rgb: 239,233,221;
   --ink-dim: var(--panel-text-3);
-  --ink-hair: rgba(11,11,9,0.18);
+  --ink-hair: rgba(11,11,9,0.12);
   --surface: var(--panel-1);
   --surface-2: var(--panel-2);
+  --surface-3: var(--panel-3, var(--panel-2));
   --user: var(--link);
+  --row-hover: rgba(var(--ink-rgb), 0.04);
+  --row-active: rgba(var(--ink-rgb), 0.08);
+  --row-selected: rgba(var(--ink-rgb), 0.12);
+  --ring-focus: 0 0 0 3px rgba(var(--ink-rgb), 0.10);
+  --shadow-soft: 0 1px 2px rgba(var(--ink-rgb), 0.06), 0 2px 8px rgba(var(--ink-rgb), 0.04);
+  --shadow-raised: 0 2px 4px rgba(var(--ink-rgb), 0.08), 0 8px 24px rgba(var(--ink-rgb), 0.06);
 }
 [data-theme="dark"] {
   --ink-rgb: 239,233,221;
   --paper-rgb: 11,11,9;
-  --ink-hair: rgba(239,233,221,0.18);
+  --ink-hair: rgba(239,233,221,0.10);
+  --row-hover: rgba(var(--ink-rgb), 0.05);
+  --row-active: rgba(var(--ink-rgb), 0.10);
+  --row-selected: rgba(var(--ink-rgb), 0.14);
 }
 *, *::before, *::after { font-family: var(--ff-mono); }
 ::selection { background: var(--green); color: var(--green-fg); }
@@ -20,12 +32,11 @@
   display: flex;
   gap: 0;
   background: var(--panel-0);
-  border-bottom: 1px solid var(--panel-text);
-  padding: 0 2ch;
+  padding: 4px 2ch 0;
 }
 .tui-tab {
   background: transparent;
-  border-bottom: 2px solid transparent;
+  border: 0;
   color: var(--panel-text-3);
   padding: 8px 2ch;
   cursor: pointer;
@@ -33,23 +44,30 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  transition: color var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease);
+  border-radius: 6px 6px 0 0;
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
 }
-.tui-tab:hover { color: var(--panel-text); }
-.tui-tab.active { color: var(--panel-text); border-bottom-color: var(--green); }
+.tui-tab:hover { color: var(--panel-text); background: var(--row-hover); }
+.tui-tab:focus-visible { outline: 0; box-shadow: var(--ring-focus); }
+.tui-tab.active { color: var(--panel-text); background: var(--surface); }
 
 .tui-input, .tui-select, .tui-textarea {
   background: var(--surface);
-  border-bottom: 1px solid var(--ink-hair);
+  border: 0;
   color: var(--panel-text);
-  padding: 4px 1ch;
+  padding: 6px 1.25ch;
   font-size: 12px;
   font-family: var(--ff-mono);
+  border-radius: 4px;
+  transition: background var(--dur-snap) var(--ease), box-shadow var(--dur-snap) var(--ease);
 }
+.tui-input:hover, .tui-select:hover, .tui-textarea:hover { background: var(--surface-2); }
 .tui-input:focus, .tui-select:focus, .tui-textarea:focus {
-  border-bottom-color: var(--green);
-  background: var(--paper);
+  outline: 0;
+  background: var(--paper, var(--surface));
+  box-shadow: var(--ring-focus);
 }
+.tui-input:disabled, .tui-select:disabled, .tui-textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 .tui-select {
   appearance: none;
   padding-right: 3ch;
@@ -62,38 +80,44 @@
 
 .tui-btn {
   background: transparent;
+  border: 0;
   color: var(--panel-text);
-  padding: 4px 1.5ch;
+  padding: 6px 1.5ch;
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+  border-radius: 4px;
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease), box-shadow var(--dur-snap) var(--ease);
 }
-.tui-btn:hover { background: var(--panel-text); color: var(--panel-0); }
+.tui-btn:hover { background: var(--row-hover); }
+.tui-btn:active { background: var(--row-active); }
+.tui-btn:focus-visible { outline: 0; box-shadow: var(--ring-focus); }
 .tui-btn.primary {
-  background: var(--panel-text);
-  color: var(--panel-0);
-  box-shadow: 3px 3px 0 var(--green);
-  transition: transform var(--dur-snap) var(--ease), box-shadow var(--dur-snap) var(--ease);
+  background: var(--green);
+  color: var(--green-fg);
+  box-shadow: var(--shadow-soft);
 }
-.tui-btn.primary:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 var(--green); background: var(--green); color: var(--green-fg); }
-.tui-btn.primary:active { transform: translate(3px,3px); box-shadow: 0 0 0 var(--green); }
-.tui-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tui-btn.primary:hover { background: var(--green-deep, var(--green)); box-shadow: var(--shadow-raised); }
+.tui-btn.primary:active { box-shadow: none; transform: translateY(1px); }
+.tui-btn:disabled { opacity: 0.4; cursor: not-allowed; background: transparent; }
 
 .tui-msg {
   max-width: 78ch;
-  padding: 6px 1ch;
+  padding: 10px 1.5ch;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
+  border-radius: 6px;
+  transition: background var(--dur-snap) var(--ease);
 }
-.tui-msg.user { color: var(--user); border-left: 2px solid var(--user); padding-left: 1.5ch; }
-.tui-msg.user::before { content: 'you / '; color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; font-weight: 600; }
-.tui-msg.assistant { color: var(--panel-text); border-left: 2px solid var(--green); padding-left: 1.5ch; }
-.tui-msg.assistant::before { content: 'agent / '; color: var(--green); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px; font-weight: 600; }
+.tui-msg:hover { background: var(--row-hover); }
+.tui-msg.user { color: var(--user); background: var(--row-hover); }
+.tui-msg.user::before { content: 'you / '; color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 4px; font-weight: 600; }
+.tui-msg.assistant { color: var(--panel-text); }
+.tui-msg.assistant::before { content: 'agent / '; color: var(--green); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 4px; font-weight: 600; }
 
 .tui-status { color: var(--green-deep); font-size: 11px; }
 .tui-error-text { color: var(--flame); font-size: 11px; font-weight: 600; }
@@ -106,8 +130,7 @@
 .tui-toolbar {
   display: flex;
   gap: 1ch;
-  padding: 6px 2ch;
-  border-bottom: 1px solid var(--ink-hair);
+  padding: 8px 2ch;
   background: var(--panel-0);
   align-items: center;
   flex-wrap: wrap;
@@ -116,14 +139,13 @@
 .tui-toolbar label { color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
 
 .tui-agent-stats {
-  padding: 4px 2ch;
-  border-bottom: 1px solid var(--ink-hair);
+  padding: 6px 2ch;
   background: var(--surface);
   font-size: 10px;
   color: var(--ink-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  min-height: 18px;
+  min-height: 22px;
   font-family: var(--ff-mono);
   white-space: nowrap;
   overflow: hidden;
@@ -134,17 +156,16 @@
 .tui-msglist {
   flex: 1;
   overflow-y: auto;
-  padding: 2ch;
+  padding: 1ch 2ch;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   background: var(--panel-0);
 }
 .tui-compose {
   display: flex;
   gap: 1ch;
-  padding: 8px 2ch;
-  border-top: 1px solid var(--panel-text);
+  padding: 10px 2ch;
   background: var(--surface);
 }
 @keyframes blink { 50% { opacity: 0; } }

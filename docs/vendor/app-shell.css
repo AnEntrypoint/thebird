@@ -417,3 +417,27 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--panel-3); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--panel-hover); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Gmail-style DX: focus rings via box-shadow, disabled states, no outline-on-click */
+:where(button, a, input, select, textarea, [role="button"], [role="tab"], [tabindex]):focus { outline: 0; }
+:where(button, a, input, select, textarea, [role="button"], [role="tab"], [tabindex]):focus-visible {
+    box-shadow: 0 0 0 3px var(--panel-3);
+    outline: 0;
+}
+.btn:focus-visible, .btn-primary:focus-visible, .btn-ghost:focus-visible,
+.app-topbar nav a:focus-visible, .app-side a:focus-visible, .row:focus-visible,
+.cli .copy:focus-visible {
+    box-shadow: 0 0 0 3px var(--panel-3), var(--panel-shadow);
+}
+.btn:disabled, .btn-primary:disabled, .btn-ghost:disabled,
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+/* Loading state — subtle pulse on bg, not on opacity */
+@keyframes app-loading-pulse {
+    0%, 100% { background: var(--panel-1); }
+    50% { background: var(--panel-2); }
+}
+.is-loading { animation: app-loading-pulse 1.2s ease-in-out infinite; }
