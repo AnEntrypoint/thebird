@@ -194,8 +194,6 @@
           <button class="tui-btn" onclick="loadPreviewUrl('http://localhost:5173/')" title="Hermes web GUI on default Vite port">[hermes]</button>
           <button class="tui-btn" onclick="loadPreviewUrl('')" title="back to in-browser preview from idb">[idb]</button>
           <span id="asgi-launchers" style="display:flex;gap:1ch"></span>
-          <button class="tui-btn" onclick="window.open(location.pathname+'?smoke=1&net=1','_blank')" title="Run in-browser smoke harness">[smoke]</button>
-          <button class="tui-btn" onclick="window.open(location.pathname+'?smoke=hermes','_blank')" title="Run Hermes preflight (Pyodide + wheels + ASGI)">[hermes-smoke]</button>
           <button class="tui-btn" onclick="launchHermesInPreview()" title="Boot Hermes in Pyodide and load its SPA in the iframe">[hermes-app]</button>
         </div>
         <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--panel-0)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
@@ -334,28 +332,6 @@ function renderAsgiLaunchers() {
 }
 window.addEventListener('asgi-mount', renderAsgiLaunchers);
 window.renderAsgiLaunchers = renderAsgiLaunchers;
-
-(async () => {
-  const params = new URLSearchParams(location.search);
-  if (!params.has('smoke')) return;
-  await new Promise(r => (document.readyState === 'complete' ? r() : window.addEventListener('load', r)));
-  await new Promise(r => setTimeout(r, 800));
-  try {
-    const v = params.get('v') || Date.now();
-    if (params.get('smoke') === 'hermes') {
-      const m = await import('./smoke-hermes.js?v=' + v);
-      await m.autoRunIfRequested();
-      return;
-    }
-    const m = await import('./smoke.js?v=' + v);
-    await m.autoRunIfRequested();
-  } catch (e) {
-    const div = document.createElement('div');
-    div.style.cssText = 'position:fixed;top:8px;right:8px;background:#fee;color:#900;padding:12px;font-family:monospace;z-index:99999;border-radius:8px';
-    div.textContent = 'smoke harness failed to load: ' + e.message;
-    document.body.appendChild(div);
-  }
-})();
 
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {

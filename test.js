@@ -132,12 +132,12 @@ const found = asgi.findAsgiApp('/asgi/hello');
 ok('findAsgiApp resolves /asgi/hello', !!found && found.prefix === '/asgi');
 const r = await asgi.dispatchAsgi('GET', '/asgi/hello?x=1', { 'host': 'thebird' }, null);
 eq('status 200', r.status, 200);
-eq('body matches', r.body, 'ok GET /asgi/hello');
+eq('body matches (prefix-stripped)', r.body, 'ok GET /hello');
 eq('content-type', r.headers['content-type'], 'text/plain');
 
 const scope = asgi.buildScope('POST', '/asgi/api?a=b', { 'X-Foo': 'bar' }, '{"k":1}', '/asgi');
 eq('scope method', scope.method, 'POST');
-eq('scope path', scope.path, '/asgi/api');
+eq('scope path (prefix-stripped)', scope.path, '/api');
 eq('scope query', new TextDecoder().decode(scope.query_string), 'a=b');
 eq('scope root_path', scope.root_path, '/asgi');
 ok('scope.headers is array of [Uint8Array, Uint8Array]', Array.isArray(scope.headers) && scope.headers[0][0] instanceof Uint8Array);
@@ -184,17 +184,10 @@ const allMounted = pyMod2.getMountedPyApps();
 ok('mounted registry has app', allMounted.has('app'));
 asgiMod2.unmountAsgi('/app');
 
-console.log('# smoke harness: shape');
-const smokeMod = await import('./docs/smoke.js');
-ok('runSmoke exported', typeof smokeMod.runSmoke === 'function');
-ok('renderSmokePanel exported', typeof smokeMod.renderSmokePanel === 'function');
-ok('autoRunIfRequested exported', typeof smokeMod.autoRunIfRequested === 'function');
-const netMod = await import('./docs/smoke-network.js');
-ok('runNetworkSmoke exported', typeof netMod.runNetworkSmoke === 'function');
-const hermesSmoke = await import('./docs/smoke-hermes.js');
-ok('runHermesPreflight exported', typeof hermesSmoke.runHermesPreflight === 'function');
-ok('renderHermesPanel exported', typeof hermesSmoke.renderHermesPanel === 'function');
-ok('hermes autoRunIfRequested exported', typeof hermesSmoke.autoRunIfRequested === 'function');
+console.log('# hermes-preview: shape');
+const hp = await import('./docs/hermes-preview.js');
+ok('mountHermes exported', typeof hp.mountHermes === 'function');
+ok('isHermesMounted exported', typeof hp.isHermesMounted === 'function');
 
 console.log('# vendor: pyodide URL points at vendor');
 const fs2 = await import('node:fs');
