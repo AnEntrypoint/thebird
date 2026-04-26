@@ -8,10 +8,6 @@ async function unpackHermes(inst, onLog) {
   const manifest = await (await fetch(manifestUrl, { cache: 'no-cache' })).json();
   try { inst.FS.mkdirTree('/vendor-apps/hermes'); } catch {}
   const baseUrl = new URL('./vendor/hermes/', import.meta.url).href;
-  // Publish dist-file fast-path lookup so SW client can serve static assets
-  // directly without round-tripping through Pyodide. Hermes's web_dist/ tree
-  // becomes /hermes/<file> in the SPA; manifest.distFiles is rooted at
-  // 'hermes_cli/web_dist/<file>' so we strip that prefix for the SW lookup.
   if (typeof window !== 'undefined') {
     window.__debug = window.__debug || {};
     window.__debug.appDistFiles = window.__debug.appDistFiles || {};
@@ -24,9 +20,8 @@ async function unpackHermes(inst, onLog) {
     window.__debug.appDistFiles['/hermes'] = distSet;
     window.__debug.appDistBase['/hermes'] = baseUrl + DIST_PREFIX;
   }
-  // Parallel fetch in chunks; sequential FS writes because Emscripten FS isn't thread-safe.
   async function fetchChunked(items, kind) {
-    const CHUNK = 16;
+    const CHUNK = 32;
     const fetched = [];
     for (let i = 0; i < items.length; i += CHUNK) {
       const slice = items.slice(i, i + CHUNK);
@@ -38,11 +33,13 @@ async function unpackHermes(inst, onLog) {
         } catch { return null; }
       }));
       for (const it of results) if (it) fetched.push(it);
-      if (i % (CHUNK * 4) === 0) onLog?.(`hermes: ${kind} ${Math.min(i + CHUNK, items.length)}/${items.length}\n`);
     }
     return fetched;
   }
-  const srcResults = await fetchChunked(manifest.sources, 'text');
+  const [srcResults, distResults] = await Promise.all([
+    fetchChunked(manifest.sources, 'text'),
+    fetchChunked(manifest.distFiles || [], 'binary'),
+  ]);
   let copied = 0;
   for (const it of srcResults) {
     const dst = '/vendor-apps/hermes/' + it.rel;
@@ -50,7 +47,6 @@ async function unpackHermes(inst, onLog) {
     try { inst.FS.mkdirTree(dir); } catch {}
     try { inst.FS.writeFile(dst, it.payload); copied++; } catch {}
   }
-  const distResults = await fetchChunked(manifest.distFiles || [], 'binary');
   let distCopied = 0;
   for (const it of distResults) {
     const dst = '/vendor-apps/hermes/' + it.rel;
@@ -59,36 +55,75 @@ async function unpackHermes(inst, onLog) {
     try { inst.FS.writeFile(dst, it.payload); distCopied++; } catch {}
   }
   inst.runPython(`import sys; sys.path.insert(0, '/vendor-apps/hermes') if '/vendor-apps/hermes' not in sys.path else None`);
-  onLog?.(`hermes: ${copied} src + ${distCopied} dist files unpacked\n`);
+  return { srcCount: copied, distCount: distCopied };
+}
+
+async function applyHermesTheme(inst) {
+  const themeBase = new URL('./vendor/hermes-theme/', import.meta.url).href;
+  let manifest = null;
+  try { manifest = await (await fetch(themeBase + 'manifest.json', { cache: 'no-cache' })).json(); }
+  catch { return { applied: false, reason: 'no theme manifest' }; }
+  const dark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  const themeFile = dark ? (manifest.dark || 'theme/clean-dark.yaml') : (manifest.light || 'theme/clean.yaml');
+  let yaml;
+  try { yaml = await (await fetch(themeBase + themeFile)).text(); }
+  catch { return { applied: false, reason: 'fetch ' + themeFile }; }
+  inst.FS.mkdirTree('/home/pyodide/.hermes');
+  // Hermes reads dashboard.yaml for theme name; theme file goes alongside
+  inst.FS.writeFile('/home/pyodide/.hermes/dashboard-theme.yaml', yaml);
+  const themeName = dark ? 'clean-dark' : 'clean';
+  inst.FS.writeFile('/home/pyodide/.hermes/dashboard.yaml', `theme: ${themeName}\n`);
+  return { applied: true, theme: themeName };
 }
 
 export async function mountHermes(onLog = () => {}) {
   if (findAsgiApp('/hermes')) return '/hermes';
   if (mounting) return mounting;
+  const t0 = performance.now();
+  const phase = (name, t) => { const ms = Math.round(performance.now() - t); onLog(`hermes: [${name}] ${ms}ms\n`); return ms; };
+  const phases = {};
   mounting = (async () => {
     onLog('hermes: loading pyodide…\n');
+    let t = performance.now();
     const inst = await pyodideRt.loadPyodide(onLog);
+    phases.pyodide = phase('pyodide-load', t);
+
     onLog('hermes: preloading ssl + sqlite3…\n');
-    await inst.loadPackage('ssl');
-    await inst.loadPackage('sqlite3');
-    await inst.loadPackage('micropip');
-    onLog('hermes: installing wheels (typing-extensions, fastapi, pydantic, pyyaml)…\n');
-    await inst.runPythonAsync(`
-import micropip
+    t = performance.now();
+    await Promise.all([inst.loadPackage('ssl'), inst.loadPackage('sqlite3'), inst.loadPackage('micropip')]);
+    phases.preload = phase('preload', t);
+
+    onLog('hermes: installing wheels in parallel + unpacking bundle…\n');
+    t = performance.now();
+    const wheelTask = inst.runPythonAsync(`
+import micropip, asyncio
 try: micropip.uninstall('typing-extensions')
 except Exception: pass
-await micropip.install('typing-extensions>=4.12')
-for pkg in ('pyyaml', 'pydantic', 'fastapi', 'httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit'):
-    try: await micropip.install(pkg)
-    except Exception: pass
+async def _go():
+    await micropip.install('typing-extensions>=4.12')
+    pkgs = ('pyyaml', 'pydantic', 'fastapi', 'httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit')
+    await asyncio.gather(*[micropip.install(p, deps=True) for p in pkgs], return_exceptions=True)
+await _go()
 `);
-    onLog('hermes: unpacking 245-file bundle…\n');
-    await unpackHermes(inst, onLog);
+    const unpackTask = unpackHermes(inst, onLog);
+    const [, unpackInfo] = await Promise.all([wheelTask, unpackTask]);
+    phases.wheels_and_unpack = phase('wheels-and-unpack-parallel', t);
+    onLog(`hermes: ${unpackInfo.srcCount} src + ${unpackInfo.distCount} dist files\n`);
+
+    t = performance.now();
+    const themeInfo = await applyHermesTheme(inst);
+    phases.theme = phase('theme-apply', t);
+    if (themeInfo.applied) onLog(`hermes: theme = ${themeInfo.theme}\n`);
+
     onLog('hermes: importing web_server.app…\n');
+    t = performance.now();
     await inst.runPythonAsync(`from hermes_cli.web_server import app as _hermes_app`);
+    phases.import = phase('import', t);
+
     const pyApp = inst.globals.get('_hermes_app');
     if (!pyApp) throw new Error('hermes_cli.web_server.app not in globals');
     inst.globals.set('__hermes_app', pyApp);
+    t = performance.now();
     await inst.runPythonAsync(`
 def _b(v):
     if isinstance(v, (bytes, bytearray)): return bytes(v)
@@ -114,7 +149,11 @@ async def _drive_hermes(scope, recv, send):
 `);
     const driver = inst.globals.get('_drive_hermes');
     mountAsgi(async (sc, rcv, snd) => { await driver(sc, rcv, snd); }, '/hermes');
-    onLog('hermes: mounted at /preview/hermes/\n');
+    phases.mount = phase('mount', t);
+
+    const total = Math.round(performance.now() - t0);
+    onLog(`hermes: ✓ mounted at /preview/hermes/ — total ${total}ms\n`);
+    if (typeof window !== 'undefined') window.__debug.hermesPhases = { ...phases, total };
     return '/hermes';
   })();
   return mounting;
