@@ -74,6 +74,11 @@ del _idb_snap
     const inst = await pyodideRt.loadPyodide(stdoutSink);
     await pyodideRt.bridgeFs(inst, snap(), persist);
     await pyodideRt.runPython(code, argv, stdoutSink);
+    try {
+      const { mountAsgi } = await import('./asgi-bridge.js');
+      const mounts = await pyodideRt.scanAndMount(inst, mountAsgi);
+      for (const m of mounts) wl('\x1b[32m[asgi]\x1b[0m mounted ' + m.cls + ' at /preview' + m.prefix + '/');
+    } catch {}
   }
 
   async function pipInstallMicro(pkgs) {
@@ -146,4 +151,15 @@ print('\\n'.join(mods))
   }
 
   return { python: pythonBuiltin, python3: pythonBuiltin, pip: pipBuiltin, pip3: pipBuiltin };
+}
+
+export function createPyEnv({ ctx, term }) {
+  const builtins = makePythonBuiltin(ctx);
+  async function scanAndMount() {
+    if (!pyodideRt.isLoaded()) return [];
+    const inst = await pyodideRt.loadPyodide(s => term?.write?.(s));
+    const { mountAsgi } = await import('./asgi-bridge.js');
+    return pyodideRt.scanAndMount(inst, mountAsgi);
+  }
+  return { ...builtins, scanAndMount, isLoaded: pyodideRt.isLoaded };
 }

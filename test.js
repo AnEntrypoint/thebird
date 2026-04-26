@@ -147,5 +147,42 @@ ok('findAsgiApp returns null for unmounted prefix', miss === null);
 ok('unmount works', asgi.unmountAsgi('/asgi') === true);
 ok('after unmount, findAsgiApp null', asgi.findAsgiApp('/asgi/hello') === null);
 
+console.log('# python integration: createPyEnv eager + lazy + scan');
+const shellPyMod = await import('./docs/shell-python.js');
+ok('createPyEnv exported', typeof shellPyMod.createPyEnv === 'function');
+let calls = [];
+const fakeCtx = { term: { write: s => calls.push(s) }, env: {}, cwd: '/home' };
+const pyEnv = shellPyMod.createPyEnv({ ctx: fakeCtx, term: fakeCtx.term });
+ok('createPyEnv returns python', typeof pyEnv.python === 'function');
+ok('createPyEnv returns pip', typeof pyEnv.pip === 'function');
+ok('createPyEnv returns scanAndMount', typeof pyEnv.scanAndMount === 'function');
+ok('createPyEnv returns isLoaded', typeof pyEnv.isLoaded === 'function');
+ok('isLoaded false before any python call', pyEnv.isLoaded() === false);
+
+const pyMod2 = await import('./docs/shell-python-pyodide.js');
+ok('scanAndMount exported from pyodide module', typeof pyMod2.scanAndMount === 'function');
+ok('getMountedPyApps exported', typeof pyMod2.getMountedPyApps === 'function');
+
+const fakeApp = function(scope, receive, send) { return null; };
+fakeApp.__class__ = { __name__: 'FastAPI' };
+const fakeGlobals = new Map([['app', fakeApp], ['_private', 'skip'], ['x', 42]]);
+const fakeInst = { globals: { keys: () => fakeGlobals.keys(), get: k => fakeGlobals.get(k) } };
+const asgiMod2 = await import('./docs/asgi-bridge.js');
+const beforeMounts = asgiMod2.findAsgiApp('/app');
+ok('app prefix not mounted before scan', beforeMounts === null);
+const detected = await pyMod2.scanAndMount(fakeInst, asgiMod2.mountAsgi);
+eq('one app detected', detected.length, 1);
+eq('detected name', detected[0].name, 'app');
+eq('detected prefix', detected[0].prefix, '/app');
+eq('detected class', detected[0].cls, 'FastAPI');
+const afterMounts = asgiMod2.findAsgiApp('/app/anything');
+ok('after scan, /app prefix resolves', !!afterMounts && afterMounts.prefix === '/app');
+
+const detected2 = await pyMod2.scanAndMount(fakeInst, asgiMod2.mountAsgi);
+eq('idempotent: re-scan finds zero new', detected2.length, 0);
+const allMounted = pyMod2.getMountedPyApps();
+ok('mounted registry has app', allMounted.has('app'));
+asgiMod2.unmountAsgi('/app');
+
 console.log(`\nresult: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -193,6 +193,7 @@
           <button class="tui-btn" onclick="loadPreviewUrl(document.getElementById('preview-url').value)">[go]</button>
           <button class="tui-btn" onclick="loadPreviewUrl('http://localhost:5173/')" title="Hermes web GUI on default Vite port">[hermes]</button>
           <button class="tui-btn" onclick="loadPreviewUrl('')" title="back to in-browser preview from idb">[idb]</button>
+          <span id="asgi-launchers" style="display:flex;gap:1ch"></span>
         </div>
         <iframe id="preview-frame" style="width:100%;flex:1;border:0;background:var(--panel-0)" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
@@ -301,6 +302,16 @@ function loadPreviewUrl(url) {
   if (input) input.value = trimmed;
 }
 window.loadPreviewUrl = loadPreviewUrl;
+
+function renderAsgiLaunchers() {
+  const host = document.getElementById('asgi-launchers');
+  if (!host) return;
+  const apps = window.__debug?.asgiApps;
+  const prefixes = apps ? Array.from(apps.keys()) : [];
+  host.innerHTML = prefixes.map(p => `<button class="tui-btn" onclick="loadPreviewUrl('./preview${p}/')" title="ASGI app at ${p}">[${p.replace(/^\//, '')}]</button>`).join('');
+}
+window.addEventListener('asgi-mount', renderAsgiLaunchers);
+window.renderAsgiLaunchers = renderAsgiLaunchers;
 
 function switchTab(t) {
   ['chat', 'term', 'preview'].forEach(id => {

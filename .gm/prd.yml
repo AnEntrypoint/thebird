@@ -1,0 +1,6 @@
+- id: lazy-runtime-runbook-skill
+  subject: Document the pattern + create reusable gm skill
+  status: pending
+  acceptance:
+    - docs/lazy-runtimes.md exists with eager-wire / lazy-fetch / autodiscover / launcher recipe
+    - ~/.claude/skills/lazy-runtime/SKILL.md exists, reusable for future tools

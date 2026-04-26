@@ -55,6 +55,43 @@ await _install()
 `);
 }
 
+const ASGI_CLASSES = new Set(['FastAPI', 'Starlette', 'Quart', 'Sanic', 'AsgiApp', 'Application']);
+const mountedPyApps = new Map();
+
+export async function scanAndMount(inst, mountAsgi) {
+  if (!inst || !inst.globals || typeof mountAsgi !== 'function') return [];
+  const detected = [];
+  const names = Array.from(inst.globals.keys ? inst.globals.keys() : []);
+  for (const name of names) {
+    if (name.startsWith('_') || name.startsWith('__py')) continue;
+    let val;
+    try { val = inst.globals.get(name); } catch { continue; }
+    if (!val) continue;
+    let cls = '';
+    try { cls = val.type ? String(val.type) : (val.constructor?.name || ''); } catch {}
+    try { if (val.__class__ && val.__class__.__name__) cls = String(val.__class__.__name__); } catch {}
+    const looksAsgi = ASGI_CLASSES.has(cls);
+    if (!looksAsgi) { try { if (val && typeof val.toJs === 'function') val.destroy?.(); } catch {} continue; }
+    if (mountedPyApps.get(name) === val) continue;
+    const callable = async (scope, receive, send) => {
+      const sJs = inst.toPy ? inst.toPy(scope) : scope;
+      const rJs = inst.toPy ? inst.toPy(receive) : receive;
+      const ndJs = inst.toPy ? inst.toPy(send) : send;
+      const result = val(sJs, rJs, ndJs);
+      if (result && typeof result.then === 'function') await result;
+    };
+    const prefix = mountAsgi(callable, '/' + name);
+    mountedPyApps.set(name, val);
+    detected.push({ name, prefix, cls });
+  }
+  if (typeof window !== 'undefined' && detected.length) {
+    window.dispatchEvent(new CustomEvent('asgi-mount', { detail: { mounts: detected } }));
+  }
+  return detected;
+}
+
+export function getMountedPyApps() { return new Map(mountedPyApps); }
+
 export function bridgeFs(inst, snap, persist) {
   inst.globals.set('_idb_snap', snap);
   inst.globals.set('_idb_persist', persist);

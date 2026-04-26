@@ -16,6 +16,7 @@ import { makeExpander, makeCaptureRun, makeNodeRunner, makeNpmResultRunner } fro
 import { createSwJobs, makeNohupBuiltin, makeNetcatStub, makeCurlBuiltin } from './shell-sw-jobs.js';
 import { makeGitBuiltin } from './shell-git.js';
 import { DEFAULT_CWD } from './shell-defaults.js';
+import { createPyEnv } from './shell-python.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NODE_START: 'node-running' } },
@@ -55,6 +56,7 @@ export function createShell({ term, onPreviewWrite }) {
   const npmCmd = makeNpm(ctx); const npxCmd = makeNpx(npmCmd); ctx.exec = line => run(line);
   const pmDispatch = makePmDispatcher(term, null, () => window.__debug.idbPersist?.(), ctx); const corepackCmd = makeCorepackStub(term); const dlxCmd = makeDlx(term, null, ctx, run);
   ctx.nodeEval = createNodeEnv({ ctx, term });
+  ctx.pyEval = createPyEnv({ ctx, term });
   const gitCmd = makeGitBuiltin(ctx);
   const runNode = makeNodeRunner(ctx, actor);
   const runNpmResult = makeNpmResultRunner(ctx, line => run(line));
