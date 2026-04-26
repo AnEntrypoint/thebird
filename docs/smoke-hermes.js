@@ -284,6 +284,26 @@ async def _drive_hermes(scope, recv, send):
     }
   }
 
+  const PUT_ROUTES = [
+    { method: 'PUT', path: '/api/dashboard/theme', name: 'put-theme', body: { name: 'midnight' }, expectStatus: 200 },
+  ];
+  for (const r of PUT_ROUTES) {
+    s = t0();
+    try {
+      const bodyStr = JSON.stringify(r.body);
+      const resp = await dispatch2(r.method, '/hermes' + r.path, { 'host': 'thebird', 'content-type': 'application/json', 'content-length': String(bodyStr.length) }, bodyStr);
+      const ok = resp.status === r.expectStatus;
+      const detail = r.method + ' ' + r.path + ' → ' + resp.status + ' (' + String(resp.body || '').length + 'B)';
+      if (!ok) {
+        step('route:' + r.name, false, detail + ' — ' + String(resp.body || '').slice(0, 200), dur(s));
+      } else {
+        step('route:' + r.name, true, detail, dur(s));
+      }
+    } catch (e) {
+      step('route:' + r.name, false, String(e.message).slice(0, 240), dur(s));
+    }
+  }
+
   s = t0();
   try {
     const { openWebSocket } = await import('./asgi-bridge.js');
