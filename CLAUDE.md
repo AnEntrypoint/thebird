@@ -155,6 +155,57 @@ Trigger: `[hermes-smoke]` button in the preview toolbar, or hit
 `?smoke=hermes` directly. Full report stored at
 `window.__hermesPreflight` for programmatic inspection.
 
+## Vendor Architecture (current + planned)
+
+**Today (current state):**
+
+- **Page-boot path is fully same-origin.** `index.html`, all `app.js`/
+  `terminal.js`/`shell-*.js`, `tui.css`, `app-shell.css`, vendored
+  `xterm-bundle.js` and `webcontainer.js` and `thebird-browser.js` —
+  all served from thebird's own origin. Zero CDN fetches at page load.
+- **Pyodide entry vendored** at `docs/vendor/pyodide/`: `pyodide.mjs`,
+  `pyodide.asm.js`, `pyodide.asm.wasm`, `python_stdlib.zip`,
+  `pyodide-lock.json`, `package.json`. ~14 MB, committed.
+- **Pyodide wheel index points at jsdelivr CDN** for now (`indexURL:
+  https://cdn.jsdelivr.net/pyodide/v0.27.2/full/`). Reason: jsdelivr
+  serves wheels under that path whose SHA-256 do NOT match what
+  `pyodide-lock.json` claims (witnessed: micropip lock sha
+  `f06926694dba…` vs jsdelivr-served `3bbbd5b1fbe6…`). Causes
+  `loadPackage` to silently no-op. Until upstream fixes or we mirror
+  from a sha-matched source, wheels remain a CDN fetch. Page boot
+  is still local; first `python` invocation (already lazy) is the
+  only thing that touches CDN.
+- **MicroPython** (opt-in `THEBIRD_PYTHON=micro`) fully vendored at
+  `docs/vendor/micropython/`.
+- **5 esm.sh packages** vendored cleanly (brotli-wasm, fflate,
+  source-map-js, browser_wasi_shim, isomorphic-git-http-web). Used
+  by lazy Node-side code paths only.
+- **5 esm.sh packages** vendored with shimmed `/node/*.mjs` polyfills
+  (isomorphic-git, sucrase, sql-wasm, bcryptjs, argon2-browser).
+  Hand-written shims at `docs/vendor/esm/node/` bridge to
+  `globalThis.crypto`, `Buffer`, `fetch`, IDB-FS.
+
+**Planned (multi-system + sha-resolved wheel mirror):**
+
+1. **Shared vendor across virtual systems.** A user can run multiple
+   "systems" (different `idbSnapshot` profiles) concurrently in the
+   same page. The vendor mount (`docs/vendor/`) is read-only and
+   shared — every system sees the same Pyodide bytes, the same npm
+   bundles, the same node shims. Per-system writable state lives
+   under `home/`. Wires through:
+   - `window.__debug.systems = { default: {...}, hermes: {...}, ... }`
+   - shell ctx carries `systemId` selecting the active home
+   - vendor paths resolve via a single root, not per-system
+2. **Sha-verified wheel vendor.** Either (a) build wheels locally
+   from Pyodide source so we control hashes, or (b) wait for
+   upstream fix, or (c) tolerate cdn-served wheels with a
+   `try-vendor-then-cdn` fetch wrapper that disables the lock's
+   sha check for non-vendored wheels. Wheels can balloon to 250 MB
+   without harm — they're lazy, only fetched on first import.
+3. **Per-system Pyodide instances.** Each virtual system gets its
+   own Pyodide interpreter with isolated `home/` mounted, but the
+   underlying bytes share one pool. Saves memory across systems.
+
 ## Vendor Localization
 
 All heavy CDN imports have a vendored fallback under `docs/vendor/`.
