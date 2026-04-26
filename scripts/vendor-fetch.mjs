@@ -11,6 +11,7 @@ const VENDOR = join(ROOT, 'docs', 'vendor');
 const PYODIDE_VERSION = '0.27.2';
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 const PYODIDE_FILES = ['pyodide.mjs', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json', 'package.json'];
+const PYODIDE_WHEELS_FROM_LOCK = ['micropip', 'ssl', 'sqlite3', 'distutils', 'packaging', 'pyparsing'];
 
 const MICROPYTHON_VERSION = '1.25.0';
 const MICROPYTHON_BASE = `https://cdn.jsdelivr.net/npm/@micropython/micropython-webassembly-pyscript@${MICROPYTHON_VERSION}/`;
@@ -21,7 +22,6 @@ const ESM_BUNDLES = [
   { id: 'brotli-wasm', url: 'https://esm.sh/brotli-wasm@3.0.1?bundle&target=es2022' },
   { id: 'isomorphic-git', url: 'https://esm.sh/isomorphic-git@1.27.1?bundle&target=es2022' },
   { id: 'isomorphic-git-http-web', url: 'https://esm.sh/isomorphic-git@1.27.1/http/web?bundle&target=es2022' },
-  { id: 'x509', url: 'https://esm.sh/@peculiar/x509@1.9.7?bundle&target=es2022' },
   { id: 'sql-wasm', url: 'https://esm.sh/sql.js@1.11.0?bundle&target=es2022' },
   { id: 'bcryptjs', url: 'https://esm.sh/bcryptjs@2.4.3?bundle&target=es2022' },
   { id: 'argon2-browser', url: 'https://esm.sh/argon2-browser@1.18.0?bundle&target=es2022' },
@@ -64,10 +64,27 @@ async function writeManifest(outDir, entries) {
   await writeFile(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 }
 
+async function fetchPyodideLockWheels(outDir) {
+  const lockPath = join(outDir, 'pyodide-lock.json');
+  const lock = JSON.parse(await readFile(lockPath, 'utf-8'));
+  const pkgs = lock.packages || {};
+  const want = new Set(PYODIDE_WHEELS_FROM_LOCK.map(s => s.toLowerCase()));
+  for (const [n, p] of Object.entries(pkgs)) {
+    if (!want.has(n.toLowerCase()) || !p.file_name) continue;
+    await fetchTo(PYODIDE_BASE + p.file_name, join(outDir, p.file_name));
+    for (const dep of p.depends || []) {
+      const depPkg = pkgs[dep];
+      if (depPkg?.file_name) await fetchTo(PYODIDE_BASE + depPkg.file_name, join(outDir, depPkg.file_name));
+    }
+  }
+}
+
 async function main() {
   console.log('vendor-fetch — localizing CDN imports under docs/vendor/');
   await fetchSet(`pyodide v${PYODIDE_VERSION}`, PYODIDE_BASE, PYODIDE_FILES, join(VENDOR, 'pyodide'));
-  await writeManifest(join(VENDOR, 'pyodide'), { version: PYODIDE_VERSION, base: PYODIDE_BASE, files: PYODIDE_FILES });
+  console.log('\n# pyodide bundled wheels');
+  await fetchPyodideLockWheels(join(VENDOR, 'pyodide'));
+  await writeManifest(join(VENDOR, 'pyodide'), { version: PYODIDE_VERSION, base: PYODIDE_BASE, files: PYODIDE_FILES, bundledWheels: PYODIDE_WHEELS_FROM_LOCK });
 
   await fetchSet(`micropython v${MICROPYTHON_VERSION}`, MICROPYTHON_BASE, MICROPYTHON_FILES, join(VENDOR, 'micropython'));
   await writeManifest(join(VENDOR, 'micropython'), { version: MICROPYTHON_VERSION, base: MICROPYTHON_BASE, files: MICROPYTHON_FILES });

@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-26T11:40:17.177Z",
+  "fetchedAt": "2026-04-26T11:50:22.574Z",
   "entries": {
     "version": "1.25.0",
     "base": "https://cdn.jsdelivr.net/npm/@micropython/micropython-webassembly-pyscript@1.25.0/",

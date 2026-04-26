@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-26T11:40:17.174Z",
+  "fetchedAt": "2026-04-26T11:50:22.572Z",
   "entries": {
     "version": "0.27.2",
     "base": "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/",
@@ -10,6 +10,14 @@
       "python_stdlib.zip",
       "pyodide-lock.json",
       "package.json"
+    ],
+    "bundledWheels": [
+      "micropip",
+      "ssl",
+      "sqlite3",
+      "distutils",
+      "packaging",
+      "pyparsing"
     ]
   }
 }
