@@ -31,6 +31,7 @@
   font-family: var(--ff-mono);
   font-size: 13px;
   line-height: 1.5;
+  height: 100dvh;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -121,11 +122,23 @@
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 /* ── page panels ── */
-.page-panel { display: none; flex: 1; flex-direction: column; }
+.page-panel { display: none; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .page-panel.active { display: flex; }
 
 /* ── overview page ── */
 #page-overview { overflow-y: auto; }
+
+/* ── live app sizing — flex-fill all the way down ── */
+#page-app .app-embed { flex: 1 1 auto; min-height: 0; }
+#page-app .tui-tabs { flex: 0 0 auto; }
+#page-app #pane-chat,
+#page-app #pane-term,
+#page-app #pane-preview { flex: 1 1 auto; min-height: 0; }
+bird-chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; height: 100%; }
+#term-container { width: 100%; height: 100%; min-height: 0; }
+#term-container .xterm,
+#term-container .xterm-viewport,
+#term-container .xterm-screen { width: 100% !important; height: 100% !important; }
 
 /* ── hero ── */
 .hero {
@@ -677,16 +690,8 @@ function switchPage(p) {
     document.getElementById('page-' + id).classList.toggle('active', id === p);
     document.getElementById('ptab-' + id).classList.toggle('active', id === p);
   });
-  if (p === 'app') {
-    document.getElementById('page-app').style.height = (window.innerHeight - 40) + 'px';
-  }
+  if (p === 'app') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
 }
-
-window.addEventListener('resize', () => {
-  if (document.getElementById('page-app').classList.contains('active')) {
-    document.getElementById('page-app').style.height = (window.innerHeight - 40) + 'px';
-  }
-});
 
 function copyInstall() {
   navigator.clipboard?.writeText('npm install acptoapi');
@@ -756,6 +761,7 @@ function switchTab(t) {
     tab.classList.toggle('active', id === t);
   });
   if (t === 'preview') refreshPreview();
+  if (t === 'term') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
 }
 window.showPreview = () => switchTab('preview');
 
