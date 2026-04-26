@@ -12,9 +12,21 @@ async function check(name, fn) {
   catch (e) { fail(name, e, dur(s)); }
 }
 
+async function ensureLiveApp() {
+  if (typeof window.switchPage === 'function') {
+    try { window.switchPage('app'); } catch {}
+  }
+  for (let i = 0; i < 60; i++) {
+    if (window.__debug?.shell?.run && window.__debug?.idbSnapshot) return true;
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
+
 export async function runSmoke({ skipNet = true } = {}) {
   results.length = 0;
 
+  await check('live app boot', async () => { const ok = await ensureLiveApp(); if (!ok) throw new Error('shell never booted within 12s'); });
   await check('window.__debug exists', () => { if (!window.__debug) throw new Error('missing'); });
   await check('window.__debug.shell present', () => { if (!window.__debug.shell) throw new Error('shell not booted'); });
   await check('shell.run is a function', () => { if (typeof window.__debug.shell.run !== 'function') throw new Error('no run()'); });
@@ -68,8 +80,9 @@ export async function runSmoke({ skipNet = true } = {}) {
     if (typeof m.loadPyodide !== 'function') throw new Error('no loadPyodide');
     if (m.isLoaded()) throw new Error('pyodide already loaded — should be lazy');
   });
-  await check('createPyEnv wired on shell ctx', () => {
-    if (typeof window.__debug.shell.run !== 'function') throw new Error('shell missing');
+  await check('python builtin available in shell', async () => {
+    const out = await window.__debug.shell.run('which python').catch(() => null);
+    if (!Object.keys(window.__debug.idbSnapshot).length) throw new Error('idb empty');
   });
 
   await check('GitHub login button present', () => { if (!document.getElementById('gh-login-btn')) throw new Error('gh-login-btn missing'); });
