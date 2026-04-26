@@ -247,6 +247,14 @@ async def _drive_hermes(scope, recv, send):
     return { steps, ok: false };
   }
 
+  // Extract Hermes's session token from the SPA HTML so authed routes pass.
+  let SESSION_TOKEN = '';
+  try {
+    const tok = await inst.runPythonAsync(`from hermes_cli.web_server import _SESSION_TOKEN; _SESSION_TOKEN`);
+    SESSION_TOKEN = String(tok || '');
+  } catch {}
+  const AUTH_HEADERS = SESSION_TOKEN ? { 'x-hermes-session-token': SESSION_TOKEN } : {};
+
   const ROUTES = [
     { method: 'GET', path: '/', name: 'spa-root', expectStatus: 200 },
     { method: 'GET', path: '/api/status', name: 'api-status', expectStatus: 200, expectJson: true },
@@ -264,7 +272,8 @@ async def _drive_hermes(scope, recv, send):
   for (const r of ROUTES) {
     s = t0();
     try {
-      const resp = await dispatch2(r.method, '/hermes' + r.path, { 'host': 'thebird', 'accept': r.expectJson ? 'application/json' : 'text/html' }, null);
+      const headers = { 'host': 'thebird', 'accept': r.expectJson ? 'application/json' : 'text/html', ...AUTH_HEADERS };
+      const resp = await dispatch2(r.method, '/hermes' + r.path, headers, null);
       const body = String(resp.body || '');
       const okStatus = resp.status === r.expectStatus;
       const bodyLen = body.length;
@@ -291,7 +300,8 @@ async def _drive_hermes(scope, recv, send):
     s = t0();
     try {
       const bodyStr = JSON.stringify(r.body);
-      const resp = await dispatch2(r.method, '/hermes' + r.path, { 'host': 'thebird', 'content-type': 'application/json', 'content-length': String(bodyStr.length) }, bodyStr);
+      const headers = { 'host': 'thebird', 'content-type': 'application/json', 'content-length': String(bodyStr.length), ...AUTH_HEADERS };
+      const resp = await dispatch2(r.method, '/hermes' + r.path, headers, bodyStr);
       const ok = resp.status === r.expectStatus;
       const detail = r.method + ' ' + r.path + ' → ' + resp.status + ' (' + String(resp.body || '').length + 'B)';
       if (!ok) {
