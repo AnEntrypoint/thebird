@@ -5,8 +5,9 @@ import { makePythonBuiltin } from './shell-python.js';
 import { makeFsBuiltins } from './shell-builtins-fs.js';
 
 export function resolvePath(cwd, p) {
-  if (!p || p === '~') return '/';
-  if (p.startsWith('~/')) p = '/' + p.slice(2);
+  if (p == null || p === '') return cwd;
+  if (p === '~') return '/home';
+  if (p.startsWith('~/')) p = '/home/' + p.slice(2);
   if (!p.startsWith('/')) p = cwd.replace(/\/$/, '') + '/' + p;
   const parts = [];
   for (const s of p.split('/')) {
