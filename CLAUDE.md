@@ -359,12 +359,25 @@ thebird absorbs every adaptation.
 1. **Lazy Pyodide entry** (vendored at `docs/vendor/pyodide/` — zero
    CDN fetch on page boot; wheels still pulled lazily from jsdelivr
    on first python use, sha-verified against the lockfile).
-2. **`docs/vendor/python-shims/`** — 14 minimal Python modules
-   (`subprocess`, `psutil`, `fcntl`, `termios`, `pwd`, `grp`,
-   `select`, `msvcrt`, `curses`, `winpty`, `ptyprocess`,
-   `sounddevice`, `soundfile`, `wave`) covering the native-only
-   stdlib gaps Pyodide doesn't ship. Each exports the canonical
-   names callers `import`; method calls return harmless defaults.
+2. **`docs/vendor/python-shims/`** — 14 Python modules covering
+   native-only stdlib gaps. Each is a **shim that connects to a
+   real thebird surface**, not a stub:
+
+   | Module | Connects to |
+   | ------ | ----------- |
+   | `subprocess` | `window.__debug.shell.run` — real POSIX shell |
+   | `psutil` | `window.__debug.shell.bgJobs/jobRegistry` for processes; `window.performance.memory` for RAM; `navigator.hardwareConcurrency` for CPU count |
+   | `curses` | `window.__debug.term` (xterm) — `addstr` writes ANSI cursor positioning + bold/reverse/underline; `clear/erase` issues `\x1b[2J\x1b[H`; `curs_set` toggles `\x1b[?25h/l`; `getmaxyx` reads xterm `rows/cols` |
+   | `pwd`/`grp` | `localStorage.thebird_github_user` — real user identity from GitHub login |
+   | `fcntl` | `window.__debug.shell.fdTable` — fd flags + locks against real fd registry |
+   | `termios` | xterm modes — `tcsendbreak` sends `\x03`; `tcsetattr` toggles cursor visibility on ICANON change |
+   | `msvcrt` | xterm input queue — `kbhit` reads `shell.inputQueue`; `getch/getche/putch` bridge through term |
+   | `winpty` | spawns via `shell.run`, sizes via xterm `term.resize` |
+   | `ptyprocess` | same as winpty — `spawn(argv).read()` reads xterm input queue, `.write()` issues to shell or terminal |
+   | `select.select` | fd 0 reads from `shell.inputQueue`; other fds via `shell.fdTable.readFd` |
+   | `sounddevice` | Web Audio API — `play()` builds an `AudioBuffer` and routes through `AudioContext.destination` |
+   | `soundfile`/`wave` | Real WAV PCM reader/writer over IDB-FS `open()` — round-trips 16/32-bit PCM frames |
+
    Mounted at `/vendor-shims/` and inserted at the front of
    `sys.path`.
 3. **`docs/python-runtime.py`** — bootstrap that runs once after
