@@ -50,6 +50,28 @@ export function buildScope(method, path, headers, body, prefix) {
   };
 }
 
+export function buildWsScope(path, headers, prefix, subprotocols = []) {
+  const u = new URL(path, 'ws://thebird.local');
+  const root = prefix === '/' ? '' : prefix;
+  return {
+    type: 'websocket',
+    asgi: { version: '3.0', spec_version: '2.3' },
+    http_version: '1.1',
+    scheme: 'ws',
+    path: u.pathname,
+    raw_path: new TextEncoder().encode(u.pathname),
+    query_string: new TextEncoder().encode(u.search.replace(/^\?/, '')),
+    root_path: root,
+    headers: Object.entries(headers || {}).map(([k, v]) => [
+      new TextEncoder().encode(k.toLowerCase()),
+      new TextEncoder().encode(String(v)),
+    ]),
+    client: ['127.0.0.1', 0],
+    server: ['thebird.local', 80],
+    subprotocols: Array.from(subprotocols || []),
+  };
+}
+
 async function ensureLifespan(app) {
   if (lifespanStarted.has(app)) return;
   lifespanStarted.add(app);
@@ -119,4 +141,54 @@ export async function dispatchAsgi(method, path, headers, body) {
     ? new TextDecoder().decode(merged)
     : merged;
   return { status, headers: respHeaders, body: bodyOut };
+}
+
+const wsSendJsToPyDecoder = msg => {
+  if (msg && typeof msg.toJs === 'function') return msg.toJs({ dict_converter: Object.fromEntries });
+  if (msg && typeof msg.get === 'function' && typeof msg.has === 'function') {
+    const t = msg.get('type');
+    return { type: t, text: msg.get('text'), bytes: msg.get('bytes'), code: msg.get('code'), reason: msg.get('reason'), subprotocol: msg.get('subprotocol'), headers: msg.get('headers') };
+  }
+  return msg;
+};
+
+export function openWebSocket(path, { subprotocols = [], headers = {}, onOpen, onMessage, onClose, onError } = {}) {
+  const found = findAsgiApp(path);
+  if (!found) { onError?.(new Error('no asgi app for ' + path)); return null; }
+  const { app, prefix } = found;
+  const scope = buildWsScope(path, headers, prefix, subprotocols);
+  const inbox = [];
+  let inboxResolver = null;
+  let connected = false;
+  let closed = false;
+  const pushInbox = ev => {
+    if (inboxResolver) { const r = inboxResolver; inboxResolver = null; r(ev); }
+    else inbox.push(ev);
+  };
+  const receive = async () => {
+    if (inbox.length) return inbox.shift();
+    return new Promise(r => { inboxResolver = r; });
+  };
+  const send = async (msgIn) => {
+    const msg = wsSendJsToPyDecoder(msgIn);
+    if (msg.type === 'websocket.accept') { connected = true; onOpen?.(msg.subprotocol || null); }
+    else if (msg.type === 'websocket.send') {
+      const t = msg.text != null ? msg.text : (msg.bytes != null ? new TextDecoder().decode(msg.bytes instanceof Uint8Array ? msg.bytes : new Uint8Array(msg.bytes)) : '');
+      onMessage?.(t);
+    }
+    else if (msg.type === 'websocket.close') { closed = true; onClose?.(msg.code || 1000, msg.reason || ''); }
+  };
+  pushInbox({ type: 'websocket.connect' });
+  const runner = (async () => {
+    try { await app(scope, receive, send); }
+    catch (e) { onError?.(e); }
+    if (!closed) { closed = true; onClose?.(1006, 'app exited'); }
+  })();
+  return {
+    send: text => pushInbox({ type: 'websocket.receive', text: String(text) }),
+    sendBytes: data => pushInbox({ type: 'websocket.receive', bytes: data instanceof Uint8Array ? data : new Uint8Array(data) }),
+    close: (code = 1000, reason = '') => pushInbox({ type: 'websocket.disconnect', code, reason }),
+    isOpen: () => connected && !closed,
+    runner,
+  };
 }

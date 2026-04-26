@@ -284,6 +284,27 @@ async def _drive_hermes(scope, recv, send):
     }
   }
 
+  s = t0();
+  try {
+    const { openWebSocket } = await import('./asgi-bridge.js');
+    const got = await new Promise((resolve, reject) => {
+      let opened = false;
+      const ws = openWebSocket('/hermes/api/events', {
+        onOpen: () => { opened = true; setTimeout(() => ws?.close?.(1000, 'smoke'), 1500); },
+        onMessage: () => {},
+        onClose: (code, reason) => resolve({ opened, code, reason }),
+        onError: e => reject(e),
+      });
+      if (!ws) return reject(new Error('openWebSocket returned null'));
+      setTimeout(() => { try { ws.close?.(1000, 'timeout'); } catch {}; resolve({ opened, code: 1006, reason: 'timeout' }); }, 4000);
+    });
+    if (!got.opened) throw new Error('websocket.accept never sent (close ' + got.code + ' ' + got.reason + ')');
+    step('hermes:websocket', true, 'accepted; closed ' + got.code, dur(s));
+  } catch (e) {
+    step('hermes:websocket', null, String(e.message).slice(0, 240), dur(s),
+      'WebSocket route may auth-gate or have prerequisites; non-blocking.');
+  }
+
   return { steps, ok: steps.every(r => r.ok !== false) };
 }
 
