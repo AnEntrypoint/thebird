@@ -203,6 +203,8 @@ export function openWebSocket(path, { subprotocols = [], headers = {}, onOpen, o
     try { await app(scope, receive, send); }
     catch (e) { onError?.(e); }
     if (!closed) { closed = true; onClose?.(1006, 'app exited'); }
+    // Wake any pending receive() so the runner finalises cleanly
+    if (inboxResolver) { const r = inboxResolver; inboxResolver = null; r({ type: 'websocket.disconnect', code: 1000 }); }
   })();
   return {
     send: text => pushInbox({ type: 'websocket.receive', text: String(text) }),

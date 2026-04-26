@@ -309,10 +309,22 @@ async function launchHermesInPreview() {
   if (btn) { btn.disabled = true; btn.textContent = '[booting hermes…]'; }
   const log = s => { try { window.__debug?.term?.write?.(String(s).replace(/\n/g, '\r\n')); } catch {} };
   try {
+    if (!window.__debug?.sw?.registered) {
+      log('\x1b[36m[hermes]\x1b[0m registering preview service worker…\r\n');
+      try { const sw = await import('./preview-sw-client.js'); await sw.registerPreviewSW(); } catch (e) { log('\x1b[33m[hermes]\x1b[0m sw register: ' + e.message + ' (continuing without SW; routes work via dispatchAsgi)\r\n'); }
+    }
     const m = await import('./hermes-preview.js');
     if (!m.isHermesMounted()) {
       log('\x1b[36m[hermes]\x1b[0m booting (this is a one-time ~30s wait)…\r\n');
       await m.mountHermes(log);
+    }
+    if (window.__debug?.sw?.registered && navigator.serviceWorker?.controller == null) {
+      log('\x1b[36m[hermes]\x1b[0m waiting for sw to take control…\r\n');
+      await new Promise(r => {
+        if (navigator.serviceWorker.controller) return r();
+        navigator.serviceWorker.addEventListener('controllerchange', () => r(), { once: true });
+        setTimeout(r, 1500);
+      });
     }
     loadPreviewUrl('./preview/hermes/');
     if (btn) { btn.disabled = false; btn.textContent = '[hermes-app]'; }

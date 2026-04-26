@@ -6,16 +6,27 @@ const SCOPE = new URL('./preview/', import.meta.url).href;
 window.__debug = window.__debug || {};
 window.__debug.sw = { registered: false, error: null };
 
-export async function registerPreviewSW() {
+export async function registerPreviewSW({ readyTimeoutMs = 4000 } = {}) {
   if (!('serviceWorker' in navigator)) {
     window.__debug.sw.error = 'unsupported';
     throw new Error('ServiceWorker not supported');
   }
   try {
     const reg = await navigator.serviceWorker.register(SW_PATH, { scope: SCOPE });
-    await navigator.serviceWorker.ready;
-    window.__debug.sw.registered = true;
+    // navigator.serviceWorker.ready hangs forever in some Chrome contexts
+    // (incognito/headless without a stored controller). Wait on the
+    // registration's own lifecycle with a bounded timeout instead.
+    const active = await new Promise(resolve => {
+      if (reg.active) return resolve(reg.active);
+      const sw = reg.installing || reg.waiting;
+      if (!sw) return resolve(null);
+      const onChange = () => { if (sw.state === 'activated') resolve(sw); };
+      sw.addEventListener('statechange', onChange);
+      setTimeout(() => resolve(reg.active || null), readyTimeoutMs);
+    });
+    window.__debug.sw.registered = !!active;
     window.__debug.sw.registration = reg;
+    if (!active) window.__debug.sw.error = 'sw not activated within ' + readyTimeoutMs + 'ms';
     return reg;
   } catch (err) {
     window.__debug.sw.error = err.message;
