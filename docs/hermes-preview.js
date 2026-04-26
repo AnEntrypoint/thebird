@@ -8,6 +8,22 @@ async function unpackHermes(inst, onLog) {
   const manifest = await (await fetch(manifestUrl, { cache: 'no-cache' })).json();
   try { inst.FS.mkdirTree('/vendor-apps/hermes'); } catch {}
   const baseUrl = new URL('./vendor/hermes/', import.meta.url).href;
+  // Publish dist-file fast-path lookup so SW client can serve static assets
+  // directly without round-tripping through Pyodide. Hermes's web_dist/ tree
+  // becomes /hermes/<file> in the SPA; manifest.distFiles is rooted at
+  // 'hermes_cli/web_dist/<file>' so we strip that prefix for the SW lookup.
+  if (typeof window !== 'undefined') {
+    window.__debug = window.__debug || {};
+    window.__debug.appDistFiles = window.__debug.appDistFiles || {};
+    window.__debug.appDistBase = window.__debug.appDistBase || {};
+    const distSet = new Set();
+    const DIST_PREFIX = 'hermes_cli/web_dist/';
+    for (const f of (manifest.distFiles || [])) {
+      if (f.startsWith(DIST_PREFIX)) distSet.add(f.slice(DIST_PREFIX.length));
+    }
+    window.__debug.appDistFiles['/hermes'] = distSet;
+    window.__debug.appDistBase['/hermes'] = baseUrl + DIST_PREFIX;
+  }
   let copied = 0;
   for (const src of manifest.sources) {
     const r = await fetch(baseUrl + src);

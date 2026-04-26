@@ -3,6 +3,12 @@ import { dispatchAsgi, findAsgiApp } from './asgi-bridge.js';
 const SW_PATH = new URL('./preview-sw.js', import.meta.url).href;
 const SCOPE = new URL('./preview/', import.meta.url).href;
 
+const CT_MAP = { '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf', '.wasm': 'application/wasm', '.txt': 'text/plain' };
+function guessCt(p) {
+  const i = p.lastIndexOf('.');
+  return (i >= 0 && CT_MAP[p.slice(i).toLowerCase()]) || 'application/octet-stream';
+}
+
 window.__debug = window.__debug || {};
 window.__debug.sw = { registered: false, error: null };
 
@@ -55,7 +61,24 @@ navigator.serviceWorker?.addEventListener('message', e => {
   if (e.data?.type !== 'EXPRESS_REQUEST') return;
   const { path, method, body: reqBody, headers: reqHeaders } = e.data;
   const replyPort = e.ports[0];
-  if (findAsgiApp(path)) {
+  // Fast-path static dist assets (e.g. /hermes/assets/index.js, /hermes/favicon.ico)
+  // Serve them directly from docs/vendor/<app>/<app's-dist-prefix>/... bypassing
+  // Python entirely. Asgi-mounted prefix + manifest distFiles is the lookup key.
+  const asgiMatch = findAsgiApp(path);
+  if (asgiMatch && method === 'GET') {
+    const rel = path.slice(asgiMatch.prefix.length).replace(/^\//, '') || '';
+    const distMatch = rel && (window.__debug?.appDistFiles?.[asgiMatch.prefix]?.has?.(rel));
+    if (distMatch) {
+      const url = window.__debug.appDistBase[asgiMatch.prefix] + rel;
+      fetch(url).then(async r => {
+        const buf = await r.arrayBuffer();
+        const ct = r.headers.get('content-type') || guessCt(rel);
+        replyPort.postMessage({ status: r.status, body: ct.startsWith('text/') || ct.includes('json') || ct.includes('javascript') ? new TextDecoder().decode(buf) : new Uint8Array(buf), contentType: ct });
+      }).catch(err => replyPort.postMessage({ status: 500, body: 'dist-fetch: ' + err.message, contentType: 'text/plain' }));
+      return;
+    }
+  }
+  if (asgiMatch) {
     dispatchAsgi(method, path, reqHeaders, reqBody)
       .then(r => replyPort.postMessage({ status: r.status, body: r.body, contentType: r.headers['content-type'] || 'text/plain' }))
       .catch(err => replyPort.postMessage({ status: 500, body: 'asgi: ' + err.message, contentType: 'text/plain' }));
