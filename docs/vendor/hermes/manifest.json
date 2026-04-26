@@ -1,5 +1,5 @@
 {
-  "bundledAt": "2026-04-26T12:28:54.205Z",
+  "bundledAt": "2026-04-26T15:58:14.598Z",
   "entry": "hermes_cli.web_server",
   "sources": [
     "hermes_cli/web_server.py",
@@ -248,5 +248,22 @@
     "gateway/platforms/feishu_comment_rules.py",
     "acp_adapter/tools.py"
   ],
-  "distDir": "hermes_cli/web_dist"
+  "distDir": "hermes_cli/web_dist",
+  "distFiles": [
+    "hermes_cli/web_dist/assets/filler-bg0-Dc7xVfma.jpg",
+    "hermes_cli/web_dist/assets/index-DZT8bZwQ.js",
+    "hermes_cli/web_dist/assets/index-W-Jy3qm3.css",
+    "hermes_cli/web_dist/favicon.ico",
+    "hermes_cli/web_dist/fonts/Collapse-Bold.woff2",
+    "hermes_cli/web_dist/fonts/Collapse-Regular.woff2",
+    "hermes_cli/web_dist/fonts/Mondwest-Regular.woff2",
+    "hermes_cli/web_dist/fonts/RulesCompressed-Medium.woff2",
+    "hermes_cli/web_dist/fonts/RulesCompressed-Regular.woff2",
+    "hermes_cli/web_dist/fonts/RulesExpanded-Bold.woff2",
+    "hermes_cli/web_dist/fonts/RulesExpanded-Regular.woff2",
+    "hermes_cli/web_dist/fonts-terminal/JetBrainsMono-Bold.woff2",
+    "hermes_cli/web_dist/fonts-terminal/JetBrainsMono-Italic.woff2",
+    "hermes_cli/web_dist/fonts-terminal/JetBrainsMono-Regular.woff2",
+    "hermes_cli/web_dist/index.html"
+  ]
 }

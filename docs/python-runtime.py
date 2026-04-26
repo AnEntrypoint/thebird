@@ -79,7 +79,7 @@ class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         'exa_py', 'fal_client', 'edge_tts', 'elevenlabs', 'tiktoken',
         'acp', 'davey', 'simple_term_menu', 'dotenv', 'croniter',
         'aiohttp_socks', 'qrcode', 'mutagen', 'markdown', 'PIL',
-        'numpy', 'websockets', 'tomllib', 'sqlite3',
+        'numpy', 'websockets', 'tomllib',
     )
     def find_spec(self, name, path, target=None):
         head = name.split('.', 1)[0]

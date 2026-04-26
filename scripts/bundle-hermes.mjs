@@ -89,12 +89,24 @@ async function main() {
   }
   console.log('copying hermes_cli/web_dist (prebuilt frontend)');
   const distSrc = join(HERMES, 'hermes_cli', 'web_dist');
-  if (existsSync(distSrc)) await copyTree(distSrc, join(OUT, 'hermes_cli', 'web_dist'));
+  const distFiles = [];
+  async function walkDist(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) await walkDist(p);
+      else distFiles.push(relative(HERMES, p).replace(/\\/g, '/'));
+    }
+  }
+  if (existsSync(distSrc)) {
+    await copyTree(distSrc, join(OUT, 'hermes_cli', 'web_dist'));
+    await walkDist(distSrc);
+  }
   const manifest = {
     bundledAt: new Date().toISOString(),
     entry: 'hermes_cli.web_server',
     sources: closure.map(p => relative(HERMES, p).replace(/\\/g, '/')),
     distDir: 'hermes_cli/web_dist',
+    distFiles,
   };
   await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log(`done. ${closure.length} files + web_dist → docs/vendor/hermes/`);

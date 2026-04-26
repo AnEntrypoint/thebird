@@ -1,4 +1,4 @@
-const HERMES_PRELOAD_PACKAGES = ['ssl'];
+const HERMES_PRELOAD_PACKAGES = ['ssl', 'sqlite3'];
 const HERMES_PREFLIGHT_UPGRADES = ['typing-extensions>=4.12'];
 const HERMES_CORE_WHEELS = ['pyyaml', 'pydantic', 'fastapi'];
 const HERMES_OPTIONAL_WHEELS = ['httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit'];
@@ -173,8 +173,18 @@ async def _drive(scope, recv, send):
       try { inst.FS.mkdirTree(dir); } catch {}
       try { inst.FS.writeFile(dst, text); copied++; } catch {}
     }
+    let distCopied = 0;
+    for (const rel of (manifest.distFiles || [])) {
+      const r = await fetch(baseUrl + rel);
+      if (!r.ok) continue;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      const dst = '/vendor-apps/hermes/' + rel;
+      const dir = dst.substring(0, dst.lastIndexOf('/'));
+      try { inst.FS.mkdirTree(dir); } catch {}
+      try { inst.FS.writeFile(dst, buf); distCopied++; } catch {}
+    }
     inst.runPython(`import sys; sys.path.insert(0, '/vendor-apps/hermes')`);
-    step('hermes:bundle-unpack', true, copied + '/' + manifest.sources.length + ' files', dur(s));
+    step('hermes:bundle-unpack', true, copied + ' src + ' + distCopied + ' dist files', dur(s));
   } catch (e) {
     step('hermes:bundle-unpack', false, e.message.slice(0, 200), dur(s));
     return { steps, ok: false };
