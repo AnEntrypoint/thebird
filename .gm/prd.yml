@@ -20,35 +20,6 @@
     - xterm canvas not affected (terminal renders own glyphs)
     - rippleui/tailwind utility borders left alone if vendor
 
-- id: posix-predictability
-  subject: Run 10 LLM-style scenarios + fix divergences
-  status: pending
-  description: Author test.js scenarios that mimic LLM-issued shell commands. Run each, capture output, compare to bash on host. Fix divergences in shell-builtins, shell-expand, shell-exec. Document remaining gotchas in CLAUDE.md.
-  effort: large
-  category: bug
-  route_family: execution
-  load: 0.85
-  failure_modes: [F1-spec-drift, F3-silent-divergence, F9-edge-loss]
-  route_fit: examined
-  authorization: weak_prior
-  blocking: [acptoapi-wire]
-  blockedBy: [chat-cwd-unify]
-  acceptance:
-    - 10 scenarios scripted and exec_witness in test.js
-    - All 10 produce bash-equivalent output (or documented limit)
-    - CLAUDE.md gotchas section updated
-  edge_cases:
-    - cd into nonexistent dir
-    - command substitution \$(...) nesting
-    - pipe with empty stdin
-    - glob expansion in /home with no matches
-    - quoted vs unquoted variable expansion
-    - heredoc indentation
-    - && / || short circuit
-    - exit code propagation through pipes (PIPESTATUS)
-    - subshell () isolation
-    - background &  job tracking
-
 - id: acptoapi-wire
   subject: Verify acptoapi vendored bundle drives all 3 providers
   status: pending

@@ -1,5 +1,22 @@
 # thebird Development Notes
 
+## POSIX Predictability — LLM-Facing Guarantees
+
+The shell is the boundary an LLM sees. Behaviors witnessed by `test.js` (47 assertions, 10 scenario groups):
+
+- `~` expands to `/home`; `~/x` → `/home/x`. Always. From any cwd.
+- Empty/null path arg to `resolvePath` returns cwd unchanged.
+- `cd` with no arg defaults to `~` (i.e. `/home`); `cd -` toggles to `prevCwd`; `cd` into nonexistent dir throws.
+- Tokenizer preserves `\n` inside double-quotes as literal backslash-n (so `echo -e` can process it). Single-quotes never process escapes.
+- `splitTopLevel` returns `{cmd, sep}` pairs where `sep` is the separator BEFORE the cmd (first item's sep is `null`).
+- `parsePipes` ignores `|` inside quotes.
+- `parseRedirects` recognises `>`, `>>`, `<`. No `2>`, no `&>` yet — document divergence if needed.
+- `expand`: `$?` = lastExitCode, `$#` = argv.length, `$@` = argv joined, `$0..$9` indexed, unset variables expand to empty string (matches bash default, not `set -u`).
+- `globToRe`: `*` does not cross `/`, `**` does, `[abc]` and `[!abc]` work, `?` is single non-slash char.
+- `isControlStart` recognises `if/for/while/case/until/select/function`.
+
+Single source of truth for the home folder: `docs/shell-defaults.js` exports `DEFAULT_CWD` and `HOME_DIR`. Every chat tool (`agent-chat.js` `run_command`, `list_files`) and `shell.js` (ctx init) and `shell-builtins.js` (`resolvePath` `~`) imports from there. No `/home` literal duplicates.
+
 ## Architecture Overview
 
 **thebird** is the web OS shell — browser-native terminal, agentic chat, and file system. The repo has **no `package.json`, no `node_modules`, no server**. The entire product is the static `docs/` directory deployed to GitHub Pages. All Anthropic-format message translation, routing, streaming, and tool calling is owned by **[acptoapi](https://github.com/AnEntrypoint/acptoapi)**, vendored into the browser as `docs/vendor/thebird-browser.js`. Consumers of acptoapi outside the browser run `bunx acptoapi` / `npx acptoapi` / `npm install acptoapi`.
