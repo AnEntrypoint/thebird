@@ -27,9 +27,17 @@ export function findAsgiApp(path) {
   return best ? { prefix: best, app: apps.get(best) } : null;
 }
 
+function stripPrefix(path, prefix) {
+  if (prefix === '/' || !prefix) return path;
+  if (path === prefix) return '/';
+  if (path.startsWith(prefix + '/')) return path.slice(prefix.length);
+  return path;
+}
+
 export function buildScope(method, path, headers, body, prefix) {
   const u = new URL(path, 'http://thebird.local');
-  const rawPath = u.pathname;
+  const fullPath = u.pathname;
+  const stripped = stripPrefix(fullPath, prefix);
   const root = prefix === '/' ? '' : prefix;
   return {
     type: 'http',
@@ -37,8 +45,8 @@ export function buildScope(method, path, headers, body, prefix) {
     http_version: '1.1',
     method: method.toUpperCase(),
     scheme: 'http',
-    path: rawPath,
-    raw_path: new TextEncoder().encode(rawPath),
+    path: stripped,
+    raw_path: new TextEncoder().encode(stripped),
     query_string: new TextEncoder().encode(u.search.replace(/^\?/, '')),
     root_path: root,
     headers: Object.entries(headers || {}).map(([k, v]) => [
@@ -52,14 +60,15 @@ export function buildScope(method, path, headers, body, prefix) {
 
 export function buildWsScope(path, headers, prefix, subprotocols = []) {
   const u = new URL(path, 'ws://thebird.local');
+  const stripped = stripPrefix(u.pathname, prefix);
   const root = prefix === '/' ? '' : prefix;
   return {
     type: 'websocket',
     asgi: { version: '3.0', spec_version: '2.3' },
     http_version: '1.1',
     scheme: 'ws',
-    path: u.pathname,
-    raw_path: new TextEncoder().encode(u.pathname),
+    path: stripped,
+    raw_path: new TextEncoder().encode(stripped),
     query_string: new TextEncoder().encode(u.search.replace(/^\?/, '')),
     root_path: root,
     headers: Object.entries(headers || {}).map(([k, v]) => [
@@ -143,7 +152,7 @@ export async function dispatchAsgi(method, path, headers, body) {
   // root-relative asset paths (/assets/...) resolve under the prefix.
   if (isText && ct.includes('text/html') && bodyOut.includes('<head')) {
     const reqPath = scope.path;
-    if (reqPath === prefix || reqPath === prefix + '/' || reqPath.endsWith('/index.html')) {
+    if (reqPath === '/' || reqPath.endsWith('/index.html')) {
       const baseUrl = (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
       const baseTag = `<base href="${baseUrl}">`;
       if (!/<base\b/i.test(bodyOut)) {
