@@ -81,6 +81,126 @@ Live browser-side validation requires `bunx serve docs` + a real
 browser; test.js validates bridge surface and JS-side round-trip
 with a stub ASGI app written in JS.
 
+## Lazy Runtime Pattern (reusable for future runtimes)
+
+How to add any heavy language/tool runtime to thebird so it boots
+**eagerly enough to feel integrated** and **lazily enough not to bloat
+page load**. Python/Pyodide is the canonical example. Reuse for Ruby
+(Ruby.wasm), Lua (Wasmoon), Crystal (Crystal-WASM), Go (TinyGo-WASM),
+R (WebR), PHP (php-wasm), or any WASM-compiled language.
+
+### Four-layer shape
+
+```
+shell.js                              eager:  ctx.<name>Eval at construction
+  └─ shell-<name>.js                  factory + dispatcher
+       └─ shell-<name>-runtime.js     lazy loader (loadRuntime, run, scanAndMount)
+            └─ <CDN runtime>          downloaded only on first call
+
+asgi-bridge.js | httpHandlers         registry that auto-discovered artefacts mount into
+  └─ scanAndMount(inst, mountFn)      called after each runCode
+       └─ window.__debug.<name>Apps + '<name>-mount' CustomEvent
+            └─ index.html toolbar listens, renders launcher buttons
+```
+
+### Recipe
+
+1. **Lazy module** `docs/shell-<name>-runtime.js`:
+   ```js
+   const URL_ = 'https://cdn.jsdelivr.net/...';
+   let promise = null, instance = null;
+   export function isLoaded() { return !!instance; }
+   export async function loadRuntime(onStdout) {
+     if (instance) return instance;
+     if (promise) return promise;
+     promise = (async () => {
+       onStdout?.('fetching <name>...\n');
+       const mod = await import(URL_);
+       instance = await mod.init({ stdout: onStdout });
+       window.__debug = window.__debug || {};
+       window.__debug.<name> = { loaded: true, instance, run: c => instance.run(c) };
+       return instance;
+     })();
+     return promise;
+   }
+   export async function scanAndMount(inst, mountFn) {
+     // walk inst.globals; for each artefact (ASGI app, HTTP handler):
+     //   if not in module-scope Map<name, ref>: mountFn(handler, '/' + name); add
+     // dispatch CustomEvent('<name>-mount', { detail: { mounts } })
+   }
+   ```
+
+2. **Dispatcher** `docs/shell-<name>.js`:
+   ```js
+   import * as runtime from './shell-<name>-runtime.js';
+   export function create<Name>Env({ ctx, term }) {
+     const builtins = make<Name>Builtin(ctx);
+     async function scanAndMount() {
+       if (!runtime.isLoaded()) return [];
+       const inst = await runtime.loadRuntime(s => term?.write?.(s));
+       const { mountAsgi } = await import('./asgi-bridge.js');
+       return runtime.scanAndMount(inst, mountAsgi);
+     }
+     return { ...builtins, scanAndMount, isLoaded: runtime.isLoaded };
+   }
+   ```
+
+3. **Eager wiring** `docs/shell.js` — one line:
+   ```js
+   ctx.<name>Eval = create<Name>Env({ ctx, term });
+   ```
+
+4. **Auto-discovery** in dispatcher's `runCode`:
+   ```js
+   await runtime.run(code, argv, stdoutSink);
+   try {
+     const { mountAsgi } = await import('./asgi-bridge.js');
+     const mounts = await runtime.scanAndMount(inst, mountAsgi);
+     for (const m of mounts) wl('\x1b[32m[<name>]\x1b[0m mounted ' + m.cls + ' at /preview' + m.prefix + '/');
+   } catch {}
+   ```
+
+5. **Launcher** in `docs/index.html`:
+   ```html
+   <span id="<name>-launchers" style="display:flex;gap:1ch"></span>
+   ```
+   ```js
+   function render<Name>Launchers() {
+     const host = document.getElementById('<name>-launchers');
+     const apps = window.__debug?.<name>Apps;
+     const prefixes = apps ? Array.from(apps.keys()) : [];
+     host.innerHTML = prefixes.map(p =>
+       `<button class="tui-btn" onclick="loadPreviewUrl('./preview${p}/')">[${p.replace(/^\//,'')}]</button>`
+     ).join('');
+   }
+   window.addEventListener('<name>-mount', render<Name>Launchers);
+   ```
+
+6. **test.js invariants**:
+   - Wrap `globalThis.fetch`, import the runtime module, assert zero calls.
+   - Assert `isLoaded() === false` after import.
+   - Stub instance with one fake artefact → `scanAndMount` returns 1, registry has it.
+   - Re-call `scanAndMount` → returns 0 (idempotent).
+
+### Invariants (hard rules)
+
+- **No page-load fetch.** Witnessed by fetch-wrap in test.js.
+- **Single concurrent download.** Module-scope `let promise = null` shared.
+- **Idempotent auto-discovery.** Track mounted refs in a `Map`.
+- **Errors surface.** Network failure prints a clear terminal line, no silent retry.
+- **Opt-out flag.** Provide an env escape hatch (e.g. `THEBIRD_PYTHON=micro`) for a lighter alternate where one exists.
+
+### Known Lazy Lanes
+
+| Tool | Runtime module | Heavy fetch URL |
+| ---- | -------------- | --------------- |
+| Python (default) | `docs/shell-python-pyodide.js` | `cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs` |
+| MicroPython (opt-in via `THEBIRD_PYTHON=micro`) | `docs/shell-python.js` | `@micropython/micropython-webassembly-pyscript@1.25.0` |
+
+The reusable gm skill at `~/.claude/skills/lazy-runtime/SKILL.md`
+codifies this recipe so future tools can be added with one skill
+invocation.
+
 ## Hermes GUI in the Preview Pane
 
 The Hermes web GUI lives at `c:/dev/hermes/web` (Vite + React + tailwind +
