@@ -98,5 +98,21 @@ ok('kilo lane present', acpModels.some(m => m.startsWith('kilo/')));
 ok('opencode lane present', acpModels.some(m => m.startsWith('opencode/')));
 ok('claude-code-compatible: openrouter+anthropic', PROVIDERS.openrouter.models.some(m => m.startsWith('anthropic/claude-')));
 
+console.log('# pyodide: lazy import surface');
+let fetchCalls = 0;
+const origFetch = globalThis.fetch;
+globalThis.fetch = (...a) => { fetchCalls++; return origFetch ? origFetch(...a) : Promise.reject(new Error('no fetch in node')); };
+const pyMod = await import('./docs/shell-python-pyodide.js');
+ok('shell-python-pyodide loads without fetch', fetchCalls === 0);
+ok('loadPyodide is a function', typeof pyMod.loadPyodide === 'function');
+ok('runPython is a function', typeof pyMod.runPython === 'function');
+ok('micropipInstall is a function', typeof pyMod.micropipInstall === 'function');
+ok('bridgeFs is a function', typeof pyMod.bridgeFs === 'function');
+ok('isLoaded is a function returning false pre-load', pyMod.isLoaded() === false);
+const shellPy = await import('./docs/shell-python.js');
+ok('makePythonBuiltin exported', typeof shellPy.makePythonBuiltin === 'function');
+ok('shell-python import did not fetch', fetchCalls === 0);
+globalThis.fetch = origFetch;
+
 console.log(`\nresult: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

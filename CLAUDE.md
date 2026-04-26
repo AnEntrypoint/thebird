@@ -1,5 +1,48 @@
 # thebird Development Notes
 
+## Python Runtime — Lazy Pyodide
+
+Default Python runtime is **Pyodide**, lazy-loaded on first use. No
+fetch fires on page load; the ~10 MB Pyodide bundle downloads exactly
+once when the user first runs `python`, `python -c '…'`, `pip install`,
+or any tool that calls into `docs/shell-python-pyodide.js`.
+
+- Module: `docs/shell-python-pyodide.js`
+  - `loadPyodide(onStdout)` — caches and returns one interpreter promise
+  - `runPython(code, argv, onStdout)`
+  - `micropipInstall(pkgs, onStdout)` — pip via Pyodide's micropip
+  - `bridgeFs(inst, snap, persist)` — exposes the IDB virtual FS as `open()` inside Python
+  - `isLoaded()` — synchronous check; false until first `loadPyodide` resolves
+- After load, `window.__debug.py = { loaded, pyodide, runPython }`
+- MicroPython kept as opt-in fallback: set `THEBIRD_PYTHON=micro` in
+  the shell env (`export THEBIRD_PYTHON=micro`) and the existing
+  micropython binding (`@micropython/micropython-webassembly-pyscript`)
+  serves `python`/`pip` instead.
+- `pip install <pkg>` uses Pyodide micropip by default; with the env
+  flag it falls back to micropython-lib (mip).
+
+`test.js` asserts the module imports without triggering any fetch and
+exposes the loader API.
+
+### Why Pyodide
+
+Real CPython 3.x semantics in WASM. Has wheels for `pydantic`, `httpx`,
+`cryptography`, `pyyaml`, `jinja2`, `requests`, `pyjwt`, `tenacity`,
+`prompt_toolkit`, `rich` — the bulk of what a CPython app like
+**hermes-agent** depends on. MicroPython does not run CPython-only
+code (Pydantic v2 core, asyncio in CPython sense, native extensions),
+so it remains the lightweight default for trivial scripts only when
+the user explicitly opts in.
+
+### Future: ASGI Bridge for In-Browser Python Web Apps
+
+`.gm/prd.yml` carries a follow-up item `hermes-pyodide-asgi-bridge`:
+mount any Pyodide-loaded ASGI app (FastAPI/Starlette/Hermes web
+backend at `hermes_cli/web_server.py`) under thebird's preview service
+worker, so requests from the preview iframe answer in-page from
+Pyodide. Foundation for hosting Hermes (and other Python web apps)
+in thebird without any host process.
+
 ## Hermes GUI in the Preview Pane
 
 The Hermes web GUI lives at `c:/dev/hermes/web` (Vite + React + tailwind +
