@@ -155,13 +155,14 @@ export async function dispatchAsgi(method, path, headers, body) {
   if (isText && ct.includes('text/html') && bodyOut.includes('<head')) {
     const reqPath = scope.path;
     if (reqPath === '/' || reqPath.endsWith('/index.html')) {
-      const baseUrl = (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
-      const baseTag = `<base href="${baseUrl}">`;
-      if (!/<base\b/i.test(bodyOut)) {
-        bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  ${baseTag}`);
-      }
-      // Rewrite src/href that start with single / (root-relative) to ./
+      // Rewrite root-relative src/href to path-relative FIRST (don't touch base href)
       bodyOut = bodyOut.replace(/(\b(?:src|href)=["'])\/(?!\/)/g, '$1./');
+      // Then inject absolute base href (uses //origin/ so URL rewrite above can't have touched it)
+      const origin = typeof location !== 'undefined' ? location.origin : '';
+      const baseUrl = origin + (typeof location !== 'undefined' ? location.pathname.replace(/[^/]+$/, '') : '/') + 'preview' + prefix + '/';
+      if (!/<base\b/i.test(bodyOut)) {
+        bodyOut = bodyOut.replace(/<head([^>]*)>/i, `<head$1>\n  <base href="${baseUrl}">`);
+      }
     }
   }
   return { status, headers: respHeaders, body: bodyOut };
