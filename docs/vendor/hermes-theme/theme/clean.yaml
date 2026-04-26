@@ -1,0 +1,1121 @@
+# Clean Light — Hermes dashboard theme
+# Material You / inbox-style light theme.
+name: clean
+label: "Clean Light"
+description: "Crisp white canvas, red accents, Roboto — clean inbox aesthetic"
+
+# ------- palette -------
+palette:
+  background: "#f6f8fc"
+  midground: "#202124"
+  foreground:
+    hex: "#ffffff"
+    alpha: 0
+  warmGlow: "rgba(0,0,0,0)"
+  noiseOpacity: 0
+
+# ------- typography -------
+typography:
+  fontSans: '"Google Sans", "Roboto", system-ui, sans-serif'
+  fontMono: '"Roboto Mono", ui-monospace, monospace'
+  fontDisplay: '"Google Sans", "Roboto", system-ui, sans-serif'
+  fontUrl: "https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap"
+  baseSize: "14px"
+  lineHeight: "1.5"
+  letterSpacing: "0"
+
+# ------- layout -------
+layout:
+  radius: "0.5rem"
+  density: "comfortable"
+
+layoutVariant: standard
+
+# ------- assets -------
+assets:
+  bg: "#f6f8fc"
+
+# ------- component chrome -------
+componentStyles:
+  card:
+    background: "#ffffff"
+    boxShadow: "none"
+    border: "none"
+    borderRadius: "0"
+  header:
+    background: "#f6f8fc"
+    boxShadow: "none"
+    borderBottom: "none"
+  sidebar:
+    background: "#f6f8fc"
+    borderRight: "none"
+  tab:
+    borderRadius: "0"
+  backdrop:
+    fillerOpacity: "0"
+  badge:
+    borderRadius: "9999px"
+    fontWeight: "500"
+
+# ------- color overrides -------
+colorOverrides:
+  primary: "#d93025"
+  primaryForeground: "#ffffff"
+  secondary: "#e8eaed"
+  secondaryForeground: "#202124"
+  accent: "#1a73e8"
+  accentForeground: "#ffffff"
+  muted: "#f1f3f4"
+  mutedForeground: "#5f6368"
+  border: "#e0e0e0"
+  input: "#eaf1fb"
+  ring: "#1a73e8"
+  card: "#ffffff"
+  cardForeground: "#202124"
+  destructive: "#d93025"
+  destructiveForeground: "#ffffff"
+  success: "#137333"
+  warning: "#f9ab00"
+
+# ------- customCSS -------
+customCSS: |
+  /* ═══════════════════════════════════════════════════════
+     CLEAN LIGHT — Material You inbox aesthetic
+     Light: #f6f8fc bg, white cards, red/blue accents
+     Dark:  #1f1f1f bg, #2d2e30 surface, same accents
+     ═══════════════════════════════════════════════════════ */
+
+  /* ── Light mode tokens — always on for this theme ── */
+  /* Use !important on vars to beat prefers-color-scheme: dark from our own rules */
+  :root {
+    --cl-bg: #f6f8fc !important;
+    --cl-surface: #ffffff !important;
+    --cl-surface-2: #f8f9fa !important;
+    --cl-hover: #f1f3f4 !important;
+    --cl-selected: #e8f0fe !important;
+    --cl-divider: rgba(0,0,0,0.1) !important;
+    --cl-divider-strong: rgba(0,0,0,0.18) !important;
+    --cl-text-1: #202124 !important;
+    --cl-text-2: #5f6368 !important;
+    --cl-text-3: #80868b !important;
+    --cl-red: #d93025 !important;
+    --cl-red-light: #fce8e6 !important;
+    --cl-red-hover: #fad2cf !important;
+    --cl-blue: #1a73e8 !important;
+    --cl-blue-light: #e8f0fe !important;
+    --cl-green: #137333 !important;
+    --cl-yellow: #f9ab00 !important;
+    --cl-nav-width: 256px;
+    --cl-nav-item-radius: 0 20px 20px 0;
+    --cl-row-bg: #ffffff !important;
+    --cl-input-bg: #f1f3f4 !important;
+    --cl-input-hover: #e8eaed !important;
+    --cl-cta-shadow: 0 1px 2px rgba(60,64,67,0.15) !important;
+    --cl-cta-shadow-hover: 0 1px 3px rgba(60,64,67,0.25), 0 2px 6px rgba(60,64,67,0.10) !important;
+    --cl-severity-warn-bg: #fff8e1 !important;
+    --cl-severity-warn-bg-alt: #fef7e0 !important;
+    --cl-severity-warn-fg: #b06000 !important;
+    --cl-severity-error-bg: #fce8e6 !important;
+    --cl-severity-error-fg: #c5221f !important;
+    --cl-severity-success-bg: #e6f4ea !important;
+    --cl-severity-success-fg: #137333 !important;
+    --cl-shadow: none;
+  }
+
+  /* ── Kill noise / filler overlays ── */
+  body::before, body::after { display: none !important; }
+  [class*="noise"], [class*="grain"] { display: none !important; opacity: 0 !important; }
+  /* The dashboard renders a fixed inset-0 z-[2] decorative overlay (3D/canvas bg).
+     On a flat inbox surface it shows through as dark grey bars over scroll regions —
+     hide it entirely. */
+  .pointer-events-none.fixed.inset-0,
+  div[class*="pointer-events-none"][class*="fixed"][class*="inset-0"] {
+    display: none !important;
+  }
+
+  /* ── Root app reset (hardcoded bg-black / uppercase / font-mondwest) ── */
+  .bg-black, [class~="bg-black"] { background-color: #f6f8fc !important; }
+  .uppercase, [class~="uppercase"] { text-transform: none !important; }
+  .font-mondwest, [class~="font-mondwest"] {
+    font-family: "Google Sans", Roboto, system-ui, sans-serif !important;
+    letter-spacing: 0 !important;
+  }
+  [class*="tracking-["] { letter-spacing: 0 !important; }
+  .text-midground { color: var(--cl-text-1) !important; mix-blend-mode: normal !important; }
+
+  /* ── ALL fonts → Google Sans / Roboto ── */
+  *, *::before, *::after {
+    font-family: "Google Sans", Roboto, system-ui, -apple-system, sans-serif !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+  code, pre, kbd, samp, [class*="font-mono"], .font-mono-ui, [class*="mono"] {
+    font-family: "Roboto Mono", ui-monospace, monospace !important;
+  }
+
+  /* ── Base — hardcoded to beat OS dark mode ── */
+  html, body {
+    background: #f6f8fc !important;
+    background-color: #f6f8fc !important;
+    color: #202124 !important;
+    min-height: 100vh !important;
+    overscroll-behavior: none !important;
+  }
+  /* #root and ALL wrappers must have a background so transparent layers don't go black */
+  #root, #root > div, #root > div > div, #root > div > div > div {
+    background: #f6f8fc !important;
+    min-height: 100vh !important;
+  }
+  /* All transparent flex wrappers in the app shell */
+  .flex.min-h-0.min-w-0.flex-1,
+  [class*="flex min-h-0 w-full"],
+  [class*="flex min-h-0 min-w-0"] {
+    background: #f6f8fc !important;
+  }
+  /* Every scroll container must paint its own bg — overscroll/elastic bounce
+     reveals whatever is behind, which on some browsers/OS is the dark
+     compositor canvas. Force light bg on every overflowing element. */
+  [class*="overflow-y-auto"],
+  [class*="overflow-auto"],
+  [class*="overflow-y-scroll"],
+  [class*="overflow-scroll"],
+  [style*="overflow-y: auto"],
+  [style*="overflow-y:auto"],
+  [style*="overflow: auto"],
+  [style*="overflow:auto"] {
+    background-color: #f6f8fc !important;
+    overscroll-behavior: contain !important;
+  }
+  /* Kill any OS dark mode trickery on ALL elements */
+  *, *::before, *::after { color-scheme: light !important; }
+
+  /* ══════════════════════════════════════════
+     SIDEBAR  — inbox left nav rail
+     ══════════════════════════════════════════ */
+  /* Force color-scheme light so OS dark mode doesn't bleed through */
+  :root { color-scheme: light !important; }
+  html, body { color-scheme: light !important; }
+
+  aside {
+    background: #f6f8fc !important;
+    border-right: none !important;
+    width: var(--cl-nav-width) !important;
+    padding: 0 !important;
+    /* Kill translucency from bg-background-base/95 backdrop-blur-sm */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Logo area */
+  aside.fixed > div:first-child {
+    background: var(--cl-bg) !important;
+    border-bottom: none !important;
+    padding: 0 16px !important;
+    height: 64px !important;
+    align-items: center !important;
+  }
+  /* Kill mix-blend-mode plus-lighter — bad on light bg */
+  aside span[style*="mix-blend-mode"],
+  [class*="blend-lighter"] {
+    mix-blend-mode: normal !important;
+    color: var(--cl-text-1) !important;
+    opacity: 1 !important;
+  }
+  /* Logo text — direct child only, scoped to primary nav aside */
+  aside.fixed > div:first-child > span,
+  aside.fixed > div:first-child > a {
+    font-size: 1.375rem !important;
+    font-weight: 400 !important;
+    letter-spacing: -0.01em !important;
+    color: var(--cl-text-1) !important;
+    mix-blend-mode: normal !important;
+  }
+
+  /* Nav section */
+  aside nav, aside > div > nav {
+    padding: 8px 0 !important;
+  }
+
+  /* Nav links — inbox pill shape (full-width, rounded right only) */
+  aside a[href], aside nav a, aside nav button:not([aria-label]) {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    height: 40px !important;
+    padding: 0 16px !important;
+    margin: 0 8px 0 0 !important;
+    border-radius: var(--cl-nav-item-radius) !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    color: var(--cl-text-1) !important;
+    background: transparent !important;
+    transition: background 0.1s ease !important;
+    white-space: nowrap !important;
+    min-height: 0 !important;
+    border: none !important;
+    text-decoration: none !important;
+  }
+  aside a[href]:hover, aside nav a:hover { background: var(--cl-hover) !important; }
+
+  /* Active / current route — inbox uses red for selected nav */
+  aside a[aria-current="page"], aside a.active {
+    background: var(--cl-red-light) !important;
+    color: var(--cl-red) !important;
+    font-weight: 500 !important;
+  }
+  aside a[aria-current="page"] svg, aside a.active svg { color: var(--cl-red) !important; }
+  /* But secondary nav (config category aside.sm:w-56) buttons must NOT inherit red */
+  aside.sm\:w-56 svg, aside[class*="sm:w-56"] svg,
+  aside.sm\:w-56 button svg, aside[class*="sm:w-56"] button svg {
+    color: var(--cl-text-2) !important;
+    width: 16px !important;
+    height: 16px !important;
+  }
+  aside.sm\:w-56 button[class*="bg-foreground"] svg,
+  aside[class*="sm:w-56"] button[class*="bg-foreground"] svg {
+    color: var(--cl-blue) !important;
+  }
+
+  /* Nav icons */
+  aside a svg, aside nav svg {
+    width: 20px !important;
+    height: 20px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* System section at bottom */
+  aside .text-muted-foreground, aside [class*="text-muted"] {
+    font-size: 0.75rem !important;
+    color: var(--cl-text-3) !important;
+    padding: 4px 16px !important;
+  }
+  aside [class*="text-muted"] a {
+    font-size: 0.8125rem !important;
+    color: var(--cl-text-2) !important;
+    font-weight: 400 !important;
+    padding: 4px 0 !important;
+    height: auto !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Footer / version */
+  aside [class*="border-t"], aside > div:last-child {
+    border-top: 1px solid var(--cl-divider) !important;
+    padding: 8px 16px !important;
+    font-size: 0.75rem !important;
+    color: var(--cl-text-3) !important;
+  }
+
+  /* ══════════════════════════════════════════
+     HEADER BAR
+     ══════════════════════════════════════════ */
+  header,
+  [class*="h-14"][class*="border-b"],
+  [class*="h-12"][class*="border-b"],
+  [class*="sticky"][class*="top-0"][class*="border"] {
+    background: #f6f8fc !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: #f6f8fc !important;
+  }
+  /* Page title */
+  [class*="h-14"] h1, [class*="h-14"] h2, header h1, header h2 {
+    font-size: 1.375rem !important;
+    font-weight: 400 !important;
+    color: var(--cl-text-1) !important;
+  }
+
+  /* ══════════════════════════════════════════
+     MAIN CONTENT AREA
+     ══════════════════════════════════════════ */
+  main {
+    background: #f6f8fc !important;
+    padding: 0 !important;
+    color: #202124 !important;
+  }
+  /* Every descendant of main that is transparent will show the dark root — prevent this */
+  main > div,
+  main > div > div,
+  main > div > div > div,
+  main > div > div > div > div {
+    background: #f6f8fc !important;
+  }
+  /* Flex wrappers that lay out page columns (e.g. skills filter + list) */
+  .flex.flex-col.sm\:flex-row,
+  .flex.sm\:flex-row,
+  [class*="sm:flex-row"] {
+    background: #f6f8fc !important;
+  }
+  /* The filter aside column in skills/config — must stretch to fill so no transparent gap */
+  .sm\:w-56.sm\:shrink-0 {
+    align-self: stretch !important;
+    background: #f6f8fc !important;
+    min-height: 100% !important;
+  }
+  /* Any sticky sidebar panel inside the filter aside */
+  .sm\:sticky.sm\:top-0 {
+    background: #f6f8fc !important;
+  }
+
+  /* ── Section cards (outer containers like "Recent Sessions") ──
+     Flat, no shadow, white bg, thin top border separator */
+  .border.border-border,
+  [class*="border border-border"],
+  [class*="border-border bg-card"],
+  [class*="rounded"][class*="border"][class*="bg-card"] {
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 1px !important;
+    color: #202124 !important;
+  }
+
+  /* Card header rows — thin divider */
+  .border.border-border > [class*="border-b"],
+  [class*="border-border"] > [class*="border-b"] {
+    border-bottom: 1px solid var(--cl-divider) !important;
+    padding: 12px 16px !important;
+    background: var(--cl-surface-2) !important;
+  }
+
+  /* Card header title text */
+  [class*="border-border"] h3, [class*="border-border"] h2 {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    color: var(--cl-text-2) !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+
+  /* ── inbox inbox rows — flat rows, divider-only, hover bg ── */
+  /* Session rows inside card */
+  .border.border-border [class*="border border-border p-"],
+  [class*="border-border"] [class*="border border-border"],
+  [class*="flex flex-col"][class*="border border-border p-3"] {
+    background: var(--cl-row-bg) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    border-radius: 0 !important;
+    padding: 12px 16px !important;
+    box-shadow: none !important;
+    transition: background 0.12s !important;
+    cursor: pointer !important;
+  }
+  .border.border-border [class*="border border-border p-"]:hover,
+  [class*="border-border"] [class*="border border-border"]:hover,
+  [class*="flex flex-col"][class*="border border-border p-3"]:hover {
+    background: var(--cl-hover) !important;
+  }
+  /* Last row no border */
+  .border.border-border [class*="border border-border p-"]:last-child,
+  [class*="border-border"] [class*="border border-border"]:last-child {
+    border-bottom: none !important;
+  }
+
+  /* Outer gap between session groups */
+  .flex.flex-col.gap-4 > * + * {
+    border-top: 1px solid var(--cl-divider) !important;
+  }
+  .flex.flex-col.gap-4 {
+    gap: 0 !important;
+  }
+  .grid.gap-3 { gap: 0 !important; }
+
+  /* ── Session row expanded (full sessions page) ── */
+  /* The session rows that appear below the grouped card */
+  [class*="border-b border-border"],
+  [class*="border-b border-current"] {
+    border-color: var(--cl-divider) !important;
+    background: var(--cl-surface) !important;
+    box-shadow: none !important;
+    transition: background 0.12s !important;
+  }
+  [class*="border-b border-border"]:hover,
+  [class*="border-b border-current"]:hover {
+    background: var(--cl-hover) !important;
+    box-shadow: none !important;
+  }
+
+  /* ── Table (Analytics, Logs) ── */
+  tr {
+    border-bottom: 1px solid var(--cl-divider) !important;
+    background: var(--cl-surface) !important;
+    box-shadow: none !important;
+    transition: background 0.1s !important;
+  }
+  tr:hover { background: var(--cl-hover) !important; }
+  thead tr { background: var(--cl-surface-2) !important; }
+  th {
+    font-weight: 500 !important;
+    color: var(--cl-text-2) !important;
+    font-size: 0.8125rem !important;
+    border-bottom: 1px solid var(--cl-divider-strong) !important;
+  }
+  td { font-size: 0.875rem !important; color: var(--cl-text-1) !important; }
+  table { background: var(--cl-surface) !important; border-collapse: collapse !important; }
+
+  /* ══════════════════════════════════════════
+     SEARCH / INPUTS
+     ══════════════════════════════════════════ */
+  /* Material's prominent pill search */
+  input[type="search"],
+  input[placeholder*="Search"],
+  input[placeholder*="search"] {
+    background: var(--cl-hover) !important;
+    border: none !important;
+    border-radius: 9999px !important;
+    padding: 10px 20px !important;
+    font-size: 1rem !important;
+    height: 48px !important;
+    color: var(--cl-text-1) !important;
+    box-shadow: none !important;
+    transition: background 0.2s, box-shadow 0.2s !important;
+  }
+  input[type="search"]:focus,
+  input[placeholder*="Search"]:focus {
+    background: var(--cl-surface) !important;
+    box-shadow: none !important;
+    outline: 1px solid var(--cl-divider-strong) !important;
+  }
+  /* Standard inputs */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="url"], textarea, select {
+    background: var(--cl-surface) !important;
+    border: 1px solid var(--cl-divider-strong) !important;
+    border-radius: 0.25rem !important;
+    padding: 8px 12px !important;
+    font-size: 0.875rem !important;
+    color: var(--cl-text-1) !important;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    border-color: var(--cl-blue) !important;
+    box-shadow: inset 0 0 0 1px var(--cl-blue) !important;
+    outline: none !important;
+  }
+
+  /* ══════════════════════════════════════════
+     BUTTONS
+     ══════════════════════════════════════════ */
+  button[data-variant="default"],
+  [class*="bg-primary"]:not(aside):not(nav) {
+    background: var(--cl-blue) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 0.25rem !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    padding: 8px 16px !important;
+    box-shadow: none !important;
+  }
+  button[data-variant="default"]:hover { background: #1557b0 !important; }
+
+  button[data-variant="outline"], button[data-variant="ghost"] {
+    background: transparent !important;
+    border: 1px solid var(--cl-divider-strong) !important;
+    color: var(--cl-blue) !important;
+    border-radius: 0.25rem !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+  }
+  button[data-variant="ghost"] { border-color: transparent !important; color: var(--cl-text-1) !important; }
+  button[data-variant="outline"]:hover, button[data-variant="ghost"]:hover {
+    background: var(--cl-hover) !important;
+  }
+  button[data-variant="destructive"] {
+    background: var(--cl-red) !important; color: #fff !important;
+    border: none !important; border-radius: 0.25rem !important;
+    box-shadow: none !important;
+  }
+  button[class*="rounded-full"],
+  button[class*="size-8"], button[class*="h-8 w-8"],
+  button[class*="size-7"], button[class*="h-7 w-7"] {
+    border-radius: 50% !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  button[class*="rounded-full"]:hover,
+  button[class*="size-8"]:hover { background: var(--cl-hover) !important; }
+
+  /* ══════════════════════════════════════════
+     TABS — inbox category bar
+     ══════════════════════════════════════════ */
+  [role="tablist"] {
+    background: var(--cl-surface) !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    gap: 0 !important; padding: 0 !important;
+    box-shadow: none !important;
+  }
+  [role="tab"] {
+    border-radius: 0 !important;
+    color: var(--cl-text-2) !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 14px 20px !important;
+    border-bottom: 3px solid transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  [role="tab"]:hover { color: var(--cl-text-1) !important; background: var(--cl-hover) !important; }
+  [role="tab"][aria-selected="true"], [role="tab"][data-state="active"] {
+    color: var(--cl-blue) !important;
+    border-bottom-color: var(--cl-blue) !important;
+    background: transparent !important;
+    font-weight: 700 !important;
+  }
+
+  /* ══════════════════════════════════════════
+     BADGES / CHIPS / LABELS
+     ══════════════════════════════════════════ */
+  [data-slot="badge"],
+  .inline-flex.items-center.border[class*="px-"][class*="py-"],
+  [class*="rounded-full"][class*="px-"] {
+    border-radius: 9999px !important;
+    font-size: 0.6875rem !important;
+    font-weight: 500 !important;
+    padding: 2px 8px !important;
+    border: none !important;
+    background: var(--cl-hover) !important;
+    color: var(--cl-text-2) !important;
+  }
+  /* Source badges (cli, telegram etc) */
+  .inline-flex.items-center.border[class*="tracking-"] {
+    background: var(--cl-surface-2) !important;
+    color: var(--cl-text-2) !important;
+    border: 1px solid var(--cl-divider) !important;
+    border-radius: 9999px !important;
+    font-size: 0.6875rem !important;
+    font-weight: 400 !important;
+    padding: 2px 8px !important;
+  }
+
+  /* ══════════════════════════════════════════
+     DROPDOWNS / POPOVERS / DIALOGS
+     ══════════════════════════════════════════ */
+  [data-slot="popover-content"], [data-slot="dropdown-content"],
+  [data-slot="select-content"], [data-slot="command"],
+  [role="listbox"], [role="menu"], [role="dialog"] > div {
+    background: var(--cl-surface) !important;
+    border: none !important;
+    border-radius: 0.5rem !important;
+    box-shadow: none !important;
+    outline: 1px solid var(--cl-divider) !important;
+    padding: 4px 0 !important;
+  }
+  [role="option"], [role="menuitem"],
+  [data-slot="dropdown-item"], [data-slot="select-item"] {
+    padding: 8px 16px !important;
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+    color: var(--cl-text-1) !important;
+    border-radius: 0 !important;
+  }
+  [role="option"]:hover, [role="menuitem"]:hover { background: var(--cl-hover) !important; }
+
+  /* ══════════════════════════════════════════
+     ALERTS / BANNERS
+     ══════════════════════════════════════════ */
+  [role="alert"], [data-slot="alert"] {
+    background: var(--cl-surface-2) !important;
+    border: none !important;
+    border-left: 4px solid var(--cl-blue) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 12px 16px !important;
+  }
+
+  /* ══════════════════════════════════════════
+     FOOTER
+     ══════════════════════════════════════════ */
+  footer, [data-slot="footer"],
+  [class*="border-t p-"], [class*="border-t px-"] {
+    background: var(--cl-bg) !important;
+    border-top: 1px solid var(--cl-divider) !important;
+    color: var(--cl-text-3) !important;
+    font-size: 0.75rem !important;
+    box-shadow: none !important;
+  }
+
+  /* ══════════════════════════════════════════
+     MISC
+     ══════════════════════════════════════════ */
+  /* Thin light scrollbars */
+  * { scrollbar-width: thin; scrollbar-color: #dadce0 #f6f8fc; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; background: #f6f8fc; }
+  *::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 4px; border: 2px solid #f6f8fc; }
+  *::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
+
+  /* Separators */
+  [data-slot="separator"], hr {
+    background-color: var(--cl-divider) !important;
+    border: none !important;
+    height: 1px !important;
+    opacity: 1 !important;
+  }
+
+  /* Progress */
+  [role="progressbar"] > *, [class*="progress-"] > * {
+    background: var(--cl-blue) !important;
+    border-radius: 9999px !important;
+    box-shadow: none !important;
+  }
+
+  /* Checkbox / radio */
+  input[type="checkbox"] { accent-color: var(--cl-blue) !important; }
+  input[type="radio"] { accent-color: var(--cl-blue) !important; }
+
+  /* Tooltips */
+  [data-slot="tooltip-content"], [role="tooltip"] {
+    background: #202124 !important;
+    color: #fff !important;
+    border-radius: 0.25rem !important;
+    font-size: 0.75rem !important;
+    padding: 4px 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Switch toggle */
+  [data-slot="switch"], [role="switch"] {
+    background: var(--cl-divider-strong) !important;
+  }
+  [data-slot="switch"][data-state="checked"],
+  [role="switch"][aria-checked="true"] {
+    background: var(--cl-blue) !important;
+  }
+
+  /* Kill all remaining box shadows globally */
+  *:not([data-slot="popover-content"]):not([data-slot="dropdown-content"]):not([role="dialog"]) {
+    box-shadow: none !important;
+  }
+
+  /* ══════════════════════════════════════════
+     GMAIL PAGE POLISH
+     ══════════════════════════════════════════ */
+
+  /* Page-level padding — inbox uses 0 side padding on the outer shell,
+     content areas have their own internal padding */
+  main > div > div { padding-left: 0 !important; padding-right: 0 !important; }
+
+  /* Section header rows (e.g. "Recent Sessions", "Filters") —
+     flat label, no card chrome, just a thin bottom divider */
+  .border.border-border > div:first-child,
+  [class*="border-border"] > div:first-child,
+  [class*="p-4 border-b"],
+  [class*="px-4 py-3"],
+  [class*="flex flex-col gap-1.5 p-4"] {
+    background: #f6f8fc !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    border-radius: 0 !important;
+    padding: 10px 16px !important;
+    color: var(--cl-text-2) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 500 !important;
+  }
+
+  /* Session list rows — tighter inbox density */
+  .flex.flex-col.sm\:flex-row.sm\:items-center {
+    padding: 8px 16px !important;
+    min-height: 52px !important;
+  }
+  .flex.flex-col.sm\:flex-row.sm\:items-center span.font-medium {
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+    color: var(--cl-text-1) !important;
+  }
+
+  /* Session expanded accordion rows */
+  .border.overflow-hidden.transition-colors.border-border {
+    border: none !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+  }
+  .border.overflow-hidden.transition-colors.border-border > div:first-child {
+    padding: 8px 16px !important;
+    min-height: 52px !important;
+  }
+  .border.overflow-hidden.transition-colors.border-border:hover > div:first-child {
+    background: var(--cl-hover) !important;
+  }
+
+  /* Sticky filter panels (skills page, config page sidebar) */
+  .sm\:sticky { background: #f6f8fc !important; }
+
+  /* Category / filter pills (skills, config) — inbox chip size */
+  button[class*="rounded-full"][class*="border"],
+  aside button, aside a[role="button"],
+  [class*="sm:w-56"] button, [class*="sm:sticky"] button {
+    border: 1px solid var(--cl-divider) !important;
+    border-radius: 9999px !important;
+    background: #f6f8fc !important;
+    color: var(--cl-text-2) !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+    font-weight: 500 !important;
+    padding: 4px 10px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    letter-spacing: 0 !important;
+  }
+  button[class*="rounded-full"][class*="border"][aria-pressed="true"],
+  button[class*="rounded-full"][data-state="active"],
+  [class*="sm:w-56"] button[aria-pressed="true"],
+  [class*="sm:sticky"] button[aria-pressed="true"] {
+    background: var(--cl-blue) !important;
+    color: #fff !important;
+    border-color: var(--cl-blue) !important;
+  }
+  /* Filter aside text (counts, labels) */
+  [class*="sm:w-56"], [class*="sm:w-56"] *,
+  [class*="sm:sticky"], [class*="sm:sticky"] * {
+    font-size: 0.8125rem !important;
+  }
+  [class*="sm:w-56"] h2, [class*="sm:w-56"] h3, [class*="sm:w-56"] h4,
+  [class*="sm:sticky"] h2, [class*="sm:sticky"] h3, [class*="sm:sticky"] h4 {
+    font-size: 0.6875rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--cl-text-3) !important;
+  }
+
+  /* ══════════════════════════════════════════
+     LOGO CORNER (top-left) — inbox logo well
+     ══════════════════════════════════════════ */
+  aside.fixed > div:first-child,
+  aside.fixed > a:first-child,
+  aside header, aside [class*="h-14"]:first-child, aside [class*="h-16"]:first-child {
+    background: #f6f8fc !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 16px !important;
+    gap: 12px !important;
+  }
+  /* Logo SVG/icon */
+  aside.fixed > div:first-child svg, aside.fixed > a:first-child svg {
+    width: 28px !important;
+    height: 28px !important;
+    color: var(--cl-red) !important;
+  }
+  /* Header bar above main, aligned with logo well */
+  header > div:first-child, [class*="h-14"][class*="border-b"] > div:first-child {
+    background: transparent !important;
+  }
+
+  /* ══════════════════════════════════════════
+     MATERIAL / GMAIL POLISH — backgrounds, not borders
+     ══════════════════════════════════════════ */
+  /* Kill EVERY 1px border on layout chrome — keep only on inputs */
+  .border.border-border,
+  [class*="border-border"],
+  [class*="border-b"], [class*="border-t"], [class*="border-l"], [class*="border-r"],
+  header, main, aside, section, article, nav, [role="tablist"],
+  table, thead, tbody, tr, th, td, hr, [data-slot="separator"] {
+    border-color: transparent !important;
+  }
+  /* Re-introduce subtle separation via bg surface tones, not lines */
+  [class*="border-border"] > [class*="border-b"],
+  [class*="border-border"] > div:first-child,
+  [class*="p-4 border-b"] {
+    border-bottom: none !important;
+    background: transparent !important;
+    padding: 16px 20px 4px !important;
+    color: var(--cl-text-3) !important;
+    font-size: 0.6875rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+  }
+  /* Row separation: gap, not divider — inbox uses tonal hover only */
+  .border.border-border [class*="border border-border"],
+  [class*="border-border"] [class*="border border-border"],
+  [class*="border-b border-border"], [class*="border-b border-current"],
+  .border.overflow-hidden.transition-colors.border-border {
+    border: none !important;
+    border-bottom: none !important;
+    background: var(--cl-surface) !important;
+    border-radius: 0 !important;
+    transition: background 0.12s !important;
+  }
+  /* Table — borderless, zebra-bg via odd surface tone */
+  table { border: none !important; }
+  tr { border: none !important; background: transparent !important; }
+  tbody tr:nth-child(even) { background: var(--cl-surface-2) !important; }
+  tbody tr:hover { background: var(--cl-hover) !important; }
+  thead tr { background: transparent !important; }
+  th { border: none !important; color: var(--cl-text-3) !important; font-size: 0.6875rem !important; font-weight: 500 !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; padding: 12px 16px !important; }
+  td { border: none !important; padding: 14px 16px !important; }
+
+  /* Inputs — Material filled style: no border, tonal fill, focus underline */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="url"], textarea, select {
+    background: var(--cl-hover) !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 4px 4px 0 0 !important;
+    padding: 12px 12px 10px !important;
+    font-size: 0.9375rem !important;
+    color: var(--cl-text-1) !important;
+    transition: background 0.15s, border-color 0.15s !important;
+  }
+  input[type="text"]:hover, textarea:hover, select:hover { background: #e8eaed !important; }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    background: var(--cl-hover) !important;
+    border-bottom-color: var(--cl-blue) !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  /* Cards: pure surface — no border, no shadow, gap-separated */
+  [class*="bg-card"], [class*="rounded-lg"][class*="border"] {
+    background: var(--cl-surface) !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0.5rem !important;
+  }
+  /* Section gap → use page bg as gutter between cards */
+  main .grid, main .flex.flex-col {
+    gap: 12px !important;
+  }
+  main .grid > *, main .flex.flex-col > * {
+    border-radius: 0.5rem !important;
+  }
+
+  /* Tabs — Material indicator on bg, no border line */
+  [role="tablist"] {
+    border-bottom: none !important;
+    background: transparent !important;
+  }
+  [role="tab"] { border-bottom: 3px solid transparent !important; }
+  [role="tab"][aria-selected="true"], [role="tab"][data-state="active"] {
+    background: var(--cl-blue-light) !important;
+    color: var(--cl-blue) !important;
+    border-radius: 9999px !important;
+    border-bottom: none !important;
+    padding: 8px 16px !important;
+    margin: 6px 4px !important;
+  }
+  [role="tab"] {
+    border-radius: 9999px !important;
+    padding: 8px 16px !important;
+    margin: 6px 4px !important;
+  }
+
+  /* Badges/chips — flat, no border at all */
+  [data-slot="badge"], .inline-flex.items-center[class*="border"][class*="px-"] {
+    border: none !important;
+    background: var(--cl-hover) !important;
+  }
+
+  /* Page-title row — inbox uses generous space, no divider */
+  header, [class*="h-14"][class*="border-b"], [class*="h-12"][class*="border-b"] {
+    border-bottom: none !important;
+    background: var(--cl-bg) !important;
+    height: 56px !important;
+  }
+
+  /* Section titles inside cards: small uppercase inbox label */
+  main h2, main h3 {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    color: var(--cl-text-1) !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+
+  /* ══════════════════════════════════════════
+     FULL-VIEWPORT FILL — kill scrolled dark reveal
+     ══════════════════════════════════════════ */
+  /* Body must paint behind the entire scrollable area, including overscroll */
+  html { background: #f6f8fc !important; }
+  body { background: #f6f8fc !important; min-height: 100vh !important; }
+  /* The app shell flex container — must stretch full height */
+  body > #root, #root > * {
+    min-height: 100vh !important;
+    background: #f6f8fc !important;
+  }
+  /* All direct children of main also stretch — prevents dark gap when content is short */
+  main, main > * {
+    background: #f6f8fc !important;
+  }
+  /* Any fixed/sticky bar that paints over the corner */
+  [class*="fixed"][class*="top-0"], [class*="sticky"][class*="top-0"] {
+    background: #f6f8fc !important;
+  }
+
+  /* Flat white containers — remove all card chrome */
+  [class*="bg-card\\/80"], [class*="bg-muted\\/20"] {
+    background: #ffffff !important;
+    border: none !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    border-radius: 0 !important;
+  }
+
+  /* ══════════════════════════════════════════
+     LOG VIEWER — inbox/Material readable monospace
+     ══════════════════════════════════════════ */
+  /* Outer scroll container: white surface, generous viewport */
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] {
+    background: #ffffff !important;
+    padding: 0 !important;
+    font-size: 13px !important;
+    line-height: 22px !important;
+    max-height: calc(100vh - 180px) !important;
+  }
+  /* Each log line is a row: full width, single line, no wrap, hover */
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div {
+    display: block !important;
+    margin: 0 !important;
+    padding: 4px 16px 4px 16px !important;
+    white-space: pre !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-family: "Roboto Mono", ui-monospace, monospace !important;
+    font-size: 13px !important;
+    line-height: 22px !important;
+    background: #ffffff !important;
+    color: var(--cl-text-1) !important;
+    transition: background 0.08s !important;
+    cursor: text !important;
+  }
+  /* Zebra rows for scannability */
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div:nth-child(even) {
+    background: #f8f9fa !important;
+  }
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div:hover {
+    background: #e8f0fe !important;
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    z-index: 1 !important;
+    position: relative !important;
+  }
+  /* Severity colour: theme-aware via custom properties so dark mode picks
+     dark surface/foreground variants automatically. */
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div.text-warning,
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div[class*="text-warning"] {
+    color: var(--cl-severity-warn-fg) !important;
+    background: var(--cl-severity-warn-bg) !important;
+  }
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div.text-warning:nth-child(even),
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div[class*="text-warning"]:nth-child(even) {
+    background: var(--cl-severity-warn-bg-alt) !important;
+  }
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div.text-destructive,
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div[class*="text-destructive"],
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div[class*="text-error"] {
+    color: var(--cl-severity-error-fg) !important;
+    background: var(--cl-severity-error-bg) !important;
+  }
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div.text-success,
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div[class*="text-success"] {
+    color: var(--cl-severity-success-fg) !important;
+    background: var(--cl-severity-success-bg) !important;
+  }
+  div[class*="font-mono"][class*="text-xs"][class*="overflow-auto"] > div.text-muted-foreground {
+    color: var(--cl-text-3) !important;
+  }
+
+  /* Stat / summary cards (analytics) — white flat tiles separated by dividers */
+  [class*="border border-border"][class*="p-4"],
+  [class*="border border-border"][class*="p-6"] {
+    background: #ffffff !important;
+    border: none !important;
+    border-bottom: 1px solid var(--cl-divider) !important;
+    border-radius: 0 !important;
+    padding: 20px 24px !important;
+  }
+
+  /* Cron / skill toggle items — flat row list */
+  .border.border-border.bg-card\/80 > div[class*="p-3"],
+  .border.border-border.bg-card\/80 > div[class*="p-4"] {
+    padding: 12px 16px !important;
+  }
+
+  /* ══════════════════════════════════════════
+     ZERO-BORDER POLICY — inbox uses surface tones, never lines
+     ══════════════════════════════════════════ */
+  /* Universal: zero out every border on every element except form controls.
+     Surface separation comes from background tones (cl-bg / cl-surface /
+     cl-surface-2 / cl-hover) plus generous spacing. */
+  *, *::before, *::after {
+    border-color: transparent !important;
+    border-width: 0 !important;
+  }
+  /* Form controls keep a hairline only on focus */
+  input, textarea, select {
+    border-width: 0 !important;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-bottom: 2px solid var(--cl-blue) !important;
+  }
+  /* Dividers via separator slot become 1px tonal bands, not borders */
+  hr, [data-slot="separator"] {
+    background: var(--cl-divider) !important;
+    height: 1px !important;
+    border: 0 !important;
+  }
+  /* Re-introduce row separation as background tone difference, not lines */
+  tbody tr { background: var(--cl-surface) !important; }
+  tbody tr:nth-child(even) { background: var(--cl-surface-2) !important; }
+  tbody tr:hover { background: var(--cl-hover) !important; }
+
+  /* ══════════════════════════════════════════
+     GMAIL CORNER — logo + wordmark on one row
+     ══════════════════════════════════════════ */
+  /* Header row holds small diamond + "Thoth Agent" wordmark on a single line */
+  aside.fixed > div:first-child {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 12px !important;
+    height: 64px !important;
+    padding: 0 20px !important;
+    background: var(--cl-bg) !important;
+  }
+  /* Single-line wordmark */
+  aside.fixed > div:first-child span.text-midground {
+    font-size: 1.25rem !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+    letter-spacing: -0.01em !important;
+    color: var(--cl-text-1) !important;
+    white-space: nowrap !important;
+    mix-blend-mode: normal !important;
+  }
+  /* Plugin-injected diamond logo — small Material-style mark */
+  aside.fixed > div:first-child svg.cl-brand-logo {
+    width: 24px !important;
+    height: 24px !important;
+    color: var(--cl-red) !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ══════════════════════════════════════════
+     COMPARTMENT COLOURS — random pastel per name
+     (plugin injects --cl-compartment-bg/fg)
+     ══════════════════════════════════════════ */
+  [data-compartment] [data-slot="badge"],
+  [data-compartment] .badge {
+    background: var(--cl-compartment-bg, var(--cl-blue-light)) !important;
+  }
+
+  /* INBOX-LIKE FINAL POLISH lives in the clean-skin plugin (CSS injected
+     at runtime). Adding it here would push customCSS past the 32 KB cap
+     enforced by web_server.py:_THEME_CUSTOM_CSS_MAX, silently truncating
+     the rest of this file. */
