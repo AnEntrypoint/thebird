@@ -72,7 +72,7 @@ export function makeHttp2(){
 }
 
 let wasiPromise=null;
-async function getWasi(){if(!wasiPromise)wasiPromise=import('https://esm.sh/@bjorn3/browser_wasi_shim@0.3.0/es2022/browser_wasi_shim.mjs').then(m=>m.default||m);return wasiPromise;}
+async function getWasi(){if(!wasiPromise)wasiPromise=import('./vendor/esm/browser_wasi_shim.mjs').then(m=>m.default||m);return wasiPromise;}
 
 export function makeWasi(){
   return{

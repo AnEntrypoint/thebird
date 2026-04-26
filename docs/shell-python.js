@@ -1,7 +1,6 @@
 import * as pyodideRt from './shell-python-pyodide.js';
 
 const MICROPYTHON_VENDOR = new URL('./vendor/micropython/micropython.mjs', import.meta.url).href;
-const MICROPYTHON_CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/@micropython/micropython-webassembly-pyscript@1.25.0/micropython.mjs';
 
 let mpPromise = null;
 let mpInstance = null;
@@ -10,9 +9,7 @@ async function getMp(onStdout) {
   if (mpInstance) return mpInstance;
   if (mpPromise) return mpPromise;
   mpPromise = (async () => {
-    let mod;
-    try { mod = await import(MICROPYTHON_VENDOR); }
-    catch { onStdout('vendor micropython missing — using CDN. Run scripts/vendor-fetch.mjs to localize.\n'); mod = await import(MICROPYTHON_CDN_FALLBACK); }
+    const mod = await import(MICROPYTHON_VENDOR);
     mpInstance = await mod.loadMicroPython({ stdout: line => onStdout(line + '\n') });
     return mpInstance;
   })();

@@ -1,0 +1,15 @@
+{
+  "fetchedAt": "2026-04-26T11:40:17.174Z",
+  "entries": {
+    "version": "0.27.2",
+    "base": "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/",
+    "files": [
+      "pyodide.mjs",
+      "pyodide.asm.js",
+      "pyodide.asm.wasm",
+      "python_stdlib.zip",
+      "pyodide-lock.json",
+      "package.json"
+    ]
+  }
+}

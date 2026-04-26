@@ -1,0 +1,52 @@
+{
+  "fetchedAt": "2026-04-26T11:40:21.160Z",
+  "entries": {
+    "source": "esm.sh",
+    "bundles": [
+      {
+        "id": "browser_wasi_shim",
+        "url": "https://esm.sh/@bjorn3/browser_wasi_shim@0.3.0?bundle&target=es2022"
+      },
+      {
+        "id": "brotli-wasm",
+        "url": "https://esm.sh/brotli-wasm@3.0.1?bundle&target=es2022"
+      },
+      {
+        "id": "isomorphic-git",
+        "url": "https://esm.sh/isomorphic-git@1.27.1?bundle&target=es2022"
+      },
+      {
+        "id": "isomorphic-git-http-web",
+        "url": "https://esm.sh/isomorphic-git@1.27.1/http/web?bundle&target=es2022"
+      },
+      {
+        "id": "x509",
+        "url": "https://esm.sh/@peculiar/x509@1.9.7?bundle&target=es2022"
+      },
+      {
+        "id": "sql-wasm",
+        "url": "https://esm.sh/sql.js@1.11.0?bundle&target=es2022"
+      },
+      {
+        "id": "bcryptjs",
+        "url": "https://esm.sh/bcryptjs@2.4.3?bundle&target=es2022"
+      },
+      {
+        "id": "argon2-browser",
+        "url": "https://esm.sh/argon2-browser@1.18.0?bundle&target=es2022"
+      },
+      {
+        "id": "source-map-js",
+        "url": "https://esm.sh/source-map-js@1.2.1?bundle&target=es2022"
+      },
+      {
+        "id": "fflate",
+        "url": "https://esm.sh/fflate@0.8.2?bundle&target=es2022"
+      },
+      {
+        "id": "sucrase",
+        "url": "https://esm.sh/sucrase@3.35.0?bundle&target=es2022"
+      }
+    ]
+  }
+}

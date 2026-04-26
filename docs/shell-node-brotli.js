@@ -1,7 +1,7 @@
 let brotliMod=null;let brotliPromise=null;
 
 async function loadBrotli(){
-  if(!brotliPromise)brotliPromise=import('https://esm.sh/brotli-wasm@3.0.1/es2022/brotli-wasm.mjs').then(async m=>{const lib=m.default||m;if(lib.then)return await lib;if(lib.compress&&lib.decompress)return lib;return lib;});
+  if(!brotliPromise)brotliPromise=import('./vendor/esm/brotli-wasm.mjs').then(async m=>{const lib=m.default||m;if(lib.then)return await lib;if(lib.compress&&lib.decompress)return lib;return lib;});
   return brotliPromise;
 }
 

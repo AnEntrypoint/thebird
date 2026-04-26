@@ -31,8 +31,9 @@ export async function runNetworkSmoke() {
   out.push(await probe('local:kilo-serve', 'http://localhost:7000/', { optional: true }));
   out.push(await probe('local:opencode', 'http://localhost:4096/', { optional: true }));
 
-  out.push(await probe('cdn:pyodide-mjs (fallback)', 'https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs'));
-  out.push(await probe('vendor:pyodide-mjs', './vendor/pyodide/pyodide.mjs', { optional: true }));
+  out.push(await probe('vendor:pyodide-mjs', './vendor/pyodide/pyodide.mjs'));
+  out.push(await probe('vendor:pyodide-wasm', './vendor/pyodide/pyodide.asm.wasm'));
+  out.push(await probe('vendor:micropython-mjs', './vendor/micropython/micropython.mjs'));
 
   const t = performance.now();
   try {

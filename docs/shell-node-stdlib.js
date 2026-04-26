@@ -77,7 +77,7 @@ export { createHash } from './shell-node-crypto.js';
 
 let fflatePromise = null;
 async function getFflate() {
-  if (!fflatePromise) fflatePromise = import('https://esm.sh/fflate@0.8.2/es2022/fflate.mjs').then(m => m.gzipSync ? m : (m.default && m.default.gzipSync ? m.default : m));
+  if (!fflatePromise) fflatePromise = import('./vendor/esm/fflate.mjs').then(m => m.gzipSync ? m : (m.default && m.default.gzipSync ? m.default : m));
   return fflatePromise;
 }
 let fflateSync = null;

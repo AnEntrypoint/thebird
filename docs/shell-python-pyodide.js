@@ -2,7 +2,6 @@ const PYODIDE_VERSION = '0.27.2';
 const VENDOR_BASE = new URL('./vendor/pyodide/', import.meta.url).href;
 const PYODIDE_URL = VENDOR_BASE + 'pyodide.mjs';
 const PYODIDE_INDEX = VENDOR_BASE;
-const PYODIDE_CDN_FALLBACK = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 let pyPromise = null;
 let pyInstance = null;
@@ -13,18 +12,10 @@ export async function loadPyodide(onStdout) {
   if (pyInstance) return pyInstance;
   if (pyPromise) return pyPromise;
   pyPromise = (async () => {
-    onStdout?.(`fetching pyodide v${PYODIDE_VERSION}...\n`);
-    let mod, indexURL;
-    try {
-      mod = await import(PYODIDE_URL);
-      indexURL = PYODIDE_INDEX;
-    } catch (e) {
-      onStdout?.('vendor pyodide missing — falling back to CDN. Run scripts/vendor-fetch.mjs to localize.\n');
-      mod = await import(PYODIDE_CDN_FALLBACK + 'pyodide.mjs');
-      indexURL = PYODIDE_CDN_FALLBACK;
-    }
+    onStdout?.(`loading pyodide v${PYODIDE_VERSION} from vendor...\n`);
+    const mod = await import(PYODIDE_URL);
     const inst = await mod.loadPyodide({
-      indexURL,
+      indexURL: PYODIDE_INDEX,
       stdout: line => onStdout?.(line + '\n'),
       stderr: line => onStdout?.(line + '\n'),
     });

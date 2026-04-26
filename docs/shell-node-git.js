@@ -2,8 +2,8 @@ let gitMod=null;let gitPromise=null;
 
 async function loadGit(){
   if(!gitPromise)gitPromise=Promise.all([
-    import('https://esm.sh/isomorphic-git@1.27.1/es2022/isomorphic-git.mjs').then(m=>m.default||m),
-    import('https://esm.sh/isomorphic-git@1.27.1/http/web').then(m=>m.default||m).catch(()=>null),
+    import('./vendor/esm/isomorphic-git.mjs').then(m=>m.default||m),
+    import('./vendor/esm/isomorphic-git-http-web.mjs').then(m=>m.default||m).catch(()=>null),
   ]).then(([git,http])=>({git,http}));
   return gitPromise;
 }

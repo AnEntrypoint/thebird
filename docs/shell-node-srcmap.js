@@ -1,7 +1,7 @@
 let smMod=null;let smPromise=null;const consumers=new Map();const CAP=5;
 
 async function loadSm(){
-  if(!smPromise)smPromise=import('https://esm.sh/source-map-js@1.2.1/es2022/source-map-js.mjs').then(m=>m.default||m);
+  if(!smPromise)smPromise=import('./vendor/esm/source-map-js.mjs').then(m=>m.default||m);
   return smPromise;
 }
 
