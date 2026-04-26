@@ -1,3 +1,4 @@
+const HERMES_PREFLIGHT_UPGRADES = ['typing-extensions>=4.12'];
 const HERMES_CORE_WHEELS = ['pyyaml', 'pydantic', 'fastapi'];
 const HERMES_OPTIONAL_WHEELS = ['httpx', 'jinja2', 'requests', 'pyjwt', 'tenacity', 'rich', 'prompt_toolkit'];
 const HERMES_KNOWN_GAPS = {
@@ -44,6 +45,16 @@ export async function runHermesPreflight({ onStep } = {}) {
     return { steps, ok: false };
   }
 
+  for (const pkg of HERMES_PREFLIGHT_UPGRADES) {
+    s = t0();
+    try {
+      inst.globals.set('__pkg', pkg);
+      await inst.runPythonAsync(`import micropip; await micropip.install(__pkg, deps=False)`);
+      step('upgrade:' + pkg, true, '', dur(s));
+    } catch (e) {
+      step('upgrade:' + pkg, null, e.message.slice(0, 160), dur(s), 'pre-upgrade — pyodide ships older pin');
+    }
+  }
   for (const pkg of HERMES_CORE_WHEELS) {
     s = t0();
     try {
@@ -51,7 +62,7 @@ export async function runHermesPreflight({ onStep } = {}) {
       await inst.runPythonAsync(`import micropip; await micropip.install(__pkg)`);
       step('wheel:' + pkg, true, '', dur(s));
     } catch (e) {
-      step('wheel:' + pkg, false, e.message.slice(0, 200), dur(s),
+      step('wheel:' + pkg, false, e.message.slice(0, 400), dur(s),
         HERMES_KNOWN_GAPS[pkg] || 'check pyodide wheel availability for ' + pkg);
     }
   }
