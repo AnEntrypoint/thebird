@@ -184,5 +184,24 @@ const allMounted = pyMod2.getMountedPyApps();
 ok('mounted registry has app', allMounted.has('app'));
 asgiMod2.unmountAsgi('/app');
 
+console.log('# smoke harness: shape');
+const smokeMod = await import('./docs/smoke.js');
+ok('runSmoke exported', typeof smokeMod.runSmoke === 'function');
+ok('renderSmokePanel exported', typeof smokeMod.renderSmokePanel === 'function');
+ok('autoRunIfRequested exported', typeof smokeMod.autoRunIfRequested === 'function');
+const netMod = await import('./docs/smoke-network.js');
+ok('runNetworkSmoke exported', typeof netMod.runNetworkSmoke === 'function');
+
+console.log('# vendor: pyodide URL points at vendor');
+const fs2 = await import('node:fs');
+const py = fs2.readFileSync('./docs/shell-python-pyodide.js', 'utf8');
+ok('shell-python-pyodide refs vendor/pyodide', py.includes('./vendor/pyodide/'));
+ok('shell-python-pyodide retains CDN fallback', py.includes('cdn.jsdelivr.net/pyodide'));
+const sp = fs2.readFileSync('./docs/shell-python.js', 'utf8');
+ok('shell-python refs vendor/micropython', sp.includes('./vendor/micropython/'));
+ok('vendor-fetch script exists', fs2.existsSync('./scripts/vendor-fetch.mjs'));
+const vf = fs2.readFileSync('./scripts/vendor-fetch.mjs', 'utf8');
+ok('vendor-fetch is zero-dep (no require/import of npm)', !/from ['"][^./]/.test(vf.replace(/from ['"]node:/g, '')));
+
 console.log(`\nresult: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

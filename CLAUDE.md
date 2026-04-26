@@ -81,6 +81,70 @@ Live browser-side validation requires `bunx serve docs` + a real
 browser; test.js validates bridge surface and JS-side round-trip
 with a stub ASGI app written in JS.
 
+## Browser Smoke Harness
+
+In-page validation runner — proves thebird works in any real browser
+without needing a browser-automation tool.
+
+**Usage:**
+
+- Add `?smoke=1` to the URL → runs ~25 in-page assertions, displays
+  a live pass/fail panel in the top-right.
+- Add `?smoke=1&net=1` → also runs live network probes for every
+  configured provider (with key in localStorage), local dev servers
+  (acptoapi, hermes, kilo, opencode), CDN/vendor Pyodide reachability,
+  and a real Pyodide cold-load + `1+1` round-trip.
+- Click `[smoke]` button in the preview toolbar → opens
+  `?smoke=1&net=1` in a new tab.
+
+What's covered (`docs/smoke.js`):
+
+- `window.__debug` shape, shell boot, terminal element rendered, IDB snapshot present
+- `ctx.cwd` defaults to `/home`, `cd ~` resolves, `cd /nope` rejects
+- `ls`, `echo`, `cat`, pipe, redirect — write file, read it back
+- Preview iframe + URL bar present, ASGI launcher span present
+- chat-providers PROVIDERS registry shape, acptoapi entry sane
+- shell-defaults exports `DEFAULT_CWD = '/home'`
+- ASGI bridge mountAsgi + dispatchAsgi round-trip with stub app
+- Lazy Pyodide loader present and **not yet loaded** (lazy invariant)
+- GitHub login button rendered, theme toggle works, all three tabs present
+
+Network tier (`docs/smoke-network.js`):
+
+- For each provider with `localStorage.apiKey_<id>` or matching
+  placeholder: GET `/models`, capture status + latency
+- Probe `localhost:4800/v1/models` (acptoapi), `localhost:5173/`
+  (hermes), `localhost:7000/` (kilo serve), `localhost:4096/`
+  (opencode)
+- Verify `./vendor/pyodide/pyodide.mjs` resolves locally; CDN
+  fallback URL probed separately
+- Cold-load Pyodide once, run `1+1`, assert result is 2
+
+Each result row: `✓ name — detail   ms` (red ✗ on fail). Full report
+is also stored at `window.__smokeReport` for programmatic inspection.
+
+## Vendor Localization
+
+All heavy CDN imports have a vendored fallback under `docs/vendor/`.
+On first import, modules try the local `./vendor/...` path; if the
+file is missing they fall back to jsdelivr and print a one-line
+nudge to run the fetch script.
+
+**One-shot fetch:** `node scripts/vendor-fetch.mjs`
+
+That downloads:
+
+- Pyodide v0.27.2 → `docs/vendor/pyodide/` (pyodide.mjs, asm.js, asm.wasm, stdlib zip, lock, package.json)
+- MicroPython v1.25.0 → `docs/vendor/micropython/` (mjs, wasm, package.json)
+
+Each subdir gets a `manifest.json` with version + source URL +
+fetch timestamp. Re-running the script is safe — existing files are
+skipped.
+
+After `vendor-fetch`, page-load fetches stay zero (lazy invariant)
+and **first python-call** fetches from same-origin instead of jsdelivr.
+Useful for offline use, GH Pages reliability, and reproducible builds.
+
 ## Lazy Runtime Pattern (reusable for future runtimes)
 
 How to add any heavy language/tool runtime to thebird so it boots
