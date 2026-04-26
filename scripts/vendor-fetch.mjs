@@ -9,9 +9,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDOR = join(ROOT, 'docs', 'vendor');
 
 const PYODIDE_VERSION = '0.27.2';
-const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const PYODIDE_BASE = `https://cdn.jsdelivr.net/npm/pyodide@${PYODIDE_VERSION}/`;
 const PYODIDE_FILES = ['pyodide.mjs', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json', 'package.json'];
-const PYODIDE_WHEELS_FROM_LOCK = ['micropip', 'ssl', 'sqlite3', 'distutils', 'packaging', 'pyparsing'];
+const PYODIDE_WHEELS_FROM_LOCK = ['micropip', 'ssl', 'sqlite3', 'distutils', 'packaging', 'pyparsing', 'pyyaml', 'pydantic', 'pydantic-core', 'annotated-types', 'idna', 'jinja2', 'markupsafe', 'rich', 'requests', 'charset-normalizer', 'urllib3', 'certifi', 'httpx', 'httpcore', 'h11', 'sniffio', 'anyio', 'attrs', 'six', 'typing-extensions', 'pygments', 'mdurl', 'markdown-it-py'];
 
 const MICROPYTHON_VERSION = '1.25.0';
 const MICROPYTHON_BASE = `https://cdn.jsdelivr.net/npm/@micropython/micropython-webassembly-pyscript@${MICROPYTHON_VERSION}/`;
