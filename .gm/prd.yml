@@ -1,0 +1,90 @@
+- id: ui-bg-over-borders
+  subject: Replace borders with bg tints + soft shadows across docs/ UI
+  status: pending
+  description: Audit docs/tui.css, docs/vendor/app-shell.css, docs/vendor/design-tokens.css, docs/index.html. Replace 1px solid borders with subtle background-color shifts (panel-2, panel-3 tokens) and soft box-shadows. Gmail-like — no hairlines on rows, hover = bg shift, selected = stronger bg, focus = ring-shadow not outline.
+  effort: large
+  category: refactor
+  route_family: representation
+  load: 0.7
+  failure_modes: [F2-aesthetic-regression, F8-token-drift, F11-a11y-contrast]
+  route_fit: examined
+  authorization: weak_prior
+  blocking: []
+  blockedBy: []
+  acceptance:
+    - No 'border:' / 'border-top/right/bottom/left:' rules remain in tui.css and app-shell.css except for explicit dividers tagged --divider-bg
+    - All hover/focus/active/disabled states defined for buttons, tabs, list rows, inputs
+    - focus-visible uses box-shadow ring (3px panel-3) not outline
+    - Contrast ratio >= 4.5 for body text on panel surfaces
+  edge_cases:
+    - xterm canvas not affected (terminal renders own glyphs)
+    - rippleui/tailwind utility borders left alone if vendor
+
+- id: posix-predictability
+  subject: Run 10 LLM-style scenarios + fix divergences
+  status: pending
+  description: Author test.js scenarios that mimic LLM-issued shell commands. Run each, capture output, compare to bash on host. Fix divergences in shell-builtins, shell-expand, shell-exec. Document remaining gotchas in CLAUDE.md.
+  effort: large
+  category: bug
+  route_family: execution
+  load: 0.85
+  failure_modes: [F1-spec-drift, F3-silent-divergence, F9-edge-loss]
+  route_fit: examined
+  authorization: weak_prior
+  blocking: [acptoapi-wire]
+  blockedBy: [chat-cwd-unify]
+  acceptance:
+    - 10 scenarios scripted and exec_witness in test.js
+    - All 10 produce bash-equivalent output (or documented limit)
+    - CLAUDE.md gotchas section updated
+  edge_cases:
+    - cd into nonexistent dir
+    - command substitution \$(...) nesting
+    - pipe with empty stdin
+    - glob expansion in /home with no matches
+    - quoted vs unquoted variable expansion
+    - heredoc indentation
+    - && / || short circuit
+    - exit code propagation through pipes (PIPESTATUS)
+    - subshell () isolation
+    - background &  job tracking
+
+- id: acptoapi-wire
+  subject: Verify acptoapi vendored bundle drives all 3 providers
+  status: pending
+  description: Inspect docs/vendor/thebird-browser.js export surface. Confirm chat-providers.js + agent-chat.js can drive claude-code, kilo, opencode lanes. Where credentials present, witness end-to-end; otherwise mock-witness via stubbed fetch.
+  effort: medium
+  category: feature
+  route_family: boundary
+  load: 0.75
+  failure_modes: [F5-integration-mismatch, F6-protocol-drift, F12-stale-vendored]
+  route_fit: examined
+  authorization: weak_prior
+  blocking: [hermes-preview]
+  blockedBy: [posix-predictability]
+  acceptance:
+    - Each provider lane has a witnessed prompt round-trip (live or mock)
+    - test.js asserts importable surface
+  edge_cases:
+    - Auth missing — graceful fail with clear message
+    - Tool schema translation per provider
+
+- id: hermes-preview
+  subject: Run Hermes GUI in thebird preview pane with hermes-theme
+  status: pending
+  description: Locate Hermes GUI entrypoint (recently added; user confirms exists). Wire preview iframe to render it with c:/dev/hermes-theme styling applied. Validate Pythonic baseline.
+  effort: large
+  category: feature
+  route_family: integration
+  load: 0.8
+  failure_modes: [F10-runtime-mismatch, F13-theme-collision]
+  route_fit: unexamined
+  authorization: none
+  blocking: []
+  blockedBy: [acptoapi-wire]
+  acceptance:
+    - Preview pane displays Hermes UI, theme applied
+    - test.js asserts preview navigates to Hermes route without console errors
+  edge_cases:
+    - Hermes needs Python runtime — confirm browser path exists or proxy to host
+    - hermes-theme dist asset paths resolve

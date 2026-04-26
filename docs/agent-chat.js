@@ -1,4 +1,5 @@
 import { streamGemini, streamOpenAI } from './vendor/thebird-browser.js';
+import { DEFAULT_CWD, HOME_DIR } from './shell-defaults.js';
 
 function idbRead(path) {
   const snap = window.__debug.idbSnapshot;
@@ -36,12 +37,12 @@ const TOOLS = {
     },
   },
   list_files: {
-    description: 'List project files in /home (the working directory). Pass prefix="sys/" to inspect system internals (rarely needed).',
+    description: `List project files in ${HOME_DIR} (the working directory). Pass prefix="sys/" to inspect system internals (rarely needed).`,
     parameters: { type: 'object', properties: { prefix: { type: 'string' } }, required: [] },
     execute: async ({ prefix }) => {
       const snap = window.__debug.idbSnapshot || {};
       const keys = Object.keys(snap).sort();
-      const scope = prefix || 'home/';
+      const scope = prefix || (HOME_DIR.replace(/^\//, '') + '/');
       const filtered = keys.filter(k => k.startsWith(scope) && !k.endsWith('/.keep'));
       return filtered.join('\n') || '(empty)';
     },
@@ -52,7 +53,7 @@ const TOOLS = {
     execute: async ({ command, cwd }) => {
       const c = window.__debug.container;
       if (!c) throw new Error('container not ready');
-      const proc = await c.spawn('sh', ['-c', command], cwd ? { cwd } : undefined);
+      const proc = await c.spawn('sh', ['-c', command], { cwd: cwd || DEFAULT_CWD });
       let out = '';
       await proc.output.pipeTo(new WritableStream({ write: d => { out += d; } }));
       await proc.exit;

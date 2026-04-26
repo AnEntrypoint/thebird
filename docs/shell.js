@@ -15,6 +15,7 @@ import { readStream } from './shell-procsub.js';
 import { makeExpander, makeCaptureRun, makeNodeRunner, makeNpmResultRunner } from './shell-exec.js';
 import { createSwJobs, makeNohupBuiltin, makeNetcatStub, makeCurlBuiltin } from './shell-sw-jobs.js';
 import { makeGitBuiltin } from './shell-git.js';
+import { DEFAULT_CWD } from './shell-defaults.js';
 
 const machine = createMachine({ id: 'shell', initial: 'idle', states: {
   idle: { on: { RUN: 'executing', ENTER_REPL: 'node-repl', NODE_START: 'node-running' } },
@@ -24,7 +25,7 @@ const machine = createMachine({ id: 'shell', initial: 'idle', states: {
 }});
 
 export function createShell({ term, onPreviewWrite }) {
-  const ctx = { term, cwd: '/home', prevCwd: '/home', env: {}, history: [], lastExitCode: 0, argv: [], functions: {}, opts: {}, localStack: [], loopFlag: null, arrays: {}, bgJobs: {}, traps: {} };
+  const ctx = { term, cwd: DEFAULT_CWD, prevCwd: DEFAULT_CWD, env: {}, history: [], lastExitCode: 0, argv: [], functions: {}, opts: {}, localStack: [], loopFlag: null, arrays: {}, bgJobs: {}, traps: {} };
   const actor = createActor(machine);
   actor.start();
   const httpHandlers = {};

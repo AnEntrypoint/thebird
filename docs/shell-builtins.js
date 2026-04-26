@@ -3,11 +3,12 @@ import { makeExtraBuiltins } from './shell-builtins-extra.js';
 import { makeUtilBuiltins } from './shell-builtins-util.js';
 import { makePythonBuiltin } from './shell-python.js';
 import { makeFsBuiltins } from './shell-builtins-fs.js';
+import { HOME_DIR } from './shell-defaults.js';
 
 export function resolvePath(cwd, p) {
   if (p == null || p === '') return cwd;
-  if (p === '~') return '/home';
-  if (p.startsWith('~/')) p = '/home/' + p.slice(2);
+  if (p === '~') return HOME_DIR;
+  if (p.startsWith('~/')) p = HOME_DIR + '/' + p.slice(2);
   if (!p.startsWith('/')) p = cwd.replace(/\/$/, '') + '/' + p;
   const parts = [];
   for (const s of p.split('/')) {
