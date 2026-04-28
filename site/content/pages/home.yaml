@@ -1,0 +1,25 @@
+id: home
+title: Home
+hero:
+  heading: "thebird"
+  subheading: "Anthropic SDK → Gemini bridge"
+  body: "streaming bridge from the Anthropic SDK to Gemini — point your existing Claude code at Google models, no rewrite."
+  badges:
+    - { label: "bridge" }
+    - { label: "anthropic" }
+    - { label: "gemini" }
+    - { label: "tooling" }
+  ctas:
+    - { label: "GitHub", href: "https://github.com/AnEntrypoint/thebird", primary: true }
+    - { label: "247420", href: "https://247420.xyz" }
+features:
+  heading: "Why thebird"
+  items:
+    - { name: "bridge", desc: "flagship trait of thebird." }
+    - { name: "anthropic", desc: "core capability of thebird." }
+    - { name: "gemini", desc: "core capability of thebird." }
+quickstart:
+  heading: Quick start
+  lines:
+    - { kind: "cmt", text: "# source" }
+    - { kind: "cmd", text: "git clone https://github.com/AnEntrypoint/thebird.git" }

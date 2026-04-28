@@ -1,0 +1,17 @@
+title: "thebird"
+tagline: "Anthropic SDK → Gemini bridge"
+description: "streaming bridge from the Anthropic SDK to Gemini — point your existing Claude code at Google models, no rewrite."
+repo: "https://github.com/AnEntrypoint/thebird"
+url: "https://anentrypoint.github.io/thebird"
+year: 2026
+keywords:
+  - "bridge"
+  - "anthropic"
+  - "gemini"
+  - "247420"
+  - "anentrypoint"
+accent_from: "#ffa657"
+accent_to: "#f0883e"
+glyph: "◊"
+code: "052"
+category: "tooling"
