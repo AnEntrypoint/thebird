@@ -1,0 +1,1126 @@
+/* == appended: popovers-files == */
+/* FilePreviewMedia controls row — spacing + coarse-pointer tap floor */
+.ds-preview-media-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+@media (hover: none), (pointer: coarse) {
+  .ds-preview-media-controls .chat-code-copy,
+  .chat-code-copy-head {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* == appended: ui-kits == */
+/* ============================================================
+   ui_kit responsive helpers (kits-grids sweep) */
+/* App-surface root. .ds-section carries a --space-8 (96px) editorial rhythm
+   that is correct between landing-page sections and wrong as the ROOT wrapper
+   of an Operate surface, where .app-main has already padded the region — used
+   there it just pushes the page heading a screen-inch down and adds dead space
+   below the last panel. This is the app-mode counterpart: no outer margin, and
+   it owns the heading -> lede -> first-panel cadence so each kit stops
+   re-deriving it. Pair with .ds-section-pad for the shadow inset. */
+.ds-app-surface { margin: 0; display: flow-root; }
+/* Operate surfaces run the compact heading ceiling. --fs-h1 tops out at 64px,
+   a display size that makes the page TITLE outweigh the data it labels; the
+   app scale (--fs-h1-app, 22-30px) is what these tokens exist for. Applied
+   here rather than as a data-attribute on each kit shell so any surface using
+   this root gets the app voice without a per-kit opt-in that kits forget. */
+/* Descendant, not direct-child: a kit that wraps its title in a head row (an
+   h1 beside a theme toggle, say) still gets the app voice. The direct-child
+   form silently missed exactly that shape and left those titles at the 64px
+   display ceiling -- the surface opted in but the rule did not reach the
+   heading. Nested .ds-section content is unaffected because nothing re-raises
+   the size below this point. */
+.ds-app-surface h1, .ds-app-surface .t-h1 { font-size: var(--fs-h1-app); line-height: 1.15; }
+.ds-app-surface h2, .ds-app-surface .t-h2 { font-size: var(--fs-h2-app); }
+.ds-app-surface h3, .ds-app-surface .t-h3 { font-size: var(--fs-h3-app); }
+/* The lede is supporting chrome under an app title, not a marketing stand-first:
+   it drops to body size and keeps a readable measure instead of --fs-xl. */
+.ds-app-surface > .lede, .ds-app-surface > .t-lede { font-size: var(--fs-body); max-width: 60ch; }
+.ds-app-surface > h1,
+.ds-app-surface > h2 { margin-bottom: var(--space-2); }
+/* The lede belongs to the heading above it, so it sits tight to that heading
+   and separates generously from the content it introduces. */
+.ds-app-surface > .lede,
+.ds-app-surface > .t-lede { margin-bottom: calc(var(--space-6) * var(--density)); }
+/* No leading margin on the first block or trailing margin on the last — the
+   shell owns the region's outer edges. */
+.ds-app-surface > :first-child { margin-top: 0; }
+.ds-app-surface > :last-child { margin-bottom: 0; }
+
+/* Section padding is the shell's job (.app-main owns --pad-x). This only adds
+   the small inset a kit root needs so panel shadows are not clipped by the
+   scroll container, and it scales with density like every other app metric —
+   the old clamp(6px,1.2vw,16px) sized against the VIEWPORT inside a
+   container-query layout that measures everything else in cqi. */
+.ds-section-pad { padding: calc(var(--space-1) * var(--density)); }
+
+/* Separation between sibling panels. This is the OUTER rhythm: it must exceed
+   .panel-body's 16px inner sibling gap, otherwise proximity says two unrelated
+   panels belong together more tightly than two rows inside one panel. The old
+   value was --space-2 (8px), which inverted exactly that relationship and made
+   the class named "gap" the only rule in the system that removed separation. */
+.ds-panel-gap { margin: calc(var(--space-5) * var(--density)) 0; }
+/* Density-scaled sibling rhythm for any run of stacked panels, so the cadence
+   holds without each kit re-declaring a margin per panel. */
+.ds-panel-gap + .ds-panel-gap { margin-top: calc(var(--space-5) * var(--density)); }
+
+/* A panel inside a gap-owning parent (grid/flex row). .panel ships a 24px
+   bottom margin for the stacked case; inside a row that margin fights the
+   parent's gap and makes the last row of a wrapping grid sit on a different
+   rhythm than the columns. The container owns separation, so the panel drops
+   its own. Also stretches to the row's height so a short panel next to a tall
+   one does not leave a ragged bottom edge. */
+/* Drops only the panel's own bottom margin — the row container owns separation.
+   Height is deliberately NOT forced here: whether panels in a row should match
+   heights depends on whether they are a SET (trio: equal peers, matching edge
+   reads as one band) or a PAIR of different things (duo: a 4-bar chart beside a
+   5-row table, where forcing equality just relocates the dead space inside the
+   shorter panel). Each container decides via align-items below. */
+.ds-panel-flush { margin-bottom: 0; }
+
+/* Paired panels. Container-relative (the shell is the CQ container), so the
+   split collapses when the PANELS are cramped rather than when the viewport
+   crosses an arbitrary width — with a sidebar open those are far apart.
+   minmax(0,1fr) lets a scrolling table shrink instead of forcing overflow. */
+.ds-panel-duo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--space-3) * var(--density));
+  margin: calc(var(--space-5) * var(--density)) 0;
+  /* A duo pairs two DIFFERENT things (a 4-bar chart beside a 5-row table).
+     Stretching them to a common height does not create equality, it just moves
+     the shorter panel's dead space inside its own body. Each takes its natural
+     height and they align at the top, where the eye actually starts. */
+  align-items: start;
+}
+@container (max-width: 900px) {
+  .ds-panel-duo { grid-template-columns: minmax(0, 1fr); }
+}
+/* Fallback for kit roots that are not themselves a container (older kit shells
+   mount outside .app/.ds-stage); harmless where the CQ rule already applies. */
+@media (max-width: 760px) {
+  .ds-panel-duo { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Three equal reference panels. Real grid tracks, NOT percentage flex-basis:
+   three 33.33% bases plus two gaps exceed 100% and wrap the last panel onto
+   its own row. Steps 3 -> 2 -> 1 on container width so the panels reflow when
+   they are actually cramped rather than at a viewport number that ignores how
+   much chrome the shell is holding. */
+.ds-panel-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space-3) * var(--density));
+  margin: calc(var(--space-5) * var(--density)) 0;
+  /* A trio IS a set of equal peers, so a shared bottom edge reads as one band
+     rather than three ragged cards — the opposite call from .ds-panel-duo
+     above, and the reason these are two classes and not one. */
+  align-items: stretch;
+}
+.ds-panel-trio > .panel { height: 100%; }
+@container (max-width: 1100px) {
+  .ds-panel-trio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 720px) {
+  .ds-panel-trio { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .ds-panel-trio { grid-template-columns: minmax(0, 1fr); }
+}
+/* wide dense rows/tables scroll inside their panel, never the page */
+.ds-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+/* --- slide deck ------------------------------------------- */
+.ds-deck-stage {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: min(1100px, 100%);
+  margin: var(--space-3) auto;
+  background: var(--bg-2);
+  border-radius: var(--r-2);
+  padding: clamp(var(--space-3), 5vw, var(--space-7));
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
+  container-type: inline-size; /* cqw units track the stage, not the viewport */
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .ds-deck-stage {
+    max-height: calc(100vh - 140px);
+    max-height: calc(100dvh - 140px);
+    aspect-ratio: auto;
+  }
+}
+.ds-deck-slide {
+  flex: 1; display: flex; min-width: 0;
+  animation: ds-deck-slide-in var(--dur-base) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-deck-slide { animation: none; }
+}
+@keyframes ds-deck-slide-in {
+  from { opacity: 0; transform: translateY(var(--space-1-75)); }
+  to { opacity: 1; transform: none; }
+}
+.ds-deck-controls {
+  /* 14px sits between --space-2-75 (12) and --space-3 (16) with no tier; it is
+     the deck control spacing tuned against the mono glyph run. */
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: var(--space-2); font-family: var(--ff-mono); font-size: var(--fs-sm);
+}
+.ds-deck-count { color: var(--fg-3); }
+@media (pointer: coarse) {
+  .ds-deck-controls .btn { min-height: 44px; min-width: 44px; }
+}
+/* Dot progress indicator: one dot per slide, current slide filled with
+   --accent (same fill token .ds-dot-on uses elsewhere in the system), rest
+   dim at --fg-3 so the row reads as a track, not a second counter. */
+.ds-deck-progress {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--space-1-5); padding-bottom: var(--space-2);
+}
+.ds-deck-dot {
+  width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%;
+  background: var(--fg-3); flex: 0 0 auto;
+  transition: background var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
+}
+.ds-deck-dot--active { background: var(--accent); transform: scale(1.3); }
+/* Kit small-label voice — one local composition of the house `.t-label` recipe
+   (base.css) for every eyebrow/label in the appended kit blocks below. These
+   previously each restated the four declarations with drifted tracking
+   (0.1em / 0.06em / --tr-label) and drifted size (11px / --fs-micro); they now
+   share --fs-nano + --tr-label. Members declare only their real differences.
+   --fs-nano because these are dense kit chrome, never body or UI text. */
+.ds-slide-eyebrow,
+.ds-field-eyebrow,
+.ds-auth-field-label,
+.ds-lightbox-tag {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-nano);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--panel-text-3);
+}
+
+/* Deliberate overrides: the deck slide eyebrow sits on the app --fg ramp (it is
+   full-bleed slide chrome, not panel chrome) and owns its own bottom gutter. */
+.ds-slide-eyebrow {
+  color: var(--fg-3);
+  margin-bottom: clamp(var(--space-2-75), 2.5cqw, var(--space-4));
+}
+.ds-slide-col { display: flex; flex-direction: column; justify-content: center; gap: clamp(var(--space-2-75), 2.5cqw, var(--space-4)); min-width: 0; }
+.ds-slide-col--start { align-items: flex-start; }
+.ds-slide-col--narrow { max-width: 38ch; }
+.ds-slide-col--quote { max-width: 42ch; }
+.ds-slide-hero {
+  font-size: clamp(var(--fs-h2), 6cqw, var(--fs-hero));
+  line-height: var(--lh-tight); letter-spacing: var(--tr-tight); font-weight: 600;
+  color: var(--slide-accent, var(--accent-ink));
+  overflow-wrap: anywhere;
+}
+.ds-slide-h1 {
+  font-size: clamp(var(--fs-h3), 4.5cqw, var(--fs-h1));
+  line-height: var(--lh-snug); color: var(--fg); font-weight: 500; min-width: 0;
+}
+.ds-slide-h1--lead { margin-bottom: var(--space-2-75); }
+.ds-slide-quote-body {
+  font-size: clamp(var(--fs-lg), 3.5cqw, var(--fs-h2));
+  line-height: var(--lh-snug); color: var(--fg); font-weight: 400; font-style: italic;
+}
+.ds-slide-cite { font-family: var(--ff-mono); font-size: var(--fs-sm); color: var(--fg-3); }
+.ds-slide-bullet {
+  /* 18px ceiling has no tier (--space-3 is 16, --space-3-5 is 20); it is the
+     bullet key/value split tuned against the clamp(56px,18%,100px) key column. */
+  display: flex; gap: clamp(var(--space-2), 2vw, 18px); align-items: baseline;
+  border-bottom: 1px solid var(--rule); padding: var(--space-2-75) 0; flex-wrap: wrap;
+}
+.ds-slide-bullet-key {
+  flex: 0 1 clamp(56px, 18%, 100px); min-width: 0;
+  font-family: var(--ff-mono); font-size: var(--fs-sm);
+  color: var(--slide-accent, var(--accent-ink));
+}
+.ds-slide-bullet-val { color: var(--fg-2); font-size: var(--fs-lg); min-width: 0; }
+.ds-slide-split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(var(--space-2-75), 3vw, var(--space-5)); margin-top: var(--space-2-75); }
+@media (max-width: 760px) {
+  .ds-slide-split { grid-template-columns: 1fr; }
+}
+.ds-slide-split-cell {
+  padding: var(--space-3-5); background: var(--bg-2); border-radius: var(--r-2);
+  color: var(--fg-2); font-size: var(--fs-lg); line-height: var(--lh-base); min-width: 0;
+}
+/* DELIBERATE accent spine — this modifier's only job is to mark the emphasized
+   half of a split slide (see ui_kits/slide_deck/app.js), so the rule is the
+   whole component, not decoration on a card. Routed through the house
+   .panel-spine idiom (::before rail at --bw-chunk, squared leading corners)
+   instead of an off-scale 3px border-left. */
+.ds-slide-split-cell--accent {
+  position: relative;
+  padding-left: calc(var(--space-3-5) + var(--bw-chunk));
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+}
+.ds-slide-split-cell--accent::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: var(--bw-chunk); background: var(--slide-accent, var(--accent));
+  border-radius: var(--bw-chunk) 0 0 var(--bw-chunk);
+}
+
+/* --- error 404 --------------------------------------------- */
+.ds-err-hero {
+  /* 36px/22px clamp ceilings and the 14px gap are off-scale on purpose: this
+     hero is centred around a clamp(56px,20vw,120px) numeral and the insets are
+     tuned to it, not to the panel rhythm the --space-* scale encodes. */
+  padding: clamp(var(--space-3), 5vw, 36px) clamp(var(--space-2-75), 4vw, 22px);
+  text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center;
+}
+.ds-err-numeral {
+  font-family: var(--ff-mono); font-size: clamp(56px, 20vw, 120px);
+  /* Shares the headline's weight (base.css h1: font-weight:600) so the two
+     most important elements on the page read as one weight relationship
+     instead of a thin numeral against a bold headline. */
+  font-weight: 600;
+  line-height: 1; color: var(--panel-text-3); letter-spacing: -0.03em;
+}
+.ds-err-path {
+  display: inline-flex; gap: var(--space-1-75); align-items: baseline; flex-wrap: wrap; max-width: 100%;
+  font-family: var(--ff-mono); font-size: var(--fs-tiny); color: var(--panel-text-2);
+  background: var(--panel-1); padding: var(--space-1-75) var(--space-2-75); border-radius: var(--r-0);
+  overflow-wrap: anywhere; word-break: break-all;
+}
+
+/* --- gallery ------------------------------------------------ */
+.ds-tile-grid {
+  padding: clamp(var(--space-2), 2.5vw, var(--space-3));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: var(--space-2);
+}
+.ds-tile-grid--tight { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
+.ds-swatch-grid {
+  padding: clamp(var(--space-2), 2.5vw, var(--space-3));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: var(--space-2-75);
+}
+.ds-gallery-tile {
+  cursor: pointer; display: flex; flex-direction: column; gap: var(--space-1-75);
+  padding: var(--space-2-75); border-radius: var(--r-1);
+  /* Fixed aspect-ratio (not just a min-height floor) so every tile in the grid
+     occupies the same shape regardless of caption length — the ascii specimen
+     is centered inside via .ds-tile-cap's flex alignment, the equivalent of
+     object-fit: cover for a text tile with no bitmap to crop. */
+  aspect-ratio: 4 / 3;
+  border: 0; text-align: left; font: inherit; color: inherit;
+  background: var(--tile-tone, var(--panel-1));
+  transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+/* Flat tonal fill only (house style: no bespoke tile chrome, no borders — see
+   .ds-feature above), so the hover affordance is a lift, matching the same
+   translateY + shadow idiom .chat-msg:hover .chat-bubble already uses. */
+.ds-gallery-tile:hover { transform: translateY(-2px); box-shadow: 0 2px 8px color-mix(in oklab, var(--fg) 10%, transparent); }
+.ds-gallery-tile:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.ds-gallery-tile--tight { aspect-ratio: 3 / 2; }
+/* The lightbox scrim/card chrome itself is now Dialog's (.ds-ep-dialog /
+   .ds-ep-dialog-backdrop in editor-primitives.css) — Dialog already ships
+   role="dialog", aria-modal, Tab-trap and focus-restore-on-close, which the
+   former hand-rolled .ds-lightbox/.ds-lightbox-card overlay had none of. Only
+   the gallery-specific content rules (head row, tag, carousel sizing, tile
+   preview) remain here. */
+.ds-lightbox-preview {
+  /* 36px ceiling has no tier (--space-5 is 32, --space-6 is 48). */
+  padding: clamp(var(--space-3), 6vw, 36px); border-radius: var(--r-1); text-align: center;
+  font-family: var(--ff-mono); white-space: pre-line; font-size: clamp(16px, 5vw, 24px);
+  background: var(--tile-tone, var(--panel-1));
+}
+/* Carousel adoption in the lightbox: each item takes the track's full inner
+   width so exactly one tile is visible per page, matching the modal's own
+   fixed 520px card width rather than sizing to caption content. */
+.ds-lightbox-card--carousel .ds-carousel-item { flex: 0 0 100%; width: 100%; }
+.ds-lightbox-card--carousel .ds-carousel-track { scroll-snap-type: x mandatory; }
+
+/* --- search ------------------------------------------------- */
+.ds-topbar-search { width: min(280px, 100%); min-width: 0; flex: 1 1 clamp(140px, 30vw, 280px); }
+@media (max-width: 480px) {
+  .ds-topbar-search { flex-basis: 100%; }
+}
+/* Namespaced .ds-kit-empty-state (not .ds-empty-state) -- .ds-empty-state is
+   primitives.css's shared base (padding var(--space-6), color var(--fg-3));
+   this sheet loads after it in app-shell.css's import order, so reusing the
+   same class name silently overrode that base's padding/color for every
+   consumer, defeating the "shared base, one place" contract primitives.css
+   documents. This block is unused by any component today, but kept
+   namespaced so a future consumer gets this sheet's fluid clamp() treatment
+   deliberately rather than by cascade accident. */
+.ds-kit-empty-state { padding: clamp(var(--space-3), 5vw, var(--space-4)); text-align: center; color: var(--panel-text-3); }
+/* Fluid ICON size (empty-state mark), not a type tier: it scales with the
+   viewport between 24 and 32px. Every fluid --fs-* tier is a heading clamp
+   tuned to cqi + heading weight, so none of them substitutes here. */
+.ds-kit-empty-state-glyph { font-size: clamp(24px, 6vw, 32px); }
+.ds-kit-empty-state-msg { margin: var(--space-1-75) 0; }
+.ds-kit-empty-state-hint { margin: 0; font-size: var(--fs-sm); }
+
+/* --- system primer ------------------------------------------ */
+/* The three primer panels below share one fluid inset,
+   clamp(10px, 2.5vw, 14px) clamp(10px, 3vw, 18px), and a 14/18px gap. None of
+   10/14/18 is a --space-* tier (the scale jumps 8 -> 10 -> 12 -> 16 -> 20) and
+   the three values are tuned as a set against the 64px label columns, so the
+   panels stay optically identical to each other. Snapping any one of them
+   desyncs the family; they are deliberate literals, not un-migrated drift. */
+.ds-swatch-grid-sm {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr));
+  gap: var(--space-2-75); padding: clamp(10px, 2.5vw, 14px) clamp(10px, 3vw, 18px);
+}
+.ds-swatch-grid-lg { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); }
+.ds-swatch-col { display: flex; flex-direction: column; gap: var(--space-1-75); }
+.ds-swatch-chip { height: 48px; border-radius: var(--r-1); border: 1px solid var(--rule); background: var(--swatch, var(--panel-1)); }
+.ds-swatch-chip--big { height: 64px; }
+.ds-swatch-name { font-family: var(--ff-mono); font-size: var(--fs-nano); color: var(--fg-3); }
+.ds-type-panel { padding: clamp(10px, 2.5vw, 14px) clamp(10px, 3vw, 18px); display: flex; flex-direction: column; gap: 14px; }
+.ds-type-row {
+  display: flex; align-items: baseline; gap: 14px;
+  border-bottom: 1px solid var(--rule); padding-bottom: var(--space-2); flex-wrap: wrap;
+}
+.ds-type-row-label { flex: 0 0 64px; font-family: var(--ff-mono); font-size: var(--fs-nano); color: var(--fg-3); }
+.ds-type-sample {
+  min-width: 0; overflow-wrap: anywhere; line-height: var(--lh-tight); color: var(--fg);
+  font-size: var(--sample-size, var(--fs-body));
+}
+.ds-prim-panel { padding: clamp(10px, 2.5vw, 14px) clamp(10px, 3vw, 18px); display: flex; flex-direction: column; gap: 18px; }
+.ds-prim-row { display: flex; gap: var(--space-2-5); flex-wrap: wrap; align-items: center; }
+.ds-prim-label { flex: 0 0 64px; font-family: var(--ff-mono); font-size: var(--fs-nano); color: var(--fg-3); }
+
+/* == appended: content-site == */
+/* Home landing wrappers (site/theme.mjs) — replace banned inline styles. */
+.ds-home-hero-wrap { padding: 0 var(--space-2, 8px); }
+.ds-home-panel { margin: var(--space-2, 8px); }
+@media (max-width: 480px) {
+  .ds-home-panel { margin: var(--space-1, 4px) 0; }
+}
+/* Home landing section tablist (site/theme.mjs Tabs()) — bare .tabs had no
+   rule anywhere, so the four links rendered as unstyled inline text jammed
+   together with no separation. Mirror the topbar nav pill-tab treatment. */
+.tabs[role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+  font-size: var(--fs-sm);
+}
+.tabs[role="tablist"] a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--r-pill);
+  color: var(--fg-2);
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease),
+    transform var(--dur-base) var(--ease-spring);
+}
+.tabs[role="tablist"] a:hover { background: var(--bg-2); color: var(--fg); transform: translateY(-1px); }
+.tabs[role="tablist"] a.active {
+  color: var(--accent-ink);
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+  font-weight: 600;
+}
+.ds-quickstart {
+  padding: var(--space-3, 16px) var(--space-4, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-75, 6px);
+}
+/* Table() scroll containment — wide tables scroll inside their own box,
+   never the page body. overflow-x:auto alone works but gives no visible cue
+   that a table is wider than its box (macOS overlay scrollbars stay hidden
+   until an active hover/scroll gesture) -- columns beyond the fold read as
+   simply missing rather than reachable. An always-visible thin scrollbar
+   track makes the overflow legible without a gesture first. */
+.ds-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+.ds-table-wrap::-webkit-scrollbar { height: 8px; }
+.ds-table-wrap::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: var(--r-pill, 999px); }
+.ds-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.ds-table-wrap > table { min-width: 100%; }
+/* Sortable column headers (Table's opt-in sortable prop) — a docstudio-cue
+   addition: color stays neutral at rest (this is a structural control, not a
+   brand moment) and only the active sort direction gets the accent tint,
+   matching the "color reserved for meaning, not decoration" pattern seen in
+   docstudio's admin table. */
+.ds-table-sort-btn {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; font-weight: inherit; color: inherit; cursor: pointer;
+}
+.ds-table-sort-btn:hover { color: var(--fg); }
+.ds-table-sort-btn:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: 2px; }
+.ds-table-sort-btn.is-active { color: var(--accent-ink, var(--accent)); }
+
+
+/* == appended: settings kit cleanup == */
+/* == appended: settings kit == */
+/* .app-main already owns this region's padding; this only supplies the inset
+   that keeps panel shadows off the scroll edge (see .ds-section-pad). */
+.ds-settings-main { padding: calc(var(--space-1) * var(--density)); }
+/* .panel-body already pads the panel interior — this sat inside it and
+   double-padded every field, on an off-scale 14/18 pair. The body is now a
+   flow container that owns only the RHYTHM between fields, not a second inset. */
+.ds-settings-body { padding: 0; }
+.ds-settings-body-stack { display: flex; flex-direction: column; gap: calc(var(--space-2-5) * var(--density)); }
+/* Field rhythm: the label/control/hint cluster is tight internally, so fields
+   need a clearly larger interval between them than within them, or the whole
+   form reads as one undifferentiated column. Margin-collapse-free (flow root
+   siblings) — first/last are zeroed so the panel body sets the outer edge. */
+.ds-field-block { display: flex; flex-direction: column; gap: var(--space-1-75); margin: calc(var(--space-4) * var(--density)) 0 0; }
+.ds-settings-body > .ds-field-block:first-child { margin-top: 0; }
+/* Field width is a hint about expected input length. A name or handle stretched
+   across a 1000px desktop column tells the user to type a paragraph and leaves
+   the eye no left-to-right anchor; capping the control (not the row) keeps the
+   label/hint full-width for wrapping while the input reads as the right size.
+   Textareas keep a wider cap since prose genuinely uses the room. */
+.ds-field-block > .input { max-width: 44ch; width: 100%; }
+.ds-field-block > textarea.input { max-width: 72ch; }
+/* .ds-field-eyebrow joins the kit small-label voice above with no overrides. */
+.ds-hint-sm { font-size: var(--fs-xs); color: var(--panel-text-2); }
+.ds-note-quiet { margin: 0; color: var(--panel-text-2); }
+.ds-btn-row { display: flex; gap: var(--space-2, 8px); flex-wrap: wrap; align-items: center; }
+.ds-btn-row-tight { gap: var(--space-1-75, 6px); }
+/* Size-ladder demo group: each size's caption+button pair stacks and the
+   group aligns at the BOTTOM so buttons of different heights share one
+   visual baseline instead of centering on their own mismatched midpoints. */
+.ds-btn-size-row { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-end; }
+.ds-btn-size-col { display: flex; flex-direction: column; gap: var(--space-1-75); align-items: flex-start; }
+.ds-key-input { flex: 1 1 160px; min-width: 0; font-family: var(--ff-mono); }
+.ds-toggle-btn { min-width: 78px; }
+/* Side-by-side checked/unchecked reference pair (settings kit theme panel) --
+   documents the visual difference between states in one static, non-live
+   spot rather than requiring a viewer to toggle a real control back and
+   forth to compare. */
+.ds-toggle-state-sample { display: flex; align-items: center; gap: var(--space-1-5, 6px); }
+.ds-toggle-label { margin-left: var(--space-2, 8px); color: inherit; opacity: 0.7; }
+.ds-btn-warn { color: var(--warn); }
+/* Raw --mascot text measures 3.11:1 on paper (fails 4.5:1); --mascot-deep is
+   the text-safe tone, same accent/accent-ink split used everywhere else. */
+.ds-btn-mascot { color: var(--mascot-deep); }
+/* Sticky commit bar. It floats OVER the form it commits, so it needs real
+   elevation and a larger top margin than the form's own field rhythm —
+   otherwise it reads as one more field rather than as the action for all of
+   them. Spacing is density-scaled like the rest of the surface. */
+.ds-savebar {
+  position: sticky; bottom: var(--space-2); z-index: var(--z-sticky);
+  display: flex; align-items: center;
+  justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap;
+  padding: calc(var(--space-2-75) * var(--density)) calc(var(--space-3) * var(--density));
+  background: var(--panel-2); border-radius: var(--r-1);
+  /* --panel-1 (this bar's parent .panel surface) and --panel-2 are adjacent
+     lightness steps that measure only ~1.1-1.5:1 apart (both themes) -- too
+     close to read as a distinct nesting depth by background tone alone.
+     A hairline border is the same edge-definition device .panel itself
+     already uses (see the top of this file) rather than a token-lightness
+     change, which would risk the fg-3-on-panel-2 text contrast that is
+     already right at its AA floor in the dark theme. */
+  border: var(--bw-hair) solid var(--rule);
+  margin: calc(var(--space-5) * var(--density)) 0 var(--space-2);
+  box-shadow: var(--shadow-2, var(--shadow-1));
+}
+.ds-savebar-note { flex: 1 1 160px; min-width: 0; color: var(--panel-text-2); }
+.ds-settings-modal { min-width: min(320px, calc(100vw - var(--space-5))); max-width: 480px; }
+.ds-modal-body-form { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2-75); }
+.ds-modal-note { margin: 0; color: var(--panel-text-2); font-size: var(--fs-xs); }
+.ds-draft-preview {
+  background: var(--panel-1); padding: var(--space-2-75); border-radius: var(--r-0);
+  font-size: var(--fs-micro); color: var(--panel-text-2); max-height: 120px;
+  overflow-y: auto; font-family: var(--ff-mono); overflow-wrap: anywhere;
+}
+/* Destructive-choice actions get a clearly larger interval than the body's own
+   gap — the decision must not read as the next line of the explanation. */
+.ds-modal-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); justify-content: space-between; flex-wrap: wrap; }
+
+/* == appended: signin kit cleanup == */
+/* -- signin kit (ui_kits/signin) -- */
+/* Centres one short card in the pane. `display:flex` is repeated after
+   .ds-app-surface's `flow-root` because this class is used TOGETHER with that
+   root and must win the centring; `min-height:100%` lets justify-content
+   actually have room to centre against. No block margin: an auth screen is one
+   card, not a run of editorial sections, and inheriting .ds-section's 96px
+   rhythm is what pushed a 430px card to a 946px scroll height inside a ~514px
+   pane and gave .app-main its own scrollbar at every real window height. */
+.ds-auth-wrap { padding: var(--space-2, 8px); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; margin-block: 0; }
+/* `auto` block margin, not a fixed clamp: the wrap centres the column, and a
+   fixed top/bottom margin both fights that centring and re-adds height the pane
+   then has to scroll. `auto` collapses when the pane is short, centres when tall. */
+.ds-auth-col { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: var(--space-2); margin: auto 0; min-width: 0; }
+/* 18px ceiling: no tier between --space-3 (16) and --space-3-5 (20). */
+.ds-auth-form { padding: clamp(var(--space-2-75), 3vw, 18px); display: flex; flex-direction: column; gap: var(--space-2-5); }
+.ds-auth-sent { align-items: center; text-align: center; }
+/* 32px is an ICON size, not a type size: this is the confirmation mark above
+   the "check your mail" copy, sized to the 440px auth column, and the --fs-*
+   scale tops out at --fs-xl (21px) before jumping to fluid clamp() heading
+   tiers. Snapping it to either would visibly resize the mark. */
+.ds-auth-sent-glyph { font-size: 32px; color: var(--panel-accent); }
+.ds-auth-sent-title { margin: 0; font-weight: 600; }
+.ds-auth-sent-sub { margin: 0; color: var(--panel-text-2); overflow-wrap: anywhere; }
+.ds-auth-otp-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.ds-auth-field { display: flex; flex-direction: column; gap: var(--space-1); }
+/* .ds-auth-field-label joins the kit small-label voice above, no overrides. */
+.ds-auth-field-input-row { position: relative; display: flex; align-items: center; }
+/* Reserves room for the absolutely-positioned toggle: its --space-1 inset plus
+   the --ds-icon-btn-sm 26px box, so the input text never sits under it. This
+   only holds at the pointer:fine 26px box size, though -- the coarse-pointer
+   touch-floor rule (states-interactions.css) grows .ds-icon-btn-sm to a
+   min-width/height of 44px without this padding following it, so on a
+   touchscreen the enlarged hit target actually overlapped 14px into the
+   typed password text (44 + 4 inset > 34 reserved). Reserve for the coarse
+   floor too, gated behind the same media query, so clearance holds at both
+   sizes instead of only the desktop one. */
+.ds-auth-field-input-row .input { flex: 1 1 auto; padding-right: calc(26px + var(--space-2)); }
+@media (pointer: coarse) {
+  .ds-auth-field-input-row .input { padding-right: calc(44px + var(--space-2)); }
+}
+.ds-auth-pw-toggle { position: absolute; right: var(--space-1); }
+.ds-auth-row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.ds-auth-remember { display: flex; align-items: center; gap: var(--space-1-75); cursor: pointer; }
+/* The native checkbox is already re-tinted site-wide via `accent-color:
+   var(--accent-ink)` in states-interactions.css (that rule's own comment
+   names this exact control) -- reused here rather than hand-drawing a new
+   checkbox component. What that global rule doesn't cover is size: the UA
+   default box renders at ~13px, which is under the 24px comfortable-tap
+   floor other controls in this row (the link text, the input fields) sit
+   above. Sized up on the existing --space-2-5 token, no new primitive. */
+.ds-auth-remember input[type="checkbox"] { width: var(--space-2-5); height: var(--space-2-5); margin: 0; }
+.ds-auth-remember-text { color: var(--panel-text-2); font-size: var(--fs-tiny); }
+/* --accent-ink, not --accent, per the design system's text-vs-fill split
+   (AGENTS.md): --accent is a background/border-color lead only, --accent-ink
+   is the tone actually verified for text contrast. The link was previously
+   unstyled prose color at --fs-tiny, reading as inert grey next to the
+   checkbox label it shares a row with. */
+.ds-auth-forgot { font-size: var(--fs-tiny); color: var(--accent-ink); font-weight: 500; }
+.ds-auth-forgot:hover { text-decoration: underline; }
+/* Error and status share layout but not color: a color-only distinction
+   between role="alert" (something is wrong) and role="status" (informational)
+   fails WCAG 1.4.1, so each also carries a distinct ASCII marker via ::before —
+   never rely on the reader noticing the role attribute alone. */
+.ds-auth-error, .ds-auth-status { padding: var(--space-2) var(--space-2-5); background: var(--panel-1); border-radius: var(--r-0); font-size: var(--fs-tiny); overflow-wrap: anywhere; display: flex; gap: var(--space-1-75); align-items: flex-start; }
+.ds-auth-error { color: var(--danger); }
+.ds-auth-error::before { content: '[!]'; flex: none; }
+.ds-auth-status { color: var(--panel-text-2); }
+.ds-auth-status::before { content: '[i]'; flex: none; }
+/* The shared Divider() label defaults to --fs-tiny/--panel-text-3 (editor-
+   primitives.css), tuned for a dense editor toolbar rule -- inside the auth
+   form it sat at the same weight as fine print two rows below it and read
+   as barely-there rather than a section break between the password form and
+   the OAuth row. Scoped to this form only (never edit the shared component
+   sheet for one consumer): borrows the kit small-label voice above (mono,
+   --fs-nano, --tr-label, uppercase) at --panel-text-2 instead of the
+   dimmer -3 tier, plus the ::before/::after rule lines pushed to full
+   --panel-text opacity so the break itself, not just the label, is visible. */
+.ds-auth-form .ds-ep-divider-labeled { margin: var(--space-1) 0; }
+.ds-auth-form .ds-ep-divider-labeled::before,
+.ds-auth-form .ds-ep-divider-labeled::after {
+  border-top-color: var(--panel-text-3);
+}
+.ds-auth-form .ds-ep-divider-label {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-nano);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--panel-text-2);
+}
+.ds-auth-providers { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ds-auth-provider-btn { flex: 1 1 100px; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2-5); }
+.ds-auth-provider-btn--loading { opacity: 0.7; pointer-events: none; }
+.ds-auth-provider-glyph { font-family: var(--ff-mono); color: var(--panel-text-3); display: inline-flex; }
+.ds-auth-modes { display: flex; justify-content: center; gap: 14px; /* off-scale, matches the auth form inset */ margin-top: var(--space-2); font-size: var(--fs-tiny); flex-wrap: wrap; }
+.ds-auth-mode-link { color: var(--panel-text-3); text-decoration: none; }
+.ds-auth-mode-link--active { color: var(--panel-text); text-decoration: underline; }
+.ds-auth-fineprint { text-align: center; font-size: var(--fs-micro); color: var(--panel-text-3); margin: var(--space-1-75) 0; }
+
+/* == appended: gallery-misc kit cleanup == */
+/* --- shared helpers (converted from inline styles) --- */
+.ds-m0 { margin: 0; }
+.ds-text-2 { color: var(--panel-text-2); }
+.ds-text-3 { color: var(--panel-text-3); }
+.ds-kit-head { display: flex; align-items: center; justify-content: space-between; gap: clamp(var(--space-2), 2vw, var(--space-3)); flex-wrap: wrap; }
+
+/* --- gallery kit --- */
+.ds-tile-cap { flex: 1; display: flex; align-items: center; justify-content: center; font-family: var(--ff-mono); white-space: pre-line; color: var(--panel-text-2); font-size: var(--fs-lg); min-width: 0; text-align: center; }
+.ds-tile-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1-75); font-size: var(--fs-micro); flex-wrap: wrap; min-width: 0; }
+.ds-tile-glyph { font-family: var(--ff-mono); color: var(--panel-text-3); }
+.ds-tile-label { color: var(--panel-text); overflow-wrap: anywhere; }
+.ds-gal-swatch { height: 64px; border-radius: var(--r-0); background: var(--swatch, var(--panel-1)); }
+.ds-gal-swatch-meta { display: flex; justify-content: space-between; gap: var(--space-1-75); flex-wrap: wrap; font-family: var(--ff-mono); font-size: var(--fs-nano); min-width: 0; }
+.ds-gal-swatch-name { color: var(--panel-text); }
+.ds-gal-swatch-hint { color: var(--panel-text-3); overflow-wrap: anywhere; }
+.ds-lightbox-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2-75); }
+/* .ds-lightbox-tag joins the kit small-label voice above, no overrides. */
+/* Dialog's .ds-ep-dialog-body has no default child gap (unlike the former
+   hand-rolled .ds-lightbox-card, which was `display:flex; gap:14px`), so the
+   carousel block gets its own top gutter to keep head/carousel/hint spaced. */
+.ds-lightbox-card--carousel { margin-bottom: var(--space-2-75); }
+
+/* --- error_404 kit --- */
+.ds-err-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: center; margin-top: var(--space-1-75); }
+.ds-err-chips { display: flex; gap: var(--space-1-75); flex-wrap: wrap; justify-content: center; margin-top: var(--space-1); }
+
+/* == appended: terminal-capp kit cleanup == */
+/* --- terminal kit ------------------------------------------ */
+.ds-section-pad-sm { padding: var(--space-2); }
+.ds-kit-head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+/* `.cli` (hero-content.css) is an ALWAYS-INK card: it sets a var(--ink)
+   background with var(--paper) text in every theme, by design. So its text
+   tones must be ink-surface tones, NOT the theme-relative fg / accent-ink /
+   mascot-deep ramps. Those resolve to the PAPER tier under a light theme and
+   paint dark text on this permanently dark card: --fg-3 lands at 2.48:1,
+   --fg-2 at 1.18:1, --mascot-deep at 3.13:1 — all failing AA, and all
+   invisible on a machine whose browser defaults to a dark color-scheme.
+   The tones below are theme-independent and measured on --ink:
+   --paper-3-dark 9.35:1, --paper-2 13.26:1, --acid 15.88:1, and the dark
+   mascot tone 6.67:1. Same FILL-vs-TEXT discipline --accent/--accent-ink
+   draws, applied to a surface that never follows the theme. */
+.ds-cli-cmt .cmd { color: var(--paper-3-dark); }
+.ds-cli-out .cmd { color: var(--paper-2); }
+.ds-cli-ok .prompt, .ds-cli-ok .cmd { color: var(--success-on-ink); } /* WCAG-verified 2026 restyle: --acid alone is now a dark neutral and fails on this always-dark .cli surface (npm run a11y) */
+.ds-cli-warn .prompt, .ds-cli-warn .cmd { color: var(--mascot-on-ink); }
+.ds-cli-log .prompt { color: var(--paper-3-dark); }
+.ds-cli-log .cmd { color: var(--paper-2); font-family: var(--ff-mono); }
+/* The terminal surface is theme-INDEPENDENT ink, like .cli itself: a shell
+   that turns white in light mode does not read as a terminal, and the
+   .ds-cli-* line tones above are all measured on --ink, so a light surface
+   would also break their contrast. */
+.ds-term-body {
+  padding: var(--space-3) var(--space-3-5);
+  display: flex; flex-direction: column; gap: 0;
+  background: var(--ink); border-radius: var(--r-1);
+  font-family: var(--ff-mono); font-size: var(--fs-micro); line-height: 1.65;
+  /* Responsive strategy for long logs: cap the scrollback height and scroll
+     vertically rather than growing the page indefinitely; long command/output
+     lines wrap (see .cli .cmd's overflow-wrap: anywhere below) instead of
+     scrolling horizontally, so wrapping is the chosen default over
+     horizontal scroll for this kit. */
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+/* .cli is authored in hero-content.css as a STANDALONE hero code block --
+   20px/24px padding, --fs-lg type, --r-3 radius and its own --ink background
+   per row. Stacked as scrollback those become a column of fat rounded cards
+   instead of terminal lines, which is why this kit did not read as a
+   terminal. Inside the terminal body a .cli is a LINE: no box of its own,
+   no radius, no padding, inheriting the body's mono scale. */
+.ds-term-body .cli {
+  display: flex; align-items: flex-start; gap: var(--space-1-5);
+  padding: 0; background: none; border-radius: 0;
+  font-size: inherit; font-family: inherit; line-height: inherit;
+  overflow-x: visible;
+}
+/* Prompt marks are a fixed gutter so every line's text starts on one column;
+   ragged prompts are the tell of a fake terminal. ch units track the mono
+   glyph width, so the gutter holds at any type size. */
+.ds-term-body .cli .prompt { flex: 0 0 auto; width: 1ch; text-align: center; opacity: 0.75; }
+.ds-term-body .cli .cmd { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
+.ds-term-body--tall { min-height: 280px; }
+.ds-term-input-row { margin-top: var(--space-1-75); }
+.ds-term-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-family: var(--ff-mono); font-size: var(--fs-micro); color: var(--paper); caret-color: var(--acid); }
+.ds-term-input::placeholder { color: var(--paper-3-dark); }
+/* Adding type="text" (for the a11y fix below) makes the global
+   input[type="text"] rule in states-interactions.css match this element for
+   the first time, at equal-or-higher specificity than this file's load
+   order would otherwise win. Re-assert the borderless prompt-line chrome so
+   the shared form-control skin (bg, border, radius, fixed height) can't leak
+   onto what is a terminal prompt, not a form field. */
+.ds-term-input[type='text'] { background: transparent; border: 0; border-radius: 0; box-shadow: none; height: auto; }
+/* The row-level `outline: 0` above kills the browser default, so the control
+   needs its own :focus-visible ring back — otherwise a keyboard user gets no
+   visual confirmation focus landed on the one control they type into. */
+.ds-term-input:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+/* The input itself is a prompt line, not a form control, so it is NOT floored
+   to 44px (that would break the terminal's line rhythm). Instead the whole
+   prompt ROW becomes the tap target, and the font goes to 16px so focusing it
+   does not trigger iOS zoom — a sub-16px input is what causes that. */
+@media (pointer: coarse) {
+  .ds-term-input-row { min-height: 44px; align-items: center; }
+  .ds-term-input { font-size: max(16px, var(--fs-micro)); }
+}
+/* full-viewport render root (community-app) */
+.ds-root-viewport { height: 100vh; height: 100dvh; }
+
+/* --- chat kit: widescreen detail pane -----------------------
+   .chat itself stays single-column (shared component, untouched) and
+   stretches full-width on ultrawide via the existing .app-main > .chat
+   max-width:none rule above (~L380) — that's fine for a bare thread, but
+   it leaves a lone thread column growing to 1400px+ with no other use of
+   the extra width. This wrapper adds a persistent "thread info" rail once
+   there is room to spare, instead of just widening the message column. */
+/* min-height is a floor, not the intended size — .chat-kit-page's flex-column
+   splits leftover height between this (flex:1 1 0%, "leftover") and the
+   pattern-notes panel below it (flex:0 1 auto, i.e. sized to its own content
+   first). On a short viewport the panel's natural content height can consume
+   the entire column budget, squeezing this flex-basis:0% sibling to a real,
+   rendered, fully-populated-with-messages 0px — the thread is never empty,
+   it is invisible. Inside .chat itself, .chat-head and .chat-composer are
+   also flex:0-ish naturally-sized siblings of .chat-thread (flex:1 1 0%,
+   chat-polish.css), so the floor has to clear their combined natural height
+   (~55px head + ~78px composer, chrome + gap) with real room left for the
+   thread to still show at least a couple of message bubbles rather than
+   collapsing to a sliver between them — 30vh was not enough on a short
+   viewport. It still grows past this floor via flex:1 whenever the column
+   has room. */
+.ds-chat-layout { display: flex; flex-direction: column; flex: 1; min-height: max(30vh, 420px); gap: var(--space-3); }
+.ds-chat-layout > .chat { min-width: 0; }
+.ds-chat-detail { display: none; }
+@media (min-width: 1100px) {
+  /* Two compounding grid quirks, not one:
+     1. align-items:start sizes the row to its tallest item's natural content
+        height instead of stretching items to fill it — align-items must stay
+        the grid default (stretch).
+     2. Even with stretch, an implicit row with no explicit sizing (the
+        default here) ALSO sizes itself to content first, then stretches
+        items to that content-derived height — which can exceed the row's
+        actual allotment from this grid's own flex parent (.chat-kit-page,
+        flex:1/min-height:0). .chat then renders taller than .ds-chat-layout's
+        own box, so it overflows past the grid container instead of being
+        clipped by .chat-thread's internal scroll — visually burying the
+        pattern-notes panel that follows this grid in the DOM. Explicit
+        `grid-template-rows: minmax(0, 1fr)` makes the row take exactly the
+        container's height (from the flex chain above) as the ceiling, so
+        .chat's min-height:0 has a real, smaller-than-content value to clip
+        against. .ds-chat-detail opts out via align-self so its own sticky
+        positioning still works without forcing the row back to content-sized. */
+  .ds-chat-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; grid-template-rows: minmax(0, 1fr); gap: var(--space-4); }
+  .ds-chat-detail { display: block; position: sticky; top: 0; align-self: start; }
+}
+
+/* Avatar — generic identity disc primitive (content.js Avatar). Sized
+   variants mirror the existing chat-avatar/community-avatar footprints so
+   any consumer gets a consistent disc without duplicating the CSS. */
+.ds-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--bg-3); color: var(--fg);
+  font-family: var(--ff-body); font-weight: 600; text-transform: lowercase;
+  letter-spacing: 0.02em; user-select: none; flex-shrink: 0; object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.ds-avatar-sm { width: 24px; height: 24px; font-size: var(--fs-pico); }
+.ds-avatar-md { width: 36px; height: 36px; font-size: var(--fs-micro); }
+.ds-avatar-lg { width: 48px; height: 48px; font-size: var(--fs-sm); }
+.ds-avatar-square { border-radius: var(--r-2, 6px); }
+
+/* SpreadsheetPreview — tabbed inline spreadsheet/CSV viewer (docstudio
+   xls-preview.js port). Tabs reuse the same neutral-at-rest pattern as
+   Table's sortable headers; the truncation banner is persistent and never
+   hides the table underneath. */
+.ds-sheet-preview { display: flex; flex-direction: column; gap: var(--space-2, 8px); min-width: 0; }
+.ds-sheet-preview-tabbar {
+  display: flex; gap: var(--space-1, 4px); overflow-x: auto; -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid var(--border, var(--bg-3));
+}
+.ds-sheet-preview-tab {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  padding: var(--space-1-5, 5px) var(--space-2-5, 10px);
+  font: inherit; color: var(--fg-3); border-bottom: 2px solid transparent;
+}
+.ds-sheet-preview-tab:hover { color: var(--fg); }
+.ds-sheet-preview-tab:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: -2px; }
+.ds-sheet-preview-tab.is-active { color: var(--fg); border-bottom-color: var(--accent-ink, var(--accent)); }
+.ds-sheet-preview-truncated {
+  font-size: var(--fs-tiny, 12px); color: var(--fg-3);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  background: var(--bg-2); border-radius: var(--r-1, 6px);
+}
+.ds-sheet-preview-body { overflow: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.ds-sheet-preview-table { min-width: 100%; border-collapse: collapse; font-size: var(--fs-sm, 13px); }
+.ds-sheet-preview-table th, .ds-sheet-preview-table td {
+  padding: var(--space-1-5, 5px) var(--space-2, 8px);
+  border-bottom: 1px solid var(--border, var(--bg-3));
+  text-align: left; white-space: nowrap;
+}
+.ds-sheet-preview-table thead th {
+  position: sticky; top: 0; background: var(--bg-2); color: var(--fg-3);
+  font-weight: 600; z-index: var(--z-sticky);
+}
+.ds-sheet-preview-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ds-sheet-preview-empty { padding: var(--space-3, 16px); color: var(--fg-3); }
+.ds-sheet-preview-error-action {
+  align-self: flex-start; background: none; border: 1px solid var(--border, var(--bg-3));
+  border-radius: var(--r-1, 6px); padding: var(--space-1, 4px) var(--space-2-5, 10px);
+  font: inherit; color: var(--fg); cursor: pointer;
+}
+.ds-sheet-preview-error-action:hover { background: var(--bg-2); }
+.ds-sheet-preview-error-action:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: 2px; }
+
+/* == appended: community kit message list == */
+/* ui_kits/community mounts CommunityShell (the .cm-* family) but renders its
+   OWN message list in ds-* markup, and its index.html links app-shell.css
+   WITHOUT community.css. So these live here, not in community.css: the .cm-*
+   sheet never reaches this page, and .ds-community-* is ds-family markup by
+   the lint-classes taxonomy anyway. Every rule below deliberately mirrors the
+   .chat-msg / .chat-avatar / .chat-stack primitives in chat-polish.css so the
+   community thread and the chat kit read as one message language. */
+
+/* Page root — owns the full viewport column so CommunityShell's own 100dvh
+   flex shell has a height to resolve against, with the topbar/status chrome
+   stacked around it. */
+.ds-community-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-width: 0;
+}
+/* Main column inside the shell — .cm-main's ds-family counterpart: header
+   pinned, message list taking the remaining height and doing the scrolling. */
+.ds-community-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Thread scroller. Same rhythm as .chat-thread (column + --space-3 gap +
+   own overflow), so messages breathe on the same interval as the chat kit. */
+.ds-community-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-3) transparent;
+}
+.ds-community-messages::-webkit-scrollbar { width: 8px; }
+.ds-community-messages::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: var(--r-0); }
+
+/* One message — avatar rail + body stack, matching .chat-msg's flex/gap and
+   its quiet tonal hover (no border, per the zero-border aesthetic). */
+.ds-community-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-75);
+  padding: var(--space-1-75) var(--space-2);
+  margin: 0;
+  border-radius: var(--r-1);
+  min-width: 0;
+  transition: background var(--dur-base) var(--ease);
+}
+.ds-community-msg:hover { background: color-mix(in oklab, var(--fg) 4%, transparent); }
+
+/* Identity disc. The inline `background:` from app.js supplies the per-author
+   tone; this owns the SHAPE — a circle, which is the whole reason the avatar
+   was rendering as a coloured bar with no rule. Footprint + type match
+   .chat-avatar exactly. */
+.ds-community-avatar {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+/* Body stack — name + time on one baseline, text beneath. .chat-stack's
+   column/gap idiom, without the bubble max-width (this is a flat list row,
+   not a two-sided bubble thread). */
+.ds-community-msg-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+/* Author. The inline `color:` from app.js carries the per-author tone; weight
+   and size are what make it read as the row's title. */
+.ds-community-msg-name {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  line-height: 1.3;
+}
+/* Timestamp — the quiet mono meta voice used by .cm-user-tag / row .meta. */
+.ds-community-msg-time {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-micro);
+  color: var(--fg-3);
+  line-height: 1.3;
+}
+/* Message body claims the full second line of the wrapping body row. */
+.ds-community-msg-text {
+  flex: 1 0 100%;
+  margin: 0;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-community-msg { transition: none; }
+}
+
+/* == appended: cross-kit note / swatch / chat-page / caret == */
+
+/* "about this kit" explanatory block — 8 kits render a run of <p> lines here
+   (often carrying inline Chip()/<code>) inside a .panel body. This is
+   SECONDARY copy annotating the demo above it, so it takes the quiet voice:
+   one step down from body, on the --fg-2 ramp, with a comfortable reading
+   line-height. It owns only the RHYTHM between its lines; the panel body still
+   owns the inset, so this must not re-pad. */
+.ds-pattern-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  max-width: var(--measure);
+  min-width: 0;
+}
+.ds-pattern-notes p { margin: 0; overflow-wrap: anywhere; }
+/* Inline literals inside a note read as quoted machinery, not as body copy —
+   same tonal chip treatment .chat-bubble code uses. */
+.ds-pattern-notes code {
+  font-family: var(--ff-mono);
+  /* em-relative on purpose: inline code must track whatever size the
+     surrounding prose is set at (the mono face runs optically large next to
+     the system stack, hence 0.92). An absolute --fs-* tier would decouple it
+     from its own paragraph and break at every containing type size. */
+  font-size: 0.92em;
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+  padding: 0 var(--space-1);
+  border-radius: var(--r-hair);
+}
+.ds-pattern-notes strong { color: var(--fg); font-weight: 600; }
+
+/* .panel.panel-docs — documentation/annotation chrome, visibly different from
+   the plain .panel the real interface renders in. aicat stacks its "about
+   this kit" caption directly under the live chat surface; identical card
+   chrome on both made the meta-explanation read as part of the product
+   instead of a caption about it. Dashed border reuses the .ds-dropzone
+   affordance vocabulary (a dashed edge already reads as "not solid content"
+   in this system) and the tint is a quiet, low-saturation wash rather than
+   an accent color, so it never competes with real accent-toned UI state. */
+.panel.panel-docs {
+  border-style: dashed;
+  border-color: var(--rule-strong);
+  background: color-mix(in oklab, var(--fg) 4%, var(--bg-2));
+  box-shadow: none;
+}
+.panel.panel-docs .panel-title {
+  color: var(--fg-3);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0;
+}
+.panel.panel-docs .panel-title::before {
+  content: 'docs · ';
+  color: var(--fg-3);
+}
+
+/* .ds-kit-controls — collapsed-by-default dev/demo toggle drawer. Reference
+   state-toggle pills (ready/loading/empty/error and similar) are scaffolding
+   for exercising a kit's other states, not live content; sitting exposed in
+   the flow next to real content made them read as leftover dev debris. A
+   native <details>/<summary> disclosure needs no bespoke open/close state or
+   JS and is keyboard/AT-operable for free — closed by default, opens on
+   click or Enter/Space on the summary. */
+.ds-kit-controls {
+  border: var(--bw-hair) dashed var(--rule);
+  border-radius: var(--r-2);
+  margin: 0 0 var(--space-4);
+  background: var(--bg);
+}
+.ds-kit-controls summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+  list-style: none;
+}
+.ds-kit-controls summary::-webkit-details-marker { display: none; }
+.ds-kit-controls summary::before { content: '[+] '; }
+.ds-kit-controls[open] summary::before { content: '[-] '; }
+.ds-kit-controls summary:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+.ds-kit-controls-body {
+  padding: 0 var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Swatch cell wrapper (system_primer pairs it with .ds-swatch-col, which owns
+   the column/gap). This adds only what the wrapper itself needs: a minimum-zero
+   track so long token names ellipsize inside the grid instead of widening it. */
+.ds-swatch { min-width: 0; }
+.ds-swatch .ds-swatch-name { overflow-wrap: anywhere; }
+
+/* Chat kit page root — the thread must own the leftover column height rather
+   than growing the page, so the composer stays on screen. Pairs with
+   .ds-chat-layout (flex column, flex:1) which is already defined above. */
+.chat-kit-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Terminal caret — a solid block that sits on the last demo line. Sized in ch
+   so it tracks the mono column it follows. The blink is motion, so it is
+   declared ONLY inside prefers-reduced-motion: no-preference (the same
+   opt-in shape .cm-ch-spinner / .cm-vs-label::before use); with reduced
+   motion the caret is a steady block, still marking the cursor position. */
+.cursor-blink {
+  display: inline-block;
+  width: 1ch;
+  height: 1em;
+  margin-left: var(--space-1);
+  background: var(--accent);
+  vertical-align: text-bottom;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cursor-blink { animation: ds-cursor-blink 1s step-end infinite; }
+  @keyframes ds-cursor-blink { 50% { opacity: 0; } }
+}
+
+/* == appended: panel width modifier == */
+/* .panel.panel-inline-wide — a width-capped inline note panel. Companion to
+   the .panel-inline / .panel-wide modifiers in panel-row.css: those two change
+   the panel's SURFACE (tonal fill / chrome-stripped), this one changes only
+   its MEASURE, so it composes with either. Introduced when ui_kits/docs's
+   `[!] note` panel traded `style="max-width:640px"` for a class (the inline-
+   style sweep) but never got a rule written, leaving that panel to run the
+   full column width. 640px is the note measure, deliberately narrower than
+   --measure-narrow (760px): the aside is meant to read as a set-aside block
+   against the surrounding prose, not to match its column. It is a literal
+   rather than a new token because it has exactly one consumer — promote it to
+   --measure-note the moment a second surface wants the same cap.
+   `margin-right: auto` (not `margin: 0 auto`) keeps the panel left-aligned to
+   the prose it interrupts and preserves .panel's own --space-4 stack margin. */
+.panel.panel-inline-wide {
+  max-width: 640px;
+  margin-right: auto;
+}

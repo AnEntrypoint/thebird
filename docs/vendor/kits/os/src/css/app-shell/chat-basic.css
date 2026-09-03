@@ -1,0 +1,12 @@
+
+/* ============================================================
+   Chat — minimal styles (placeholder for full chat surface)
+   ============================================================ */
+.ds-chat { display: flex; flex-direction: column; gap: 12px; padding: var(--space-4); }
+.ds-chat-msg { padding: 12px 18px; background: var(--bg-2); border-radius: var(--r-3); max-width: min(90vw, 36em); }
+.ds-chat-msg.user { background: var(--accent-tint); color: var(--fg); align-self: flex-end; }
+.ds-chat-md { font-size: var(--fs-sm); line-height: 1.6; }
+.ds-chat-composer { display: flex; gap: 8px; padding: var(--space-4); }
+.ds-chat-composer input { flex: 1; padding: 13px 18px; background: var(--bg-2); border: 0; border-radius: var(--r-pill); font-family: inherit; font-size: var(--fs-sm); color: var(--fg); }
+.ds-chat-composer input:focus-visible { box-shadow: var(--focus-ring-inset); }
+

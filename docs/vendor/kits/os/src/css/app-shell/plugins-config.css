@@ -1,0 +1,143 @@
+/* ============================================================
+   PluginsConfig — plugin/extension list + detail modal.
+   ============================================================ */
+
+.ds-plugins-overlay {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: color-mix(in oklab, var(--ink) 35%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--space-3);
+}
+.ds-plugins-modal {
+  width: min(860px, 100%); height: min(76vh, 720px);
+  background: var(--bg); border: var(--bw-hair) solid var(--rule); border-radius: var(--r-3);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: var(--shadow-3, 0 8px 32px rgba(0,0,0,0.18));
+}
+.ds-plugins-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--bw-hair) solid var(--rule); flex: 0 0 auto;
+}
+.ds-plugins-title { font-size: var(--fs-md); font-weight: 600; color: var(--fg); }
+.ds-plugins-close {
+  background: none; border: none; color: var(--fg-3); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: var(--r-1);
+}
+.ds-plugins-close:hover { background: var(--bg-2); color: var(--fg); }
+.ds-plugins-close:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+.ds-plugins-body { flex: 1 1 auto; display: flex; overflow: hidden; }
+
+.ds-plugins-sidebar {
+  width: 245px; flex: 0 0 auto; overflow-y: auto;
+  border-right: var(--bw-hair) solid var(--rule); background: var(--bg-2);
+  padding: var(--space-2);
+}
+.ds-plugins-sidebar-status {
+  padding: var(--space-3) var(--space-2); font-size: var(--fs-sm); color: var(--fg-3);
+}
+.ds-plugins-sidebar-status.ds-plugins-status-error { color: var(--flame); }
+.ds-plugins-list { display: flex; flex-direction: column; gap: 2px; }
+
+.ds-plugins-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: var(--space-2); border-radius: var(--r-2);
+  background: none; border: var(--bw-hair) solid transparent; text-align: left; cursor: pointer;
+  color: var(--fg); font: inherit;
+  transition: background var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease);
+}
+.ds-plugins-row:hover { background: var(--bg-3, var(--bg)); }
+.ds-plugins-row.active { background: var(--accent-tint); border-color: var(--accent); }
+.ds-plugins-row:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+.ds-plugins-row-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ds-plugins-row-name {
+  font-family: var(--ff-body); font-size: var(--fs-sm); color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-plugins-row-meta {
+  font-size: var(--fs-micro); color: var(--fg-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-plugins-row-busy { flex: 0 0 auto; font-size: var(--fs-micro); color: var(--fg-3); }
+
+.ds-plugins-dot {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
+}
+.ds-plugins-dot.tone-add { background: var(--green-2); }
+.ds-plugins-dot.tone-delete { background: var(--flame); }
+.ds-plugins-dot.tone-neutral { background: var(--fg-3); }
+
+.ds-plugins-main { flex: 1 1 auto; overflow-y: auto; padding: var(--space-4); }
+
+.ds-plugins-empty {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); color: var(--fg-3);
+}
+
+.ds-plugins-detail { display: flex; flex-direction: column; gap: var(--space-4); max-width: 640px; }
+.ds-plugins-detail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+}
+.ds-plugins-detail-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ds-plugins-detail-title .name {
+  font-family: var(--ff-body); font-size: var(--fs-md); font-weight: 600; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-plugins-version { font-size: var(--fs-micro); color: var(--fg-3); }
+
+/* Same track/knob proportions as the shared .ds-toggle primitive
+   (states-interactions.css) -- kept as its own class since ds-plugins-toggle
+   is a plain <button>+.on instead of .ds-toggle's [aria-checked] contract,
+   but sized and colored to match it exactly rather than drifting. */
+.ds-plugins-toggle {
+  flex: 0 0 auto; width: 40px; height: 22px; border-radius: var(--r-pill, 999px); border: none; padding: 0;
+  background: var(--rule); position: relative; cursor: pointer;
+  transition: background var(--dur-snap) var(--ease);
+}
+.ds-plugins-toggle.on { background: var(--accent-ink); }
+.ds-plugins-toggle[disabled] { cursor: wait; opacity: 0.65; }
+.ds-plugins-toggle-knob {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg); box-shadow: var(--shadow-1, 0 1px 4px rgba(0,0,0,0.22));
+  transition: left var(--dur-snap) var(--ease);
+}
+.ds-plugins-toggle.on .ds-plugins-toggle-knob { left: 21px; }
+
+.ds-plugins-fact-grid {
+  display: grid; grid-template-columns: minmax(96px, 130px) minmax(0, 1fr);
+  gap: 9px var(--space-3); font-size: var(--fs-sm);
+}
+.ds-plugins-fact-label { color: var(--fg-3); }
+.ds-plugins-fact-value { color: var(--fg-2); }
+.ds-plugins-fact-value.ds-plugins-mono { font-family: var(--ff-mono); overflow-wrap: anywhere; }
+.ds-plugins-fact-value.tone-text-add { color: var(--green-2); }
+.ds-plugins-fact-value.tone-text-delete { color: var(--flame); }
+.ds-plugins-fact-value.tone-text-neutral { color: var(--fg-3); }
+
+.ds-plugins-group-label {
+  font-size: var(--fs-micro); font-weight: 600; color: var(--fg-3);
+  letter-spacing: 0; margin-bottom: 6px;
+}
+.ds-plugins-requires-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.ds-plugins-chip {
+  font-family: var(--ff-mono); font-size: var(--fs-micro); color: var(--fg-2);
+  border: var(--bw-hair) solid var(--rule); border-radius: var(--r-1); padding: 2px 7px;
+}
+.ds-plugins-requires-empty { font-size: var(--fs-sm); color: var(--fg-3); }
+
+.ds-plugins-detail-actions { display: flex; gap: var(--space-2); }
+.ds-plugins-btn {
+  padding: 6px 12px; background: none; border: var(--bw-hair) solid var(--rule); border-radius: var(--r-2);
+  color: var(--fg-2); cursor: pointer; font-size: var(--fs-sm);
+}
+.ds-plugins-btn:hover { background: var(--bg-2); }
+.ds-plugins-btn[disabled] { cursor: not-allowed; opacity: 0.5; }
+
+.ds-plugins-footer {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--bw-hair) solid var(--rule); flex: 0 0 auto;
+}
+.ds-plugins-footer-count { font-size: var(--fs-micro); color: var(--fg-3); }

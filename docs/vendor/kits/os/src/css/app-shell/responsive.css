@@ -1,0 +1,315 @@
+
+/* ============================================================
+   Responsive Design — Mobile (480px), Tablet (1024px), Desktop (1440px+)
+   ============================================================ */
+
+/* Breakpoint reference (CSS custom properties can't be used in @media queries,
+   so these are documented here for consistency — always use these exact values):
+   - Mobile/tablet boundary: 768px (max-width) — used for compact nav/sidebar
+     collapse (catalog-theme.css, sidebar-misc.css). Note: kits-appended.css
+     uses 760px for the same kind of collapse in a few places — a near-miss
+     of this value, worth aligning to 768px when touched.
+   - Tablet/desktop boundary: 900px (max-width) / 901px (min-width) — used for
+     main layout reflow (hero-content.css, responsive2-workspace.css)
+   - Tablet landscape band: 768px–1024px (min-width 768px / max-width 1024px) —
+     used in this file (responsive.css) for a specific tablet treatment;
+     aligned to the 768px mobile/tablet boundary above (was 481px, a near-miss).
+*/
+
+/* --------------------------------------------------------------------
+   Mobile Portrait Breakpoint (480px and below)
+   ---------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  /* App Layout: single-column + drawer is handled once in the ≤900px block;
+     no need to re-declare grid-template-columns here (was a redundant !important). */
+
+  /* Topbar Navigation: stack the nav onto its own full-width row below the
+     brand and let it scroll horizontally. The brand stays on the first row;
+     nav wraps to a second row at 100% width (flex-wrap on .app-topbar). */
+  .app-topbar {
+    gap: var(--space-2); padding: var(--space-2-75) var(--space-3);
+  }
+  /* When the topbar is folded into .app-chrome it is a flex:0 0 auto child, so
+     it sizes to its nav's content and overflows the viewport instead of letting
+     the nav's own overflow-x:auto engage. Constrain it to the chrome width so
+     the horizontally-scrolling nav stays inside the screen. */
+  .app-chrome > .app-topbar { max-width: 100%; min-width: 0; flex-basis: 100%; }
+  .app-topbar > nav {
+    flex: 1 1 100%; margin-left: 0; order: 3; min-width: 0; max-width: 100%;
+    display: flex; gap: var(--space-hair); flex-wrap: nowrap;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    /* Fade the trailing edge so a clipped last item (e.g. "source ->" cut to
+       "sour") reads as scrollable content, not a broken/truncated label. */
+    mask-image: linear-gradient(90deg, var(--fg) 0 calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, var(--fg) 0 calc(100% - 28px), transparent 100%);
+  }
+  .app-topbar nav::-webkit-scrollbar { display: none; }
+  .app-topbar nav a {
+    flex: 0 0 auto; padding: var(--space-2-5) var(--space-2-75); min-height: 44px; white-space: nowrap;
+  }
+  .brand { font-size: var(--fs-tiny); font-weight: 600; }
+
+  /* Search */
+  .app-search {
+    display: none; /* Hide search on mobile unless explicitly pinned */
+  }
+
+  /* Main Content */
+  .app-main { padding: var(--space-4) var(--space-2); }
+  .app-main.narrow { max-width: 100%; margin: 0; }
+
+  /* Headings stay on the fluid base clamps (cqi) — no mobile re-clamp. */
+
+  /* Panel & Row */
+  .panel { margin: 0 0 var(--space-3); }
+  .panel-head { padding: var(--space-3) var(--space-2); gap: var(--space-2); }
+  .panel-body { padding: var(--space-2); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .panel-body > table { min-width: 100%; }
+
+  /* Scoped to the `.app` shell so this wins on SPECIFICITY (0,2,0) rather than
+     on an !important flag. Three rules would otherwise beat a bare `.row`
+     (0,1,0) here: `.row.row-nocode` (0,2,0, panel-row.css) out-specifies it,
+     and the `@media(481-1024)` + `@media(max-width:768px)` `.row` rules later
+     in THIS file win on source order (a media query adds no specificity).
+     `.app` is safe to require: `.app-body`/`.row` only ever render inside it
+     (single call site, shell.js AppShell). */
+  .app .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2); padding: var(--space-2-75) var(--space-3);
+    row-gap: var(--space-1);
+  }
+  .row .sub { grid-column: 1 / -1; order: 3; }
+  .row .title { font-size: var(--fs-sm); }
+  /* Changelog carries 3 children: give date+ver line one, message wraps below
+     (the generic 2-col .row override staggers it into an implicit row).
+     Needs (0,3,0) to clear BOTH the `.app .row` rule directly above and
+     `.ds-changelog-row`'s own !important base in hero-content.css — an
+     !important base can only be beaten by another !important, so this one
+     stays until that upstream flag is removed (hero-content.css is outside
+     this change's scope). */
+  .app .row.ds-changelog-row { grid-template-columns: minmax(70px, 10ch) minmax(0, 1fr) !important; }
+  .ds-changelog-row .title { grid-column: 1 / -1; }
+
+  .btn:not(.btn-sm):not(.btn-lg), .btn-primary:not(.btn-sm):not(.btn-lg), .btn-ghost:not(.btn-sm):not(.btn-lg) {
+    /* 11px vertical is optical, not scale drift: --space-2-75 (12) would tip
+       the intrinsic box past the 44px min-height floor below and make the
+       floor dead, changing the mobile button rhythm. */
+    padding: 11px var(--space-3); font-size: var(--fs-tiny);
+    min-height: 44px; /* Touch target minimum */
+  }
+
+  /* File Grid */
+  .ds-file-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-half);
+  }
+  .ds-file-row {
+    gap: var(--space-2); padding: var(--space-2-5) var(--space-2-75);
+    font-size: var(--fs-xs);
+  }
+  .ds-file-open { gap: var(--space-2-5); }
+  /* At mobile row widths, a fixed-size meta column (date/size) plus the
+     always-visible action buttons leave the flexible title only a few px —
+     not enough for even one legible character before the two collide. Drop
+     the metadata column here; the title + actions still fully identify and
+     operate on the row, and meta stays available in the file viewer. */
+  .ds-file-row .ds-file-meta { display: none; }
+  .ds-file-row .ds-file-actions { opacity: 1; }
+  /* H4: floor finger-sized controls so file actions/sort/filter/breadcrumb are
+     reachable by touch (cohesion sweep). */
+  .ds-file-act, .ds-file-sort-btn, .ds-crumb-seg { min-height: 44px; }
+  .ds-file-filter-input { min-height: 44px; }
+  .ds-file-check, .ds-file-selectall, .ds-density-btn { min-height: 44px; min-width: 44px; }
+
+  /* Chat */
+  .chat-stack { max-width: 100%; min-width: 0; }
+  .chat-bubble {
+    padding: var(--space-2-5) var(--space-2-75); font-size: var(--fs-sm);
+  }
+  .chat-avatar { width: 28px; height: 28px; font-size: 11px; }
+  .chat-msg:hover { padding: var(--space-1) 0; margin: 0; background: transparent; }
+  .chat-composer { padding: var(--space-2); gap: var(--space-1-75); }
+  .chat-composer textarea { padding: var(--space-2-5) var(--space-2-75); font-size: var(--fs-sm); }
+
+  /* KPI Cards */
+  .kpi {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--space-2);
+  }
+  .kpi-card { padding: var(--space-3); }
+  /* Container-relative like the base rule (5vw sized against the viewport and
+     jumped across the breakpoint). */
+  .kpi-card .num { font-size: clamp(22px, 8cqi, 32px); }
+
+  /* Empty State */
+  .empty { padding: var(--space-5); font-size: var(--fs-xs); }
+
+  /* Form */
+  .row-form { gap: var(--space-2-5); padding: var(--space-3); }
+  .row-form input,
+  /* 11px block is the tuned inset that lines the textarea baseline up with the
+     sibling input; --space-2-75 (12) would offset the two by 1px each side. */
+  .row-form textarea { padding: 11px var(--space-2-75); font-size: var(--fs-sm); }
+
+  /* Hero Section — keep fluid base font-size, just unconstrain width on mobile. */
+  .ds-hero { padding: var(--space-6) 0 var(--space-5); }
+  .ds-hero-title { max-width: 100%; }
+  .ds-hero-body { max-width: 100%; }
+
+  /* Table Responsiveness */
+  table { font-size: var(--fs-xs); }
+  table th,
+  table td { padding: var(--space-2-5) var(--space-2-75); }
+
+  /* CLI Block */
+  .cli {
+    flex-direction: column; align-items: flex-start; gap: var(--space-2-5);
+    padding: var(--space-3) var(--space-2-75); font-size: var(--fs-xs);
+  }
+  .cli .copy { padding: var(--space-1-75) var(--space-2-75); font-size: var(--fs-micro); }
+}
+
+/* --------------------------------------------------------------------
+   Container Query Responsive (720px and below)
+   ---------------------------------------------------------------------- */
+@container (max-width: 760px) {
+  /* `.app`-scoped for specificity, not an !important flag: the bare `.app-body`
+     (0,1,0) was out-specified by `.app-body.no-side` (0,2,0) in topbar.css, so
+     a sidebar-less shell kept its base template. `.app .app-body` is (0,2,0)
+     and lands later in source, beating both topbar.css rules on merit. */
+  .app .app-body { grid-template-columns: 1fr; }
+  .app-side-shell { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .app-topbar nav { font-size: var(--fs-xs); gap: var(--space-2-75); }
+  /* Same (0,2,0) lift as the 480px block above — clears `.row.row-nocode` and
+     the later `@media` `.row` rules in this file without a flag. */
+  .app .row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-1); }
+  .row .sub { grid-column: 1 / -1; order: 3; }
+  /* (0,3,0) + !important: still required to beat `.ds-changelog-row`'s
+     !important base in hero-content.css (see the 480px block). */
+  .app .row.ds-changelog-row { grid-template-columns: minmax(70px, 10ch) minmax(0, 1fr) !important; }
+  .ds-changelog-row .title { grid-column: 1 / -1; }
+}
+
+/* --------------------------------------------------------------------
+   Tablet Landscape Breakpoint (768px to 1024px)
+   ---------------------------------------------------------------------- */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* App Layout — side handled by 900px drawer block; restore for 901-1024 */
+  .app-side a {
+    padding: var(--space-2-75) var(--space-2-75); gap: var(--space-2);
+    grid-template-columns: 16px 1fr auto;
+    font-size: var(--fs-xs);
+    min-height: 44px;
+  }
+
+  /* Topbar Navigation (flex container — no grid-template here) */
+  .app-topbar {
+    gap: var(--space-3); padding: var(--space-2-75) var(--space-4);
+  }
+  .app-topbar nav {
+    display: flex; gap: var(--space-2); font-size: var(--fs-xs);
+    flex-wrap: wrap;
+  }
+  .app-topbar nav a {
+    padding: var(--space-2-75) var(--space-2-75); font-size: var(--fs-xs);
+    min-height: 44px;
+  }
+  .brand { font-size: var(--fs-sm); }
+
+  /* Search */
+  .app-search {
+    display: inline-flex;
+    max-width: 280px; font-size: var(--fs-xs);
+    /* 14px inline is between --space-2-75 (12) and --space-3 (16) with no tier;
+       it is the width that centers the search glyph against the 280px max-width
+       field. Snapping either way reads as a mis-centered control. */
+    padding: var(--space-2) 14px;
+  }
+
+  /* Main Content */
+  .app-main { padding: var(--space-6) var(--space-4); }
+  .app-main.narrow { max-width: 100%; }
+
+  /* Headings stay on the fluid base clamps (cqi) — no tablet re-clamp. */
+
+  /* File list — single column rows on tablet (cards only via data-columns) */
+  .ds-file-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+    /* 14px inline (no tier between 12 and 16) is the tablet row inset that
+       keeps the 24px icon column optically flush with the panel edge. */
+    gap: var(--space-2-75); padding: var(--space-2-75) 14px;
+  }
+
+  /* Chat Bubbles */
+  .chat-stack { max-width: min(75%, 420px); }
+  .chat-bubble {
+    /* 11px/14px are the tuned tablet bubble insets; neither is on the scale
+       (11 sits between --space-2-5 and --space-2-75, 14 between --space-2-75
+       and --space-3) and snapping visibly re-pitches every bubble in a thread. */
+    padding: 11px 14px; font-size: var(--fs-sm);
+  }
+  .chat-avatar { width: 32px; height: 32px; font-size: 12px; }
+
+  /* KPI Cards */
+  .kpi {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .btn:not(.btn-sm):not(.btn-lg), .btn-primary:not(.btn-sm):not(.btn-lg), .btn-ghost:not(.btn-sm):not(.btn-lg) {
+    /* 18px inline has no tier (--space-3 is 16, --space-3-5 is 20); it is the
+       tablet CTA width tuned against the 12px vertical, so snapping changes
+       the button aspect on the most visible control in the kit. */
+    padding: var(--space-2-75) 18px; font-size: var(--fs-sm);
+  }
+
+  /* Panel - keep the head on the body's left axis at laptop widths too. */
+  .panel-head { padding: var(--space-2) var(--space-3); }
+  .panel-body { padding: var(--space-2) var(--space-3); }
+
+  /* Hero — fluid base font-size; only width unconstrained on tablet. */
+  .ds-hero { padding: var(--space-7) 0 var(--space-6); max-width: 100%; }
+  .ds-hero-title { max-width: 100%; }
+
+  /* Row */
+  .row {
+    grid-template-columns: minmax(90px, 12ch) minmax(0, 1fr) auto;
+    /* 14px block (no tier between 12 and 16) is the tablet row height tuned
+       against the 12ch code column; snapping re-pitches the whole list. */
+    gap: var(--space-2); padding: 14px var(--space-3);
+  }
+}
+
+/* --------------------------------------------------------------------
+   Mid Breakpoint (768px and below) — collapse sidebar + simplify row grid
+   ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Sidebar stacks above main rather than sitting beside it */
+  .app-body { grid-template-columns: 1fr; }
+  .app-side { width: 100%; max-width: none; }
+
+  /* Row drops the leading code column; title + meta share the line */
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+  }
+  .row .code { display: none; }
+  /* Changelog's date lives in span.code — hiding it is data loss, not reflow. */
+  .ds-changelog-row .code { display: inline; font-size: var(--fs-micro); }
+  .row .sub { grid-column: 1 / -1; }
+}
+
+/* --------------------------------------------------------------------
+   Desktop Breakpoint Enhancements (1025px and up)
+   ---------------------------------------------------------------------- */
+@media (min-width: 1025px) {
+  /* Chat Bubbles */
+  .chat-stack { max-width: min(70%, 480px); }
+
+  /* KPI Cards */
+  .kpi {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-3);
+  }
+}

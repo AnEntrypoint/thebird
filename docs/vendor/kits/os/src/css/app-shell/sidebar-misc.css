@@ -1,0 +1,138 @@
+/* ============================================================
+   Sidebar polish: hide zero-count badges; tonal active state;
+   monospace count chips.
+   ============================================================ */
+/* Rail row rhythm: the sidebar rows (bins/labels) previously packed at
+   --space-hair (2px) margin-bottom while the main content column reads at
+   the --space-5/--space-3 outer/inner rhythm (AGENTS.md "panel rhythm").
+   Bumping the inter-row gap to --space-1-5 (5px) — still a tight, dense-app
+   value, but enough that adjacent rows no longer read as glued together —
+   and making it density-aware via [data-density] mirrors the existing
+   compact-density override pattern in files.css (.ds-file-grid[data-density]).
+   [data-density="compact"] keeps the old tighter feel for long rail lists;
+   [data-density="spacious"] opens it further. */
+.app-side a { margin-bottom: var(--space-1-5); }
+.app-side[data-density="compact"] a,
+.app-side-shell[data-density="compact"] .app-side a { margin-bottom: var(--space-hair); }
+.app-side[data-density="spacious"] a,
+.app-side-shell[data-density="spacious"] .app-side a { margin-bottom: var(--space-2); }
+
+.app-side .count {
+  padding: 1px 8px; font-size: var(--fs-micro); font-weight: 700;
+  font-family: var(--ff-body); letter-spacing: 0.04em;
+  min-width: 18px; text-align: center;
+}
+.app-side a:has(> .count:empty) > .count,
+.app-side .count:empty { display: none; }
+.app-side a .glyph { font-family: var(--ff-body); font-size: 13px; font-weight: 600; color: var(--fg-3); text-align: center; }
+.app-side a.active .glyph { color: var(--accent-ink); }
+
+/* .ds-side-tree — two-level project-tree group (parent <details> + nested
+   child rows), the sidebar's hierarchy primitive. Sits alongside Side()'s
+   own flat .app-side-group rows but carries genuine nesting: a summary row
+   (parent) disclosing child conversation rows, closer to a project-tree
+   sidebar than a single flat list. */
+.ds-side-tree { border: 0; }
+.ds-side-tree-summary {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--r-1);
+  font-family: var(--ff-mono); font-size: var(--fs-sm); color: var(--fg-2);
+  cursor: pointer; list-style: none;
+}
+.ds-side-tree-summary::-webkit-details-marker { display: none; }
+.ds-side-tree-summary:hover { background: var(--bg-2); color: var(--fg); }
+.ds-side-tree-summary:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+.ds-side-tree-summary .glyph { font-family: var(--ff-body); font-size: 13px; font-weight: 600; color: var(--fg-3); }
+.ds-side-tree-summary .count {
+  margin-left: auto; padding: 1px 8px; font-size: var(--fs-micro); font-weight: 700;
+  font-family: var(--ff-body); letter-spacing: 0.04em; min-width: 18px; text-align: center;
+  color: var(--fg-3); background: var(--bg-2); border-radius: var(--r-pill, 999px);
+}
+.ds-side-tree-children {
+  display: flex; flex-direction: column;
+  padding-left: var(--space-4);
+  gap: var(--space-hair);
+}
+.ds-side-tree-child {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-1);
+  font-family: var(--ff-mono); font-size: var(--fs-xs); color: var(--fg-3);
+  text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ds-side-tree-child:hover, .ds-side-tree-child:focus-visible { background: var(--bg-2); color: var(--fg); }
+.ds-side-tree-child:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+.ds-side-tree-child .glyph { font-family: var(--ff-body); color: var(--fg-3); }
+
+/* -- select primitive --------------------------------------------------- */
+.ds-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 32px; /* shared control floor with .btn/.btn-primary/.btn-ghost */
+    padding: 10px 30px 10px 14px; /* right gap clears the chevron */
+    background: var(--bg-2);
+    border: 0;
+    border-radius: var(--r-2);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    color: var(--fg);
+    /* Clip long option text gracefully - a select that cuts 'Claude Sonnet
+       (latest' mid-parenthesis reads as broken; ellipsis reads as truncated. */
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--fg-3) 50%),
+        linear-gradient(135deg, var(--fg-3) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+}
+.ds-select:focus-visible { box-shadow: var(--focus-ring-inset); }
+.ds-select:hover { background-color: var(--bg-3); }
+
+/* -- chat composer autogrow polish (sizing lives in the primary block) -- */
+.chat-composer textarea {
+    transition: height var(--dur-snap) var(--ease);
+}
+.chat-composer textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* -- mobile responsive: chat -------------------------------------------- */
+@media (max-width: 768px) {
+    .chat-stack { max-width: 100%; }
+    .chat-msg { padding: 4px 0; }
+    .chat-msg:hover { padding: 4px 0; margin: 0; border-radius: 0; background: transparent; }
+    .chat-bubble { font-size: var(--fs-sm); padding: 10px 14px; }
+    .chat-avatar { width: 28px; height: 28px; font-size: 12px; }
+    .chat-composer { padding: 8px; }
+    .chat-composer textarea { padding: 10px 12px; }
+}
+
+/* --- landscape orientation: reduce vertical space for chrome + composer --- */
+@media (max-height: 500px) and (orientation: landscape) {
+    /* Keep horizontal padding: 0 put the textarea/focus ring flush on the edge. */
+    .chat-composer { padding: 6px var(--space-2); }
+    .chat-composer textarea { min-height: 36px; max-height: 96px; }
+    .chat-composer .chat-composer-hint,
+    .chat-composer .chat-composer-context { display: none; }
+    /* Compact the shell chrome: ~114px of topbar+crumb+status is a third of a
+       360px-tall landscape fold. */
+    :root { --app-topbar-h: 40px; --app-crumb-h: 24px; }
+    .app-chrome { padding: 4px var(--pad-x); }
+    .app-status { display: none; }
+    .ws-crumb { min-height: 32px; }
+    .ds-hero { padding: var(--space-4) 0 var(--space-3); }
+    .ds-hero-title { font-size: clamp(28px, 6cqi, 56px); }
+}
+

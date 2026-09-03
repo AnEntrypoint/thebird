@@ -1,0 +1,421 @@
+{
+  "lockVersion": 1,
+  "entries": {
+    "bootstrap.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "9c03d251737e573dc7f8024611df1785e1d9cb0a2ebe992a801f7df56b382f72",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "community-app.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "b20c5508f34a3ab4d61e5841b4c37f26edbf99804b93b1a9b87ada0931d6e280",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "components": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "dir",
+      "sha256": "455d4ae6eb6e28b20d4f963b8019716b593ded55565b3fcbfb145ba1fe1cea87",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "components.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "668ee01760556a3aa9ddbd4fe4366a83237888ecda6a23bc7aef8561eb99577c",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "copy-code.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "691f4b2cd4965ecb759fa21c0f4def96fe5ffe826a15b26807757e68a6545478",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "debug.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "4f2328790e714d63ef57b357a8eadd5a354a8b370dd77c059a66f8f00d000447",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "deck-stage.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "5b59e42de02faec17416748a9f50f69668786f58500b3bb636f3dc11f8f10b81",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "file-mention.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "93765f6b32c9c4659623196bd08a0b01b4baefa416faecd37f16dc3d89287221",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "freddie/freddie.js": {
+      "package": "freddie",
+      "version": "0.0.256",
+      "source": "local:C:\\dev\\freddie",
+      "type": "file",
+      "sha256": "972cfa6c37a80a24f4faa1113d0667f33574154195c3f6a9cd68153cddd6ad50",
+      "updatedAt": "2026-08-04T14:02:08.799Z"
+    },
+    "freddie/freddie.js.map": {
+      "package": "freddie",
+      "version": "0.0.256",
+      "source": "local:C:\\dev\\freddie",
+      "type": "file",
+      "sha256": "dcc44ba1cd34ecab93b7178a88c1a18932f63ea5f819b26e4d3c457af81c726f",
+      "updatedAt": "2026-08-04T14:02:08.799Z"
+    },
+    "freddie/skills": {
+      "package": "freddie",
+      "version": "0.0.257",
+      "source": "npm:freddie@latest",
+      "type": "dir",
+      "sha256": "1df9100726e236e6e8a0fd09cf814cd6543b4b0fe9ef982288c724d4f8da6c67",
+      "updatedAt": "2026-08-04T14:22:15.417Z"
+    },
+    "gm/bert.version": {
+      "package": "agentplug-bert",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-bert-bin@latest",
+      "type": "file",
+      "sha256": "9407b671bcdb6f78b46bad2749a412011a1162350b5ee24ed6702ebe4d333dbd",
+      "updatedAt": "2026-07-30T09:57:36.289Z"
+    },
+    "gm/bert.wasm": {
+      "package": "agentplug-bert",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-bert-bin@latest",
+      "type": "file",
+      "sha256": "ba97dd6370527c9af03276c659ea5c49a4ce5eb275145db3a5ed1e8d48aacef8",
+      "updatedAt": "2026-07-30T09:57:36.289Z"
+    },
+    "gm/bert.wasm.sha256": {
+      "package": "agentplug-bert",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-bert-bin@latest",
+      "type": "file",
+      "sha256": "de8fa76adbcc16b57a4772fd6d87925f28e8d3c8bc189a14e137053b51e2feba",
+      "updatedAt": "2026-07-30T09:57:36.289Z"
+    },
+    "gm/instructions": {
+      "package": "gm-plugkit",
+      "version": "0.1.1180",
+      "source": "npm:gm-plugkit@latest",
+      "type": "dir",
+      "sha256": "a344df9213b03e18253dcea2bfd1a476f5d01413aeb92eb7c6559172260bef8b",
+      "updatedAt": "2026-08-04T14:10:35.233Z"
+    },
+    "gm/libsql.version": {
+      "package": "agentplug-libsql",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-libsql-bin@latest",
+      "type": "file",
+      "sha256": "bf5b974ad486653f598e890c0432d30d7a9eb2d45afec4815adb7f316ba6589b",
+      "updatedAt": "2026-07-30T13:11:09.736Z"
+    },
+    "gm/libsql.wasm": {
+      "package": "agentplug-libsql",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-libsql-bin@latest",
+      "type": "file",
+      "sha256": "101b99f277ec490ba5d4bc7f2a5e879cb50aaafe6a6d504d621349ae7b8a284f",
+      "updatedAt": "2026-07-30T13:11:09.736Z"
+    },
+    "gm/libsql.wasm.sha256": {
+      "package": "agentplug-libsql",
+      "version": "latest",
+      "source": "github-release:AnEntrypoint/agentplug-libsql-bin@latest",
+      "type": "file",
+      "sha256": "7356af63e0d3c2c941278883281c6e7e52cbd323dfb3f439e99f5a1310a30bfe",
+      "updatedAt": "2026-07-30T13:11:09.736Z"
+    },
+    "gm/oxibrowser.version": {
+      "package": "oxibrowser-core",
+      "version": "local",
+      "source": "local:C:\\dev\\oxibrowser",
+      "type": "file",
+      "sha256": "fdcd95567703c8d0b9bc7bc6656f9c9a0c6beef632e06411ef281b50e338d9e7",
+      "updatedAt": "2026-08-09T06:07:42.435Z"
+    },
+    "gm/oxibrowser.wasm": {
+      "package": "oxibrowser-core",
+      "version": "local",
+      "source": "local:C:\\dev\\oxibrowser",
+      "type": "file",
+      "sha256": "b67ee4f65e388176b277167724b52db6f09f40299d23b068a2156bb68663ce6d",
+      "updatedAt": "2026-08-09T06:07:42.435Z"
+    },
+    "gm/oxibrowser.wasm.sha256": {
+      "package": "oxibrowser-core",
+      "version": "local",
+      "source": "local:C:\\dev\\oxibrowser",
+      "type": "file",
+      "sha256": "20ecd542e9a40e366c5c4f174d4a8e5fcd9af61aeb9bab431eedc37171e4cc85",
+      "updatedAt": "2026-08-09T06:07:42.435Z"
+    },
+    "gm/plugkit-wasm-wrapper.js": {
+      "package": "gm-plugkit",
+      "version": "0.1.1180",
+      "source": "npm:gm-plugkit@latest",
+      "type": "file",
+      "sha256": "79c3012e2a9b6418dfa72755f768138b147ddb50417046f674be6979cc3305f6",
+      "updatedAt": "2026-08-04T14:10:35.233Z"
+    },
+    "gm/plugkit.version": {
+      "package": "gm-plugkit",
+      "version": "0.1.1180",
+      "source": "npm:gm-plugkit@latest",
+      "type": "file",
+      "sha256": "6ebc450c659a108625861ad9ecfd02e1dab60abf8b6e294ecb88aa0bcbc55777",
+      "updatedAt": "2026-08-04T14:10:35.233Z"
+    },
+    "gm/plugkit.wasm": {
+      "package": "gm-plugkit",
+      "version": "0.1.1180",
+      "source": "npm:gm-plugkit@latest",
+      "type": "file",
+      "sha256": "a75e552faf7e6b2c73bc8c71db1add15b83807666db32ca72f9697a47c30fcf6",
+      "updatedAt": "2026-08-04T14:10:35.233Z"
+    },
+    "gm/plugkit.wasm.sha256": {
+      "package": "gm-plugkit",
+      "version": "0.1.1180",
+      "source": "npm:gm-plugkit@latest",
+      "type": "file",
+      "sha256": "d7d97288b44dea049f9837df7c29bb0969bd225348eaf961cd2428955cc1a533",
+      "updatedAt": "2026-08-04T14:10:35.233Z"
+    },
+    "highlight.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "244e210c3b721fc0e3ea01844e4d0f5dde2e2ce31f9186d6047ea3b0ff1377ab",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "html-escape.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "f784ba1e975d97f5b526c3cd51af4c6aa7b089bdc76b20ae31acd9e1afa4ff21",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "i18n.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "2c47700dd4d63d2af59ec3ff7508fc8719ef3ad31df6d5cb361bdb01927188f7",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "idb-outbox.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "7f8a7f080450c5922c673a925ebf58a9850dbe9bd70eec9b20735bab2e0b2ddb",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "index.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "3a2f4c0efd6374c1f81222046575750dfc49243490cb7ebf2f9c31e2c1f7a16c",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "kits/os": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "dir",
+      "sha256": "fba6514398e61ec21186d2f642da53895606341d436e9690a43cc8735e8df2a8",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "lint.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "06a549badce92fc1c43ff7fc6322fa9f4dcdbcc9071665bbc3c3a0397ebe304e",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "locale.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "c9b91bc86e80646d3b4ca82c7a853d8181dffe0460629c30034487a25273a8a1",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "markdown-cache.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "ec9cdcf5a8d23815d8bdb29df90a71ff251748f6b730514cb1f0b12823684ec0",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "markdown.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "97e07cab2716ef8c1aebeb2467f57427228f62b06839866b7a4c119dcc87d491",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "math.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "051836336c2f7242dffa70c3f4df0d870b276015d4a9c1df4da4d9a3b648622f",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "mermaid.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "b02fabec269344b6f392498704ecce97c012f8d717a5f542c708b97e9a37a296",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "motion-toggle.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "f56f5e80f528593e42a9d8addec87d2e3652fc9ad8ede13010f6121dda36707c",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "motion.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "0751533cc92165d6a0a0b3cabb7db5f0a669cfb170c7db4b55fc08d4838ce87e",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "page-html.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "54b79648796dc25f92dd708da127cc089f5feb42bb76503ba7573bfcffc8da52",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "router.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "346ce019262a02cfcd1c6bcdea3ec9f35e602d2ef6bc50dc8df93a63294ab55d",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "shell.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "7024eced3fc815db5577801284e07c38a40fd90b35f9deb828ebc9ba136f1fbf",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "spoint-ecs/package.json": {
+      "package": "@spoint/ecs",
+      "version": "0.1.0",
+      "source": "local:C:\\dev\\spoint\\packages\\ecs",
+      "type": "file",
+      "sha256": "41e0014e23cafe625aefb232e9c36de6d3117c6a92daa7a95860429d79ad645e",
+      "updatedAt": "2026-08-04T14:22:16.027Z"
+    },
+    "spoint-ecs/src": {
+      "package": "@spoint/ecs",
+      "version": "0.1.0",
+      "source": "local:C:\\dev\\spoint\\packages\\ecs",
+      "type": "dir",
+      "sha256": "9ad3f265a12a3d2a407498e0420461048f02e70bee6e7675e94121056c61f57f",
+      "updatedAt": "2026-08-04T14:22:16.027Z"
+    },
+    "styles.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "897a63e30b69ff35d8b8dddd7abeebda6b4f0229b8dac8619e8dd15dc2da030b",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "theme.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "3851a02ad6488ec33de30b4b6f2ac4b47bce413a69ae0e6ef75c3434ff984b5c",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "uid.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "7e847bf6422b469715b926db88c964c7fd788e6055ecf54fc9174dd8047168db",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "virtual-scroll.js": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "file",
+      "sha256": "a46809b0b8b741f72b51f93e4eeb5d1b52ccf6c2b7fda7c1d31820e5c2507cf3",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "web-components": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "dir",
+      "sha256": "aeb5e8b3c514c770a806093864cdb05a632f3a29488e4759e9f2226a37de9ec5",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "webjsx": {
+      "package": "anentrypoint-design",
+      "version": "1.0.30",
+      "source": "local:C:\\dev\\thebird\\vendor-src\\design",
+      "type": "dir",
+      "sha256": "dca695695516abc0d88f5f1e78135fa92e484e4f1a455c604ca403f695d30fb7",
+      "updatedAt": "2026-08-09T12:03:50.938Z"
+    },
+    "markdown-libs/marked.js": {
+      "package": "marked",
+      "version": "15.0.12",
+      "source": "https://cdn.jsdelivr.net/npm/marked@15.0.12/+esm",
+      "type": "file",
+      "sha256": "228b6099dfa443ec020f075eea54a0a6a9f507517595a07e613ffb7981738edf3",
+      "updatedAt": "2026-08-09T16:46:53.233Z"
+    },
+    "markdown-libs/dompurify.js": {
+      "package": "dompurify",
+      "version": "3.2.6",
+      "source": "https://cdn.jsdelivr.net/npm/dompurify@3.2.6/+esm",
+      "type": "file",
+      "sha256": "218b06597bfa71c4565ccfd7b23cc8b47cee4412aa9c86332083980605b335063",
+      "updatedAt": "2026-08-09T16:46:53.233Z"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Agent spec: plan
+# Read-only implementation planning and architecture design.
+name: plan
+description: Read-only implementation planning and architecture design
+whenToUse: Use for planning implementation steps, identifying key files, and analyzing trade-offs before code changes.
+defaultModel: null
+toolPolicy:
+  mode: allowlist
+  tools:
+    - read
+    - glob
+    - grep
+    - web_search
+    - web_fetch
+systemPromptAddition: >
+  You are a read-only planning subagent. You can read files, search the
+  codebase, and produce a plan. You must NOT run shell commands, write files,
+  or make any changes. Do not ask the user questions — produce the best plan
+  you can from available context.
+supportsBackground: false

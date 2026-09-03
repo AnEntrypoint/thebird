@@ -1,0 +1,23 @@
+{
+  "fetchedAt": "2026-04-26T11:50:22.572Z",
+  "entries": {
+    "version": "0.27.2",
+    "base": "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/",
+    "files": [
+      "pyodide.mjs",
+      "pyodide.asm.js",
+      "pyodide.asm.wasm",
+      "python_stdlib.zip",
+      "pyodide-lock.json",
+      "package.json"
+    ],
+    "bundledWheels": [
+      "micropip",
+      "ssl",
+      "sqlite3",
+      "distutils",
+      "packaging",
+      "pyparsing"
+    ]
+  }
+}

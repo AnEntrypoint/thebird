@@ -1,0 +1,605 @@
+/* ============================================================
+   Hero
+   ============================================================ */
+/* RESTYLED 2026 (webjsx-toolkit look): centered-stack hero, replacing the
+   prior asymmetric two-column editorial grid (title-wide / body+aside-offset)
+   per a deliberate house-rule reversal -- shadcn/webjsx-toolkit itself has no
+   asymmetric-grid opinion, and the prior "no centered stack, ever" rule was
+   specific to the retired Acid Editorial identity. All child classes/markup
+   are UNCHANGED (no JS component edit needed) -- only the grid arrangement
+   and each part's own layout (aside becomes a full-width card below the body
+   instead of a right-column card) changed. Centered text, capped measure.
+
+   RE-CENTERED 2026-08-09: reverted the 2026-07-31 de-centering (flex-start +
+   left text-align + left inset) back to a centered stack -- the airy,
+   dead-centered arrangement is the intended house look after all, matching
+   the plain centered-lead reference this hero is now aligned to. Aside card
+   dropped its filled background/accent bar for a plain top-rule divider. */
+.ds-hero {
+  padding: var(--space-9) 0 var(--space-8);
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-5);
+  max-width: var(--stage-wide);
+  text-align: center;
+  position: relative; isolation: isolate;
+}
+.ds-hero-head { display: grid; gap: var(--space-3); justify-items: center; margin-inline: auto; }
+.ds-hero-body  { margin-inline: auto; }
+/* The stat/badge/CTA cluster now sits as a full-width card BELOW the body
+   copy, left-aligned with the rest of the stack, rather than a right-offset
+   column -- still carries its own visual weight via the top accent bar
+   (rotated from the former left spine) so it still reads as a deliberate
+   block, not an afterthought. */
+.ds-hero-aside {
+  position: relative; isolation: isolate;
+  width: 100%; max-width: 46ch;
+  margin-inline: auto;
+  display: flex; flex-direction: column;
+  justify-content: space-between; gap: var(--space-5);
+  background: transparent;
+  border-top: var(--bw-hair, 1px) solid var(--rule);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  text-align: left;
+}
+.ds-hero-stats { display: flex; flex-direction: column; gap: var(--space-2); }
+.ds-hero-stat {
+  font-family: var(--ff-mono); font-size: var(--fs-sm);
+  color: var(--fg-2); letter-spacing: var(--tr-tight);
+  padding-bottom: var(--space-2); border-bottom: var(--bw-hair) solid var(--bg-3);
+}
+.ds-hero-stat:last-child { border-bottom: 0; padding-bottom: 0; }
+/* HeroFromPageData's richer badge shape ({label, desc}) renders a strong
+   figure plus a muted descriptor inside the same .ds-hero-stat row — give
+   the pair a baseline-aligned inline layout instead of falling back to
+   unstyled default inline flow. */
+.ds-hero-stat-n { font-weight: 700; color: var(--fg); margin-right: var(--space-2); }
+.ds-hero-stat-l { color: var(--fg-3); font-size: var(--fs-xs); }
+.ds-hero-title {
+  font-family: var(--ff-display); font-weight: 700;
+  /* Bespoke display clamp, deliberately off the --fs-* ladder: --fs-hero is
+     clamp(42px,7cqi,96px) and --fs-mega is clamp(56px,11cqi,168px). This lead
+     runs a steeper 9cqi slope with a LOWER 40px floor so a two-line 16ch title
+     still fits a narrow column, and a 116px ceiling between the two tiers.
+     Snapping to either changes the hero's whole optical weight. */
+  font-size: clamp(40px, 9cqi, 116px);
+  /* 0.96 let ascenders/descenders visibly touch between wrapped lines at the
+     upper end of this clamp (measured on "the creative department of the
+     internet" at the 116px ceiling) -- 1.02 keeps the tight, no-air display
+     feel this title wants while clearing enough vertical room that letters
+     stop colliding. */
+  line-height: 1.02; letter-spacing: var(--tr-tighter);
+  margin: 0; max-width: 16ch; margin-inline: auto; text-wrap: balance;
+}
+.ds-hero-body {
+  font-family: var(--ff-body); font-size: var(--fs-xl);
+  line-height: 1.45; margin: 0; max-width: 46ch;
+  color: var(--fg-2);
+}
+/* The lead phrase in the title — printed in the electric lead, not glowing. */
+.ds-hero-accent { color: var(--accent-ink); font-weight: 700; }
+.ds-hero-actions {
+  display: flex; gap: var(--space-2, 10px); flex-wrap: wrap;
+  justify-content: flex-start; margin-top: var(--space-4);
+}
+/* Hero CTA labels are content-driven (e.g. "GitHub", proper nouns from
+   home.yaml) and the site's voice is deliberately all-lowercase everywhere
+   else. Force the rendered case here rather than hand-lowercasing every
+   proper-noun label at the content layer, so a future CTA label doesn't
+   silently reintroduce Title Case. */
+.ds-hero-actions .btn { text-transform: lowercase; }
+/* Filter input above the homepage's "ui kits" panel — reuses the same
+   .input token the search kit's own topbar query box uses, just placed
+   inline above the panel instead of in a topbar slot. */
+.ds-kits-panel-wrap { display: flex; flex-direction: column; gap: var(--space-2, 10px); }
+.ds-kits-filter { display: flex; }
+.ds-kits-filter-input { width: 100%; max-width: 32ch; }
+/* Below this width the aside card's own internal rhythm (stat rows still
+   stacked vertically at full width) is already correct for a narrow column —
+   no separate breakpoint override needed now that .ds-hero is always a
+   single-column left-aligned stack at every width. */
+@container (max-width: 900px) {
+  .ds-hero { padding: var(--space-7) 0 var(--space-6); }
+}
+.ds-chat-title { margin: 0; font-size: inherit; }
+
+/* ============================================================
+   Section grouping
+   ============================================================ */
+.ds-section { margin: var(--space-8) 0; }
+/* A .ds-section's own margin-top exists so a BARE first section (no element
+   above it inside .app-main/.ds-app-surface) still gets the --space-8 lead
+   from something. But .app-main and .ds-tier are flex/grid containers, where
+   sibling margins never collapse -- so once ANY preceding sibling supplies
+   its own trailing space (a .panel's --space-4 bottom margin, or a prior
+   .ds-section's own --space-8 bottom margin), that top margin stacks ON TOP
+   of it instead of coordinating into one gap: measured live, two adjacent
+   .ds-section elements sat 192px apart (96 + 96) instead of 96, and a .panel
+   followed by a .ds-section sat ~136px apart instead of the intended single
+   gap. Zeroing the top margin on every NON-first .ds-section collapses the
+   pair back to one coordinated gap, supplied by whichever side already
+   carries it (the preceding sibling's own bottom margin, or the .ds-section's
+   trailing margin below) -- same "gap is owned by one side only" pattern as
+   .ds-panel-gap + .ds-panel-gap / .row + .row elsewhere in this file. */
+* + .ds-section { margin-top: 0; }
+/* Compact section (e.g. a PageHeader used as a page's first element): no large
+   leading margin, modest trailing margin — top-aligns without consumer overrides. */
+.ds-section-compact { margin-top: 0; margin-bottom: var(--space-4); }
+.ds-section > h3 {
+  font-family: var(--ff-body); font-weight: 600; font-size: var(--fs-h3);
+  /* Zero top margin looks like it inverts the more-space-above-than-below rule,
+     but it does not: this h3 is always the section's first child and .ds-section
+     itself carries the --space-8 (96px) lead, so the effective space above is
+     96px against 32px below. Adding a top margin here would double the lead.
+     Measured live on project_page: gapAboveInSection 0 with the section margin
+     supplying the separation, gapBelow 32. */
+  margin: 0 0 var(--space-5);
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 900px) {
+  .ds-section { margin: var(--space-4) 0; }
+}
+
+/* ============================================================
+   Print texture — the signature surface treatment. Opt-in overlay that
+   reads as risograph/newsprint grain, layered above the surface fill but
+   below content. Faint by default so type stays crisp; reduced-data and
+   reduced-motion are unaffected (texture is static).
+   ============================================================ */
+.ds-grain { position: relative; isolation: isolate; }
+.ds-grain::after {
+  content: ''; position: absolute; inset: 0; z-index: var(--z-below);
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 160px 160px;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+}
+/* ============================================================
+   Marquee / ticker — brand kinetic device ("always open 24/7"). The track
+   holds two identical runs so the loop is seamless; reduced-motion freezes it
+   to a single static run. Editorial, not a decorative flourish.
+   ============================================================ */
+.ds-marquee {
+  overflow: hidden; width: 100%;
+  border-block: var(--bw-hair) solid var(--rule-strong);
+  padding: var(--space-2) 0;
+  font-family: var(--ff-display); font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tr-caps);
+  mask-image: linear-gradient(90deg, transparent 0, var(--fg) 28px, var(--fg) calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, var(--fg) 28px, var(--fg) calc(100% - 28px), transparent 100%);
+}
+.ds-marquee-track {
+  display: inline-flex; gap: var(--space-5);
+  white-space: nowrap; will-change: transform;
+  animation: ds-marquee-run 28s linear infinite;
+}
+.ds-marquee-run { display: inline-flex; align-items: center; gap: var(--space-5); }
+.ds-marquee-item { display: inline-flex; align-items: center; gap: var(--space-5); }
+.ds-marquee-sep { color: var(--accent-ink); }
+.ds-marquee:hover .ds-marquee-track,
+.ds-marquee:focus-within .ds-marquee-track,
+.ds-marquee:active .ds-marquee-track { animation-play-state: paused; }
+@keyframes ds-marquee-run {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+/* Touch has no hover-pause; slow the ticker so it burns less attention. */
+@media (hover: none), (pointer: coarse) {
+  .ds-marquee-track { animation-duration: 40s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Static: wrap to a readable strip instead of a frozen half-offscreen run. */
+  .ds-marquee-track { animation: none; flex-wrap: wrap; white-space: normal; }
+  .ds-marquee-run-b { display: none; }
+}
+
+/* ============================================================
+   Install — single CLI command card
+   ============================================================ */
+.cli {
+  display: flex; align-items: center; gap: 14px;
+  overflow-x: auto;
+  padding: var(--space-3-5) var(--space-4);
+  background: var(--ink); color: var(--paper);
+  border-radius: var(--r-3);
+  font-family: var(--ff-mono); font-size: var(--fs-lg);
+}
+/* user-select:none (matching .ds-cli-row .prompt below) so selecting/copying
+   a command line grabs only the command text, not the prompt mark itself --
+   otherwise every copy-pasted line carries a leading '$ ' that has to be
+   stripped by hand before it can be re-run. */
+.cli .prompt { color: var(--green-2); user-select: none; }
+.cli .cmd    { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; color: var(--paper); }
+.cli .copy   {
+  padding: var(--space-2) var(--space-3); background: transparent; color: var(--paper);
+  font-size: var(--fs-tiny); letter-spacing: var(--tr-tight); font-weight: 500;
+  cursor: pointer; box-shadow: inset 0 0 0 1px var(--rule-strong);
+  border-radius: var(--r-pill);
+}
+.cli .copy:hover { background: var(--fg-3); }
+.cli .copy:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+/* Multi-line CLI block: when .cli holds .ds-cli-row / .ds-cli-comment children
+   (quickstart scripts, multi-command snippets — see CliBlock in
+   src/components/content.js) it stacks as a column instead of the
+   single-line install row. */
+.cli:has(.ds-cli-row),
+.cli:has(.ds-cli-comment) {
+  flex-direction: column; align-items: stretch; gap: 0;
+  font-size: var(--fs-sm); line-height: 1.6;
+}
+.ds-cli-row {
+  display: flex; gap: 10px;
+  font-family: var(--ff-mono); font-size: var(--fs-tiny); line-height: 1.6;
+  padding: 3px 0;
+}
+.ds-cli-row .prompt { color: var(--green-2); flex: 0 0 auto; user-select: none; }
+/* `overflow-wrap: break-word` only breaks a token when it genuinely cannot
+   fit the line at all (last resort); `word-break: break-word` (its
+   predecessor here) breaks ANY overflowing token eagerly, which is what
+   split "anentrypoint-design" mid-identifier inside the importmap JSON line.
+   `min-width: 0` lets the flex child actually shrink to trigger wrapping
+   instead of pushing the panel wider. */
+.ds-cli-row .cmd { flex: 1 1 auto; min-width: 0; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; color: var(--paper); }
+.ds-cli-comment {
+  color: var(--fg-3);
+  font-family: var(--ff-mono); font-size: var(--fs-tiny); line-height: 1.6;
+  padding: 3px 0; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+
+/* Quickstart copy button: sits below the multi-line block (Install's inline
+   copy button assumes a single-line row with room beside it; the stacked
+   quickstart block has no such side room). */
+.ds-quickstart-cli { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+.ds-quickstart-copy {
+  align-self: flex-end;
+  padding: var(--space-2) var(--space-3); background: transparent; color: var(--paper);
+  font-family: var(--ff-body); font-size: var(--fs-tiny); letter-spacing: var(--tr-tight); font-weight: 500;
+  cursor: pointer; box-shadow: inset 0 0 0 1px var(--rule-strong);
+  border-radius: var(--r-pill); border: none;
+}
+.ds-quickstart-copy:hover { background: var(--fg-3); }
+.ds-quickstart-copy:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+/* ============================================================
+   Receipt — key/value table
+   ============================================================ */
+table.kv { width: 100%; border-collapse: collapse; }
+table.kv td {
+  padding: 8px 0;
+  font-family: var(--ff-body); font-size: var(--fs-sm);
+}
+table.kv tr + tr td { border-top: 1px solid var(--rule); }
+table.kv td:first-child {
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: var(--tr-caps);
+  width: 14ch;
+  /* The 14ch column width is a target, not a guarantee — a label whose
+     uppercase-transformed width fills the column exactly (e.g. "environment")
+     leaves zero slack before the value cell, so label and value render with
+     no visible gap between them ("ENVIRONMENTproduction") while shorter
+     labels (region, build, by) are saved only by leftover column slack.
+     An explicit right-side padding guarantees a gap regardless of label
+     length, instead of relying on slack that a long label can consume
+     entirely. */
+  padding-right: var(--space-3);
+}
+table.kv td:last-child {
+  font-weight: 600;
+  overflow-wrap: anywhere; min-width: 0;
+}
+/* Tiny screens: stack the key over the value instead of squeezing a 14ch
+   label column beside long unbroken values (URLs, hashes). */
+@media (max-width: 400px) {
+  table.kv td { display: block; width: auto; padding: 4px 0; }
+  table.kv td:first-child { padding-top: 8px; }
+  table.kv tr + tr td { border-top: 0; }
+  table.kv tr + tr td:first-child { border-top: 1px solid var(--rule); }
+}
+
+/* ============================================================
+   Generic table
+   ============================================================ */
+table {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--ff-body); font-size: var(--fs-sm);
+  /* A data grid, not a card: a tight --r-0 corner (was --r-3/22px, which read
+     as a rounded card). Cells drop to 8px 12px for a dense, scannable row
+     (was 12/14 x 16 => ~43px rows). Density scales the vertical padding. */
+  border-radius: var(--r-0); overflow: hidden;
+}
+/* Panel heads / KPI labels / table headers were all identical uppercase-
+   tracked-mono weight (600), so a page with several of these side by side
+   (a dashboard) reads as one flat volume with no anchor -- the most
+   repetitive, least-singular label (a column header, one of many per
+   table) drops to a lighter 500 with slightly tighter tracking, keeping the
+   system's uppercase-mono voice but giving panel titles (still 600) a real
+   step up as the "read this first" tier. */
+table th {
+  text-align: left;
+  padding: calc(var(--space-2) * var(--density)) var(--space-2-75);
+  font-size: var(--fs-tiny); font-weight: 500;
+  color: var(--fg-3); text-transform: uppercase; letter-spacing: calc(var(--tr-caps) * 0.7);
+  background: var(--bg-2);
+}
+/* letter-spacing adds trailing space AFTER the last glyph too, but the table's
+   own border-radius+overflow:hidden (above) clips flush to the card edge --
+   the last header's positive tracking bleeds past its own padding box and
+   gets cropped mid-word ("STATUS" -> "STATI"). Absorb that bleed with a bit
+   of extra right padding on the last column only, so no header text sits
+   closer to the clip edge than --tr-caps can push it. */
+table th:last-child { padding-right: calc(var(--space-2-75) + var(--tr-caps, 0px)); }
+table td { padding: calc(var(--space-2) * var(--density)) var(--space-2-75); border-top: 1px solid var(--rule); }
+table tr.clickable { cursor: pointer; }
+table tr.clickable:hover td { background: var(--bg-2); }
+table tr.clickable:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: -2px;
+}
+table tr.clickable:focus-visible td { background: var(--bg-2); }
+/* Non-clickable (static) rows still get a subtle hover cue — most dashboard
+   tables (freddie's sessions-by-platform/model, tool distribution, commands)
+   never pass onRowClick, so they had zero row-hover feedback at all. A dim
+   hover on ANY row (not just .clickable) reads as "you're scanning this
+   row" without implying it's actionable. */
+table tr:not(.clickable):hover td { background: color-mix(in oklab, var(--bg-2) 60%, transparent); }
+
+/* Table() striped/compact opt-in density modifiers (webgeist g-table parity).
+   Scoped under .ds-table-wrap so they never leak onto an unrelated bare
+   <table> a consumer hand-rolls outside this component. */
+.ds-table-wrap.is-striped table tr:nth-child(even) td { background: var(--bg-2); }
+.ds-table-wrap.is-striped table tr.clickable:nth-child(even):hover td,
+.ds-table-wrap.is-striped table tr.clickable:nth-child(even):focus-visible td { background: var(--bg-3, var(--bg-2)); }
+.ds-table-wrap.is-striped table tr:not(.clickable):nth-child(even):hover td { background: color-mix(in oklab, var(--bg-3, var(--bg-2)) 60%, transparent); }
+.ds-table-wrap.is-compact table th { padding: var(--space-1-5, 5px) var(--space-2, 8px); }
+.ds-table-wrap.is-compact table td { padding: var(--space-1-5, 5px) var(--space-2, 8px); }
+/* Numeric-column right-alignment: Table() (content/table.js) tags a cell
+   td.is-num when its raw content is a plain integer/decimal, so digit
+   columns (session counts, tool counts, etc.) line up on the ones place
+   instead of ragged-left like prose columns. th.is-num mirrors it on the
+   matching header so the label sits over its column. */
+table td.is-num, table th.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Changelog
+   ============================================================ */
+.ds-changelog-row {
+  /* The !important is load-bearing and was empirically confirmed so -- do not
+     remove it on a specificity argument. A changelog row carries three tracks
+     (date, version, message) where a plain .row carries two, and the responsive
+     blocks in responsive.css legitimately rewrite .row's template at several
+     breakpoints. Those blocks are later in the cascade, so at tablet width the
+     two-track override wins on source order and collapses the version column:
+     measured live, removing this flag changes the computed template from
+     "120.75px 77.625px 70.125px" to "103.5px 0px 165px" -- a zero-width column
+     and the version silently gone. Scoping to .app does not help, because the
+     competing rules would need to be scoped in lockstep. */
+  grid-template-columns: minmax(110px, 14ch) minmax(60px, 9ch) minmax(0, 1fr) !important;
+}
+.ds-changelog-ver {
+  font-family: var(--ff-body); font-weight: 600; font-size: var(--fs-sm);
+}
+/* Belt-and-suspenders for the message column: `.row .title` (panel-row.css)
+   is already `white-space: normal` (no nowrap/ellipsis), so long entries wrap
+   by word as expected whenever the message track has any real width. This
+   only matters in the narrow zone between "row still on 3 columns" and the
+   panel's own `@container` breakpoint kicking in (see .panel-wide's new
+   container-type in panel-row.css) — overflow-wrap:anywhere is the fallback
+   so a single long unbroken token still wraps instead of overflowing the
+   track, rather than depending solely on the breakpoint transition. */
+.ds-changelog-row .title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* ============================================================
+   Works
+   ============================================================ */
+.work-detail {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  margin: 4px 0 var(--space-2);
+  background: var(--bg-2);
+  border-radius: var(--r-3);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.ds-work-body { margin: 0; max-width: 60ch; }
+.ds-work-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ============================================================
+   Manifesto / pull moment
+   ============================================================ */
+.ds-manifesto { max-width: 60ch; }
+.ds-manifesto-para {
+  font-family: var(--ff-body); font-size: var(--fs-lg);
+  line-height: var(--lh-long); margin: 0 0 var(--space-3);
+}
+.ds-manifesto-para.dim { color: var(--fg-3); }
+
+/* ============================================================
+   Currently shipping dots
+   ============================================================ */
+.ds-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; vertical-align: middle; }
+.ds-dot-on  { color: var(--green-2); }
+/* Off/idle reads as a HOLLOW ring (transparent fill, currentColor outline)
+   instead of a solid dot in a dimmer color -- filled-vs-outline is a shape
+   cue that survives grayscale/colorblind simulation, where a solid green dot
+   and a solid gray dot at the same size can look identical in luminance. */
+.ds-dot-off { color: var(--fg-3); background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+/* live is a distinct hue from a plain "on" dot — see .chip.tone-live's
+   comment for the success-vs-live rationale. */
+.ds-dot-live { color: var(--sky); }
+.ds-dot-warn { color: var(--amber); }
+.ds-dot-idle { color: var(--fg-3); }
+
+/* ============================================================
+   KPI
+   ============================================================ */
+.kpi {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2);
+}
+.kpi-card {
+  /* Was --space-5 (32px) pad + --r-3 (22px) — four cards ate a full fold. A
+     16px pad on a --r-1 corner keeps them prominent but dense; the number drops
+     from a 48px marketing display to a 32px app-scale figure. */
+  padding: var(--space-3);
+  background: var(--bg-2);
+  border-radius: var(--r-1);
+  /* A thin border + hover elevation gives the tile real edges and a "this is
+     a distinct object" affordance instead of a flat color patch that blends
+     into the surrounding panel — matches the "no border, no hover state"
+     gap named against the stat tiles. */
+  border: 1px solid var(--rule);
+  position: relative;
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.kpi-card:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--rule));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-1, 0 2px 8px rgba(0,0,0,.12));
+}
+/* Number+caption stack, isolated from .kpi-foot below it. Previously the
+   number and label were plain block children of .kpi-card with the label's
+   own margin-top providing the gap — visually fine for a single card, but
+   across a row of four the caption's WRAPPED height (one line vs two, e.g.
+   "requests · 24h" vs "error rate · 5xx+4xx") pushed .kpi-foot down by a
+   different amount per card, so the deltas/sparklines never lined up on one
+   shared baseline. A dedicated flex column groups exactly the two elements
+   that must stay glued together, independent of whatever sits below. */
+.kpi-stack {
+  display: flex; flex-direction: column; align-items: flex-start;
+}
+.kpi-glyph {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  color: var(--fg-3);
+  opacity: 0.6;
+  display: inline-flex;
+}
+.kpi-card .num {
+  font-family: var(--ff-body); font-weight: 600;
+  /* Numeric display size, not a heading tier: --fs-h4 is clamp(19px,1.8cqi,
+     24px) — too small and too flat a slope for a KPI figure that must read as
+     the loudest thing in its card, and --fs-h3 (22/30) tops out short of 32.
+     Deliberate off-scale value tuned to the .kpi-card box. */
+  font-size: clamp(22px, 3cqi, 32px); line-height: 1;
+  letter-spacing: var(--tr-tight);
+}
+.kpi-card .lbl {
+  font-size: var(--fs-xs); color: var(--fg-3);
+  font-weight: 600; margin-top: 8px;
+  letter-spacing: var(--tr-tight);
+}
+.kpi-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: var(--space-2);
+}
+.kpi-delta {
+  display: inline-flex; align-items: center; gap: var(--space-hair);
+  font-size: var(--fs-xs); font-weight: 600;
+}
+/* --green, not --success (--green-2): --success measures 3.2:1 on --paper-2,
+   below the 4.5:1 AA floor for text -- --success is tuned for non-text uses
+   (fills/backgrounds, where 3:1 suffices), --green clears 5.2:1 as text. */
+.kpi-delta-up { color: var(--green); }
+.kpi-delta-down { color: var(--danger); }
+.ds-sparkline path { stroke: currentColor; }
+.ds-sparkline-up { color: var(--green); }
+.ds-sparkline-down { color: var(--danger); }
+
+/* ============================================================
+   BarChart
+   ============================================================ */
+.ds-barchart { display: flex; flex-direction: column; gap: var(--space-2); }
+.ds-barchart-row {
+  display: grid; grid-template-columns: minmax(90px, 25%) 1fr auto;
+  align-items: center; gap: var(--space-2);
+}
+.ds-barchart-label { font-size: var(--fs-sm); color: var(--fg-2); }
+.ds-barchart-track {
+  /* 6px unifies with the system's other bar tracks (.ds-upload-bar,
+     .ds-bar-bg); was --space-2 (8px), the lone thicker slab in the bar family. */
+  height: var(--space-1-75); border-radius: var(--r-pill);
+  background: var(--bg-3); overflow: hidden;
+}
+.ds-barchart-fill {
+  height: 100%; width: var(--bar-pct, 0%);
+  background: var(--fg-3); border-radius: var(--r-pill);
+}
+.ds-barchart-fill.is-active { background: var(--accent); }
+.ds-barchart-value {
+  font-size: var(--fs-xs); font-weight: 600; color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+/* Shares its base declarations with .ds-empty-state (primitives.css) via the
+   combined selector there -- .empty only adds its own font-size/background/
+   radius modifiers on top. Was --space-8 (96px) padding; --space-6 (48px)
+   still centres a message with air without the empty state dominating the
+   fold. */
+.empty {
+  background: var(--bg-2);
+  border-radius: var(--r-1);
+  font-size: var(--fs-sm);
+}
+
+/* ============================================================
+   Form
+   ============================================================ */
+.row-form {
+  display: grid; gap: var(--space-2-75);
+  padding: var(--space-5);
+  background: var(--bg-2);
+  border-radius: var(--r-3);
+  /* Grid's default justify-items:stretch was silently stretching the submit
+   * button (a direct grid child, same as every input) to the full column
+   * width -- other primary buttons elsewhere (e.g. session-ui's "new
+   * session") are inline/compact by contrast, since they're not grid
+   * children. justify-self:start keeps inputs/textareas at their natural
+   * grid-stretched width (a form field SHOULD fill its column) while the
+   * submit button sizes to its own content, matching the compact convention
+   * used everywhere else primary buttons appear. */
+}
+.row-form > button[type="submit"] { justify-self: start; }
+.row-form input,
+.row-form textarea {
+  font-family: inherit; font-size: var(--fs-sm);
+  padding: 12px 16px;
+  /* --bg here previously resolved to the SAME color as .row-form's own
+   * --bg-2 background in the dark theme, leaving only a 14%-opacity
+   * currentColor ring (var(--rule)) as the sole edge between an input and
+   * the panel behind it -- effectively invisible. --bg-3 (one step darker
+   * than the panel) plus a stronger border restores a real, panel-distinct
+   * field surface.
+   * LOAD-BEARING !important: `.row-form input` and states-interactions.css's
+   * bare `input[type="text"]:where(...)` rule are both (0,1,1) specificity
+   * (the :where() wrapper there is intentionally zero-specificity) --
+   * states-interactions.css @imports AFTER this file in app-shell.css, so on
+   * this exact tie it wins by source order and silently discarded these two
+   * declarations. Only !important beats that without restructuring the
+   * shared bare-input rule's own selector, which many other consumers rely on. */
+  background: var(--bg-3) !important; color: var(--fg);
+  border: 0; border-radius: var(--r-2);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, currentColor 28%, transparent) !important;
+}
+.row-form input:focus-visible,
+.row-form textarea:focus-visible { box-shadow: var(--focus-ring-inset); }
+
+/* Field char counter (TextField maxLength) — canonical definition is with
+   the rest of the .ds-field family below (states-interactions.css); this
+   duplicate was removed to stop the two bodies fighting on stylesheet load
+   order. */
+
+/* Multi-column form layout (Form columns prop) */
+.row-form[data-columns="2"] { grid-template-columns: repeat(2, 1fr); }
+.row-form[data-columns="3"] { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 600px) {
+  .row-form[data-columns="2"],
+  .row-form[data-columns="3"] { grid-template-columns: 1fr; }
+}

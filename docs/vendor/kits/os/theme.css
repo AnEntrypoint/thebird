@@ -1,0 +1,2045 @@
+/* Fonts are declared once in the canonical theme (colors_and_type.css /
+   vendor/fonts.css), which every .ds-247420 consumer loads first. No @import
+   here — a second Inter-only import risked a weight-set FOUT mismatch. */
+
+/* The OS shell namespaces its surfaces as --os-* but those are pure ALIASES of
+   the canonical semantic tokens from colors_and_type.css. colors_and_type.css
+   is always loaded before this sheet for any .ds-247420 consumer, so the
+   canonical tokens are guaranteed present and the alias fallbacks are dropped —
+   a fallback here would silently re-introduce theme drift (a baked light value
+   that ignores [data-theme="ink"]). One theme drives both token namespaces. */
+:root {
+    /* --ff-ui is the OS-shell alias for the canonical body font; --ff-display
+       and --ff-mono are already canonical (colors_and_type.css), referenced
+       directly below — do not self-redefine them here (cycle). */
+    --ff-ui: var(--ff-body);
+    /* --os-accent is used predominantly as TEXT/icon/border in the OS chrome,
+       so it tracks the readable --accent-ink tone (the electric lead is too
+       light for text on paper). --os-accent-fill is the saturated lead for the
+       rare solid fill; --os-accent-soft is the tint. */
+    --os-accent: var(--accent-ink);
+    --os-accent-fill: var(--accent);
+    --os-accent-2: var(--accent-bright, var(--accent));
+    --os-accent-soft: var(--accent-tint);
+    --os-bg-0: var(--bg);
+    --os-bg-1: var(--bg-2);
+    --os-bg-2: var(--bg-3);
+    --os-bg-3: var(--panel-3);
+    --os-fg: var(--fg);
+    --os-fg-2: var(--fg-2);
+    --os-fg-3: var(--fg-3);
+    --os-red: var(--warn);
+    --os-amber: var(--sun);
+    --os-green: var(--green);
+    --os-radius: var(--r-2);
+    --os-radius-sm: var(--r-1);
+    --os-bar-h: 44px;
+    --os-bar-h-mobile: 52px;
+    --os-rail-w: 64px;
+    --os-tap: 44px;
+    /* Unified menubar control height: every clickable control in the top bar
+       (home/apps buttons, workspace tabs, tray icon buttons) sits on this one
+       height so the bar reads as a single control language instead of a mix
+       of pill buttons, chips, and icon buttons each sized on their own. */
+    --os-control-h: 28px;
+    --os-font: var(--ff-ui);
+    --os-display: var(--ff-display);
+    --os-mono: var(--ff-mono);
+
+    /* ---- Unified spacing scale (--space-1..6) ----
+       colors_and_type.css already defines --space-1 (4px) through --space-6
+       (48px), plus finer hair/half/fractional rungs (--space-hair/half/0/1-5/
+       1-75/2-5/2-75/3-5), all loaded before this sheet for every .ds-247420
+       consumer. That IS the unified spacing scale this contract asks for — no
+       redeclaration here (a self-referencing `--space-1: var(--space-1)` would
+       be circular and resolve to invalid at computed-value time). New call
+       sites and the migrations below consolidate onto --space-1..6 directly. */
+
+    /* ---- Unified type scale (title / body / meta) ----
+       Maps onto the canonical --fs-* rail (colors_and_type.css) rather than
+       inventing new pixel values: title = display-weight heading size already
+       used by .os-drawer-title/.chat-empty-title (--fs-xl); body = the base
+       readable size already used by .chat-bubble/.app-pane (--fs-xs); meta =
+       the small secondary/timestamp size already used by .chat-meta/.os-clock
+       (--fs-nano). */
+    --font-size-title: var(--fs-xl);
+    --font-size-body: var(--fs-xs);
+    --font-size-meta: var(--fs-nano);
+
+    /* ---- Unified corner-radius scale (sm / md / lg / pill) ----
+       Aliases of the canonical --r-* rail (colors_and_type.css: --r-0 4px,
+       --r-1 8px, --r-2 10px, --r-3 14px, --r-pill 999px) under the names this
+       token contract specifies, so windows/buttons/badges can standardize on
+       one vocabulary instead of picking --r-0 vs --r-1 vs --r-2 ad hoc. */
+    --radius-sm: var(--r-1);
+    --radius-md: var(--r-2);
+    --radius-lg: var(--r-3);
+    --radius-pill: var(--r-pill, 999px);
+
+    /* ---- Unified color / accent system ----
+       --accent-primary is the brand lead (#247420 in the thebird preset via
+       --os-accent, which already resolves through --accent-ink); kept as its
+       own token (rather than a bare alias) so non-.ds-247420 consumers of this
+       kit get the literal brand green called for by this contract even before
+       any brand-scoped override applies. --color-success/warning/danger alias
+       the existing canonical severity primitives (--green-2/--sun/--warn) so
+       severity language is consistent with what --success/--warn already mean
+       everywhere else in colors_and_type.css — not a second competing set. */
+    --accent-primary: #247420;
+    --color-success: var(--success, var(--green-2, #3A9A34));
+    --color-warning: var(--sun, #F5C344);
+    --color-danger: var(--warn, #C41C0C);
+}
+
+html, body {
+    background: var(--os-bg-0);
+    color: var(--os-fg);
+    font-family: var(--os-font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* ---- Desktop wallpaper ----
+ * A flat --os-bg-0 fill behind the window layer reads as an empty/unfinished
+ * void once windows are moved aside. A very subtle two-stop radial wash
+ * (barely above the base tone, no imagery/texture asset to fetch or theme)
+ * gives the desktop depth without competing with window chrome — scoped to
+ * .ds-247420 .wm-root specifically (the actual desktop viewport BEHIND
+ * windows), not the page background used by bare/non-OS surfaces.
+ * A faint repeating dot-grid is layered on top of the wash: the radial wash
+ * alone reads as a barely-perceptible tint over a large empty area (the
+ * reported "huge empty dark canvas" below a single default window), while a
+ * grid of low-opacity dots gives the eye actual anchor points across that
+ * space without competing with window chrome or requiring an image asset. */
+.ds-247420 .wm-root {
+    /* Split into background-image/-color longhands, NOT the `background`
+       shorthand: some engines fail to parse a multi-layer gradient list
+       shorthand-form when any layer's color-stop uses color-mix() — the
+       whole declaration is dropped and the canvas silently renders flat.
+       The longhand form parses these same layers correctly. */
+    background-image:
+        radial-gradient(circle, color-mix(in oklab, var(--os-fg) 6%, transparent) 1px, transparent 1px),
+        radial-gradient(ellipse 120% 80% at 20% -10%, color-mix(in oklab, var(--os-accent) 6%, transparent), transparent 60%),
+        radial-gradient(ellipse 100% 70% at 100% 100%, color-mix(in oklab, var(--os-accent) 4%, transparent), transparent 55%);
+    background-color: var(--os-bg-0);
+    background-size: 28px 28px, auto, auto;
+}
+@media (prefers-reduced-transparency: reduce) {
+    .ds-247420 .wm-root { background: var(--os-bg-0); }
+}
+
+/* ---- Global focus-visible ring ----
+   Baseline accent-colored outline for every keyboard-focusable element
+   (inputs/textareas/buttons/links/contenteditable, including the terminal's
+   and chat composer's text entry) so focus is never invisible. Component-
+   level :focus-visible rules elsewhere in this sheet (chat composer textarea,
+   composer-btn, chat-empty-suggestion, fsb-row, ...) already set a matching
+   var(--os-accent) ring with layout-specific offset/inset and win by source
+   order + specificity; this is the catch-all every other focusable surface
+   falls back to. */
+.ds-247420 :focus-visible {
+    outline: 2px solid var(--os-accent);
+    outline-offset: 2px;
+}
+
+.os-menubar, .os-taskbar {
+    background: color-mix(in oklab, var(--os-bg-2) 88%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: none;
+    color: var(--os-fg);
+    font: var(--fs-tiny) var(--os-font);
+    height: var(--os-bar-h);
+    /* prefers-reduced-transparency handled below (near bottom of this file):
+       drops the blur + backing translucency to a solid --os-bg-2 fill. */
+    padding: 0 var(--space-2-75);
+    gap: var(--space-1-75);
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+.os-menubar > *, .os-taskbar > * { flex-shrink: 0; }
+.os-menubar .os-spacer { flex: 1 1 auto; min-width: 0; }
+.os-menubar .os-tray { margin-left: auto; }
+/* Many open windows must scroll within the bar, not overflow it. Mobile
+   already had this; promote it to all widths so a crowded desktop taskbar
+   scrolls horizontally instead of pushing buttons off-screen. */
+.os-taskbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.os-taskbar::-webkit-scrollbar { display: none; }
+
+.os-brand {
+    color: var(--os-fg);
+    font-family: var(--os-display);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    font-size: var(--fs-sm);
+    margin-right: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    text-transform: lowercase;
+}
+/* Wordmark lockup: the mark echoes favicon.svg (rounded-square tile, accent
+   fill, monogram) instead of a bare accent dot, so the brand reads as an
+   actual logo mark next to the "thebird" text rather than plain type with a
+   decorative dot. Inlined as a data-URI (same technique renderFaviconTags
+   already uses for the <link rel="icon"> glyph case) since theme.css ships
+   standalone via unpkg with no guaranteed relative path to favicon.svg. */
+.os-brand::before {
+    content: '';
+    display: inline-block;
+    width: 16px; height: 16px;
+    border-radius: var(--r-1, 4px);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23247420'/%3E%3Ctext x='16' y='22' font-family='ui-monospace,monospace' font-size='14' font-weight='700' fill='%23EFE9DD' text-anchor='middle'%3E24%3C/text%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    flex: 0 0 auto;
+}
+
+.os-btn {
+    background: transparent;
+    color: var(--os-fg-2);
+    border: 1px solid transparent;
+    height: var(--os-control-h);
+    padding: 0 14px;
+    cursor: pointer;
+    font: inherit;
+    font-family: var(--os-font);
+    font-size: var(--fs-tiny);
+    border-radius: var(--radius-pill, var(--r-pill, 999px));
+    transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-75);
+    outline: none;
+    text-transform: lowercase;
+}
+.os-btn:hover { background: var(--panel-hover, var(--os-bg-2)); color: var(--os-fg); }
+.os-btn.active, .os-btn[aria-pressed="true"] { background: var(--panel-select, var(--os-accent-soft)); color: var(--os-fg); }
+.os-btn:focus-visible { background: var(--panel-hover, var(--os-bg-2)); }
+.os-btn .ic { color: var(--os-accent); display: inline-flex; width: 16px; height: 16px; }
+.os-btn .ic svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; }
+/* Filled/duotone active-state icon treatment: an active nav icon otherwise
+ * looks visually IDENTICAL to its inactive sibling (only the container
+ * background changes) — a soft `fill:currentColor` wash behind the same
+ * stroke-only glyph gives active items real duotone weight, matching the
+ * "filled/duotone treatment for active items" ask. fill-opacity keeps the
+ * glyph legible over the wash rather than solid-filling the whole path. */
+.os-btn.active .ic svg, .os-btn[aria-pressed="true"] .ic svg { fill: currentColor; fill-opacity: 0.18; }
+
+.os-menu {
+    position: absolute;
+    background: var(--os-bg-1);
+    border: none;
+    border-radius: var(--radius-lg, var(--r-3, 18px));
+    padding: var(--space-2, 8px);
+    min-width: 220px;
+    /* Uncapped, the menu grows to its widest label and — at the common
+     * tablet-range window widths (~810-1150px) where content columns are
+     * already narrow — reads as covering most of the open content instead
+     * of a dropdown. Cap to a comfortable reading width but never past
+     * the viewport (same "must not extend past the viewport" contract the
+     * height clamp below already applies). */
+    max-width: min(320px, calc(100vw - var(--space-4, 16px)));
+    top: calc(var(--os-bar-h) + var(--space-1, 4px));
+    left: var(--space-2, 8px);
+    z-index: var(--z-dropdown);
+    display: none;
+    flex-direction: column;
+    gap: var(--space-hair);
+    pointer-events: auto;
+    /* Long app registries must scroll, not extend past the viewport. */
+    max-height: calc(100vh - var(--os-bar-h) - 16px);
+    max-height: calc(100dvh - var(--os-bar-h) - env(safe-area-inset-top, 0px) - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Scroll-shadow affordance: dual-background trick -- the fade gradients
+     * are pinned to the scrollport (background-attachment: local) so they
+     * only appear once there is actually more content to reveal in that
+     * direction, cueing that the menu is scrollable rather than just
+     * clipped at the viewport edge. */
+    background-image:
+        linear-gradient(var(--os-bg-1), var(--os-bg-1)),
+        linear-gradient(var(--os-bg-1), var(--os-bg-1)),
+        linear-gradient(to bottom, color-mix(in oklab, var(--os-bg-1) 100%, transparent), transparent),
+        linear-gradient(to top, color-mix(in oklab, var(--os-bg-1) 100%, transparent), transparent);
+    background-position: top, bottom, top, bottom;
+    background-repeat: no-repeat;
+    background-size: 100% var(--space-2, 8px), 100% var(--space-2, 8px), 100% var(--space-4, 16px), 100% var(--space-4, 16px);
+    background-attachment: local, local, scroll, scroll;
+}
+.os-menu.open { display: flex; }
+/* Dimming scrim behind the open apps menu — same var(--scrim) fixed-inset
+ * pattern as .tb-sess-overlay, but as a pseudo-element (not a sibling DOM
+ * node) since buildAppsMenu() in shell-chrome.js emits only the menu itself.
+ * pointer-events:none so existing click-outside-to-close handling (thebird
+ * JS) keeps working unmodified; the scrim sits one layer below the menu's
+ * own z-index but still above .wm-root's windows. */
+.os-menu.open::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-below);
+    background: var(--scrim);
+    pointer-events: none;
+}
+.os-menu .os-btn {
+    width: 100%;
+    text-align: left;
+    border-radius: var(--radius-sm, var(--os-radius-sm));
+    padding: var(--space-2) var(--space-2-5);
+    color: var(--os-fg);
+    justify-content: flex-start;
+}
+.os-menu .os-btn:hover { background: var(--panel-hover, var(--os-bg-2)); color: var(--os-fg); }
+
+/* Collapsible "System" apps group inside the apps menu. thebird's os-shell.js
+ * builds the group structurally and toggles only the list's display; the static
+ * layout (column flow + indent + arrow alignment) lives here so no visual rule
+ * leaks back into thebird JS (zero-design-CSS contract). */
+.os-menu-group { display: flex; flex-direction: column; gap: var(--space-hair); }
+.os-menu-system-toggle { display: flex; align-items: center; gap: var(--space-1-75); }
+.os-menu-system-arrow { display: inline-flex; align-items: center; transition: transform 120ms ease; }
+.os-menu-system-arrow .ds-icon { width: 14px; height: 14px; }
+.os-menu-system-list { display: none; flex-direction: column; padding-left: 14px; }
+.os-menu-system-toggle[aria-expanded="true"] + .os-menu-system-list { display: flex; }
+@media (prefers-reduced-motion: reduce) { .os-menu-system-arrow { transition: none; } }
+
+.os-clock {
+    color: var(--os-fg-2);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--os-font);
+    padding: 0 var(--space-2-5);
+    font-size: var(--fs-micro);
+}
+
+.os-task {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5, 6px);
+    border: none;
+    background: var(--os-bg-1);
+    color: var(--os-fg-2);
+    border-radius: var(--radius-pill, var(--r-pill, 999px));
+    padding: var(--space-1-75) 14px;
+    font-size: var(--fs-micro);
+    font-family: var(--os-font);
+    transition: background 80ms ease, color 80ms ease, box-shadow 80ms ease;
+    max-width: 200px;
+    cursor: pointer;
+    outline: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* No text-transform here: .os-task-label carries the app/window's own
+     * dynamic title (shell.js refreshTaskbar), and a user- or app-supplied
+     * string (filename, acronym, URL) must render as-authored rather than
+     * get silently lowercased by brand-voice CSS. */
+}
+.os-task { min-height: 28px; }
+.os-task:hover { background: var(--panel-hover, var(--os-bg-2)); color: var(--os-fg); }
+.os-task .ic { flex: none; display: inline-flex; width: 14px; height: 14px; }
+.os-task .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; }
+.os-task-label { overflow: hidden; text-overflow: ellipsis; }
+/* Empty taskbar reads as an intentional strip, not a stray blurred bar. */
+.os-task-empty { font-size: var(--fs-nano); color: var(--os-fg-3); padding: 0 var(--space-2-5); font-family: var(--os-font); }
+.os-task.focused {
+    background: var(--panel-select, color-mix(in oklab, var(--os-accent) 30%, var(--os-bg-1)));
+    color: var(--os-fg);
+    font-weight: 700;
+    box-shadow: inset 4px 0 0 var(--os-accent), inset 0 0 0 1px color-mix(in oklab, var(--os-accent) 40%, transparent);
+}
+
+/* Window-chrome overrides of wm.css.
+ *
+ * wm.css is loaded by the consumer as a SEPARATE raw sheet (it is not part of
+ * the dist bundle), so its load order relative to this file is not guaranteed.
+ * These rules therefore carry the `.ds-247420` scope class: at (0,2,0) they
+ * beat wm.css's bare (0,1,0) `.wm-*` rules on SPECIFICITY, which is order-
+ * independent — replacing the `!important` wall that previously did the same
+ * job by force. Do not un-scope these; the scope IS the override mechanism. */
+.ds-247420 .wm-win {
+    background: var(--os-bg-1);
+    border: 1px solid color-mix(in oklab, var(--os-fg) 14%, transparent);
+    border-radius: var(--radius-lg, var(--r-3));
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* Open/maximize/restore transitions: transform+opacity are interpolable
+     * (unlike wm-min's `display:none`, which cannot transition at all — a
+     * real minimize/restore animation needs wm.js to defer the display swap
+     * until this transition ends, tracked as its own follow-up). A freshly
+     * mounted .wm-win starts from CSS-animation-in via @starting-style so it
+     * scales/fades into place instead of snapping to full size, and every
+     * maximize/restore toggle (a real geometry change, not a display swap)
+     * eases instead of jumping. */
+    transition: opacity 160ms ease, transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 160ms ease;
+}
+@supports (transition-behavior: allow-discrete) {
+  .ds-247420 .wm-win {
+    transition: opacity 160ms ease, transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 160ms ease;
+    @starting-style {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .wm-win { transition: none; }
+}
+
+/* Minimize/restore/close: wm.js's animateMinimize()/animateClose() (wm.js)
+ * apply these classes BEFORE the real wm-min toggle / el.remove(), holding
+ * them for exactly the duration below so the display:none / DOM-removal
+ * that neither CSS nor `transition` can animate happens only after the
+ * visual scale+fade has actually played out. Direction: minimize collapses
+ * toward the taskbar (down+shrink); close shrinks in place; restore is the
+ * minimize keyframe in reverse. Not scoped to .ds-247420 -- these classes
+ * are always renderWindow()-authored, own their state fully. */
+.wm-win.wm-minimizing {
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.4, 0, 1, 1);
+  opacity: 0;
+  transform: scale(0.85) translateY(24px);
+  pointer-events: none;
+}
+.wm-win.wm-restoring {
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  animation: wm-restore-in 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes wm-restore-in {
+  from { opacity: 0; transform: scale(0.85) translateY(24px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.wm-win.wm-closing {
+  transition: opacity 200ms ease, transform 200ms cubic-bezier(0.4, 0, 1, 1);
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wm-win.wm-minimizing, .wm-win.wm-restoring, .wm-win.wm-closing {
+    transition: none; animation: none; opacity: 1; transform: none;
+  }
+}
+
+.ds-247420 .wm-win.wm-focused {
+    border-color: color-mix(in oklab, var(--os-fg) 28%, transparent);
+    box-shadow: inset var(--space-1) 0 0 var(--os-accent), var(--shadow-3);
+}
+
+.ds-247420 .wm-bar {
+    background: var(--os-bg-2);
+    border: none;
+    padding: var(--space-2) var(--space-2-75);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    transition: background 120ms ease;
+}
+/* Focused vs. unfocused titlebar differentiation: stacked windows otherwise
+ * share one flat gray bar and blur together. The focused window's bar picks
+ * up the accent-tinted panel shade and full-strength title text; unfocused
+ * bars stay on the plain background with dimmed title opacity. */
+.ds-247420 .wm-win.wm-focused .wm-bar {
+    background: color-mix(in oklab, var(--os-accent) 10%, var(--os-bg-2));
+}
+.ds-247420 .wm-title {
+    font: var(--fs-tiny) var(--os-font);
+    color: var(--os-fg-2);
+    letter-spacing: 0.005em;
+    text-align: center;
+    font-weight: 600;
+    /* 0.72, not 0.65: measured live against the unfocused titlebar's actual
+     * background (rgb(77,77,82)) the opacity-blended effective contrast at
+     * 0.65 was 4.25:1 -- below WCAG AA's 4.5:1 floor for normal text. 0.72
+     * clears it with margin (~4.8:1) while staying visually dimmer than the
+     * focused window's full-opacity title. */
+    opacity: 0.72;
+    transition: opacity 120ms ease;
+    /* No text-transform here: the titlebar renders the window's own dynamic
+     * title (renderWindow({title}) / setTitle(t) in wm.js) — a user- or
+     * app-supplied filename/acronym/URL must not be silently lowercased. */
+}
+.ds-247420 .wm-win.wm-focused .wm-title {
+    color: var(--os-fg);
+    opacity: 1;
+}
+.ds-247420 .wm-btns { display: flex; align-items: center; gap: var(--space-1-75); order: -1; }
+.ds-247420 .wm-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-sm, var(--r-1));
+    border: none;
+    background: var(--os-bg-3);
+    color: var(--os-fg-2);
+    padding: 0;
+    cursor: pointer;
+    font: 600 var(--fs-micro) var(--os-mono);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 100ms ease, color 100ms ease;
+}
+.ds-247420 .wm-btn:hover { background: var(--panel-hover, var(--os-bg-2)); color: var(--os-fg); }
+.ds-247420 .wm-btn svg { width: 13px; height: 13px; display: block; fill: none; stroke: currentColor; }
+/* Hover-only color differentiation on the close button (independent of the
+ * armed/confirm state below) so it reads as the destructive action at a
+ * glance, matching the base wm.css rule. */
+.ds-247420 .wm-btn[title='close']:hover,
+.ds-247420 .wm-btn[aria-label='close']:hover {
+    background: var(--color-danger);
+    color: var(--paper);
+}
+/* Armed (first-click) confirm state for the window close button's
+ * second-click-to-confirm idiom — an unrecoverable close gets a visible cue
+ * before it commits, matching the launcher dock's instance-close treatment. */
+.ds-247420 .wm-btn.confirm { background: var(--color-danger); color: var(--paper); }
+.ds-247420 .wm-btn.confirm:hover { background: color-mix(in oklab, var(--color-danger) 85%, black); }
+
+.ds-247420 .wm-resize {
+    background: transparent;
+    width: 14px;
+    height: 14px;
+    color: var(--os-fg-3);
+    opacity: 0.4;
+}
+/* Resize grip via CSS gradient (matches wm.css); no decorative content glyph. */
+.wm-resize::after {
+    content: '';
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 8px;
+    height: 8px;
+    background:
+        linear-gradient(135deg, transparent 0 45%, currentColor 45% 55%, transparent 55% 100%),
+        linear-gradient(135deg, transparent 0 70%, currentColor 70% 80%, transparent 80% 100%);
+}
+.ds-247420 .wm-body {
+    background: var(--os-bg-1);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.os-side-rail {
+    position: fixed;
+    left: 0; top: var(--os-bar-h); bottom: var(--os-bar-h);
+    padding-left: env(safe-area-inset-left, 0px);
+    width: calc(var(--os-rail-w) + env(safe-area-inset-left, 0px));
+    background: var(--os-bg-2);
+    border: none;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-2, 8px) 0;
+    gap: var(--space-1, 4px);
+    z-index: var(--z-dock);
+    pointer-events: auto;
+}
+.os-rail-btn {
+    width: 48px; height: 48px;
+    border-radius: var(--os-radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--os-fg);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 100ms ease;
+    padding: 0;
+    outline: none;
+}
+.os-rail-btn:hover { background: var(--panel-hover, var(--os-bg-1)); }
+.os-rail-btn:active { background: var(--panel-select, var(--os-accent-soft)); }
+.os-rail-btn .ic { color: var(--os-accent); display: inline-flex; }
+.os-rail-btn .ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; }
+.os-rail-btn:active .ic svg { fill: currentColor; fill-opacity: 0.18; }
+
+.os-drawer {
+    position: fixed;
+    inset: 0;
+    background: var(--os-bg-0);
+    z-index: var(--z-modal);
+    pointer-events: auto;
+    display: none;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 180ms ease, transform 180ms ease;
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.os-drawer.open { display: flex; opacity: 1; transform: translateY(0); }
+.os-drawer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-2, 8px) var(--space-3, 16px);
+    border: none;
+    height: 56px;
+    box-sizing: border-box;
+    background: var(--os-bg-2);
+}
+.os-drawer-title { color: var(--os-fg); font-family: var(--os-display); font-size: var(--font-size-title, var(--fs-xl)); font-weight: 700; letter-spacing: -0.01em; text-transform: lowercase; }
+.os-drawer-close {
+    width: 44px; height: 44px;
+    border: none; background: transparent;
+    color: var(--os-fg-2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--os-radius-sm);
+    outline: none;
+}
+.os-drawer-close:hover { background: var(--panel-hover, var(--os-bg-2)); color: var(--os-fg); }
+.os-drawer-close .ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; }
+.os-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(clamp(92px, 24vw, 140px), 1fr));
+    gap: var(--space-3, 16px);
+    padding: var(--space-3, 16px);
+    overflow-y: auto;
+    flex: 1;
+    align-content: start;
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+.os-drawer-tile {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2, 8px);
+    padding: var(--space-3, 16px) var(--space-2, 8px);
+    background: var(--os-bg-1);
+    border: none;
+    color: var(--os-fg);
+    font: var(--fs-tiny) var(--os-font);
+    min-height: 100px;
+    cursor: pointer;
+    transition: background 80ms ease;
+    outline: none;
+    border-radius: var(--radius-lg, var(--r-3, 18px));
+    text-transform: lowercase;
+}
+.os-drawer-tile:hover { background: var(--panel-hover, var(--os-bg-2)); }
+.os-drawer-tile:active, .os-drawer-tile.active { background: var(--panel-select, var(--os-accent-soft)); }
+.os-drawer-tile .ic { color: var(--os-accent); display: inline-flex; }
+.os-drawer-tile .ic svg { width: 32px; height: 32px; fill: none; stroke: currentColor; }
+.os-drawer-tile:active .ic svg, .os-drawer-tile.active .ic svg { fill: currentColor; fill-opacity: 0.18; }
+.os-drawer-tile .lbl { color: var(--os-fg); font-weight: 600; }
+
+.os-spacer { flex: 1 1 auto; }
+.os-tray { display: flex; align-items: center; gap: var(--space-1-75); }
+.os-instances { display: flex; gap: var(--space-1); margin-left: var(--space-2); flex: 0 1 40vw; max-width: 40vw; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding: 0 var(--space-1); -webkit-mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent); mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent); }
+.os-instances::-webkit-scrollbar { height: 4px; }
+.os-instances .os-btn { flex: 0 0 auto; min-width: 36px; height: var(--os-control-h); padding: 0 var(--space-2); font-family: var(--os-mono); font-size: var(--fs-nano); }
+.os-instances .os-btn.active { background: var(--panel-select, var(--os-accent-soft)); color: var(--os-fg); border-color: var(--panel-accent, var(--os-accent)); box-shadow: inset 0 0 0 1px var(--panel-accent, var(--os-accent)); }
+.os-menubar [data-role="home"] { display: none; }
+.os-root { position: fixed; inset: 0; display: flex; flex-direction: column; pointer-events: none; z-index: calc(var(--z-dock) + 2); }
+.os-menubar, .os-taskbar { pointer-events: auto; flex: 0 0 auto; }
+.os-taskbar { margin-top: auto; }
+/* Desktop default: the window layer sits BETWEEN the menubar and taskbar.
+ * Scoped (0,2,0) to beat wm.css's bare `.wm-root{inset:0}` by specificity
+ * rather than `!important`. The brand "bars overlay" block further below
+ * re-asserts inset:0 for .ds-247420 at equal specificity + later source order. */
+.ds-247420 .wm-root { inset: var(--os-bar-h) 0 var(--os-bar-h) 0; }
+
+.app-pane { padding: var(--space-3, 16px); font: var(--fs-sm, 14px) var(--os-font); color: var(--os-fg); line-height: var(--lh-base, 1.55); overflow: auto; height: 100%; box-sizing: border-box; background: var(--os-bg-1); }
+.app-pane h2 { margin: 0 0 var(--space-2, 8px) 0; color: var(--os-fg); font-family: var(--os-display); font-size: var(--fs-xl, 21px); font-weight: 700; letter-spacing: -0.01em; line-height: var(--lh-snug, 1.2); }
+.app-pane p { margin: 0 0 var(--space-2, 8px) 0; color: var(--os-fg-2); }
+.app-pane ul { padding-left: var(--space-3, 16px); margin: var(--space-1, 4px) 0 var(--space-3, 16px); color: var(--os-fg-2); }
+.app-pane li { padding: var(--space-1, 4px) 0; }
+.app-pane code { font: var(--fs-tiny, 12px) var(--os-mono); background: var(--os-bg-2); padding: 1px var(--space-1-75); border-radius: var(--r-1, 6px); color: var(--os-fg); }
+.app-pane a { color: var(--os-accent); text-decoration: none; }
+.app-pane a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.app-pane .meta { color: var(--os-fg-3); font-size: var(--fs-tiny, 12px); }
+.app-pane.mono { font: var(--fs-tiny, 12px) var(--os-mono); padding: var(--space-2, 8px); background: var(--os-bg-1); }
+.app-pane.mono[data-component="monitor-app"] { white-space: pre-wrap; line-height: 1.7; }
+.app-pane.mono .row { padding: var(--space-1) var(--space-2); cursor: pointer; border-radius: var(--r-1, 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-pane.mono .row:hover { background: var(--panel-hover, var(--os-bg-2)); }
+.app-pane.mono .row.selected { background: var(--panel-select, var(--os-accent-soft)); box-shadow: inset 4px 0 0 var(--os-accent); }
+.app-pane.mono .head { color: var(--os-accent); margin-bottom: var(--space-2); padding-bottom: var(--space-2); font-weight: 600; letter-spacing: 0.02em; border-bottom: 1px solid var(--os-bg-3); }
+/* Visible fetch-error surface for polling app panes (files/monitor): a swallowed
+ * rejection must not leave the pane silently frozen with no user-facing signal. */
+.app-pane.mono .row-error { color: var(--color-danger); padding: var(--space-2); }
+.app-pane.mono[data-component="monitor-app"].is-error { color: var(--color-danger); }
+/* Placeholder body shown immediately for a window spawned by an async app
+ * factory, swapped for the real content on resolve — see openApp() in
+ * shell.js. Prevents a slow factory from reading as a dead click. */
+.os-app-loading { display: flex; align-items: center; justify-content: center; gap: var(--space-2, 8px); color: var(--os-fg-3); }
+.os-app-loading-label { font-style: italic; }
+.app-pane.mono pre { background: var(--os-bg-2); padding: var(--space-2-5) var(--space-2-75); margin: var(--space-2) 0 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font: var(--fs-nano) var(--os-mono); border-radius: var(--r-1, 6px); color: var(--os-fg); border: none; }
+.app-shell-pane { margin: 0; padding: var(--space-2); font: var(--fs-micro) var(--os-mono); color: var(--os-fg); background: var(--os-bg-0); height: 100%; overflow: auto; white-space: pre-wrap; box-sizing: border-box; }
+.app-canvas { width: 100%; height: 100%; background: var(--os-bg-0); display: block; cursor: default; }
+.app-canvas.x-display { background: #0b0d10; } /* intentional: fake CRT/terminal black screen, not a theme surface */
+.app-frame { width: 100%; height: 100%; border: 0; background: var(--os-bg-0); }
+.app-iframe { width: 100%; height: 100%; border: 0; display: block; }
+.app-iframe.web { background: #ffffff; } /* intentional: white canvas for embedded external web content that expects white */
+/* Browser-pane empty state (about:blank): a bare framed iframe with no
+ * content is a large dead rectangle -- this placeholder fills that space
+ * with a real affordance until a navigation lands. Hidden the instant the
+ * pane's own url stops being about:blank (docs/browser-pane.js). */
+.bp-empty {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--os-fg-3);
+  font: var(--fs-sm) var(--os-font);
+  background: var(--os-bg-1);
+  text-align: center;
+}
+.app-text-cursor { }
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-text-cursor { animation: app-cursor-blink 0.5s step-end infinite; }
+  @keyframes app-cursor-blink { 50% { opacity: 0; } }
+}
+/* (min-height: 501px): short-landscape windows (<501px tall) in this width
+ * band are on the mobile contract, not tablet — see the matching guard on
+ * the .wm-root tablet-inset rule below. Without the guard this block showed
+ * the side-rail and rail-offset the menubar/taskbar while the mobile band
+ * simultaneously tried to lay out rail-less full-screen windows. */
+@media (max-width: 1023px) and (min-width: 768px) and (min-height: 501px) {
+    .os-side-rail { display: flex; }
+    .ds-247420 .wm-root { left: calc(var(--os-rail-w) + env(safe-area-inset-left, 0px)); }
+    .os-menubar { padding-left: calc(var(--os-rail-w) + env(safe-area-inset-left, 0px) + var(--space-2, 8px)); }
+    .os-taskbar { padding-left: calc(var(--os-rail-w) + env(safe-area-inset-left, 0px) + var(--space-2, 8px)); }
+    .os-menubar .os-instances { display: flex; }
+    .os-menu {
+        left: calc(var(--os-rail-w) + env(safe-area-inset-left, 0px) + var(--space-2, 8px));
+        /* The base rule's max-width doesn't know about the rail's left offset;
+         * re-derive it here so the menu still can't overflow the viewport's
+         * right edge on tablet-band windows (~810-1150px is the tightest). */
+        max-width: min(320px, calc(100vw - var(--os-rail-w) - env(safe-area-inset-left, 0px) - var(--space-4, 16px)));
+    }
+}
+
+@media (max-width: 767px) {
+    :root { --os-bar-h: var(--os-bar-h-mobile); }
+    body { overscroll-behavior: none; }
+    .os-menubar [data-role="home"] { display: inline-flex; min-width: var(--os-tap); min-height: var(--os-tap); padding: 0 var(--space-2-75); }
+    .os-menubar [data-role="home"] .ic svg { width: 22px; height: 22px; }
+    .os-menubar { font-size: var(--fs-xs); padding: env(safe-area-inset-top, 0) max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px)); height: calc(var(--os-bar-h) + env(safe-area-inset-top, 0)); }
+    .os-menubar [data-role="apps"] { display: none; }
+    .os-menubar .os-brand { font-size: var(--fs-tiny); margin-right: var(--space-1-75); }
+    .os-menubar [data-role="add"] { display: none; }
+    .os-menubar .os-instances { display: none; }
+    .os-clock { display: none; }
+    .os-taskbar {
+        padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0)) max(8px, env(safe-area-inset-left, 0px));
+        gap: var(--space-1-75);
+        overflow-x: auto;
+        overflow-y: hidden;
+        flex-wrap: nowrap;
+        scroll-snap-type: x proximity;
+        height: calc(var(--os-bar-h) + env(safe-area-inset-bottom, 0));
+        align-items: center;
+    }
+    .os-taskbar::-webkit-scrollbar { display: none; }
+    .os-task {
+        flex: 0 0 auto;
+        min-width: 120px;
+        min-height: 44px;
+        max-width: none;
+        padding: var(--space-2-5) 14px;
+        scroll-snap-align: start;
+        font-size: var(--fs-tiny);
+    }
+    .os-task.focused { background: var(--panel-select, color-mix(in oklab, var(--os-accent) 30%, var(--os-bg-1))); font-weight: 700; box-shadow: inset var(--space-1) 0 0 var(--os-accent), inset 0 0 0 1px color-mix(in oklab, var(--os-accent) 40%, transparent); }
+    .os-side-rail { display: none; }
+    .os-menu { left: var(--space-2); right: var(--space-2); min-width: 0; top: calc(var(--os-bar-h) + env(safe-area-inset-top, 0) + var(--space-1)); }
+    .ds-247420 .wm-root {
+        inset: calc(var(--os-bar-h) + env(safe-area-inset-top, 0)) 0 calc(var(--os-bar-h) + env(safe-area-inset-bottom, 0)) 0;
+    }
+    /* LOAD-BEARING !important: wm.css's own mobile block declares
+     * `.wm-win{left/top/width/height: ... !important}` (wm.css:157-165). An
+     * !important declaration can only be beaten by another !important one, so
+     * scoping alone cannot win here — these five must keep the flag. The
+     * non-!important properties in this rule do not, and were dropped. */
+    .ds-247420 .wm-win {
+        position: absolute;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border: none;
+        /* bare 0, not --r-0 (4px): a full-screen window has square corners.
+         * The radius lint intentionally does not flag unitless zero. */
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .ds-247420 .wm-bar {
+        padding: var(--space-1-75) var(--space-2-5);
+        height: 36px;
+        gap: var(--space-1-75);
+        cursor: default;
+        touch-action: pan-y;
+        pointer-events: none;
+    }
+    .ds-247420 .wm-bar .wm-title { pointer-events: auto; font-size: var(--fs-tiny); }
+    .ds-247420 .wm-bar .wm-btns { pointer-events: auto; }
+    .ds-247420 .wm-btns .wm-btn:nth-child(1), .ds-247420 .wm-btns .wm-btn:nth-child(2) { display: none; }
+    .ds-247420 .wm-btns .wm-btn:nth-child(3) { width: 44px; height: 44px; border-radius: var(--r-1); background: var(--os-bg-3); color: var(--os-fg); }
+    .ds-247420 .wm-resize, .ds-247420 .wm-edge { display: none; }
+}
+
+/* ---- data-attr theme/accent: deferred to the canonical theme ----
+ * The OS shell no longer redefines surface or accent colors per theme. The
+ * --os-* aliases above consume the canonical semantic tokens (--bg/--fg/
+ * --accent), and colors_and_type.css already drives [data-theme] (paper/ink/
+ * auto, with color-scheme + --danger tuning) and [data-accent] (green/purple/
+ * mascot). Re-declaring the os surface or accent tokens per theme here only
+ * re-introduced drift (ink vs canonical ink; purple vs canonical purple).
+ * Density bar-height is genuinely OS-shell-specific, so it stays;
+ * --os-accent-tint maps to the canonical accent tint. */
+:root { --os-accent-tint: var(--accent-tint); }
+:root[data-density="compact"]     { --os-bar-h: 28px; --os-tile-pad: 6px;  --os-gap: 6px;  }
+:root[data-density="comfortable"] { --os-bar-h: 36px; --os-tile-pad: 10px; --os-gap: 10px; }
+:root[data-density="spacious"]    { --os-bar-h: 44px; --os-tile-pad: 14px; --os-gap: 14px; }
+
+/* ============================================================
+ * thebird brand layer (migrated from thebird's local thebird-brand.css
+ * 2026-05-26). thebird ships ZERO design CSS — every rule below lives here
+ * upstream and is delivered via the published package. Scoped to .ds-247420
+ * (thebird's OS root carries that class). Brand identity: Inter + green accent
+ * + uniform 34px bars + Windows-style right-side window controls.
+ *
+ * NOTE: this no longer globally overrides --paper. A global :root override
+ * silently mutated the base theme for EVERY portfolio consumer (canonical
+ * --paper is #F6F5F1; thebird wanted #F5F0E4). The warm-paper variant is now a
+ * named preset [data-theme="thebird"] a consumer opts into, leaving the base
+ * theme untouched. The [data-theme="thebird"] COLOR preset now lives in the
+ * canonical colors_and_type.css (a first-class swappable theme); only the
+ * OS-shell chrome (bar geometry, typography alias) stays here scoped to
+ * .ds-247420.
+ * ============================================================ */
+.ds-247420 {
+    --ff-ui: var(--ff-body);
+    /* uniform bar height: 22px button + 6px+6px padding = 34px.
+     * LOAD-BEARING !important: `:root[data-density="compact"|"comfortable"|
+     * "spacious"]` (this file, "data-attr theme/accent" block above) redefines
+     * --os-bar-h at (0,2,0) — HIGHER than this rule's (0,1,0) — on the same
+     * <html> element. Without the flag the density presets silently override
+     * the brand's uniform 34px bar geometry. */
+    --os-bar-h: 34px !important;
+    --os-bar-h-mobile: 34px !important;
+    --os-dock-h: 34px !important;
+    /* Brand identity, scoped so it never leaks to other portfolio consumers.
+     * The base theme's auto/paper/ink presets let --accent drift to the bright
+     * --green-2 (#3A9A34) in ink mode; thebird's brand accent is the deep green
+     * #247420 (--green) in EVERY resolved mode, and its paper is the warm
+     * #F5F0E4 variant. Re-assert both here rather than forcing the consumer to
+     * opt into [data-theme="thebird"], which the OS boots past with
+     * data-theme="auto". --accent-bright is pinned too so the ink-mode
+     * --accent: var(--accent-bright, ...) chain still resolves to brand green.
+     * LOAD-BEARING !important: colors_and_type.css defines --accent on
+     * `[data-accent="acid"|"green"|...]` and `[data-theme="ink"]` — attribute
+     * selectors at (0,1,0), the SAME specificity as this `.ds-247420` class
+     * rule, on the same <html> element. colors_and_type.css is always loaded
+     * first, but equal specificity + later source order would still let a
+     * [data-accent] preset win. The flag is the only thing pinning brand green. */
+    --accent: var(--green) !important;
+    --accent-bright: var(--green) !important;
+    --paper: #F5F0E4;
+}
+/* Themed scrollbars for every scrollable node under the OS shell (panels,
+ * sidebars, panes, modals) that doesn't already opt into its own scrollbar
+ * styling — .chat-thread below keeps its bespoke version. Firefox via
+ * scrollbar-width/-color, Chrome/Safari/Edge via ::-webkit-scrollbar. */
+.ds-247420, .ds-247420 * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--fg) 22%, transparent) transparent;
+}
+.ds-247420::-webkit-scrollbar, .ds-247420 *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.ds-247420::-webkit-scrollbar-track, .ds-247420 *::-webkit-scrollbar-track {
+    background: transparent;
+}
+.ds-247420::-webkit-scrollbar-thumb, .ds-247420 *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--fg) 18%, transparent);
+    border-radius: var(--r-pill, 999px);
+}
+.ds-247420::-webkit-scrollbar-thumb:hover, .ds-247420 *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--fg) 30%, transparent);
+}
+/* Window titlebar matches the 34px bar height; clamp so menubar/taskbar/titlebar
+ * heights are uniform. */
+.ds-247420 .wm-bar { height: 34px; min-height: 34px; box-sizing: border-box; padding-top: var(--space-1); padding-bottom: var(--space-1); }
+/* Bars overlay windows: .wm-root fills full viewport, menubar/taskbar paint on top.
+ * Tilde key hides them via .bars-hidden on <html>.
+ * Wins over the desktop `.ds-247420 .wm-root{inset:var(--os-bar-h)...}` above by
+ * equal specificity + later source order (both are now (0,2,0)) — no flag needed. */
+.ds-247420 .wm-root { inset: 0; }
+/* With bars overlaying the wm-root, a maximized window's 34px titlebar would
+ * sit exactly under the 34px menubar (untappable) and its body under the
+ * taskbar; keep maximized windows between the bars on desktop/tablet. The
+ * mobile band re-asserts its own contract in the responsive layer below.
+ * The (min-height: 501px) guard keeps this rule out of the short-landscape
+ * mobile band (768-1023 wide AND <500 tall): the mobile .wm-root already
+ * carries the bar-inset there, so this between-the-bars geometry used to
+ * DOUBLE-inset maximized windows — a restored wm-max window measured
+ * y=104/h=240 instead of y=52/h=344 at 782x448 (witnessed live on thebird
+ * 2026-07-29). Guarding here (same idiom as the tablet-band rules below)
+ * instead of overriding inside the mobile band keeps the !important
+ * ratchet flat — no new declaration was needed. */
+@media (min-width: 768px) and (min-height: 501px) {
+  /* LOAD-BEARING !important: wm.css declares `.wm-win.wm-max{top:0!important;
+   * height:100%!important}` (wm.css:137-143). Only another !important can beat
+   * an !important, regardless of specificity. */
+  .ds-247420 .wm-win.wm-max {
+    top: var(--os-bar-h) !important;
+    height: calc(100% - (var(--os-bar-h) * 2)) !important;
+  }
+}
+/* Instance filtering hides off-instance windows via class, not inline style.
+ * LOAD-BEARING !important: must beat wm.css's `.wm-win.wm-max{...!important}`
+ * geometry and any display set by the window's own state classes — a hidden
+ * window must stay hidden no matter which layout rule matched it. */
+.ds-247420 .wm-win.wm-inst-hidden,
+.wm-win.wm-inst-hidden { display: none !important; }
+/* LOAD-BEARING !important: `.os-menubar`/`.os-taskbar` carry `display:flex`
+ * from rules at equal-or-higher specificity in this sheet and in the responsive
+ * bands below; the tilde-key hide must beat all of them unconditionally. */
+html.bars-hidden .os-menubar,
+html.bars-hidden .os-taskbar { display: none !important; }
+.ds-247420 .os-task { border-radius: var(--r-pill, 999px); }
+.os-brand { font-family: var(--ff-display); font-weight: 700; }
+
+/* thebird windows use Windows/Linux-style right-side controls (upstream theme
+ * sets .wm-btns order:-1 for a macOS look; thebird overrides to natural DOM
+ * order so controls render on the right). */
+.ds-247420 .wm-btns { order: 0; }
+
+/* OS-shell z-index layering: .os-root above .wm-root so its .os-menu dropdowns
+ * paint above windows. */
+.ds-247420 .os-root { z-index: calc(var(--z-dock) + 2); }
+.ds-247420 .os-menubar { z-index: calc(var(--z-dock) + 1); position: relative; }
+.ds-247420 .os-taskbar { z-index: calc(var(--z-dock) + 1); position: relative; }
+.ds-247420 .os-menu { z-index: var(--z-dropdown); }
+.ds-247420 .wm-root { z-index: var(--z-window); }
+.ds-247420 .launcher-dock { z-index: var(--z-dock); }
+
+/* Touch/gesture hardening. */
+html.ds-247420 { touch-action: pan-x pan-y; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+.ds-247420 .os-root, .ds-247420 .wm-root { touch-action: none; }
+.ds-247420 .wm-body { overscroll-behavior: contain; touch-action: auto; }
+.ds-247420 .wm-bar, .ds-247420 .wm-resize { -webkit-touch-callout: none; user-select: none; }
+.ds-247420 .os-menubar, .ds-247420 .os-taskbar, .ds-247420 .launcher-dock { user-select: none; -webkit-user-select: none; }
+
+/* Aero-snap drag preview. */
+.ds-247420 .wm-snap-preview {
+  position: fixed;
+  pointer-events: none;
+  display: none;
+  z-index: calc(var(--z-window) + 1);
+  background: color-mix(in oklab, var(--os-accent) 20%, transparent);
+  border: 2px solid var(--os-accent);
+  border-radius: var(--r-0);
+  /* Animate only geometry, never `all` — `transition: all` animated display/
+   * opacity too, producing a one-frame ghost on show (jank-pass fix). */
+  transition: left 80ms ease, top 80ms ease, width 80ms ease, height 80ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .wm-snap-preview { transition: none; }
+}
+
+/* Alt+Tab window switcher overlay. */
+.ds-247420 .wm-switcher {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--space-3) var(--space-3-5);
+  background: var(--os-bg-2);
+  border: 1px solid var(--os-accent);
+  border-radius: var(--r-0);
+  z-index: var(--z-modal);
+  font-family: var(--ff-ui);
+  color: var(--os-fg);
+  min-width: 280px;
+  box-shadow: var(--shadow-overlay);
+  /* Uncapped, the switcher grew one row per open window with no bound —
+   * witnessed live at 27 windows on a 448px-tall viewport: the overlay
+   * measured y=-344 / h=1136, its top rows unreachable above the screen.
+   * Cap to the viewport between the bars and scroll the overflow. */
+  max-height: calc(100dvh - (2 * var(--os-bar-h, 34px)) - 24px);
+  overflow-y: auto;
+}
+.ds-247420 .wm-switcher-item {
+  padding: var(--space-2) var(--space-2-75);
+  border-radius: var(--r-0);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+}
+.ds-247420 .wm-switcher-item.active {
+  background: var(--os-accent);
+  color: var(--paper);
+}
+
+/* freddie-chat font family (upstream still ships Nunito; brand is Inter). */
+.ds-247420 freddie-chat,
+.ds-247420 freddie-chat .chat-bubble,
+.ds-247420 freddie-chat .chat-meta,
+.ds-247420 freddie-chat .chat-head {
+  font-family: var(--ff-ui);
+}
+.ds-247420 freddie-chat .chat-bubble pre,
+.ds-247420 freddie-chat .chat-bubble code {
+  font-family: var(--ff-mono, ui-monospace, Menlo, Consolas, monospace);
+}
+.ds-247420 freddie-chat .chat-head {
+  font-family: var(--ff-display, system-ui, sans-serif);
+  font-weight: 700;
+}
+
+/* Session-switch crossfade. */
+.ds-247420 .wm-win { transition: opacity 140ms ease; }
+.tb-switching .ds-247420 .wm-win { opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .wm-win { transition: none; }
+  .tb-switching .ds-247420 .wm-win { opacity: 1; }
+}
+
+/* ---- Session-UX surfaces: chips + modals + empty state ---- */
+.ds-247420 .os-instances { display: flex; gap: var(--space-1-75); align-items: center; flex: 0 1 auto; min-width: 0; height: var(--os-bar-h, 34px); overflow-x: auto; overflow-y: hidden; padding: 0 var(--space-1); scrollbar-width: none; }
+.ds-247420 .os-instances::-webkit-scrollbar { display: none; }
+
+.ds-247420 .tb-sess-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1-75);
+  height: var(--os-control-h); padding: 0 var(--space-1-75) 0 var(--space-2);
+  border-radius: var(--radius-pill, var(--r-pill, 999px));
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+  color: var(--fg);
+  font-family: var(--ff-ui); font-size: var(--fs-nano); font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+  user-select: none; flex: 0 0 auto;
+}
+.ds-247420 .tb-sess-chip:hover { background: color-mix(in oklab, var(--fg) 12%, transparent); }
+.ds-247420 .tb-sess-chip.active {
+  background: color-mix(in oklab, var(--os-accent) 18%, transparent);
+  border-color: var(--os-accent);
+  color: var(--fg);
+}
+.ds-247420 .tb-sess-chip.active .tb-sess-dot { background: var(--os-accent); box-shadow: 0 0 0 2px color-mix(in oklab, var(--os-accent) 30%, transparent); }
+.ds-247420 .tb-sess-dot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--fg) 40%, transparent); flex: 0 0 6px; }
+.ds-247420 .tb-sess-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-247420 .tb-sess-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 14px; padding: 0 var(--space-1);
+  /* A neutral window-COUNT chip, not a notification/alert badge -- a small
+   * corner radius (--r-0, 4px) reads as a rectangular count pill, distinct
+   * from the fully-round .tb-sess-dot presence indicator elsewhere in this
+   * chip, so the two don't get visually conflated. */
+  border-radius: var(--r-0);
+  background: color-mix(in oklab, var(--fg) 14%, transparent);
+  font-size: var(--fs-pico); font-weight: 600; line-height: 1;
+}
+.ds-247420 .tb-sess-chip.active .tb-sess-badge { background: color-mix(in oklab, var(--os-accent) 30%, transparent); }
+.ds-247420 .tb-sess-x {
+  width: 16px; height: 16px; line-height: 14px; text-align: center;
+  border: 0; padding: 0; background: transparent;
+  border-radius: 50%; cursor: pointer; color: inherit;
+  font-size: var(--fs-xs); font-weight: 600;
+  opacity: 0.55; transition: opacity 120ms ease, background 120ms ease;
+}
+.ds-247420 .tb-sess-chip:hover .tb-sess-x { opacity: 1; }
+.ds-247420 .tb-sess-x:hover { background: color-mix(in oklab, var(--color-danger) 30%, transparent); color: var(--on-color); }
+
+.ds-247420 .tb-sess-add {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: var(--os-control-h); padding: 0 var(--space-2-5);
+  border: 1px dashed color-mix(in oklab, var(--fg) 30%, transparent);
+  background: transparent;
+  border-radius: var(--radius-pill, var(--r-pill, 999px));
+  font-family: var(--ff-ui); font-size: var(--fs-nano); font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  margin-left: var(--space-1-75);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.ds-247420 .tb-sess-add:hover {
+  border-color: var(--os-accent);
+  background: color-mix(in oklab, var(--os-accent) 8%, transparent);
+}
+.ds-247420 .tb-sess-add-plus { font-size: var(--fs-tiny); line-height: 1; }
+.ds-247420 .tb-sess-add-lbl { line-height: 1; }
+
+.tb-sess-overlay {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: var(--scrim);
+  display: flex; align-items: center; justify-content: center;
+  animation: tb-sess-fade 120ms ease;
+}
+@keyframes tb-sess-fade { from { opacity: 0; } to { opacity: 1; } }
+.tb-sess-modal {
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: var(--radius-sm, var(--r-1));
+  box-shadow: var(--shadow-overlay);
+  min-width: 320px; max-width: 480px;
+  border: 1px solid color-mix(in oklab, var(--fg) 12%, transparent);
+  overflow: hidden;
+  font-family: var(--ff-ui);
+}
+.tb-sess-modal-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2-75) var(--space-3); border-bottom: 1px solid color-mix(in oklab, var(--fg) 8%, transparent); }
+.tb-sess-modal-title { font-weight: 600; font-size: var(--fs-xs); }
+.tb-sess-modal-x { background: transparent; border: 0; font-size: var(--fs-xl); line-height: 1; cursor: pointer; color: inherit; padding: 0 var(--space-1); }
+.tb-sess-modal-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.tb-sess-modal-lbl { font-size: var(--fs-nano); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.tb-sess-modal-input {
+  width: 100%; box-sizing: border-box;
+  height: 32px; padding: 0 var(--space-2-5);
+  border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent);
+  border-radius: var(--radius-sm, var(--r-0));
+  background: color-mix(in oklab, var(--fg) 6%, var(--bg));
+  color: inherit;
+  font-family: inherit; font-size: var(--fs-tiny);
+}
+.tb-sess-modal-input:focus { outline: none; border-color: var(--os-accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--os-accent) 20%, transparent); }
+.tb-sess-modal-hint { font-size: var(--fs-nano); opacity: 0.7; }
+.tb-sess-modal-hint.error { color: var(--danger); opacity: 1; }
+.tb-sess-modal-msg { font-size: var(--fs-tiny); }
+.tb-sess-modal-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-2-75) var(--space-3); border-top: 1px solid color-mix(in oklab, var(--fg) 8%, transparent); }
+.tb-sess-modal-btn {
+  height: 28px; padding: 0 14px;
+  border-radius: var(--radius-sm, var(--r-0)); border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent);
+  background: transparent; color: inherit;
+  font-family: inherit; font-size: var(--fs-micro); font-weight: 500; cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.tb-sess-modal-btn:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.tb-sess-modal-btn.primary { background: var(--accent-primary, var(--os-accent)); color: var(--on-color); border-color: var(--accent-primary, var(--os-accent)); }
+.tb-sess-modal-btn.primary:hover { background: color-mix(in oklab, var(--accent-primary, var(--os-accent)) 80%, var(--ink)); }
+.tb-sess-modal-btn.danger { background: var(--color-danger); color: var(--on-color); border-color: var(--color-danger); }
+.tb-sess-modal-btn.danger:hover { background: color-mix(in oklab, var(--color-danger) 80%, var(--ink)); }
+
+.tb-sess-empty {
+  position: fixed; inset: 0; z-index: var(--z-window);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.tb-sess-empty[hidden] { display: none; }
+.tb-sess-empty-card {
+  pointer-events: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent);
+  border-radius: var(--radius-md, var(--r-2));
+  box-shadow: var(--shadow-3);
+  padding: var(--space-5) 40px; text-align: center;
+  font-family: var(--ff-ui);
+  max-width: 420px;
+}
+.tb-sess-empty-title { font-size: var(--fs-lg); font-weight: 600; margin-bottom: var(--space-1-75); }
+.tb-sess-empty-sub { font-size: var(--fs-tiny); opacity: 0.7; margin-bottom: var(--space-3-5); }
+.tb-sess-empty-cta {
+  height: 40px; padding: 0 var(--space-4);
+  background: var(--accent-primary, var(--os-accent)); color: var(--on-color);
+  border: 0; border-radius: var(--radius-pill, var(--r-pill, 999px));
+  font-family: inherit; font-size: var(--fs-xs); font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.tb-sess-empty-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 16px color-mix(in oklab, var(--os-accent) 40%, transparent); }
+
+/* ---- Workspaces app — full-window session manager card grid ---- */
+.ds-247420 .tb-sessions-app { display: flex; flex-direction: column; height: 100%; font-family: var(--ff-ui); color: var(--fg); background: var(--bg); }
+.ds-247420 .tb-sessions-bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2-5) 14px; border-bottom: 1px solid color-mix(in oklab, var(--fg) 10%, transparent); }
+.ds-247420 .tb-sessions-title { font-weight: 600; font-size: var(--fs-xs); }
+.ds-247420 .tb-sessions-count { font-size: var(--fs-micro); opacity: 0.6; margin-left: var(--space-1); }
+.ds-247420 .tb-sessions-spacer { flex: 1; }
+.ds-247420 .tb-sessions-btn { height: 28px; padding: 0 var(--space-2-75); border-radius: var(--radius-sm, var(--r-0)); border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent); background: transparent; color: inherit; font-size: var(--fs-micro); font-weight: 500; cursor: pointer; font-family: inherit; }
+.ds-247420 .tb-sessions-btn:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.ds-247420 .tb-sessions-btn.primary { background: var(--accent-primary, var(--os-accent)); color: var(--on-color); border-color: var(--accent-primary, var(--os-accent)); }
+.ds-247420 .tb-sessions-btn.danger { background: var(--color-danger); color: var(--on-color); border-color: var(--color-danger); }
+.ds-247420 .tb-sessions-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ds-247420 .tb-sessions-grid { flex: 1; overflow: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-2-75); align-content: start; }
+.ds-247420 .tb-sessions-card { padding: var(--space-2-75); border-radius: var(--radius-sm, var(--r-1, 10px)); border: 1px solid color-mix(in oklab, var(--fg) 12%, transparent); background: color-mix(in oklab, var(--fg) 3%, transparent); display: flex; flex-direction: column; gap: var(--space-2); transition: border-color 120ms ease, transform 120ms ease; }
+.ds-247420 .tb-sessions-card:hover { border-color: var(--os-accent); }
+.ds-247420 .tb-sessions-card.active { border-color: var(--os-accent); box-shadow: 0 0 0 2px color-mix(in oklab, var(--os-accent) 30%, transparent); }
+.ds-247420 .tb-sessions-card-head { display: flex; align-items: center; gap: var(--space-2); }
+.ds-247420 .tb-sessions-card-check { width: 14px; height: 14px; cursor: pointer; flex: 0 0 14px; }
+.ds-247420 .tb-sessions-card-name { font-weight: 600; font-size: var(--fs-tiny); flex: 1; outline: none; padding: var(--space-hair) var(--space-1); border-radius: var(--radius-sm, var(--r-0)); }
+.ds-247420 .tb-sessions-card-name[contenteditable="true"] { background: color-mix(in oklab, var(--fg) 8%, transparent); }
+.ds-247420 .tb-sessions-card-id { font-family: var(--os-mono, monospace); font-size: var(--fs-pico); opacity: 0.5; }
+.ds-247420 .tb-sessions-card-stats { font-size: var(--fs-nano); opacity: 0.7; display: flex; gap: var(--space-2-75); }
+.ds-247420 .tb-sessions-card-actions { display: flex; gap: var(--space-1-75); margin-top: var(--space-1); }
+.ds-247420 .tb-sessions-card-actions button { flex: 1; height: 24px; font-size: var(--fs-nano); padding: 0 var(--space-2); border-radius: var(--radius-sm, var(--r-0)); border: 1px solid color-mix(in oklab, var(--fg) 16%, transparent); background: transparent; color: inherit; cursor: pointer; font-family: inherit; }
+.ds-247420 .tb-sessions-card-actions button:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+/* Baseline (non-hover) danger tint so the destructive action reads as
+ * distinct at rest, not only on hover -- otherwise Delete is visually
+ * identical to Active/Export until the pointer happens to land on it. */
+.ds-247420 .tb-sessions-card-actions button.danger { color: var(--color-danger); border-color: color-mix(in oklab, var(--color-danger) 40%, transparent); }
+.ds-247420 .tb-sessions-card-actions button.danger:hover { background: var(--color-danger); color: var(--on-color); border-color: var(--color-danger); }
+.ds-247420 .tb-sessions-empty-mid { padding: 40px; text-align: center; opacity: 0.6; font-size: var(--fs-tiny); }
+
+/* ---- prefers-contrast: more — strengthen borders + focus so the translucent
+   chrome stays legible under forced/high-contrast user settings. ---- */
+@media (prefers-contrast: more) {
+  .ds-247420 .wm-win { border-color: var(--fg); }
+  .ds-247420 .wm-bar { border-bottom: 1px solid var(--fg); }
+  .ds-247420 .os-menubar,
+  .ds-247420 .os-taskbar { border-color: var(--fg); }
+  .ds-247420 .tb-sess-chip,
+  .ds-247420 .tb-sessions-card,
+  .ds-247420 .tb-sessions-btn { border-color: var(--fg); }
+  .ds-247420 :focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+}
+
+/* ---- print: a web-OS desktop has no meaningful print form. Suppress the
+   live chrome so a Ctrl+P does not waste pages on translucent panels. ---- */
+/* LOAD-BEARING !important throughout this block. Print must defeat two things
+ * no selector can outrank: (1) wm.css's `.wm-win.wm-max{left/top/width/height
+ * !important}` and its mobile `.wm-win{...!important}` band, and (2) the
+ * INLINE styles createWM()/renderWindow() write directly onto .wm-win/.wm-canvas
+ * for drag, resize and pan (element style attribute beats every stylesheet
+ * rule). Flattening the desktop to static flow for print is only possible by
+ * force. Do not remove. */
+@media print {
+  .os-menubar, .os-taskbar, .wm-snap-preview,
+  .tb-sess-overlay, .tb-switching, .wm-switcher { display: none !important; }
+  .wm-root, .wm-canvas { position: static !important; transform: none !important; overflow: visible !important; }
+  .wm-win { position: static !important; box-shadow: none !important; border: 1px solid var(--fg) !important; page-break-inside: avoid; margin: 0 0 var(--space-2-75); width: auto !important; height: auto !important; }
+  .wm-win.wm-min { display: none !important; }
+}
+
+/* ============================================================================
+ *  Relocated from thebird (2026-05-30) — moves design CSS out of docs/*.js
+ *  modules to enforce the zero-design-CSS-in-thebird rule.
+ *  Source files: docs/chat-config.js, docs/fsbrowse-app.js, docs/wm.js,
+ *  docs/apps.js (todo-app), docs/freddie-keys.js.
+ * ============================================================================ */
+
+/* ---- chat-config strip (was: docs/chat-config.js ensureStyles) ---- */
+.ds-247420 .wm-body:has(> .freddie-chat-wrap) { display: flex; flex-direction: column; padding: 0; }
+.ds-247420 .freddie-chat-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.ds-247420 .freddie-chat-wrap > freddie-chat { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ds-247420 .cc-strip { flex: 0 0 auto; font-size: var(--fs-micro); border-bottom: 1px solid color-mix(in oklab, var(--fg) 16%, transparent); }
+.ds-247420 .cc-toggle { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: .4em; padding: .35em .7em; color: var(--fg, inherit); opacity: .75; border: 1px solid transparent; border-radius: var(--r-1, 8px); }
+.ds-247420 .cc-toggle:hover { opacity: 1; background: var(--panel-hover, var(--os-bg-2)); border-color: color-mix(in oklab, var(--fg) 18%, transparent); color: var(--os-fg, inherit); }
+.ds-247420 .cc-toggle.cc-open { opacity: 1; font-weight: 600; background: var(--panel-hover, var(--os-bg-2)); border-color: color-mix(in oklab, var(--fg) 18%, transparent); }
+.ds-247420 .cc-body { padding: .5em .7em .7em; display: flex; flex-direction: column; gap: .5em; max-height: 42vh; max-height: 42dvh; overflow: auto; }
+.ds-247420 .cc-body[hidden] { display: none; }
+.ds-247420 .cc-row { display: flex; gap: .6em; flex-wrap: wrap; }
+.ds-247420 .cc-row > .cc-field { flex: 1 1 140px; min-width: 0; }
+.ds-247420 .cc-field { display: flex; flex-direction: column; gap: .2em; }
+.ds-247420 .cc-field-label { font-size: var(--fs-nano); opacity: .65; text-transform: lowercase; }
+.ds-247420 .cc-strip select,
+.ds-247420 .cc-strip input { font: inherit; font-size: var(--fs-micro); padding: .3em .4em; width: 100%; box-sizing: border-box; background: var(--panel-1, transparent); color: var(--fg, inherit); border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-0); }
+.ds-247420 .cc-acp-mode-wrap { display: flex; align-items: center; gap: .4em; }
+.ds-247420 .cc-acp-mode-wrap select { flex: 1; }
+.ds-247420 .cc-acp-status { opacity: .5; font-size: var(--fs-tiny); }
+.ds-247420 .cc-acp-status.cc-reachable { opacity: 1; color: var(--os-accent, #247420); }
+.ds-247420 .cc-details > summary { cursor: pointer; opacity: .7; padding: .2em 0; }
+.ds-247420 .cc-skills,
+.ds-247420 .cc-plugins { display: flex; flex-wrap: wrap; gap: .3em .8em; padding: .3em 0; }
+.ds-247420 .cc-check { display: inline-flex; align-items: center; gap: .3em; cursor: pointer; }
+.ds-247420 .cc-check input { width: auto; }
+.ds-247420 .cc-empty { opacity: .5; font-style: italic; }
+
+/* ---- fsbrowse files app (was: docs/fsbrowse-app.js ensureStyles) ---- */
+.ds-247420 .fsb-root { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; font-size: var(--fs-tiny); color: var(--fg, inherit); }
+.ds-247420 .fsb-bar { flex: 0 0 auto; display: flex; align-items: center; gap: .4em; padding: .45em .6em; border-bottom: 1px solid color-mix(in oklab, var(--fg) 16%, transparent); flex-wrap: wrap; }
+.ds-247420 .fsb-crumbs { flex: 1; display: flex; align-items: center; gap: .2em; min-width: 0; overflow: auto; white-space: nowrap; }
+.ds-247420 .fsb-crumb { cursor: pointer; opacity: .75; text-decoration: none; color: inherit; }
+.ds-247420 .fsb-crumb:hover { opacity: 1; text-decoration: underline; }
+.ds-247420 .fsb-crumb-sep { opacity: .4; }
+.ds-247420 .fsb-btn { all: unset; cursor: pointer; padding: .3em .55em; border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-0); opacity: .85; }
+.ds-247420 .fsb-btn:hover { opacity: 1; background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.ds-247420 .fsb-list { flex: 1; min-height: 0; overflow: auto; padding: .3em 0; }
+.ds-247420 .fsb-row { display: flex; align-items: center; gap: .6em; padding: .35em .7em; cursor: pointer; border: 0; }
+.ds-247420 .fsb-row:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.ds-247420 .fsb-row:focus-visible { outline: 2px solid var(--os-accent); outline-offset: -2px; background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.ds-247420 .fsb-icon { width: 1.3em; text-align: center; flex: 0 0 auto; }
+.ds-247420 .fsb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-247420 .fsb-size { opacity: .55; font-size: var(--fs-nano); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.ds-247420 .fsb-actions { display: flex; gap: .3em; flex: 0 0 auto; opacity: 0; }
+/* Reveal row actions on hover OR keyboard focus-within OR coarse-pointer (touch),
+ * so they aren't hover-only dead controls for keyboard/touch users. */
+.ds-247420 .fsb-row:hover .fsb-actions,
+.ds-247420 .fsb-row:focus-within .fsb-actions { opacity: 1; }
+@media (hover: none) { .ds-247420 .fsb-actions { opacity: 1; } }
+.ds-247420 .fsb-act { all: unset; cursor: pointer; padding: .1em .35em; border-radius: var(--r-0); opacity: .7; font-size: var(--fs-micro); }
+.ds-247420 .fsb-act:hover { opacity: 1; background: color-mix(in oklab, var(--fg) 12%, transparent); }
+.ds-247420 .fsb-empty { opacity: .5; padding: 1.5em; text-align: center; font-style: italic; }
+.ds-247420 .fsb-view { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: .7em; white-space: pre-wrap; word-break: break-word; font: var(--fs-micro)/1.5 var(--os-mono, ui-monospace, monospace); background: var(--panel-1, transparent); }
+.ds-247420 .fsb-dropping { outline: 2px dashed var(--os-accent, #247420); outline-offset: -6px; }
+
+/* ---- wm canvas (infinite zoom/pan surface — was: docs/desktop-camera.js canvas.style.cssText) ----
+ * .wm-root is the fixed clipping viewport; .wm-canvas is the inner transformed
+ * layer that carries translate()/scale() updates per camera tick. Compositor-
+ * promoted via will-change:transform so per-frame pan/zoom does GPU-only work. */
+.ds-247420 .wm-canvas { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+
+/* ---- wm context menu (was: docs/wm.js showWindowMenu cssText) ---- */
+/* No var() fallbacks here: colors_and_type.css is guaranteed loaded first for
+ * every .ds-247420 consumer (see the file header), and the old `#1a1a1a` /
+ * `#fff` fallbacks were baked DARK values that would have rendered white text
+ * on a near-white panel in paper mode had they ever fired. */
+.ds-247420 .wm-context-menu { position: fixed; background: var(--panel-2); border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-0); z-index: var(--z-dropdown); font-family: var(--ff-ui); color: var(--fg); min-width: 140px; box-shadow: var(--shadow-3); padding: var(--space-1); }
+.ds-247420 .wm-context-menu-item { display: block; width: 100%; padding: 7px var(--space-2-5); border: none; border-radius: var(--r-0); background: none; color: inherit; font-family: inherit; text-align: left; cursor: pointer; font-size: var(--fs-tiny); }
+.ds-247420 .wm-context-menu-item:hover { background: color-mix(in oklab, var(--fg) 8%, transparent); }
+
+/* ---- todo app (was: docs/apps.js todo-app cssText) ---- */
+.ds-247420 .tb-todo-bar { display: flex; gap: var(--space-1-75); margin-bottom: var(--space-2); }
+.ds-247420 .tb-todo-input { flex: 1; padding: var(--space-1-5) var(--space-2); border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-0); font: inherit; background: var(--panel-1, transparent); color: var(--fg, inherit); }
+.ds-247420 .tb-todo-list { list-style: none; padding: 0; margin: var(--space-1-75) 0; }
+.ds-247420 .tb-todo-footer { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-1-75); font-size: var(--fs-nano); }
+.ds-247420 .tb-todo-status { margin-top: var(--space-2-5); font-size: var(--fs-nano); color: color-mix(in oklab, var(--fg) 55%, transparent); padding: var(--space-1-75) var(--space-2); background: var(--panel-1, transparent); border-radius: var(--r-0); min-height: 14px; }
+.ds-247420 .tb-todo-item { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1-5) var(--space-1-75); border-bottom: 1px solid color-mix(in oklab, var(--fg) 8%, transparent); }
+.ds-247420 .tb-todo-text { flex: 1; }
+.ds-247420 .tb-todo-text.is-done { text-decoration: line-through; color: color-mix(in oklab, var(--fg) 45%, transparent); }
+.ds-247420 .tb-todo-del { padding: var(--space-hair) var(--space-2); }
+
+/* ---- freddie keys panel (was: docs/freddie-keys.js cssText) ---- */
+.ds-247420 .fk-root { padding: var(--space-2-75); overflow: auto; height: 100%; font-family: var(--os-mono, monospace); font-size: var(--fs-micro); }
+.ds-247420 .fk-status { margin-top: var(--space-2); color: color-mix(in oklab, var(--fg) 60%, transparent); min-height: 1.2em; }
+.ds-247420 .fk-row { display: grid; grid-template-columns: 140px 1fr auto auto; gap: var(--space-1-75); align-items: center; margin: var(--space-hair) 0; }
+.ds-247420 .fk-input { font-family: var(--os-mono, monospace); font-size: var(--fs-nano); padding: var(--space-hair) var(--space-1); }
+.ds-247420 .fk-title { font-weight: 600; margin-bottom: var(--space-2); }
+.ds-247420 .fk-nim-wrap { display: flex; gap: var(--space-1-75); align-items: center; margin: var(--space-1) 0 var(--space-2-5) 0; }
+.ds-247420 .fk-nim-in { font-family: var(--os-mono, monospace); font-size: var(--fs-nano); padding: var(--space-hair) var(--space-1); flex: 1; }
+.ds-247420 .fk-badge { font-size: var(--fs-pico); padding: var(--space-hair) var(--space-1-75); border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-hair); color: var(--os-accent, #247420); }
+.ds-247420 .fk-agent-title,
+.ds-247420 .fk-host-title { margin-top: 14px; font-size: var(--fs-nano); color: color-mix(in oklab, var(--fg) 60%, transparent); }
+.ds-247420 .fk-summary { font-size: var(--fs-pico); color: color-mix(in oklab, var(--fg) 60%, transparent); margin: var(--space-1-75) 0; }
+
+/* ============================================================================
+ *  Freddie chat redesign (2026-05-30) — extends ds-chat / freddie-chat with
+ *  agent-loop chrome: tool-call cards, thinking indicator, system/centered
+ *  roles, suggestion chips on empty state, cancel-while-generating button.
+ *  Drives the {role: 'tool'|'system'|'thinking'} + parts:[{kind:'tool'|...}]
+ *  shape that freddie's agent machine now produces.
+ * ============================================================================ */
+
+/* Centered chrome for system/tool/thinking — full row, no avatar column. */
+.ds-247420 .chat-msg.centered { grid-template-columns: 1fr; padding: var(--space-1) 12%; }
+.ds-247420 .chat-msg.centered .chat-stack { align-items: center; }
+.ds-247420 .chat-msg.system .chat-bubble { background: transparent; border: 0; font-style: italic; opacity: 0.65; font-size: var(--fs-micro); padding: var(--space-1) var(--space-2); text-align: center; max-width: 100%; }
+
+/* Tool-call card — collapsible details with status icon + name + label. */
+.ds-247420 .chat-tool { display: block; background: var(--panel-1, color-mix(in oklab, var(--fg) 4%, transparent)); border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent); border-radius: var(--r-0); padding: 0; max-width: min(640px, 92%); overflow: hidden; font-size: var(--fs-micro); }
+.ds-247420 .chat-tool[open] { background: var(--panel-1, color-mix(in oklab, var(--fg) 6%, transparent)); }
+.ds-247420 .chat-tool.tool-error { border-color: color-mix(in oklab, var(--color-danger) 60%, transparent); }
+.ds-247420 .chat-tool.tool-done { border-color: color-mix(in oklab, var(--color-success) 35%, transparent); }
+.ds-247420 .chat-tool-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-75) var(--space-2-5); cursor: pointer; list-style: none; user-select: none; }
+.ds-247420 .chat-tool-head::-webkit-details-marker { display: none; }
+.ds-247420 .chat-tool-icon { display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center; font-family: var(--os-mono, monospace); font-size: var(--fs-micro); opacity: 0.7; }
+.ds-247420 .chat-tool.tool-error .chat-tool-icon { color: var(--color-danger); opacity: 1; }
+.ds-247420 .chat-tool.tool-done .chat-tool-icon { color: var(--color-success); opacity: 1; }
+.ds-247420 .chat-tool.tool-running .chat-tool-icon { animation: chat-spin 1.4s linear infinite; }
+@keyframes chat-spin { to { transform: rotate(360deg); } }
+.ds-247420 .chat-tool-name { font-family: var(--os-mono, monospace); font-weight: 600; font-size: var(--fs-micro); }
+.ds-247420 .chat-tool-label { opacity: 0.7; font-size: var(--fs-nano); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-247420 .chat-tool-status { font-size: var(--fs-pico); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.05em; margin-left: auto; }
+.ds-247420 .chat-tool-body { padding: var(--space-1) var(--space-2-5) var(--space-2-5); display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid color-mix(in oklab, var(--fg) 8%, transparent); }
+.ds-247420 .chat-tool-section { display: flex; flex-direction: column; gap: var(--space-half); }
+.ds-247420 .chat-tool-section-label { font-size: var(--fs-pico); opacity: 0.5; text-transform: lowercase; letter-spacing: 0.05em; }
+.ds-247420 .chat-tool-pre { margin: 0; padding: var(--space-1-75) var(--space-2); background: color-mix(in oklab, var(--fg) 4%, transparent); border-radius: var(--r-0); max-height: 200px; overflow: auto; font: var(--fs-nano)/1.45 var(--os-mono, ui-monospace, monospace); white-space: pre-wrap; word-break: break-word; }
+.ds-247420 .chat-tool-pre.is-error { color: var(--color-danger); }
+
+/* Thinking indicator — typing dots + label, transient (assistant-side). */
+.ds-247420 .chat-thinking { display: inline-flex; align-items: center; gap: var(--space-2); background: transparent; border: 0; padding: var(--space-1) var(--space-2); opacity: 0.7; font-size: var(--fs-micro); }
+.ds-247420 .chat-thinking-dots { display: inline-flex; gap: var(--space-half); }
+.ds-247420 .chat-thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--fg); opacity: 0.4; animation: chat-thinking-bounce 1.2s infinite ease-in-out; }
+.ds-247420 .chat-thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+.ds-247420 .chat-thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-thinking-bounce { 0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .chat-thinking-dots span { animation: none; opacity: 0.7; }
+  .ds-247420 .chat-tool.tool-running .chat-tool-icon { animation: none; }
+}
+
+/* Empty-state suggestion chips — clickable prompts. */
+.ds-247420 .chat-empty-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-1-75); justify-content: center; margin-top: var(--space-2-75); max-width: 480px; }
+.ds-247420 .chat-empty-suggestion { all: unset; cursor: pointer; font-size: var(--fs-micro); padding: var(--space-1-75) var(--space-2-5); border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); border-radius: var(--r-pill, 999px); background: var(--panel-1, transparent); transition: background 120ms ease, border-color 120ms ease; }
+.ds-247420 .chat-empty-suggestion:hover { background: color-mix(in oklab, var(--os-accent, #247420) 10%, transparent); border-color: var(--os-accent, #247420); }
+.ds-247420 .chat-empty-suggestion:focus-visible { outline: 2px solid var(--os-accent, #247420); outline-offset: 2px; }
+
+/* Cancel-while-generating button replaces send. */
+.ds-247420 .chat-composer .send.cancel { background: var(--color-danger); color: var(--on-color); }
+.ds-247420 .chat-composer .send.cancel:hover { background: color-mix(in oklab, var(--color-danger) 80%, black); }
+
+/* ============================================================================
+ *  Jank pass 2 (2026-05-30) — outer-layer scroll containment + iframe gesture
+ *  blocking + backdrop blur. Compositor-promotion on .wm-win drag/resize was
+ *  already addressed in pass 1 (commit 7e057b6); these are the rules pass 1
+ *  did not surface.
+ * ============================================================================ */
+
+/* Scroll containment on the desktop frame too — pass 1 only set
+ * overscroll-behavior on .wm-body. Touch-trackpad two-finger pan over the
+ * desktop could leak to document.body in some Chromium versions, briefly
+ * rubber-banding the page while the camera also panned. */
+.ds-247420 .wm-root,
+.ds-247420 .wm-canvas { overscroll-behavior: contain; }
+
+/* Block iframe pointer-events while a wm window is being dragged/resized so
+ * mid-gesture cursor crossings into an iframe child don't swallow the drag
+ * (the iframe captures pointerover and the outer wm pointermove stops firing).
+ * .wm-dragging / .wm-resizing classes are toggled by docs/wm.js for gesture
+ * duration only. */
+.ds-247420 .wm-dragging iframe,
+.ds-247420 .wm-resizing iframe,
+.ds-247420 body:has(.wm-win.wm-dragging) iframe,
+.ds-247420 body:has(.wm-win.wm-resizing) iframe { pointer-events: none; }
+
+/* Subtle backdrop blur behind modal overlays — depth cue without compounding
+ * paint cost since the blur layer is GPU-composited. Respect reduced-motion
+ * by falling back to plain dim. Shared with the overlay-primitives backdrops
+ * below (.ov-cmd-backdrop / .ov-lightbox-backdrop / .ov-auth-backdrop) so
+ * every full-viewport modal in the kit reads as one consistent "on top of
+ * dimmed content" language instead of some floating over undimmed chrome. */
+.ds-247420 .tb-sess-overlay,
+.ds-247420 .ov-cmd-backdrop,
+.ds-247420 .ov-lightbox-backdrop,
+.ds-247420 .ov-auth-backdrop { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .tb-sess-overlay,
+  .ds-247420 .ov-cmd-backdrop,
+  .ds-247420 .ov-lightbox-backdrop,
+  .ds-247420 .ov-auth-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* Shared full-viewport dimming scrim for the overlay-primitives components
+ * (CommandPalette, VideoLightbox, AuthModal) — these three ship a *-backdrop
+ * root element (command-palette.js / full-screen.js / auth-modal.js) but had
+ * zero CSS anywhere in the kit, so they rendered undimmed, competing with
+ * whatever page content sat behind them instead of reading as on-top. Same
+ * position:fixed/inset:0/var(--z-modal)/var(--scrim) shape as .tb-sess-overlay
+ * above — one scrim implementation, not three near-duplicates. */
+.ov-cmd-backdrop,
+.ov-lightbox-backdrop,
+.ov-auth-backdrop {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: var(--scrim);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* -----------------------------------------------------------------------
+   prefers-reduced-transparency — distinct from prefers-reduced-motion
+   above: a user can want full animation but zero see-through/blur panel
+   chrome (vestibular-motion sensitivity vs. low-vision/legibility need are
+   different accessibility needs, so this is its own media query, not folded
+   into the motion one). Every backdrop-blur/translucent-panel effect in this
+   kit drops to a solid, fully-opaque backing fill — the blur adds nothing
+   once nothing shows through it, so it is dropped alongside the alpha for
+   one less GPU compositing pass, not just left as dead blur-on-opaque.
+   ----------------------------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+  .os-menubar, .os-taskbar {
+    background: var(--os-bg-2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .ds-247420 .tb-sess-overlay { background: var(--scrim-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* -----------------------------------------------------------------------
+ *  Freddie chat — jank pass 3 (2026-05-31)
+ *  Pins layout, spacing, focus, scrollbar, role-distinct bubbles, focus ring,
+ *  overflow-wrap, empty-state typography, composer chrome, suggestion list.
+ *  Visual code lives in this kit; thebird only wires state.
+ * ----------------------------------------------------------------------- */
+
+.ds-247420 freddie-chat,
+.ds-247420 ds-chat,
+.ds-247420 freddie-chat.chat,
+.ds-247420 ds-chat.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  /* zero the legacy `.chat` card treatment (app-shell.css chat-polish.css,
+     which the bundle scopes to `.ds-247420 .chat` = (0,2,0)) leaking onto the
+     host element, which also carries the `.chat` class. The
+     `freddie-chat.chat` / `ds-chat.chat` compound selectors here are (0,2,1) —
+     strictly higher — so these win on SPECIFICITY alone, independent of which
+     sheet loads first. That is why no !important is needed. */
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  max-width: none;
+  background: transparent;
+  border-radius: 0;
+}
+.ds-247420 freddie-chat > .chat,
+.ds-247420 ds-chat > .chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.ds-247420 .chat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-75);
+  border-bottom: 1px solid color-mix(in oklab, var(--fg) 10%, transparent);
+  min-height: 38px;
+  flex: 0 0 auto;
+  background: var(--panel-0, transparent);
+}
+.ds-247420 .chat-head .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--os-accent, #247420);
+  flex-shrink: 0;
+}
+.ds-247420 .chat-head .ds-chat-title {
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.ds-247420 .chat-head .sub {
+  font-size: var(--fs-micro);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ds-247420 .chat-head .spread { flex: 0; }
+
+.ds-247420 .chat-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-2-75);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-75);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--fg) 22%, transparent) transparent;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+.ds-247420 .chat-thread::-webkit-scrollbar { width: 8px; }
+.ds-247420 .chat-thread::-webkit-scrollbar-track { background: transparent; }
+.ds-247420 .chat-thread::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--fg) 18%, transparent);
+  border-radius: var(--r-0);
+}
+.ds-247420 .chat-thread::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--fg) 30%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 .chat-thread { scroll-behavior: auto; }
+}
+
+.ds-247420 .chat-msg {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--space-2);
+  align-items: start;
+}
+.ds-247420 .chat-msg.you {
+  grid-template-columns: 1fr 28px;
+  justify-items: end;
+}
+.ds-247420 .chat-msg.you .chat-stack { align-items: flex-end; }
+.ds-247420 .chat-msg.centered {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: var(--space-hair) 12%;
+}
+
+.ds-247420 .chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--os-accent, #247420) 18%, transparent);
+  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  text-transform: lowercase;
+  flex-shrink: 0;
+  user-select: none;
+}
+.ds-247420 .chat-msg.you .chat-avatar {
+  background: var(--os-accent, #247420);
+  color: var(--on-color);
+}
+
+.ds-247420 .chat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.ds-247420 .chat-bubble {
+  /* --panel-1 aliases the same --bg-2 the window body already sits on
+     (.wm-body uses --os-bg-1 = --bg-2), so an incoming bubble on --panel-1
+     read as near-invisible against its own window. --panel-2 (--bg-3) is
+     the next real step up the existing panel scale — visible separation,
+     no new token. */
+  background: var(--panel-2, color-mix(in oklab, var(--fg) 10%, transparent));
+  color: var(--fg);
+  border: 1px solid color-mix(in oklab, var(--fg) 8%, transparent);
+  border-radius: var(--radius-sm, var(--r-1));
+  padding: var(--space-2) var(--space-2-75);
+  font-size: var(--font-size-body, var(--fs-xs));
+  line-height: 1.5;
+  max-width: min(720px, 86%);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.ds-247420 .chat-msg.you .chat-bubble {
+  background: var(--os-accent, #247420);
+  color: var(--on-color);
+  border-color: color-mix(in oklab, var(--os-accent, #247420) 60%, black);
+  border-bottom-right-radius: 4px;
+}
+.ds-247420 .chat-msg.them .chat-bubble {
+  border-bottom-left-radius: 4px;
+}
+.ds-247420 .chat-bubble + .chat-bubble { margin-top: var(--space-1); }
+.ds-247420 .chat-bubble pre,
+.ds-247420 .chat-bubble code { font-family: var(--os-mono, ui-monospace, monospace); font-size: var(--fs-micro); }
+.ds-247420 .chat-bubble pre {
+  margin: var(--space-1-75) 0 0;
+  padding: var(--space-2) var(--space-2-5);
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+  border-radius: var(--r-0);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+.ds-247420 .chat-msg.you .chat-bubble pre {
+  background: color-mix(in oklab, black 25%, transparent);
+  color: var(--on-color);
+}
+.ds-247420 .chat-bubble a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.ds-247420 .chat-meta {
+  font-size: var(--font-size-meta, var(--fs-nano));
+  color: var(--fg-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-75);
+  padding: 0 var(--space-1);
+}
+.ds-247420 .chat-msg.you .chat-meta { flex-direction: row-reverse; }
+
+.ds-247420 .chat-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-5) var(--space-4);
+  color: var(--fg);
+  gap: var(--space-1);
+}
+.ds-247420 .chat-empty-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.ds-247420 .chat-empty-sub {
+  font-size: var(--fs-tiny);
+  opacity: 0.65;
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.ds-247420 .chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-75);
+  padding: var(--space-2) var(--space-2-5);
+  border-top: 1px solid color-mix(in oklab, var(--fg) 10%, transparent);
+  background: var(--panel-0, transparent);
+  flex: 0 0 auto;
+}
+.ds-247420 .chat-composer textarea {
+  font: var(--fs-xs)/1.45 var(--os-ui, system-ui), sans-serif;
+  background: var(--panel-1, color-mix(in oklab, var(--fg) 5%, transparent));
+  color: var(--fg);
+  border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent);
+  border-radius: var(--r-0);
+  padding: var(--space-2) var(--space-2-5);
+  resize: none;
+  outline: none;
+  width: 100%;
+  min-height: 40px;
+  max-height: 200px;
+  box-sizing: border-box;
+  transition: border-color 120ms ease;
+}
+.ds-247420 .chat-composer textarea:hover {
+  border-color: color-mix(in oklab, var(--fg) 22%, transparent);
+}
+.ds-247420 .chat-composer textarea:focus-visible {
+  outline: 2px solid var(--os-accent, #247420);
+  outline-offset: 0;
+  border-color: color-mix(in oklab, var(--os-accent, #247420) 60%, transparent);
+}
+.ds-247420 .chat-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.ds-247420 .composer-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-0);
+  color: var(--fg);
+  opacity: 0.65;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+.ds-247420 .composer-btn:hover {
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+  opacity: 1;
+}
+.ds-247420 .composer-btn:focus-visible {
+  outline: 2px solid var(--os-accent, #247420);
+  outline-offset: 2px;
+  opacity: 1;
+}
+.ds-247420 .chat-composer .send {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  width: 36px;
+  height: 32px;
+  border-radius: var(--r-0);
+  background: var(--os-accent, #247420);
+  color: var(--on-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, transform 60ms ease;
+}
+.ds-247420 .chat-composer .send:hover {
+  background: color-mix(in oklab, var(--os-accent, #247420) 88%, black);
+}
+.ds-247420 .chat-composer .send:active { transform: scale(0.96); }
+.ds-247420 .chat-composer .send:focus-visible {
+  outline: 2px solid var(--os-accent, #247420);
+  outline-offset: 2px;
+}
+.ds-247420 .chat-composer .send:disabled,
+.ds-247420 .chat-composer .send[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: color-mix(in oklab, var(--fg) 25%, transparent);
+}
+.ds-247420 .chat-composer.is-disabled {
+  opacity: .55;
+  pointer-events: none;
+}
+
+.ds-247420 .ds-icon { --ds-icon-stroke: 1.7; }
+
+.ds-247420 .aicat-face {
+  font-family: var(--os-mono, ui-monospace, monospace);
+  /* pico (10px) + line-height:1 = 3 lines at 30px, inside the 32px chip --
+     nano/1.2 (13.2px/line, 39.6px total) clipped the ear/whisker rows
+     against the chip's overflow:hidden. */
+  font-size: var(--fs-pico);
+  line-height: 1;
+  margin: 0;
+}
+
+/* gm memory browser — recall hits rendered as interactive, prunable cards
+   (thebird's gm app, docs/apps.js recall panel). */
+.ds-247420 .gm-recall-hits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-75);
+  margin: var(--space-2) 0;
+}
+.ds-247420 .gm-recall-hit {
+  border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent);
+  border-radius: var(--r-0);
+  padding: var(--space-2) var(--space-2-5);
+  background: color-mix(in oklab, var(--bg) 92%, var(--fg) 2%);
+}
+.ds-247420 .gm-recall-hit.is-pruned {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.ds-247420 .gm-recall-meta {
+  font-family: var(--os-mono, ui-monospace, monospace);
+  font-size: var(--fs-nano);
+  color: color-mix(in oklab, var(--fg) 60%, transparent);
+  margin-bottom: var(--space-1);
+}
+.ds-247420 .gm-recall-text {
+  font-size: var(--fs-tiny);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ds-247420 .gm-recall-acts {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-1-75);
+}
+.ds-247420 .gm-recall-forget {
+  font-size: var(--fs-nano);
+  padding: var(--space-hair) var(--space-2);
+}
+
+/* ============================================================
+ * thebird RESPONSIVE PERFECTION layer (desk / tablet / mobile).
+ * Appended LAST so the .ds-247420-scoped rules here win by SOURCE ORDER at
+ * equal (0,2,0) specificity over the earlier brand overrides
+ * (.ds-247420 .wm-root{inset:0} at the "bars overlay" block,
+ * .ds-247420 .wm-bar{height:34px}, the unconditional
+ * .ds-247420 .os-instances{display:flex}) that were silently defeating the
+ * @media(max-width:767px)/(768-1023px) contracts. Every rule below is a
+ * measured fix for a confirmed responsive-audit finding.
+ *
+ * Because every competing rule is now equally scoped, source order alone
+ * decides — so this layer needs no !important except where it must beat
+ * wm.css's own !important declarations or wm.js's inline styles.
+ *
+ * View classes: desktop >1023px (free-float windows, full menubar);
+ * tablet 768..1023px (side-rail, wm-root left-offset); mobile <=767px AND
+ * short landscape phones (full-screen windows, collapsed menubar, bottom
+ * scroll-snap taskbar). Touch sizing is driven by (pointer:coarse) so it
+ * also covers the landscape-phone band that width-only queries miss.
+ * ============================================================ */
+
+/* --- mobile bar height: the kit intends a touch-friendly 52px; the brand
+ * layer pinned --os-bar-h-mobile to 34px which left no room for 44px tap
+ * targets in the bar. Restore 52px on mobile/touch. --- */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+  /* LOAD-BEARING !important: same reason as the brand block's --os-bar-h —
+   * `:root[data-density="…"]` redefines --os-bar-h at (0,2,0), higher than
+   * this (0,1,0) class rule on the same <html> element. */
+  .ds-247420 { --os-bar-h-mobile: 52px !important; --os-bar-h: 52px !important; }
+}
+
+/* --- mobile + landscape-phone full-screen windows. The earlier
+ * .ds-247420 .wm-root{inset:0!important} forced windows over the bars so the
+ * titlebar close button landed under the menubar (occluded, untappable) and
+ * window content underlapped the taskbar. Re-assert the bar-inset at scoped
+ * specificity so windows sit BETWEEN the bars. --- */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+  .ds-247420 .wm-root {
+    inset: calc(var(--os-bar-h) + env(safe-area-inset-top, 0px)) 0
+           calc(var(--os-bar-h) + env(safe-area-inset-bottom, 0px)) 0;
+  }
+  /* LOAD-BEARING !important on the geometry four: wm.css's mobile band
+   * (wm.css:157-165) declares left/top/width/height with !important, and
+   * wm.js writes left/top/width/height as INLINE styles during drag/resize.
+   * Neither can be beaten by specificity — only by !important. The remaining
+   * properties here need no flag. */
+  .ds-247420 .wm-win {
+    position: absolute;
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: 100% !important;
+    border: none;
+    /* bare 0: full-screen window has square corners (not --r-0's 4px) */
+    border-radius: 0;
+    box-shadow: none;
+  }
+  /* A maximized window on the mobile band is just the full-screen window the
+   * rule above already describes — the desktop/tablet `.wm-win.wm-max`
+   * between-the-bars rule is kept out of this band by its own
+   * (min-height: 501px) guard (see its comment above), so no override is
+   * needed here and the !important ratchet stays flat. */
+  /* titlebar must host a 44px close button -> 44px bar (beats the 34px brand
+   * clamp by later source order at equal specificity) */
+  .ds-247420 .wm-bar {
+    height: 44px; min-height: 44px;
+    padding: 0 var(--space-2-5); align-items: center;
+    pointer-events: none;
+  }
+  .ds-247420 .wm-bar .wm-title { pointer-events: auto; }
+  .ds-247420 .wm-bar .wm-btns { pointer-events: auto; }
+  /* hide min+max on mobile full-screen; keep close at 44x44 fully inside the bar */
+  .ds-247420 .wm-btns .wm-btn:nth-child(1),
+  .ds-247420 .wm-btns .wm-btn:nth-child(2) { display: none; }
+  /* LOAD-BEARING !important on width/height: wm.css's `@media (pointer:coarse)`
+   * sets `.wm-btn{min-width:44px;min-height:44px}` and this must also beat the
+   * (0,3,0) `.ds-247420 .wm-btns .wm-btn` coarse-pointer rule below, which is
+   * later in source order. Colors/radius need no flag. */
+  .ds-247420 .wm-btns .wm-btn:nth-child(3) {
+    width: 44px !important; height: 44px !important;
+    border-radius: var(--r-1);
+    background: var(--os-bg-3); color: var(--os-fg);
+  }
+  .ds-247420 .wm-resize, .ds-247420 .wm-edge { display: none; }
+  /* collapse the menubar workspace cluster on mobile. `.os-menubar
+   * .os-instances` is (0,3,0) here, beating the unconditional (0,2,0)
+   * `.ds-247420 .os-instances{display:flex}` on specificity. */
+  .ds-247420 .os-menubar .os-instances,
+  .ds-247420 .os-instances { display: none; }
+  .ds-247420 .os-menubar [data-role="add"],
+  .ds-247420 .tb-sess-add { display: none; }
+}
+
+/* --- landscape-phone (short + wide + touch): also hide the side-rail that the
+ * 768-1023 tablet band would otherwise show, and force the mobile menubar. --- */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
+  .ds-247420 .os-side-rail { display: none; }
+}
+
+/* --- tablet (768..1023): the side-rail offset for .wm-root was defeated by
+ * the scoped inset:0; re-asserted here at equal (0,2,0) specificity but later
+ * source order, which is enough now that the earlier rule is also scoped.
+ * `inset` alone carries the left offset — the separate `left` declaration it
+ * used to be paired with was redundant with this shorthand.
+ * The (min-height: 501px) guard excludes the short-landscape overlap band
+ * (768-1023 wide AND <500 tall): both this query and the mobile band's
+ * (max-height: 500px)+(orientation: landscape) match there, and this rule —
+ * later in source order — used to override the mobile bar-inset, dropping
+ * .wm-root to top:0 so full-screen windows covered the menubar and their
+ * close buttons landed under it occluded and untappable (witnessed live on
+ * thebird at 782x448: elementFromPoint on the chat close button hit
+ * .os-clock, menubar z 601 over window z 102). Short-landscape is the
+ * phone/mobile contract, not tablet. --- */
+@media (min-width: 768px) and (max-width: 1023px) and (min-height: 501px) {
+  .ds-247420 .wm-root {
+    inset: 0 0 0 var(--os-rail-w);
+  }
+}
+
+/* --- universal touch tap-target floor (pointer:coarse covers tablets AND
+ * landscape phones that width-only queries miss). Every interactive control
+ * the audit measured below 44px is lifted to the --os-tap (44px) token. --- */
+@media (pointer: coarse) {
+  /* window chrome */
+  .ds-247420 .wm-btns .wm-btn { min-width: var(--os-tap, 44px); min-height: var(--os-tap, 44px); }
+  .ds-247420 .wm-resize { width: var(--os-tap, 44px); height: var(--os-tap, 44px); }
+  /* taskbar tasks (also widen and snap on the whole touch band, not mobile-only) */
+  .ds-247420 .os-task {
+    min-height: var(--os-tap, 44px); min-width: 120px;
+    padding: var(--space-2-5) 14px; scroll-snap-align: start;
+  }
+  .ds-247420 .os-taskbar { scroll-snap-type: x proximity; }
+  /* menubar workspace controls (when shown on tablet) */
+  .ds-247420 .os-menubar .tb-sess-x { min-width: var(--os-tap, 44px); min-height: var(--os-tap, 44px); }
+  .ds-247420 .tb-sess-chip { min-height: var(--os-tap, 44px); }
+  .ds-247420 .tb-sess-add { min-height: var(--os-tap, 44px); }
+  /* modal controls */
+  .ds-247420 .tb-sess-modal-input { height: var(--os-tap, 44px); min-height: var(--os-tap, 44px); }
+  .ds-247420 .tb-sess-modal-btn { min-height: var(--os-tap, 44px); }
+  .ds-247420 .tb-sess-modal-x { min-width: var(--os-tap, 44px); min-height: var(--os-tap, 44px); }
+  /* files-app rows + per-row actions */
+  .ds-247420 .fsb-row { min-height: var(--os-tap, 44px); }
+  .ds-247420 .fsb-act {
+    min-width: var(--os-tap, 44px); min-height: var(--os-tap, 44px);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  /* chat composer controls */
+  .ds-247420 .chat-composer .send { width: var(--os-tap, 44px); height: var(--os-tap, 44px); }
+  .ds-247420 .cc-toggle { min-height: var(--os-tap, 44px); }
+  /* sessions grid card checkbox */
+  .ds-247420 .tb-sessions-card-check { width: var(--os-tap, 44px); height: var(--os-tap, 44px); flex: 0 0 var(--os-tap, 44px); }
+}
+
+/* --- files-app row actions must reveal on coarse pointers too (the existing
+ * trigger keyed only on hover:none, which fails on hybrid touch+hover
+ * tablets that also report a hover-capable pointer). --- */
+@media (hover: none), (pointer: coarse) {
+  .ds-247420 .fsb-actions { opacity: 1; }
+}
+
+/* --- modals: a content-tall card had no max-height and the overlay did not
+ * scroll, so the footer (primary action) was stranded off-canvas. Cap the
+ * card to the visible viewport, scroll the body, honor safe-area. --- */
+.ds-247420 .tb-sess-overlay {
+  overflow-y: auto;
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+           max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+}
+.ds-247420 .tb-sess-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
+.ds-247420 .tb-sess-modal-body { overflow-y: auto; min-height: 0; }
+
+/* --- browser-pane: the generic .app-pane 16px prose padding stranded the
+ * iframe 16px on every side; the browser pane is full-bleed. --- */
+/* (0,3,0) beats the generic `.app-pane` (0,1,0) prose padding on specificity. */
+.ds-247420 .app-pane.browser-app { padding: 0; }
+
+/* --- chat send-queue indicator + per-item cancel list (F2): a rapid
+ * double/triple send while a turn is busy queues silently with no undo
+ * beyond a fading count; clicking the indicator reveals queued texts with
+ * a per-row remove control. --- */
+.ds-247420 .tb-chat-queue-indicator-hidden { display: none; }
+.ds-247420 .tb-chat-queue-indicator {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--panel-text-2);
+  padding: 2px 8px;
+  user-select: none;
+}
+.ds-247420 .tb-chat-queue-indicator:hover { color: var(--panel-text); }
+.ds-247420 .tb-chat-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin: 0 8px 8px;
+  border-radius: var(--r-2);
+  background: var(--panel-1);
+  border: 1px solid var(--panel-border);
+}
+.ds-247420 .tb-chat-queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.ds-247420 .tb-chat-queue-row-text {
+  font-size: 12px;
+  color: var(--panel-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.ds-247420 .tb-chat-queue-row-remove {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--panel-text-2);
+  cursor: pointer;
+}
+.ds-247420 .tb-chat-queue-row-remove:hover {
+  background: var(--panel-2);
+  color: var(--panel-text);
+}

@@ -1,0 +1,517 @@
+/* ============================================================
+   Responsive Perfection — Drawer rail, ultrawide cap, mobile compact
+   ============================================================ */
+
+/* Tablet + Mobile: side rail becomes off-canvas drawer (≤900px) */
+/* Sidebar drawer collapse keys on the SHELL width (@container on .app, which is
+   container-type:inline-size) — NOT the viewport. Full-page (freddie) the shell
+   == viewport so this is identical to the old @media(max-width:900px); embedded
+   in a thebird WM window the drawer + hamburger appear when the WINDOW is narrow
+   even on a wide desktop. Drawer/scrim/toggle are absolute (anchored to .app), so
+   they overlay the window, not the page. */
+@container (max-width: 900px) {
+  /* `.app`-scoped for specificity instead of an !important flag. The bare
+     `.app-body` half of this list is (0,1,0) and was out-specified by
+     `.app-body.no-side` (0,2,0) in topbar.css; scoping lifts both halves to
+     (0,2,0)/(0,3,0), which also lands later in source than topbar.css, so the
+     drawer collapse wins on merit. `.app` is guaranteed: `.app-body` is
+     emitted only as a direct child of `.app` (single call site, shell.js
+     AppShell), and this @container query already requires `.app` as its
+     container ancestor. */
+  .app .app-body,
+  .app .app-body.no-side { grid-template-columns: 1fr; }
+  .app-side-shell {
+    position: absolute;
+    /* Full-height overlay drawer: the merged .app-chrome wraps and its real
+       height drifts from --app-topbar-h, so anchoring below it misplaces the
+       drawer. Overlay the chrome instead (z above --z-header), like ws drawers. */
+    left: 0; top: 0;
+    height: 100%;
+    width: 280px; max-width: 80%;
+    transform: translateX(-100%);
+    transition: transform var(--dur-base, 240ms) var(--ease, ease);
+    /* Drawer rung, above the sticky chrome it slides over. +1 puts the panel
+       itself over its own scrim (--z-drawer), which is the layer below it. */
+    z-index: calc(var(--z-drawer) + 1);
+    background: var(--bg);
+    border-right: 1px solid color-mix(in oklab, var(--fg) 8%, transparent);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* Lock the content scroller while the drawer is open so touch pans don't
+     scroll the page behind the scrim. */
+  .app-body.side-open .app-main { overflow: hidden; }
+  .app-side-shell.open,
+  .app-side.open,
+  .app-body.side-open .app-side-shell { transform: translateX(0); }
+  /* No flags needed: the ONLY other rule that touches these properties is the
+     `.app-side` base in topbar.css, which already sets `flex-direction: column`
+     and never sets `flex-wrap` (nowrap is the initial value anyway). This rule
+     is equal-specificity and later in source, so it wins unaided. */
+  .app-side {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    font-size: var(--fs-sm);
+  }
+  .app-side a {
+    flex: 0 0 auto; min-width: 0;
+    grid-template-columns: 18px 1fr auto;
+    padding: 10px 12px;
+  }
+  .app-side .group { width: 100%; }
+  /* Keep the crumb on mobile — apps mount contextual controls (model picker,
+     actions, live status) in crumb-right, so hiding it strands them. Collapse
+     the breadcrumb trail/leaf instead and let the right cluster wrap. */
+  .app-crumb { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 8px 12px; }
+  .app-crumb > .sep, .app-crumb > span:not(.crumb-right):not(.leaf) { display: none; }
+  .app-crumb .crumb-right { margin-left: 0; }
+  .chat-head { padding: var(--space-2) var(--space-3) var(--space-2); margin-bottom: var(--space-2); }
+  .app-main { padding-left: var(--space-3); padding-right: var(--space-3); }
+}
+
+/* Drawer scrim — absolute so it covers THIS shell, shown when drawer open and
+   the shell is narrow (@container on .app). */
+.app-side-scrim {
+  display: none;
+  position: absolute; inset: 0;
+  background: color-mix(in oklab, var(--bg) 60%, transparent);
+  /* Above the sticky chrome so nav behind an open drawer is not clickable.
+     Base of the drawer rung — the panel itself sits one above this. */
+  z-index: var(--z-drawer);
+}
+@container (max-width: 900px) {
+  .app-body.side-open .app-side-scrim { display: block; }
+}
+
+/* Nav toggle (hamburger) — hidden when the shell is wide, shown when the shell
+   itself is narrow (@container on .app). Absolute so it sits in THIS shell's
+   topbar, not pinned to the viewport corner. */
+.app-side-toggle {
+  display: none;
+  position: absolute; top: calc((var(--app-topbar-h) - 44px) / 2); left: 10px;
+  /* Above the sticky topbar/chrome and the drawer/scrim so the translucent
+     blurred chrome never paints over or intercepts the toggle. Top of the
+     drawer rung: scrim < panel < toggle. */
+  z-index: calc(var(--z-drawer) + 2);
+  /* 44x44 minimum hit area (WCAG 2.5.5 / Apple HIG) - 36px is below the
+     reliable-tap threshold on touch. */
+  width: 44px; height: 44px;
+  align-items: center; justify-content: center;
+  font-size: 18px; line-height: 1;
+  background: var(--bg-2); color: var(--fg);
+  border: 1px solid var(--rule, color-mix(in oklab, var(--fg) 12%, transparent));
+  border-radius: var(--r-1, 6px);
+  cursor: pointer;
+}
+.app-side-toggle:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+@container (max-width: 900px) {
+  .app-side-toggle { display: inline-flex; }
+  .app-topbar .brand { margin-left: 44px; }
+  /* Merged-chrome layout (.app-chrome > .app-crumb) puts the breadcrumb, not
+     the topbar brand, at the left edge where the absolute-positioned toggle
+     sits — without this the crumb text renders directly under the button. */
+  .app-chrome > .app-crumb { margin-left: 44px; }
+}
+
+/* Desktop: the app shell is exactly viewport-height and contains its own
+   scroll, so only .app-main (and the side rail) scroll — never the page too.
+   Pinning .app to 100dvh + overflow:hidden is what prevents the double
+   scrollbar that a min-height:100vh shell + inner overflow:auto produces.
+   .app-body fills the gap between topbar/crumb and status via flex:1 rather
+   than a hand-computed calc() that drifts from the real chrome heights. */
+@media (min-width: 901px) {
+  .app { height: 100dvh; min-height: 0; overflow: hidden; }
+  /* Embedded shell (freddie WM window) fills its container, not the viewport. */
+  .fd-root .app { height: 100%; overflow: visible; }
+  .app-body { min-height: 0; flex: 1 1 auto; }
+  /* scrollbar-gutter mirrors .app-main's own (topbar.css) — without it the
+     thumb draws flush against the sidebar's nav text with zero breathing
+     room, reading as a mark stuck to the content rather than a scrollbar
+     anchored to the shell's own edge. */
+  .app-side-shell { overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-gutter: stable; }
+  .app-main { overflow-y: auto; min-height: 0; }
+}
+
+/* Mobile (≤480) status bar compact; hide tail item */
+@media (max-width: 480px) {
+  .app-status {
+    font-size: var(--fs-micro);
+    padding: 4px var(--space-2);
+    gap: var(--space-2);
+  }
+  .app-status > :last-child:not(:only-child) { display: none; }
+}
+
+/* Tiny phone (≤360) topbar compact */
+@media (max-width: 360px) {
+  .app-topbar {
+    padding: 8px var(--space-2);
+    font-size: var(--fs-xs);
+    gap: var(--space-2);
+  }
+  .app-topbar nav,
+  .app-topbar > :last-child { display: none; }
+  .brand { font-size: var(--fs-tiny); }
+  /* Slightly narrower drawer on tiny phones; max-width:80% remains the guard. */
+  .app-side-shell { width: 260px; }
+}
+
+/* ----------------------------------------------------------------------------
+   WorkspaceShell — Claude-Desktop / cowork three-column app shell.
+   Columns: [ws-rail] [ws-sessions?] [ws-content] [ws-pane?]
+   Collapse via .ws-rail-collapsed / .ws-pane-collapsed classes on .ws-shell.
+   All sizing/colour from kit tokens; no hardcoded palette.
+---------------------------------------------------------------------------- */
+.ws-shell {
+  /* Fluid chrome columns: shrink on small laptops, breathe on ultrawide, so the
+     ~848px of fixed chrome no longer eats a constant slab. An inline --ws-*-w
+     written by a resize drag overrides these (inline wins), pinning the width. */
+  --ws-rail-w: clamp(200px, 16vw, 260px);
+  --ws-rail-w-collapsed: 60px;
+  --ws-sessions-w: clamp(248px, 22vw, 360px);
+  --ws-pane-w: clamp(288px, 24vw, 420px);
+  display: grid;
+  grid-template-columns: var(--ws-rail-w) var(--ws-sessions-w) 1fr var(--ws-pane-w);
+  grid-template-areas: "rail sessions content pane";
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+.ws-shell.ws-no-sessions { grid-template-columns: var(--ws-rail-w) 1fr var(--ws-pane-w); grid-template-areas: "rail content pane"; }
+.ws-shell.ws-no-pane.ws-no-sessions { grid-template-columns: var(--ws-rail-w) 1fr; grid-template-areas: "rail content"; }
+.ws-shell.ws-no-pane:not(.ws-no-sessions) { grid-template-columns: var(--ws-rail-w) var(--ws-sessions-w) 1fr; grid-template-areas: "rail sessions content"; }
+/* G1 stable frame: when a tab has no pane but asks to keep the column geometry
+   (ws-no-pane + ws-pane-collapsed), KEEP the 4-track grid with the pane track
+   at width 0 instead of collapsing to a 3-track layout - so the shell does not
+   re-flow its column count on tab switch. The pane track stays present (0px),
+   so chat/history/files/live/settings share one geometry. */
+.ws-shell.ws-no-pane.ws-pane-collapsed:not(.ws-no-sessions) { grid-template-columns: var(--ws-rail-w) var(--ws-sessions-w) 1fr var(--ws-pane-w); grid-template-areas: "rail sessions content pane"; }
+.ws-shell.ws-no-pane.ws-pane-collapsed.ws-no-sessions { grid-template-columns: var(--ws-rail-w) 1fr var(--ws-pane-w); grid-template-areas: "rail content pane"; }
+.ws-shell.ws-rail-collapsed { --ws-rail-w: var(--ws-rail-w-collapsed); }
+.ws-shell.ws-pane-collapsed { --ws-pane-w: 0px; }
+/* Sessions column desktop collapse (parity with the pane collapse), reclaiming
+   its width for a full-width thread/grid. */
+.ws-shell.ws-sessions-collapsed { --ws-sessions-w: 0px; }
+.ws-sessions-collapsed .ws-sessions { overflow: hidden; border-right: none; }
+.ws-sessions-collapsed .ws-sessions > * { display: none; }
+/* Column resize handles: a thin keyboard-accessible separator pinned to the
+   right edge of each chrome track; drag (or ArrowLeft/Right) writes a clamped
+   inline --ws-*-w. */
+.ws-resizer { position: relative; grid-row: 1 / -1; align-self: stretch; justify-self: end; width: 8px; margin-right: -4px; z-index: var(--z-raised); cursor: col-resize; background: transparent; border: none; padding: 0; touch-action: none; display: flex; align-items: center; justify-content: center; }
+.ws-resizer::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--rule); opacity: 0.4; transition: background var(--dur-snap) var(--ease), opacity var(--dur-snap) var(--ease); }
+.ws-resizer:hover::after, .ws-resizer:focus-visible::after { background: var(--accent); opacity: 1; }
+/* Grip: a small pill of dots centered on the handle, visible at rest (low
+   contrast) so the resizer reads as a draggable affordance rather than an
+   invisible hit zone, then brightens to accent on hover/drag like the line. */
+.ws-resizer::before {
+  content: ""; position: absolute; width: 4px; height: 20px; border-radius: var(--r-hair);
+  background-image: radial-gradient(circle, var(--fg-3) 1px, transparent 1px);
+  background-size: 4px 5px; background-repeat: repeat-y; background-position: center;
+  opacity: 0.5; transition: opacity var(--dur-snap) var(--ease), background-image var(--dur-snap) var(--ease);
+  pointer-events: none;
+}
+.ws-resizer:hover::before, .ws-resizer:focus-visible::before {
+  opacity: 1; background-image: radial-gradient(circle, var(--accent) 1px, transparent 1px);
+}
+.ws-resizer:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: -2px; }
+/* Active drag state: wider + fully opaque accent grip so the handle a
+   fast-moving pointer has left :hover on still visibly reads as "gripped". */
+.ws-resizer.ws-resizer-active::after { background: var(--accent); width: 3px; }
+.ws-resizer.ws-resizer-rail { grid-column: 1; }
+.ws-resizer.ws-resizer-sessions { grid-column: 2; }
+.ws-resizer.ws-resizer-pane { grid-column: 3; justify-self: end; }
+/* A resizer must vanish once its TRACK is removed by the staging media blocks,
+   else dragging it writes a --ws-*-w var that no longer affects the now-fixed
+   drawer (a dead handle). Mirror the 1480 / 1100 / 900 staging exactly. */
+@media (max-width: 1480px) { .ws-resizer.ws-resizer-pane { display: none; } }
+@media (max-width: 1100px) { .ws-resizer.ws-resizer-sessions { display: none; } }
+@media (max-width: 900px)  { .ws-resizer { display: none; } }
+/* A resizer must also vanish once its TRACK is desktop-collapsed: a 0px (pane/
+   sessions) or 60px icon-only (rail) track has no width to drag, and a drag would
+   write an INLINE --ws-*-w that overrides the collapse var (inline wins), fighting
+   the collapse state. Mirror the breakpoint guards for the collapse classes. */
+.ws-rail-collapsed .ws-resizer-rail,
+.ws-sessions-collapsed .ws-resizer-sessions,
+.ws-pane-collapsed .ws-resizer-pane { display: none; }
+/* Coarse-pointer hit target for hybrid touch laptops above the drawer breakpoint
+   (the 8px sliver is un-grabbable by touch). */
+@media (pointer: coarse) { .ws-resizer { width: 16px; margin-right: -8px; } }
+/* Ease the rail/pane collapse. Track COUNT stays stable on collapse (only a
+   width var flips), so grid-template-columns is animatable; reduced-motion
+   drops it to an instant swap. */
+@media (prefers-reduced-motion: no-preference) {
+  .ws-shell { transition: grid-template-columns var(--dur-base) var(--ease); }
+}
+/* Ultrawide: .ws-shell itself stays full-width (fills the real screen edges
+   at any viewport, matching .app's own unbounded-width rule in topbar.css) --
+   only the 1fr content track's OWN inner measure is capped, so rail/sessions/
+   pane keep their fixed/clamped widths and only the middle content column's
+   text gets a readability ceiling, instead of the whole grid (and its side
+   columns) shrinking together and leaving dead margin on either side of the
+   shell. */
+.ws-content { max-width: var(--measure-wide, 1200px); margin-inline: auto; width: 100%; }
+
+/* Rail (left nav) */
+.ws-rail {
+  grid-area: rail;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-2);
+  border-right: var(--bw-hair) solid var(--bg-3);
+  overflow: hidden;
+  transition: width var(--dur-base) var(--ease);
+}
+.ws-rail-toggle {
+  position: absolute; top: var(--space-2); right: var(--space-2);
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--fg-2);
+  border-radius: var(--r-1); cursor: pointer;
+}
+.ws-rail-toggle:hover { background: var(--bg-3); color: var(--fg); }
+.ws-rail-toggle:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.ws-rail-inner { display: flex; flex-direction: column; min-height: 0; flex: 1; padding: var(--space-3) var(--space-2); gap: var(--space-2); }
+.ws-rail-head { display: flex; align-items: center; min-height: 36px; padding: 0 var(--space-2); }
+/* Wordmark treatment matches .brand (topbar.css) — same display family/weight/
+   tracking — so the rail brand reads as the SAME logotype as every other kit's
+   topbar wordmark instead of a lighter, differently-set imitation. */
+.ws-rail-brand { font-family: var(--ff-display); font-weight: 700; font-size: var(--fs-body); letter-spacing: var(--tr-tight); color: var(--fg); white-space: nowrap; overflow: hidden; }
+.ws-rail-action {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); margin: var(--space-1) 0;
+  background: var(--accent); color: var(--accent-fg, var(--bg));
+  border: none; border-radius: var(--r-1); cursor: pointer;
+  font-family: var(--ff-body); font-size: var(--fs-sm); font-weight: 600;
+  min-height: 40px; white-space: nowrap; overflow: hidden;
+}
+.ws-rail-action:hover { filter: brightness(0.92); }
+.ws-rail-action:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.ws-rail-nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.ws-rail-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; padding: var(--space-2); min-height: 44px;
+  background: transparent; border: none; color: var(--fg-2);
+  border-radius: var(--r-1); cursor: pointer; text-align: left;
+  font-family: var(--ff-body); font-size: var(--fs-sm); white-space: nowrap; overflow: hidden;
+}
+.ws-rail-item:hover { background: var(--bg-3); color: var(--fg); }
+.ws-rail-item:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: -2px; }
+.ws-rail-item.active { background: var(--accent-tint); color: var(--fg); box-shadow: inset 2px 0 0 var(--accent); }
+.ws-rail-item-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+/* Shape/color come from the shared .ds-badge component (see app-shell/primitives.css);
+   this class is now just the rail-item layout hook (spacing, collapsed-state targeting). */
+.ws-rail-item-count { flex: none; margin-inline-start: var(--space-1); }
+.ws-rail-item-flag { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.ws-rail-item-flag.tone-flame { background: var(--flame); box-shadow: 0 0 0 2px color-mix(in oklab, var(--flame) 38%, transparent); }
+.ws-rail-foot { margin-top: auto; padding-top: var(--space-2); border-top: var(--bw-hair) solid var(--bg-3); }
+
+/* Collapsed rail: icon-only — hide text labels, center icons, drop toggle's far-right pin */
+.ws-rail-collapsed .ws-rail-brand,
+.ws-rail-collapsed .ws-rail-action-label,
+.ws-rail-collapsed .ws-rail-item-label,
+.ws-rail-collapsed .ws-rail-item-count { display: none; }
+.ws-rail-collapsed .ws-rail-item,
+.ws-rail-collapsed .ws-rail-action { justify-content: center; gap: 0; }
+.ws-rail-collapsed .ws-rail-head { justify-content: center; }
+
+/* Sessions column */
+.ws-sessions {
+  grid-area: sessions;
+  min-height: 0; display: flex; flex-direction: column;
+  /* Rail and pane both sit on --bg-2 (a recessed plane framing the elevated
+     --bg content column); sessions used flat --bg instead, so the
+     conversation list and the chat thread read as the SAME surface with only
+     a 1px hairline between them - the flattest, most "one big beige box"
+     tell in the shell. --bg-2 restores the three-plane depth (rail/sessions
+     recessed either side, content elevated in the middle) the design
+     already establishes everywhere else. */
+  background: var(--bg-2); border-right: var(--bw-hair) solid var(--bg-3);
+  overflow: hidden;
+}
+.ws-no-sessions .ws-sessions { display: none; }
+
+/* Content column */
+.ws-content { grid-area: content; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* Crumb band is the top chrome of the content column: a stable height so the
+   top edge aligns with the rail head, and a left gutter matching .ws-main so
+   the trail text is not flush against the rail border. */
+.ws-crumb { flex: 0 0 auto; min-height: calc(var(--app-crumb-h) + var(--space-3)); padding: 0 var(--space-5); display: flex; align-items: center; gap: var(--space-1); border-bottom: var(--bw-hair) solid var(--bg-3); }
+.ws-crumb-main { flex: 1 1 auto; min-width: 0; }
+/* Content column gutter. Claude-Code-class calm: file grid / dashboard / event
+   list / history get a generous, consistent inner gutter instead of butting
+   against the 1px column borders. The chat tab opts out via .ws-main--flush
+   because the chat thread carries its own --measure gutter. */
+.ws-main { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: var(--space-4) var(--space-5); }
+.ws-main.ws-main--flush { padding: 0; }
+/* Skip-link target (workspace-shell.js's "#ws-main" skip-link, tabindex="-1")
+   — it does receive real keyboard-driven focus when the skip link is
+   activated, so it needs a visible ring rather than a bare outline:none. */
+.ws-main:focus { outline: none; }
+.ws-main:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: calc(-1 * var(--focus-offset));
+}
+
+/* Right context pane */
+.ws-pane {
+  grid-area: pane; position: relative;
+  min-height: 0; display: flex; flex-direction: column;
+  background: var(--bg-2); border-left: var(--bw-hair) solid var(--bg-3);
+  overflow: hidden; transition: width var(--dur-base) var(--ease);
+  overscroll-behavior: contain;
+}
+.ws-pane-collapsed .ws-pane { width: 0; border-left: none; }
+.ws-pane-collapsed .ws-pane > * { display: none; }
+@media (pointer: coarse) {
+  .ws-rail-toggle { width: 44px; height: 44px; }
+  .ws-drawer-toggle { width: 44px; height: 44px; }
+  .ws-desktop-toggle { width: 44px; height: 44px; }
+}
+
+/* Drawer toggles and the scrim are hidden by default and revealed by the staged
+   media blocks BELOW - these base rules must precede those blocks in source
+   order: at equal specificity the later rule wins regardless of media, so a
+   trailing display:none silently kills every drawer affordance (shipped bug:
+   the mobile drawers were dead because these lines used to sit last). */
+.ws-drawer-toggle { display: none; align-items: center; justify-content: center; width: 40px; height: 40px; border: none; background: none; color: var(--fg-2); cursor: pointer; border-radius: var(--r-1); }
+/* Desktop-only chrome toggle (sessions collapse): inverse of the mobile drawer-toggle. */
+.ws-desktop-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; background: none; color: var(--fg-2); cursor: pointer; border-radius: var(--r-1); }
+.ws-desktop-toggle:hover { background: var(--bg-2); color: var(--fg); }
+.ws-desktop-toggle:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+@media (max-width: 900px) { .ws-desktop-toggle { display: none; } }
+/* The pane collapse toggle is meaningless once the pane TRACK is dropped (the
+   pane becomes a mobile overlay drawer at <=1480px, reached via its own
+   drawer-toggle), so hide this crumb control past that breakpoint. */
+@media (max-width: 1480px) { .ws-pane-toggle { display: none; } }
+@media (max-width: 480px) { .ds-247420 .ws-crumb { padding-left: var(--space-2); padding-right: var(--space-2); } }
+.ws-scrim { display: none; }
+
+/* Responsive: the columns yield to the CONTENT in stages - the main column is
+   the product, so the right pane gives way first, the sessions list second,
+   and only below 900px does the rail itself drop to a fixed icon strip. Yielded
+   columns stay reachable as overlay drawers (.ws-pane-open / .ws-sessions-open,
+   toggled from the crumb bar) over a shared fade scrim. Before this staging the
+   4-track grid survived down to 901px and crushed the chat thread to ~245px
+   while the 320px context pane kept its full width. */
+
+/* Stage 1 (<=1480px): drop the pane TRACK; the context pane becomes a right
+   overlay drawer. */
+@media (max-width: 1480px) {
+  .ws-shell,
+  .ws-shell.ws-no-pane,
+  .ws-shell.ws-pane-collapsed,
+  .ws-shell.ws-no-pane.ws-pane-collapsed:not(.ws-no-sessions) {
+    grid-template-columns: var(--ws-rail-w) var(--ws-sessions-w) minmax(0, 1fr);
+    grid-template-areas: "rail sessions content";
+  }
+  .ws-shell.ws-no-sessions,
+  .ws-shell.ws-no-pane.ws-no-sessions,
+  .ws-shell.ws-no-pane.ws-pane-collapsed.ws-no-sessions {
+    grid-template-columns: var(--ws-rail-w) minmax(0, 1fr);
+    grid-template-areas: "rail content";
+  }
+  /* Drawer width is a literal: --ws-pane-w is 0px while pane-collapsed, and a
+     desktop-collapsed pane must still open as a full drawer. */
+  .ws-pane {
+    position: fixed; inset: 0 0 0 auto;
+    width: min(340px, 85vw);
+    z-index: calc(var(--z-drawer) + 1); transform: translateX(110%);
+    transition: transform var(--dur-base) var(--ease);
+  }
+  .ws-shell.ws-pane-open .ws-pane { transform: translateX(0); width: min(340px, 85vw); }
+  .ws-shell.ws-pane-open.ws-pane-collapsed .ws-pane { border-left: var(--bw-hair) solid var(--bg-3); }
+  .ws-shell.ws-pane-open.ws-pane-collapsed .ws-pane > * { display: revert; }
+  .ws-pane-drawer-toggle { display: inline-flex; }
+  /* Scrim is always present from this stage down so it FADES with the drawer
+     instead of hard-appearing; pointer-events gate keeps it inert while closed. */
+  .ws-scrim { display: block; opacity: 0; pointer-events: none; position: fixed; inset: 0; z-index: var(--z-drawer); background: color-mix(in srgb, var(--fg) 38%, transparent); transition: opacity var(--dur-base) var(--ease); }
+  .ws-shell.ws-sessions-open .ws-scrim, .ws-shell.ws-pane-open .ws-scrim { opacity: 1; pointer-events: auto; }
+}
+
+/* Stage 2 (<=1100px): drop the sessions TRACK; the conversation list becomes a
+   left overlay drawer. */
+@media (max-width: 1100px) {
+  .ws-shell,
+  .ws-shell.ws-no-pane,
+  .ws-shell.ws-pane-collapsed,
+  .ws-shell.ws-no-sessions,
+  .ws-shell.ws-no-pane.ws-no-sessions,
+  .ws-shell.ws-no-pane.ws-pane-collapsed:not(.ws-no-sessions),
+  .ws-shell.ws-no-pane.ws-pane-collapsed.ws-no-sessions {
+    grid-template-columns: var(--ws-rail-w) minmax(0, 1fr);
+    grid-template-areas: "rail content";
+  }
+  .ws-sessions {
+    position: fixed; inset: 0 auto 0 0;
+    /* Immune to the desktop collapse var (--ws-sessions-w:0px persisted from
+       a desktop session would open an invisible 0-width drawer). */
+    width: min(max(var(--ws-sessions-w), 280px), 80vw);
+    z-index: calc(var(--z-drawer) + 1); transform: translateX(-110%);
+    transition: transform var(--dur-base) var(--ease);
+    border-right: var(--bw-hair) solid var(--bg-3);
+    overscroll-behavior: contain;
+  }
+  .ws-shell.ws-sessions-open .ws-sessions { transform: translateX(0); }
+  /* Drawer mode ignores the desktop collapsed state: children stay rendered
+     and the border returns, so a persisted collapse can't blank the drawer. */
+  .ws-shell.ws-sessions-collapsed .ws-sessions > * { display: revert; }
+  .ws-shell.ws-sessions-collapsed .ws-sessions { border-right: var(--bw-hair) solid var(--bg-3); }
+  .ws-sessions-drawer-toggle { display: inline-flex; }
+}
+
+/* Stage 3 (<=900px): single content column; the rail drops to a fixed icon-only
+   strip. Labels hide UNCONDITIONALLY here - a 60px rail showing clipped label
+   text ('age', 'Ne') is the worst of both worlds. */
+@media (max-width: 900px) {
+  .ws-shell,
+  .ws-shell.ws-no-sessions,
+  .ws-shell.ws-no-pane,
+  .ws-shell.ws-pane-collapsed,
+  .ws-shell.ws-no-pane.ws-no-sessions,
+  .ws-shell.ws-no-pane.ws-pane-collapsed:not(.ws-no-sessions),
+  .ws-shell.ws-no-pane.ws-pane-collapsed.ws-no-sessions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "content";
+  }
+  /* Persistent chrome, not a drawer: it stays put while the session/pane
+     drawers slide over it, so it sits on the header rung below them. */
+  .ws-rail { position: fixed; inset: 0 auto 0 0; width: var(--ws-rail-w-collapsed); z-index: var(--z-header); }
+  .ws-rail .ws-rail-brand,
+  .ws-rail .ws-rail-action-label,
+  .ws-rail .ws-rail-item-label,
+  .ws-rail .ws-rail-item-count,
+  .ws-rail .ds-theme-toggle-label { display: none; }
+  .ws-rail .ws-rail-item, .ws-rail .ws-rail-action { justify-content: center; gap: 0; }
+  .ws-rail .ws-rail-head { justify-content: center; }
+  /* Expand/collapse is meaningless on the icon strip. */
+  .ws-rail-toggle { display: none; }
+  .ws-rail-foot { display: flex; justify-content: center; }
+  /* The 1100px rule's closed-state translateX(-110%) was sized for left:0;
+     once left shifts to the collapsed rail width, -110% no longer clears the
+     viewport and leaves a sliver of the "closed" drawer visible on screen. */
+  .ws-sessions { inset: 0 auto 0 var(--ws-rail-w-collapsed); transform: translateX(calc(-100% - var(--ws-rail-w-collapsed))); }
+  .ws-shell.ws-sessions-open .ws-sessions { transform: translateX(0); }
+  .ws-content { grid-area: content; padding-left: var(--ws-rail-w-collapsed); }
+  /* The Crumb's narrow collapse elsewhere keys on the .app @container, which
+     does not exist inside WorkspaceShell - mirror it here so the crumb bar
+     cannot overflow a narrow viewport (trail hides, leaf ellipsizes, the
+     right cluster wraps under instead of pushing past the edge). */
+  .ws-crumb { padding-top: 6px; padding-bottom: 6px; }
+  .ws-crumb .app-crumb { flex-wrap: wrap; min-width: 0; }
+  .ws-crumb .app-crumb > .sep, .ws-crumb .app-crumb > span:not(.crumb-right):not(.leaf) { display: none; }
+  .ws-crumb .app-crumb .leaf { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ws-crumb .app-crumb .crumb-right { margin-left: 0; flex-wrap: wrap; min-width: 0; display: inline-flex; }
+}
+.ws-drawer-toggle:hover { background: var(--bg-2); color: var(--fg); }
+.ws-drawer-toggle:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-shell, .ws-rail, .ws-pane, .ws-sessions, .ws-scrim { transition: none; }
+  .ws-resizer::after, .ws-resizer::before { transition: none; }
+}
+

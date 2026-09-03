@@ -1,0 +1,27 @@
+/* ============================================================
+   thebird site theme -- Hero/Features/Receipt/Architecture/Quickstart
+   Scoped under .ds-247420 (the SDK render root). Replaces inline
+   style="..." attributes previously set inline in site/theme.mjs.
+   ============================================================ */
+.ds-247420 .tb-section { padding: 0 32px 24px 32px; }
+.ds-247420 .tb-section-tight { padding: 0 32px 32px 32px; }
+/* Hero itself now renders via the SDK's C.Hero (.ds-hero asymmetric grid);
+   only the install-cli sibling row below the hero keeps a local class. */
+.ds-247420 .tb-hero-cli { max-width: 560px; margin: 16px 32px 0; }
+.ds-247420 .tb-subheading {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--panel-text-2);
+  text-transform: lowercase;
+}
+.ds-247420 .tb-panel-meta { color: var(--panel-text-3); font-size: 12px; }
+.ds-247420 .tb-arch-body {
+  margin: 0;
+  padding: 18px 22px;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+  overflow: auto;
+  color: var(--panel-text);
+}

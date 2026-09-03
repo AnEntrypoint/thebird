@@ -1,0 +1,112 @@
+/* ============================================================
+   Git status panel + diff view — changed-file list, unified diff.
+   ============================================================ */
+
+.ds-git-status-grid {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ds-git-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 7px 12px;
+  background: none; border: var(--bw-hair) solid transparent; border-radius: var(--r-2);
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+  transition: background var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease);
+}
+.ds-git-row:hover { background: var(--bg-2); border-color: var(--rule); }
+.ds-git-row.active { background: var(--accent-tint); border-color: var(--accent); }
+.ds-git-row:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.ds-git-row[disabled] { cursor: default; }
+
+.ds-git-status-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 18px; height: 18px;
+  font-family: var(--ff-body); font-size: var(--fs-micro); font-weight: 700;
+  border-radius: var(--r-1);
+}
+.ds-git-status-chip.tone-add { color: var(--green-2); background: color-mix(in oklab, var(--green-2) 16%, transparent); }
+.ds-git-status-chip.tone-modify { color: var(--sun); background: color-mix(in oklab, var(--sun) 16%, transparent); }
+.ds-git-status-chip.tone-delete { color: var(--flame); background: color-mix(in oklab, var(--flame) 16%, transparent); }
+.ds-git-status-chip.tone-neutral { color: var(--fg-3); background: var(--bg-2); }
+
+.ds-git-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--fg-3); }
+.ds-git-row-path {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--ff-mono); font-size: var(--fs-sm);
+}
+.ds-git-row-tag {
+  flex: 0 0 auto; font-size: var(--fs-micro); color: var(--fg-3);
+  border: var(--bw-hair) solid var(--rule); border-radius: var(--r-1); padding: 1px 6px;
+}
+.ds-git-row-stats { flex: 0 0 auto; display: inline-flex; gap: 6px; font-family: var(--ff-body); font-size: var(--fs-micro); }
+.ds-git-stat-add { color: var(--green-2); }
+.ds-git-stat-del { color: var(--flame); }
+
+.ds-git-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); padding: var(--space-6) var(--space-3);
+  color: var(--fg-3); text-align: center;
+}
+.ds-git-empty-glyph { opacity: 0.55; }
+
+/* Diff view */
+.ds-git-diff {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  background: var(--ink); color: var(--paper);
+  border-radius: var(--r-2); overflow: hidden;
+}
+.ds-git-diff-head {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--bw-hair) solid color-mix(in oklab, var(--paper) 18%, transparent);
+  font-family: var(--ff-mono); font-size: var(--fs-xs);
+}
+.ds-git-diff-empty { padding: var(--space-3); color: var(--fg-3); font-size: var(--fs-sm); }
+.ds-git-hunk + .ds-git-hunk { border-top: var(--bw-hair) solid color-mix(in oklab, var(--paper) 12%, transparent); }
+.ds-git-hunk-header {
+  padding: 4px var(--space-3);
+  color: var(--purple-2); font-family: var(--ff-mono); font-size: var(--fs-micro);
+  background: color-mix(in oklab, var(--paper) 6%, transparent);
+}
+.ds-git-hunk-body {
+  margin: 0; padding: 0 0 var(--space-2);
+  font-family: var(--ff-mono); font-size: var(--fs-xs); line-height: var(--lh-base);
+  white-space: pre; overflow-x: auto; tab-size: 2;
+}
+.ds-git-line {
+  display: block; padding: 0 var(--space-3);
+}
+.ds-git-line-add { background: color-mix(in oklab, var(--green-2) 16%, transparent); color: var(--paper); }
+.ds-git-line-del { background: color-mix(in oklab, var(--flame) 16%, transparent); color: var(--paper); }
+.ds-git-line-context { color: var(--paper-3); }
+
+/* ============================================================
+   WorktreeSwitcher — trigger + dropdown menu of worktrees/branches.
+   ============================================================ */
+.ds-wts { display: inline-flex; }
+.ds-wts-trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 10px; min-height: 32px;
+  background: var(--bg); border: var(--bw-hair) solid var(--rule); border-radius: var(--r-1);
+  color: var(--fg); font: inherit; font-size: var(--fs-sm); cursor: pointer;
+  max-width: 220px;
+}
+.ds-wts-trigger:hover { background: var(--bg-2); }
+.ds-wts-trigger:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.ds-wts-trigger-branch {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--ff-mono);
+}
+.ds-wts-trigger-caret { display: inline-flex; flex: 0 0 auto; color: var(--fg-3); }
+
+.ds-wts-item-body { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ds-wts-item-check { display: inline-flex; flex: 0 0 16px; color: var(--accent-ink); }
+.ds-wts-item-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.ds-wts-item-branch {
+  font-family: var(--ff-mono); font-size: var(--fs-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-wts-item-path {
+  font-size: var(--fs-micro); color: var(--fg-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ds-dropdown-item[aria-disabled="true"] .ds-wts-item-branch { color: var(--fg); font-weight: 600; }

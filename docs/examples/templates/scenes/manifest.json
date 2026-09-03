@@ -1,0 +1,5 @@
+[
+  { "file": "empty.json", "name": "Empty scene", "description": "Blank scene with no objects — a clean starting point.", "schemaVersion": 1 },
+  { "file": "platformer-starter.json", "name": "Platformer starter", "description": "Ground + two floating platforms leading up to a goal, with a player actor placed at the bottom-left.", "schemaVersion": 1 },
+  { "file": "maze-starter.json", "name": "Maze starter", "description": "Grid-like arrangement of walls forming a simple maze, with a player actor and goal placed at opposite corners.", "schemaVersion": 1 }
+]

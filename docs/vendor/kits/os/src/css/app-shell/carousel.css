@@ -1,0 +1,44 @@
+/* ============================================================
+   Carousel — horizontal (or vertical) scroll-snap content carousel
+   ============================================================ */
+.ds-carousel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ds-carousel--vertical { flex-direction: column; }
+
+.ds-carousel-track {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.ds-carousel-track--vertical {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  max-height: 480px;
+}
+
+.ds-carousel-item {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.ds-carousel-prev,
+.ds-carousel-next {
+  flex: 0 0 auto;
+  border-radius: var(--r-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-carousel-track {
+    scroll-behavior: auto;
+  }
+}

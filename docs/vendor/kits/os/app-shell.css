@@ -1,0 +1,45 @@
+/* app-shell.css -- re-exports the split source sheets in src/css/app-shell/
+   in their original order. This file is a published package export consumed
+   directly via <link rel="stylesheet" href="app-shell.css"> by preview and
+   ui_kits index pages (never through the build step, which reads the split
+   files directly for byte-identical dist output -- see scripts/build.mjs).
+   Splitting only: no rule was added, removed, or reordered versus the
+   original monolithic app-shell.css. */
+@import url('./src/css/app-shell/base.css');
+@import url('./src/css/app-shell/topbar.css');
+@import url('./src/css/app-shell/primitives.css');
+@import url('./src/css/app-shell/panel-row.css');
+@import url('./src/css/app-shell/hero-content.css');
+@import url('./src/css/app-shell/responsive.css');
+@import url('./src/css/app-shell/chat-basic.css');
+@import url('./src/css/app-shell/files.css');
+@import url('./src/css/app-shell/catalog-theme.css');
+@import url('./src/css/app-shell/chat-polish.css');
+@import url('./src/css/app-shell/sidebar-misc.css');
+@import url('./src/css/app-shell/states-interactions.css');
+@import url('./src/css/app-shell/loading-alerts.css');
+@import url('./src/css/app-shell/responsive2-workspace.css');
+@import url('./src/css/app-shell/row-print.css');
+@import url('./src/css/app-shell/data-density.css');
+@import url('./src/css/app-shell/kits-appended.css');
+/* The four below were bundled into dist by the appShellSplitFiles list in
+   scripts/build.mjs but were never imported here, so the two delivery paths
+   disagreed: the dist bundle carried their rules while every consumer that
+   links this barrel directly -- the preview pages and the per-kit index pages
+   -- rendered those components unstyled. 113 class names across 471 lines,
+   used by the skills-config, plugins-config, models-config and git-status
+   components under src/components/. Importing them here makes the barrel the
+   complete set again, which is the invariant the header comment above already
+   claims. scripts/lint-tokens.mjs now enforces that every sheet in
+   src/css/app-shell/ is reachable from this file, so the set cannot silently
+   diverge again. Order matches appShellSplitFiles exactly; the two must stay
+   identical or a page cascades differently depending on which path loaded it. */
+@import url('./src/css/app-shell/git-status.css');
+@import url('./src/css/app-shell/plugins-config.css');
+@import url('./src/css/app-shell/models-config.css');
+@import url('./src/css/app-shell/skills-config.css');
+@import url('./src/css/app-shell/slider.css');
+@import url('./src/css/app-shell/otp-input.css');
+@import url('./src/css/app-shell/carousel.css');
+@import url('./src/css/app-shell/calendar.css');
+@import url('./src/css/app-shell/collab.css');

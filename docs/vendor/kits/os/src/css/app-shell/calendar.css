@@ -1,0 +1,130 @@
+/* ============================================================
+   Calendar / DatePicker / DateRangePicker — month date-grid
+   primitive plus its trigger+popover shells. Tokens only: no raw
+   color/radius/z-index literal anywhere below (lint-tokens /
+   lint-radius / lint-zindex hard gates).
+   ============================================================ */
+.ds-cal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  width: max-content;
+  min-width: 264px;
+}
+.ds-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.ds-cal-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+  text-align: center;
+  flex: 1;
+}
+.ds-cal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: background-color var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.ds-cal-nav:hover { background: var(--bg-2); color: var(--fg); }
+.ds-cal-nav:focus-visible { box-shadow: var(--focus-ring-inset); outline: none; }
+.ds-cal-nav:active { transform: translateY(1px); }
+
+.ds-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+}
+.ds-cal-weekday-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--fg-3);
+  text-align: center;
+  padding-block: var(--space-1);
+}
+
+.ds-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+}
+.ds-cal-day {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.ds-cal-day:hover { background: var(--bg-2); }
+.ds-cal-day:focus-visible { box-shadow: var(--focus-ring-inset); outline: none; }
+.ds-cal-day-outside { color: var(--fg-3); opacity: 0.55; }
+.ds-cal-day-today { font-weight: 700; box-shadow: inset 0 0 0 var(--bw-hair) var(--rule-strong); }
+.ds-cal-day-selected {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+.ds-cal-day-selected:hover { background: var(--accent); }
+.ds-cal-day-in-range {
+  background: var(--accent-tint);
+  border-radius: var(--r-0);
+}
+.ds-cal-day-range-start { border-radius: var(--r-1) var(--r-0) var(--r-0) var(--r-1); }
+.ds-cal-day-range-end { border-radius: var(--r-0) var(--r-1) var(--r-1) var(--r-0); }
+.ds-cal-day-disabled {
+  color: var(--fg-3);
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-cal-nav, .ds-cal-day { transition: none; }
+}
+
+/* -- DatePicker / DateRangePicker trigger -------------------------------- */
+.ds-dp { display: inline-flex; position: relative; }
+.ds-dp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: 32px;
+  padding: var(--space-1-5) var(--space-2-5);
+  border: 0;
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background-color var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.ds-dp-trigger:hover { background: var(--bg-3); }
+.ds-dp-trigger:focus-visible { box-shadow: var(--focus-ring-inset); outline: none; }
+.ds-dp-trigger-label { white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-dp-trigger { transition: none; }
+}

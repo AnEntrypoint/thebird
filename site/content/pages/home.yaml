@@ -1,0 +1,62 @@
+id: home
+title: Home
+description: "thebird — browser-native web OS. agentic AI, POSIX terminal, live preview, OPFS filesystem. serverless. powered by acptoapi."
+hero:
+  heading: "web os, in your browser"
+  subheading: "agentic AI · POSIX terminal · live preview · OPFS filesystem"
+  body: "no server. no Docker. no install. powered by acptoapi for multi-provider streaming + tool calling."
+  ctas:
+    - { label: "open the live app", href: "./app.html", primary: true }
+    - { label: "source ->", href: "https://github.com/AnEntrypoint/thebird" }
+    - { label: "acptoapi ->", href: "https://github.com/AnEntrypoint/acptoapi" }
+features:
+  heading: "what's inside"
+  items:
+    - { code: "01", name: "agentic chat", desc: "Anthropic-format streaming with tool calling.", meta: "multi-provider" }
+    - { code: "02", name: "POSIX terminal", desc: "xstate v5 shell over IndexedDB — ls, cat, cd, mkdir, rm, cp, mv, echo, env, export, node, npm install, git.", meta: "xterm + xstate" }
+    - { code: "03", name: "node REPL", desc: "require() from IDB node_modules. Real npm install in the browser.", meta: "v23.10.0" }
+    - { code: "04", name: "live preview SW", desc: "service worker serves IDB files at /preview/*. Hot-reloads on every write.", meta: "sw-instance" }
+    - { code: "05", name: "IDB filesystem", desc: "Persistent virtual fs. /sys for infra, /home for the agent.", meta: "IndexedDB" }
+    - { code: "06", name: "multi-provider routing", desc: "gemini, openai, together, fireworks, groq, openrouter, 20+ more. Key in localStorage, never proxied.", meta: "acptoapi" }
+    - { code: "07", name: "browser xstate v5", desc: "Real shell state machine, not a string parser. Pipes, subshells, control flow, readline.", meta: "POSIX shell" }
+    - { code: "08", name: "github device-flow auth", desc: "isomorphic-git + GitHub device flow. Clone, commit, push from the browser.", meta: "isomorphic-git" }
+receipt:
+  heading: "project receipt"
+  rows:
+    - { k: "status", v: "live · ships continuously" }
+    - { k: "license", v: "MIT" }
+    - { k: "runtime", v: "browser only" }
+    - { k: "server required", v: "none" }
+    - { k: "frontend", v: "vanilla js + webjsx (no framework)" }
+    - { k: "storage", v: "IndexedDB" }
+    - { k: "api key", v: "localStorage only · never proxied" }
+    - { k: "providers", v: "gemini · openai · together · fireworks · groq · openrouter · 20+ more" }
+architecture:
+  heading: "architecture"
+  panel_title: "browser web os"
+  panel_meta: "no server"
+  body: |
+    thebird  (browser web os · GH Pages)
+      |-- chat       agentic AI · tool calling
+      |-- terminal   posix shell · node repl · idb-fs
+      |-- preview    service worker · hot reload
+      `-- shell-fs   IndexedDB virtual filesystem
+
+    acptoapi  (npm — runs in browser + node)
+      |-- formats    anthropic · openai · gemini · acp
+      |-- providers  gemini · openai-compat · router
+      |-- machine    xstate v5 streaming actor
+      `-- translate  any format -> any provider
+
+    browser sandbox  (replaces Docker)
+      |-- V8           javascript execution engine
+      |-- xstate v5    shell state machine
+      |-- IndexedDB    persistent virtual filesystem
+      `-- ServiceWorker  HTTP server from IDB files
+quickstart:
+  heading: "quickstart"
+  rows:
+    - { k: "open in browser", v: "anentrypoint.github.io/thebird/app.html" }
+    - { k: "local dev", v: "bunx serve docs" }
+    - { k: "source", v: "github.com/AnEntrypoint/thebird" }
+    - { k: "acptoapi (separate package)", v: "bunx acptoapi · npm install acptoapi" }

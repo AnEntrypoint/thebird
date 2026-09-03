@@ -1,0 +1,342 @@
+/* ============================================================
+   Panel — soft tonal container, no border decoration
+   ============================================================ */
+.panel {
+  /* PilotDeck-parity: the reference canvas has NO visible container edge
+     anywhere except a single hairline (sidebar only) — page bg and panel
+     fill read as the same tone. Stacking a tonal fill + a border + a shadow
+     (the previous three-layer treatment) is what critics independently
+     flagged as "every card reads as a boxed gray tile" / "grid of gray
+     cards" — the single most-repeated, highest-impact gap. Panels are now
+     flat (transparent, no border): content groups are separated by
+     whitespace and an optional --panel-shadow-1 whisper only, never a fill.
+     Use .panel-tonal to opt back into the filled/bordered look for surfaces
+     that genuinely need a floating card (e.g. dropdowns, dialogs already
+     have their own elevation scale and are unaffected). */
+  background: transparent;
+  border: none;
+  border-radius: var(--r-2);
+  /* AGENTS.md "outer 2:1 inner": outer separation is --space-6, inner
+     sibling gap --space-4 (48:24 = 2:1), matching .ds-panel-trio/
+     .ds-panel-duo. Bumped up one rung from --space-5/--space-3 for more
+     PilotDeck-style airy whitespace while preserving the 2:1 ratio. */
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  position: relative;
+  transition: box-shadow var(--dur-base) var(--ease-spring), border-color var(--dur-snap) var(--ease),
+    transform var(--dur-base) var(--ease-spring);
+}
+/* Opt-in tonal/bordered card — the pre-restyle .panel look, kept for
+   surfaces that need to read as a discrete floating card rather than a
+   text grouping on flat canvas (e.g. a composer input, which PilotDeck
+   itself DOES give a faint 1px border+no fill — see .panel-inline below
+   for that exact treatment). */
+.panel.panel-tonal {
+  background: var(--panel-1, var(--bg-2));
+  border: var(--bw-hair) solid var(--rule);
+  box-shadow: var(--panel-shadow-1);
+}
+/* Editorial accent spine — an opt-in printed-ink rule down the left edge that
+   reads as a magazine pull-quote bar, not a glow card. */
+.panel.panel-spine {
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  padding-left: calc(var(--space-3) + var(--bw-chunk));
+}
+.panel.panel-spine::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: var(--bw-chunk); background: var(--accent);
+  border-radius: var(--bw-chunk) 0 0 var(--bw-chunk);
+}
+/* PilotDeck's composer is the ONE element with a visible edge on an
+   otherwise flat canvas — a faint 1px border, no tonal fill. */
+.panel.panel-inline { background: transparent; border: var(--bw-hair) solid var(--rule); padding: var(--space-3) var(--space-3); }
+.panel.panel-wide   { background: transparent; box-shadow: none; border: none; }
+/* Changelog (and any other panel-wide content) needs its OWN container-query
+   context: the existing `@container (max-width: 760px) .ds-changelog-row`
+   rule in hero-content.css measures the nearest CQ ancestor, which without
+   this is `.app`/`.ds-stage` (base.css) — the whole shell width, not this
+   panel's actual rendered width. A changelog panel sitting inside
+   .ds-panel-trio (three equal siblings) can be far narrower than 760px
+   while the shell itself stays well over that, so the row-collapse rule
+   never engages and the message column's `minmax(0, 1fr)` track collapses
+   to 0 — the text then renders past the panel's right edge, clipped
+   mid-word instead of wrapping. Scoping the container here (not on
+   .panel generally) keeps the blast radius to panel-wide content only. */
+.panel.panel-wide   { container-type: inline-size; }
+/* Dense panel — a compact container for app surfaces (inspector sections,
+   sidebars) that want the .panel look without the roomy 16px pad + 24px stack
+   gap. Tighter corner + padding + head, so it sits between .panel and the
+   flush editor .ds-ep-panel. */
+.panel.panel--dense {
+  padding: var(--space-2); margin-bottom: var(--space-2-75);
+  border-radius: var(--r-1);
+}
+.panel.panel--dense .panel-head { padding: var(--space-1-5) var(--space-2); }
+.panel.panel--dense .panel-body { padding: var(--space-1-5) var(--space-2) var(--space-2); }
+.panel.panel--dense .panel-body > * + * { margin-top: var(--space-2); }
+.panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  /* Shares the .panel-body 16px side padding so the caps label and the body
+     rows sit on ONE left axis (the old 24/32 padding was authored for the
+     pre-padding .panel-wide era and indented the label 16px past its content). */
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm); font-weight: 600;
+  color: var(--fg-2);
+  letter-spacing: 0;
+  /* A hairline divider is the header's only structural separator from the
+     body — without it, a sentence-case label at fs-sm/600 reads as just
+     another dim meta line once the eye drops past the top of the panel. */
+  border-bottom: var(--bw-hair) solid var(--rule);
+  margin-bottom: var(--space-1);
+}
+.panel.panel-wide .panel-head { padding-left: 0; padding-right: 0; }
+/* A borderless .panel-wide (no card edge to lean on) would otherwise show a
+   divider floating with nothing to visually anchor it — drop it there and
+   rely on spacing alone, matching panel-wide's already-transparent chrome. */
+.panel.panel-wide .panel-head { border-bottom: none; margin-bottom: 0; }
+.panel.panel--dense .panel-head { border-bottom: var(--bw-hair) solid var(--rule); margin-bottom: 0; }
+.panel-head > :last-child:not(.ds-badge) {
+  font-weight: 500; color: var(--fg-3);
+  font-family: var(--ff-mono); letter-spacing: 0;
+}
+/* Panel titles render as a real heading (h2 by default) for AT heading-jump
+   navigation, but must read identically to the old plain span — reset the
+   UA heading margin/size/weight so it inherits .panel-head's own type rules
+   instead of the browser's h2 stylesheet. */
+.panel-title {
+  margin: 0; font: inherit; font-size: inherit; font-weight: inherit;
+  letter-spacing: inherit; text-transform: inherit; color: inherit;
+}
+/* Category glyph beside a panel title (kits / previews / decks / docs on the
+   homepage) — same inline-svg vocabulary as icons.js, sized to sit on the
+   text baseline rather than dominating it. */
+.ds-panel-title-glyph {
+  display: inline-flex; align-items: center; gap: var(--space-1-5, 6px);
+}
+.ds-panel-title-glyph .ds-icon { flex-shrink: 0; color: var(--fg-3); }
+.panel-body { padding: var(--space-2) var(--space-3) var(--space-3); }
+.panel-body > * { margin: 0; }
+/* One-line explanatory caption under a panel's title — e.g. distinguishing
+   two visually-similar panels (lore palette vs semantic tokens) in words
+   instead of leaving the reader to infer it from the title alone. */
+.ds-panel-caption {
+  font-size: var(--fs-sm); color: var(--fg-3); margin: 0 0 var(--space-2);
+}
+/* Inner sibling rhythm scales with density like the outer panel rhythm, so a
+   compact/spacious surface stays proportional instead of only its outer
+   intervals moving while the panel interiors hold still. Kept strictly below
+   the outer .ds-panel-gap interval at every density — that ordering is what
+   makes proximity report grouping truthfully. */
+.panel-body > * + * { margin-top: calc(var(--space-3) * var(--density)); }
+.panel.panel-wide .panel-body { padding: 0; }
+
+/* ============================================================
+   Row — primary list pattern. Indicator rail on the left,
+   no hairlines between rows.
+   ============================================================ */
+.row {
+  display: grid;
+  grid-template-columns: minmax(80px, 12ch) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: baseline;
+  /* App density is the BASE: a list row is quiet working chrome, so it defaults
+     to the compact 12px/16px rhythm (density-scaled) rather than the old
+     16px/24px marketing padding. .row--lede restores the roomier marketing
+     voice for editorial index pages. */
+  padding: calc(var(--space-2-75) * var(--density)) var(--space-3);
+  background: var(--bg);
+  border-radius: var(--r-1);
+  color: var(--fg);
+  position: relative;
+  /* Only background + the leading rail animate; padding/size never change on
+     interaction, so they are deliberately absent (a padding transition here was
+     dead and misleading). */
+  transition: background var(--dur-snap) var(--ease), box-shadow var(--dur-base) var(--ease-spring);
+}
+.row + .row { margin-top: 2px; }
+/* Mobile tap-target floor: at compact/comfortable density on a touch
+   viewport the padding-only row height can fall under the 44px effective
+   tap target (WCAG 2.5.5), especially at [data-density="compact"] (0.75x).
+   Force a min-height on narrow/coarse-pointer viewports only, so the dense
+   desktop mono/list layout (file-row, index-row) is untouched above 640px. */
+@media (max-width: 640px), (pointer: coarse) {
+  .row, a.row, button.row, .row[role="button"] { min-height: 44px; }
+}
+/* Interactive rows (anchor/button wrappers) get a hairline lift on hover,
+   matching the btn/panel elevation language — non-interactive rows (plain
+   divs used as static list items) are unaffected since the selector needs a
+   real interactive role. */
+a.row:hover, button.row:hover, .row[role="button"]:hover {
+  box-shadow: var(--shadow-1);
+}
+/* `detail` drops to its own full-width line. The row is a grid, so span every
+   track (grid-column 1/-1); flex-basis:100% covers the flex-row fallback. */
+.ds-row-detail {
+  white-space: pre-wrap;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  margin-top: var(--space-2);
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: var(--r-1);
+  overflow-x: auto;
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+}
+.row::before {
+  content: '';
+  position: absolute; left: 7px; top: 0; bottom: 0; width: 3px;
+  margin: auto 0;
+  height: 0;                 /* collapsed by default; reveals from centre */
+  background: var(--rule-strong);
+  border-radius: var(--r-pill);
+  opacity: 0;
+  transition: height var(--dur-base) var(--ease), opacity var(--dur-snap) var(--ease), background var(--dur-snap) var(--ease);
+}
+/* A clickable row (onClick -> role=button, or a link row) is interactive, so it
+   carries a pointer cursor; without this the click affordance is invisible. */
+.row[role="button"], a.row { cursor: pointer; }
+/* Hover reveals the rail (grows from centre) only on interactive rows — a static
+   row should not signal an affordance it does not have. */
+.row[role="button"]:hover, a.row:hover { background: var(--bg-2); }
+.row[role="button"]:hover::before, a.row:hover::before { height: 56%; opacity: 1; }
+/* Editorial hover-reveal — the row's meta (cta) slides toward the lead accent
+   and nudges right, the printed-index "open ->" affordance. */
+.row .meta { transition: color var(--dur-base) var(--ease), transform var(--dur-base) var(--ease-spring); }
+a.row:hover .meta, .row[role="button"]:hover .meta { color: var(--accent-ink); transform: translateX(3px); }
+.row.active { background: color-mix(in oklab, var(--accent) 10%, var(--bg-2)); }
+.row.active::before { height: 64%; opacity: 1; background: var(--accent); }
+.row.active .title { color: var(--accent-ink); }
+/* ConversationList rows use `ds-session-row`, not `row` -- CI's a11y-audit
+   caught --fg-3 (--ink-3) on `.ds-session-sub` failing AA (measured 4.43:1)
+   inside a rail-tinted row after the warm-paper retune. --fg-2 (--ink-2)
+   clears comfortably; scoped to `.ds-session-sub` specifically so plain rows
+   without a rail tone keep the lighter --fg-3 tone. */
+.ds-session-row.active .ds-session-sub,
+.ds-session-row[class*="rail-"] .ds-session-sub { color: var(--fg-2); }
+.row.row-state-disabled { opacity: 0.5; pointer-events: none; }
+.row.row-state-error { background: color-mix(in oklab, var(--flame) 10%, var(--bg-2)); }
+.row.row-state-error::before { height: 64%; opacity: 1; background: var(--flame); }
+/* rail tones — a persistent status colour on the leading rail (the ::before
+   bar). Always shown (a status indicator, not a hover affordance). Active/error
+   still win via their own rules below in source order. */
+.row.rail-green::before,
+.row.rail-purple::before,
+.row.rail-flame::before { height: 56%; opacity: 1; }
+.row.rail-green::before  { background: var(--accent-ink); }
+.row.rail-purple::before { background: var(--purple-2); }
+.row.rail-flame::before  { background: var(--flame); }
+/* Differentiate the rail by SHAPE, not hue alone (color-blind safety): error
+   reads as a taller solid bar, subagent as a dashed/gapped fill, ok stays the
+   short solid bar. Paired with the sr-only status word emitted by Row(). */
+.row.rail-flame::before  { height: 64%; }
+.row.rail-purple::before { background: repeating-linear-gradient(var(--purple-2) 0 4px, transparent 4px 7px); }
+.row-grid { /* explicit grid-template-columns set inline */ }
+/* A row with no leading code/index drops the empty first column so the title
+   takes the full width instead of wrapping in the narrow code gutter. */
+.row.row-nocode { grid-template-columns: minmax(0, 1fr) auto; }
+/* Template-rendered index/example rows (site/theme.mjs panels, via
+   panelNode()/examplesNode() in src/page-html/client-script.js) share one
+   row template across every panel-driven section on the homepage — "ui
+   kits", "previews", "file browser", "web components", "public api", "why
+   design", "live examples". Every one of those rows carries an inline
+   ".meta.dim" description and a trailing ".ds-row-arrow"; some ALSO carry a
+   leading ".code" span (file_browser/web_components/api_exports items have
+   a `code` field, "why design"/"live examples" items do not) — the
+   selector below has to handle both shapes as ONE template, not two.
+   Un-augmented, the base 3-track .row grid (minmax(80px,12ch) /
+   minmax(0,1fr) / auto) either crams the title into the narrow 12ch code
+   gutter (no-code rows) or, worse, auto-places an EXPLICIT-grid orphan:
+   once .title/.ds-row-arrow/.meta.dim below are pinned to explicit
+   grid-column/grid-row, a .code span left on `auto` placement can't share
+   row 1 with .title (already occupying column 1) and gets pushed into a
+   phantom row 3, rendering as a stray floating "fb"/"wc"/"api" line under
+   the description — the exact bug this rule exists to prevent, previously
+   left unfixed for the has-code case. Rows carrying a dim meta description
+   and an arrow always get the two-row template: code + title + arrow share
+   row 1 (code first, in its own narrow track), the description drops to
+   its own full-width row 2 and wraps normally — matching how every other
+   multi-line row pattern in this file (.ds-row-detail) already gets a
+   dedicated line. */
+.row:has(.meta.dim):has(.ds-row-arrow) {
+  grid-template-columns: minmax(80px, 12ch) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  row-gap: var(--space-1);
+}
+.row:has(.meta.dim):has(.ds-row-arrow) .code { grid-column: 1; grid-row: 1; }
+.row:has(.meta.dim):has(.ds-row-arrow) .title { grid-column: 2; grid-row: 1; }
+.row:has(.meta.dim):has(.ds-row-arrow) .ds-row-arrow { grid-column: 3; grid-row: 1; }
+.row:has(.meta.dim):has(.ds-row-arrow) .meta.dim { grid-column: 1 / -1; grid-row: 2; }
+/* No-code rows ("why design", "live examples") drop the empty leading
+   gutter so the title starts flush left instead of leaving a dead 12ch
+   column — same fix .row-nocode already applies to the base template. */
+.row:has(.meta.dim):has(.ds-row-arrow):not(:has(.code)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.row:has(.meta.dim):has(.ds-row-arrow):not(:has(.code)) .title { grid-column: 1; }
+.row:has(.meta.dim):has(.ds-row-arrow):not(:has(.code)) .ds-row-arrow { grid-column: 2; }
+.row .meta.dim {
+  white-space: normal;
+  min-width: 0;
+  text-align: left;
+}
+.ds-row-arrow {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+  align-self: center;
+  justify-self: end;
+}
+a.row:hover .ds-row-arrow, .row[role="button"]:hover .ds-row-arrow {
+  color: var(--accent-ink);
+}
+
+/* `.row-code` / `.row-title` / `.row-meta` are the BEM-ish spelling of the same
+   three cells as `.code` / `.title` / `.meta`. Both spellings are live in the
+   wild (preview/index-row.html uses the hyphenated one), and a cell that
+   matches no rule falls back to browser defaults — 16px body text in all three
+   tracks, which is precisely the undifferentiated render the specimen page was
+   shipping. Aliased rather than renamed so neither spelling can silently go
+   unstyled again. */
+.row .code,
+.row .row-code  { font-family: var(--ff-mono); font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+/* Title defaults to the quiet app voice (fs-sm/500) — the 18px/600 marketing
+   voice is now opt-in via .row--lede. */
+.row .title,
+.row .row-title { font-family: var(--ff-body); font-weight: 500; font-size: var(--fs-sm); line-height: var(--lh-snug); display: flex; align-items: baseline; gap: var(--space-2-5); flex-wrap: wrap; min-width: 0; }
+.row .title .sub { font-family: var(--ff-body); font-weight: 400; font-size: var(--fs-sm); color: var(--fg-3); }
+/* Marketing/editorial index row — restores the roomier padding + larger title
+   the default carried before app-scale became the base. */
+.row--lede { padding: var(--space-3) var(--space-4); }
+.row--lede .title { font-size: var(--fs-lg); font-weight: 600; }
+/* App typescale: list rows are quiet working chrome (the 18px/600 default is a
+   marketing-surface voice). One size for ALL app list rows - matches
+   .ds-file-row/.ds-session-title at fs-sm/500; values mirror the kit's own
+   mobile block below. Marketing pages without data-typescale keep the default. */
+[data-typescale="app"] .row { padding: 12px 16px; }
+[data-typescale="app"] .row .title { font-size: var(--fs-sm); font-weight: 500; }
+.row .sub   { font-family: var(--ff-body); font-weight: 400; font-size: var(--fs-sm); color: var(--fg-3); }
+/* Context-pane cwd fact reads as a path (like .ds-dash-cwd/.ds-session-agent/
+   .ds-dash-model) -- scoped to that one row so no other Row .sub is affected. */
+.ds-context-cwd-row .row .sub { font-family: var(--ff-mono); }
+.row .meta,
+.row .row-meta  { font-family: var(--ff-mono); font-size: var(--fs-xs); color: var(--fg-3); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; align-self: center; }
+/* `.row-meta` carries free prose ("state machine · 3k · shipping"), unlike
+   `.meta`'s short tabular counts — so it wraps instead of forcing the row's
+   third track wide enough to overflow a phone viewport. */
+.row .row-meta { white-space: normal; }
+/* Hairline-divided index list. `.row` is deliberately hairline-FREE (the rail
+   is the affordance), but an editorial index reads as a printed table of
+   contents: the divider IS the structure, which is what
+   preview/index-row.html's caption claims. Opt-in on the container so no
+   existing rail-based list changes. */
+.row-list > .row + .row { margin-top: 0; border-top: 1px solid var(--rule); border-radius: 0; }
+.row-list > .row:first-child { border-radius: var(--r-1) var(--r-1) 0 0; }
+.row-list > .row:last-child { border-radius: 0 0 var(--r-1) var(--r-1); }
+/* WorksList meta pairs a label with a disclosure chevron, inline-aligned. */
+.ds-works-meta { display: inline-flex; align-items: center; gap: .4em; }
+
+a.row { text-decoration: none; }
+

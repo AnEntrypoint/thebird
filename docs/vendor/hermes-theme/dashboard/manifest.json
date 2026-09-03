@@ -1,0 +1,13 @@
+{
+  "name": "clean-skin",
+  "label": "Clean Skin",
+  "description": "Compartment label colours for the Clean theme",
+  "icon": "Palette",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/clean-skin",
+    "position": "end",
+    "hidden": true
+  },
+  "entry": "dist/index.js"
+}

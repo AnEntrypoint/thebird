@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "objects": [
+    { "id": "obj-tpl-wall-top", "name": "wall top", "kind": "rect", "x": 0, "y": 0, "w": 480, "h": 20, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-bottom", "name": "wall bottom", "kind": "rect", "x": 0, "y": 340, "w": 480, "h": 20, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-left", "name": "wall left", "kind": "rect", "x": 0, "y": 0, "w": 20, "h": 360, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-right", "name": "wall right", "kind": "rect", "x": 460, "y": 0, "w": 20, "h": 360, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-1", "name": "wall 1", "kind": "rect", "x": 60, "y": 20, "w": 20, "h": 200, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-2", "name": "wall 2", "kind": "rect", "x": 140, "y": 100, "w": 20, "h": 240, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-3", "name": "wall 3", "kind": "rect", "x": 220, "y": 20, "w": 20, "h": 200, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-4", "name": "wall 4", "kind": "rect", "x": 300, "y": 100, "w": 20, "h": 240, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-wall-5", "name": "wall 5", "kind": "rect", "x": 380, "y": 20, "w": 20, "h": 200, "color": "#4a90d9", "label": "wall" },
+    { "id": "obj-tpl-actor", "name": "player", "kind": "circle", "x": 30, "y": 30, "w": 24, "h": 24, "color": "#d94a4a", "label": "player" },
+    { "id": "obj-tpl-goal", "name": "goal", "kind": "goal", "x": 424, "y": 300, "w": 28, "h": 28, "color": "#4ad97a", "label": "goal" }
+  ]
+}

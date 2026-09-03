@@ -1,0 +1,93 @@
+/* ============================================================
+   ModelsConfig — provider/model availability panel.
+   ============================================================ */
+.ds-mc { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.ds-mc-loading, .ds-mc-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); padding: var(--space-6) var(--space-3);
+  color: var(--fg-3); text-align: center;
+}
+.ds-mc-empty-hint { font-size: var(--fs-xs); color: var(--fg-3); }
+
+/* Summary bar: totals + last-checked + refresh/rebuild actions. */
+.ds-mc-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.ds-mc-summary-facts { display: flex; gap: var(--space-3); font-size: var(--fs-sm); color: var(--fg-2); }
+.ds-mc-summary-ts { color: var(--fg-3); }
+.ds-mc-summary-actions { display: flex; align-items: center; gap: var(--space-2); }
+.ds-mc-rebuild-error { font-size: var(--fs-xs); color: var(--flame); }
+
+/* Two-pane body: provider tree (left) + model detail (right). */
+.ds-mc-body {
+  display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: var(--space-3);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .ds-mc-body { grid-template-columns: 1fr; }
+}
+
+.ds-mc-tree { display: flex; flex-direction: column; gap: 2px; }
+.ds-mc-tree-group + .ds-mc-tree-group { margin-top: 2px; }
+
+.ds-mc-key-chip {
+  font-family: var(--ff-mono); font-size: var(--fs-micro); font-weight: 700;
+  padding: 1px 6px; border-radius: var(--r-1);
+}
+.ds-mc-key-chip.tone-ok { color: var(--green-2); background: var(--green-tint); }
+.ds-mc-key-chip.tone-fail { color: var(--fg-3); background: var(--bg-3); }
+
+.ds-mc-sampler {
+  display: inline-block; margin: 2px 0 4px 12px;
+  font-size: var(--fs-micro); padding: 1px 6px; border-radius: var(--r-1);
+}
+.ds-mc-sampler.tone-ok { color: var(--green-2); background: var(--green-tint); }
+.ds-mc-sampler.tone-fail { color: var(--ink); background: var(--sun); }
+
+/* Detail pane */
+.ds-mc-detail-empty { padding: var(--space-3); color: var(--fg-3); font-size: var(--fs-sm); }
+.ds-mc-detail-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.ds-mc-detail-title { font-family: var(--ff-body); font-size: var(--fs-base); font-weight: 700; }
+
+.ds-mc-discovery-error {
+  display: flex; align-items: center; gap: var(--space-1-75);
+  padding: var(--space-1-75) var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--flame); background: color-mix(in oklab, var(--flame) 12%, transparent);
+  border-radius: var(--r-1); font-size: var(--fs-xs);
+}
+
+.ds-mc-model-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.ds-mc-model-row {
+  padding: var(--space-2); border: var(--bw-hair) solid var(--rule); border-radius: var(--r-2);
+}
+.ds-mc-model-row.active { border-color: var(--accent); background: var(--accent-tint); }
+.ds-mc-model-head {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  margin-bottom: var(--space-1-75);
+}
+.ds-mc-model-id { font-family: var(--ff-mono); font-size: var(--fs-sm); font-weight: 600; }
+.ds-mc-model-via { font-size: var(--fs-micro); color: var(--fg-3); }
+.ds-mc-usable-chip {
+  font-size: var(--fs-micro); font-weight: 700; padding: 1px 6px; border-radius: var(--r-1);
+  margin-left: auto;
+}
+.ds-mc-usable-chip.tone-ok { color: var(--green-2); background: var(--green-tint); }
+.ds-mc-usable-chip.tone-fail { color: var(--fg-3); background: var(--bg-3); }
+
+/* 7-mode availability grid — one chip per mode, wraps on narrow panes. */
+.ds-mc-mode-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.ds-mc-chip {
+  font-family: var(--ff-mono); font-size: var(--fs-micro); font-weight: 600;
+  padding: 2px 7px; border-radius: var(--r-1);
+  border: var(--bw-hair) solid transparent;
+}
+.ds-mc-chip.tone-ok { color: var(--green-2); background: var(--green-tint); }
+.ds-mc-chip.tone-fail { color: var(--on-color); background: var(--flame); }
+.ds-mc-chip.tone-skip { color: var(--fg-3); background: var(--bg-3); }
+.ds-mc-chip.tone-unknown { color: var(--fg-3); background: none; border-color: var(--rule); opacity: 0.6; }

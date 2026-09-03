@@ -1,0 +1,31 @@
+{
+  "name": "thebird",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Browser-native web OS — multi-instance, agentic, serverless",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "gen-sws": "node scripts/gen-static-sws.mjs",
+    "refresh-vendor": "node scripts/sync-upstream.mjs",
+    "refresh-design": "node scripts/refresh-design.mjs",
+    "refresh-design:local": "node scripts/refresh-design.mjs --local",
+    "refresh-freddie": "node scripts/refresh-freddie.mjs",
+    "refresh-freddie:local": "node scripts/refresh-freddie.mjs --local",
+    "refresh-gm": "node scripts/refresh-gm.mjs",
+    "refresh-gm:local": "node scripts/refresh-gm.mjs --local",
+    "refresh-spoint-ecs": "node scripts/refresh-spoint-ecs.mjs",
+    "refresh-all": "node scripts/refresh-design.mjs --local && node scripts/refresh-freddie.mjs --local && node scripts/refresh-gm.mjs --local && node scripts/refresh-spoint-ecs.mjs",
+    "serve": "npx serve docs",
+    "playwriter-bridge": "node scripts/playwriter-bridge.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "witness": "node scripts/witness-manifest.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.3.0",
+    "serve": "^14.2.6"
+  },
+  "repository": "https://github.com/AnEntrypoint/thebird.git"
+}

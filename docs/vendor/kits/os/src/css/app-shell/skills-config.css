@@ -1,0 +1,27 @@
+/* ============================================================
+   SkillsConfig — skill list + detail panel. Shares chrome with
+   PluginsConfig (.ds-plugins-overlay/-modal/-header/-body/-sidebar/-list/
+   -row/-dot/-main/-detail/-toggle/-fact-grid/-chip/-footer); the classes
+   below are the skills-specific additions only.
+   ============================================================ */
+
+.ds-skills-search-row {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: var(--bw-hair) solid var(--rule); flex: 0 0 auto;
+}
+
+.ds-skills-group { margin-bottom: var(--space-2); }
+.ds-skills-group-label {
+  padding: var(--space-2) var(--space-2) 3px;
+  font-size: var(--fs-micro); font-weight: 600; color: var(--fg-3);
+  letter-spacing: 0;
+}
+
+.ds-skills-description { font-size: var(--fs-sm); color: var(--fg-2); line-height: 1.5; }
+
+.ds-skills-body-group { display: flex; flex-direction: column; }
+.ds-skills-body-preview {
+  font-family: var(--ff-mono); font-size: var(--fs-micro); color: var(--fg-2);
+  background: var(--bg-2); border: var(--bw-hair) solid var(--rule); border-radius: var(--r-2);
+  padding: var(--space-3); overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word;
+}

@@ -1,0 +1,909 @@
+/* ============================================================
+   247420 design system — colors + type
+   shadcn-neutral (2026-07-30 restyle): confident display type, ink-on-paper
+   with a grayscale accent, print texture inert. RESTYLED from the prior
+   "Acid Editorial" warm-paper/electric-lime identity -- see the RESTYLED
+   notes below for the token-by-token detail. Scope-prefixed at build time.
+   Source-of-truth tokens. Component sheet lives in app-shell.css.
+   ============================================================ */
+
+/* System-font stack only — no web-font @import/@font-face. Every --ff-*
+   token below is the same fallback chain that used to sit after the custom
+   family names; removing the custom names just exposes it directly. */
+
+:root {
+  /* Tree view indentation tokens */
+  --tree-indent: 12px;
+  --tree-base-indent: 6px;
+
+  /* Paper / Ink — RESTYLED to webjsx-toolkit's shadcn-neutral grayscale
+     palette (2026 restyle, replacing the prior "Acid Editorial" warm-paper/
+     electric-lime identity). Values below are HSL-equivalent-in-hex readings
+     of webjsx-toolkit's :root tokens (--background 0 0% 100%, --foreground
+     0 0% 10%, --muted 0 0% 95%, --border 0 0% 90%) so every downstream
+     color-mix()/oklch() derivation in this file keeps its formula and only
+     the ROOT input changes -- see restyle-tokens-webjsx-toolkit-look and
+     restyle-contrast-reverification-all-tokens for the swap rationale and
+     the re-verification this requires.
+     Subtle warm off-white retune (2026-08): pure #FFFFFF read as stark/cold
+     against reference material using a warm off-white. Shift is deliberately
+     tiny -- a few points toward warm gray, not a cream -- to stay a safe,
+     low-risk change on a token used everywhere. Contrast re-verified against
+     every paired text tone: --ink 16.84:1, --ink-2 12.16:1, --ink-3 7.56:1 on
+     --paper (all far clear of AA 4.5:1); --ink-3 on --paper-2/--paper-3 also
+     re-measured at 6.87:1 / 6.04:1, both still clear. */
+  --paper:       #FDFBF7;
+  --paper-2:     #F2F0EC;
+  --paper-3:     #E5E2DC;
+  --ink:         #1A1A1A;
+  --ink-2:       #333338;
+  --ink-3:       #525252; /* WCAG-verified 2026 restyle: npm run a11y caught 4.10:1 at #58585F against --paper-3 (#c6c5c5-equivalent surfaces); #525252 clears 4.54:1 there and 7.81:1 against pure paper */
+  --ink-3-dark:  #4D4D52; /* dark theme bg-3 (tier-3 surface) */
+  --paper-3-dark: #BEBEBE; /* dark theme fg-3 (tier-3 text); #9B9B9B cleared 4.52:1 against --ink-2 but --fg-3 also renders on --bg-3 (--ink-3-dark, #4D4D52, e.g. .chip.tone-dim), where it measured only 3.02:1. #BEBEBE clears 4.52:1 on --ink-3-dark, 6.76:1 on --ink-2, 9.36:1 on --ink. */
+
+  /* Lore palette. --acid was the prior electric-lime lead; RESTYLED to a
+     neutral near-black accent matching webjsx-toolkit's grayscale --primary
+     (0 0% 15%), since the shadcn-neutral look has no saturated lead color at
+     all -- primary/accent are both neutral ink tones with hover-state
+     opacity, not a distinct hue. green/purple/mascot below stay as the
+     category/status palette (webjsx-toolkit has no opinion on multi-hue
+     category tagging, so these are kept rather than flattened). */
+  --acid:        #262626;
+  --acid-deep:   #171717; /* re-verify AA text tone under restyle-contrast-reverification-all-tokens */
+  --green:       #247420;
+  --green-2:     #3A9A34;
+  --green-deep:  #133F10;
+  --green-tint:  #D7E4C2;
+  --purple:      #3A0140;
+  --purple-2:    #7F18A4;
+  --purple-deep: #220026;
+  --purple-tint: #E2CFE4;
+  --mascot:      #FF2E84;
+  --mascot-2:    #FF3CA7;
+  --mascot-tint: #F7CEDD;
+  --mascot-deep: #B81F63;
+  /* Fixed ink-surface mascot text tone (6.67:1 on --ink). Unlike
+     --mascot-deep, this NEVER follows the theme: it is for always-dark
+     surfaces like the .cli card, which stay ink under a light theme and so
+     need a tone chosen for ink rather than for the active theme. Same role
+     --paper-3-dark plays for the tier-3 text ramp. */
+  --mascot-on-ink: #FF5C9E;
+  /* Same always-dark-surface pattern, for .ds-cli-ok's success/OK text.
+     RESTYLED 2026: .ds-cli-ok previously used --acid directly (the bright
+     lime), which cleared contrast on --ink by construction; now that --acid
+     is a dark neutral, it fails 1.15:1 on the still-always-dark .cli card
+     (npm run a11y caught this on the terminal kit). Reuses the dark-theme
+     --green retune value (7.48:1 on --ink) rather than inventing a new hue,
+     since --green already carries the "success" semantic elsewhere. */
+  --success-on-ink: #5CBF52;
+
+  /* Signals */
+  --sun:         #F5C344;
+  /* Error/status tones are theme-tuned: the root values are the LIGHT (paper)
+     pair (flame 4.74:1, amber 4.5+:1 on paper); the dark blocks below restore
+     the originals (#FF5A1F / #D9A93A) which were tuned on ink and fail on
+     paper (2.9:1 / 2.0:1). */
+  --flame:       #C53E00;
+  /* #8A6512 measured 4.5+:1 on --paper but only 4.26:1 on --bg-2, which the
+     dashboard card status text actually renders on - darkened for margin on
+     both backgrounds (5.21:1 on --bg-2). */
+  --amber:       #7C570F;
+  --sky:         #3A6EFF;
+  /* --warn = interactive danger controls (buttons, banners, menus, error
+     inputs); --danger below = passive error/status text and metrics
+     (kpi/sparkline deltas, auth-error text). Two tokens, one convention.
+     #E0241A measured 4.19:1 on --paper — fails WCAG AA 4.5:1 for the many
+     TEXT usages (.field-error, .ds-btn-warn, .ds-stat-val.err-rate, toast/
+     session error labels), not just the interactive-control (>=3:1) usages.
+     Darkened to clear AA on --paper (5.29:1), --paper-2 (4.78:1), and the
+     thebird warm-paper preset (5.25:1) while staying visually a clear
+     warm red. */
+  --warn:        #C41C0C;
+  /* Paired foreground for --warn used as a FILL (a danger button background),
+     not as text-on-paper (--warn's own tuning above). --paper clears 5.97:1
+     on this --warn -- --warn was tuned dark specifically for the text-on-paper
+     direction, so re-using it for the opposite direction (paper text on this
+     as a fill) needs its own token, not a re-derivation of --warn itself. */
+  --warn-fg:     var(--paper);
+  /* Syntax-token aliases: light values pass 4.5:1 on paper; the dark blocks
+     restore the bright dark-tuned originals. Components reference ONLY these. */
+  --code-string:  var(--green);
+  --code-keyword: #2453C9;
+  --code-fn:      #B84300;
+  --code-str-alt: var(--mascot-deep);
+  --code-num:     #946300;
+  /* 0.55 lightness measured 4.70:1 on --paper but only 4.25:1 on --bg-2 (the
+     auth-error banner's actual background) - darkened for AA margin on both.
+     --danger = passive error/status text and metrics; --warn above =
+     interactive danger controls. */
+  --danger:      oklch(0.50 0.18 25);
+  --success:     var(--green-2);
+  --live:        var(--green);
+
+  /* Semantic surfaces */
+  --bg:          var(--paper);
+  --bg-2:        var(--paper-2);
+  --bg-3:        var(--paper-3);
+  --fg:          var(--ink);
+  --fg-2:        var(--ink-2);
+  --fg-3:        var(--ink-3);
+
+  /* --accent is the FILL; --accent-ink is the readable TEXT tone for
+     links/eyebrows/accents on paper; --accent-fg is what sits ON an --accent
+     fill. RESTYLED: --accent (formerly the bright --acid lime, dark text on
+     top) is now a dark neutral (webjsx-toolkit's --primary: 0 0% 15%), so
+     --accent-fg flips to a LIGHT tone (webjsx-toolkit's --primary-foreground:
+     0 0% 100%) -- verified via npm run a11y after the initial restyle caught
+     this exact dark-on-dark 1.15:1 failure across every kit's .btn-primary/
+     .active nav item, both of which read --accent-fg as their text color. */
+  --accent:      var(--acid);
+  --accent-fg:   var(--paper);
+  --accent-ink:  var(--acid-deep);
+  --accent-bright: var(--acid); /* base value so var(--accent-bright) never falls back empty; ink + [data-accent] retune it */
+  /* Blends --accent-ink (the readable/darker ink variant), not the raw
+     --accent fill, so light-theme active states clear contrast against --bg;
+     dark/ink and auto-dark restate the prior --accent-based value explicitly
+     below so this change does not leak into them via inheritance. */
+  --accent-tint: color-mix(in oklab, var(--accent-ink) 22%, var(--bg));
+
+  /* On-color foregrounds — text/icons that sit ON a saturated fill (accent,
+     danger, category chips). Theme-driven so white-on-color never hard-codes
+     #fff. --on-accent tracks --accent-fg; --on-color is the generic light
+     foreground for any colored fill. */
+  --on-accent:   var(--accent-fg);
+  --on-color:    #fff;
+
+  /* Scrims — modal/overlay backdrops. Derived from --fg so a dark theme dims
+     with its own ink rather than a baked rgba(0,0,0). */
+  --scrim:        color-mix(in oklab, var(--fg) 40%, transparent);
+  --scrim-strong: color-mix(in oklab, var(--fg) 72%, transparent);
+  --scrim-media:  color-mix(in oklab, var(--fg) 85%, transparent);
+
+  /* Category palette — surfaces (forum tags, project cards) that color-code by
+     category. Canonical so a theme/accent swap recolors categories instead of
+     drifting from a private --cat-* block. Derived from the base palette. */
+  --cat-green:   var(--green-2);
+  --cat-purple:  var(--purple-2);
+  --cat-mascot:  var(--mascot);
+  --cat-sun:     var(--sun);
+  --cat-flame:   var(--flame);
+  --cat-sky:     var(--sky);
+
+  /* Readable TEXT tones for the category hues — the same FILL/TEXT split the
+     lead accent already draws with --accent (fill) vs --accent-ink (text).
+     The bare --cat-* values are chroma-matched to sit behind ink on a swatch,
+     avatar, or tag; as `color:` on newsprint paper they land at ~3.1:1, under
+     the 4.5:1 floor. Any `color:` use of a category hue takes the -ink tone;
+     only background/border-color take the bare one. Each -deep source is
+     already remapped per-theme below, so these follow the theme too. */
+  --cat-green-ink:  var(--green-deep);
+  --cat-purple-ink: var(--purple-deep);
+  --cat-mascot-ink: var(--mascot-deep);
+
+  --panel-bg:     var(--bg);
+  --panel-bg-2:   var(--bg-2);
+  --panel-accent: var(--accent);
+  --panel-0:      var(--bg);
+  --panel-1:      var(--bg-2);
+  --panel-2:      var(--bg-3);
+  --panel-hover:  color-mix(in oklab, var(--fg) 4%, var(--panel-1));
+  --panel-3:      color-mix(in oklab, var(--fg) 12%, transparent);
+  --panel-text:   var(--fg);
+  --panel-text-2: var(--fg-2);
+  --panel-text-3: var(--fg-3);
+  --panel-accent-2: var(--accent-bright, var(--accent));
+  --panel-shadow: 0 1px 0 color-mix(in oklab, var(--fg) 6%, transparent), 0 4px 14px color-mix(in oklab, var(--fg) 8%, transparent);
+  /* Single-layer, half-strength companion to --shadow-1, used ONLY by .panel.
+     .panel already carries a tonal --panel-1 fill and a --rule border; a
+     full --shadow-1 on top made three simultaneous edge/surface signals
+     read as boxed/cardy rather than PilotDeck's flat, near-borderless look.
+     --shadow-1/2/3 stay untouched — they are the real elevation scale for
+     things that must read as floating (dialog/dropdown/tooltip/toast). */
+  --panel-shadow-1: 0 1px 2px color-mix(in oklab, var(--fg) 4%, transparent);
+
+  /* Type — system-font stack, no custom web fonts loaded. */
+  --ff-display:  system-ui, sans-serif;
+  --ff-narrow:   system-ui, sans-serif;
+  --ff-body:     system-ui, sans-serif;
+  --ff-mono:     ui-monospace, Menlo, Consolas, monospace;
+
+  /* Weight scale — regular is the default voice for body/UI text everywhere;
+     medium/semibold/bold are reserved for genuine emphasis (active state,
+     unread counts, own-message author, section headers). Never reach for a
+     hardcoded 600/700 in a component rule — use these so the whole surface
+     can be re-tuned in one place instead of drifting per-component. */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Sub-12px tiers exist ONLY for dense OS/data chrome — taskbar strips,
+     session chips, tool-call headers, file-row metadata, ID/stat columns.
+     Never use them for body copy or ordinary UI text: at these sizes the
+     system stack loses its readable x-height, so they are reserved for
+     glanceable, secondary, non-prose material. --fs-pico is the floor. */
+  --fs-pico:     10px;
+  --fs-nano:     11px;
+  --fs-micro:    12px;
+  --fs-tiny:     13px;
+  --fs-xs:       14px;
+  --fs-sm:       15px;
+  --fs-body:     16px;
+  --fs-lg:       18px;
+  --fs-xl:       21px;
+  --fs-h4:       clamp(24px, 2cqi, 28px);
+  --fs-h3:       clamp(26px, 2.6cqi, 34px);
+  --fs-h2:       clamp(28px, 3.6cqi, 44px);
+  --fs-h1:       clamp(34px, 4.4cqi, 52px);
+  --fs-hero:     clamp(42px, 7cqi, 96px);
+  --fs-mega:     clamp(56px, 11cqi, 168px);
+  /* Bridges the fixed --fs-* ladder (tops out at --fs-xl, 21px) and the fluid
+     heading clamps below it — use for fixed (non-clamping) UI text that needs
+     to sit between --fs-xl and a heading tier, e.g. empty-state icon glyphs. */
+  --fs-2xl:      28px;
+
+  /* Icon size scale — canonical sizes for glyphs/icons across the kit going
+     forward. Existing ad-hoc pixel values (6/7/8/10/12/14/16/18px etc.)
+     don't need to be migrated in this pass; new/updated icon usage should. */
+  --icon-xs: 12px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+
+  /* App/chrome typescale: the default heading scale above is tuned for
+     marketing/hero layouts (h1 up to 64px). Application chrome — page titles,
+     panel headers — needs a compact ceiling so a PageHeader title doesn't
+     dwarf the content. Opt in with `data-typescale="app"` on a container. */
+  --fs-h1-app:   clamp(22px, 2cqi, 26px);
+  --fs-h2-app:   clamp(18px, 1.6cqi, 21px);
+  --fs-h3-app:   clamp(16px, 1.5cqi, 18px);
+  --fs-h4-app:   clamp(15px, 1.6cqi, 17px);
+
+  --lh-tight:    1.05;
+  --lh-snug:     1.2;
+  --lh-base:     1.55;
+  --lh-long:     1.7;
+
+  --tr-caps:     0.06em;
+  --tr-label:    0.10em;
+  --tr-tight:    -0.02em;
+  --tr-tighter:  -0.03em;
+
+  /* Spacing (8pt) */
+  /* Micro rungs below --space-1 — dense editor/inspector chrome (table cell
+     padding, pill gaps, tight toolbar gutters) needs finer steps than the 8pt
+     scale offers; same reasoning as --r-hair/--r-0 sitting below --r-1. */
+  --space-hair:  2px;
+  --space-half:  3px;
+  --space-0:     0;
+  --space-1:     4px;
+  --space-1-5:   5px;
+  --space-1-75:  6px;
+  --space-2:     8px;
+  --space-2-5:   10px;
+  --space-2-75:  12px;   /* fills the 10->16 hole (row-form gap, dense cell pad) */
+  --space-3:     16px;
+  --space-3-5:   20px;   /* fills the 16->24 hole (settings body, mono block pad) */
+  --space-4:     24px;
+  --space-5:     32px;
+  --space-6:     48px;
+  --space-7:     64px;
+  --space-8:     96px;
+  --space-9:     128px;
+  --space-10:    192px;
+
+  --density:     1;
+  --pad-y:       calc(var(--space-6) * var(--density));
+  --pad-x:       calc(var(--space-6) * var(--density));
+  --gutter:      calc(var(--space-4) * var(--density));
+
+  /* Borders — chunky or none */
+  --bw-hair:     1px;
+  --bw-rule:     2px;
+  --bw-chunk:    4px;
+  --bw-slab:     8px;
+
+  /* Retuned toward PilotDeck's near-borderless whisper: 14% read as a visibly
+     drawn line, not a hairline. 8% keeps the edge perceptible (still enough to
+     separate a --panel-1-filled surface from its --bg backdrop) without
+     competing with the fill + shadow already doing the container-definition
+     work in .panel. --rule-strong is untouched — it is the deliberate
+     stronger variant for places that need a visible seam (table rules, active
+     tab underline), not the ambient panel/card edge. */
+  --rule:        color-mix(in oklab, currentColor 8%, transparent);
+  --rule-strong: color-mix(in oklab, currentColor 28%, transparent);
+
+  /* Micro rungs below --r-1 — chips, badges, scrollbar thumbs, tick marks
+     genuinely want a tighter corner than the base radius; without these two
+     tokens the component sheets fell back to raw px literals bypassing the
+     scale. RESTYLED (webjsx-toolkit look): base --radius is 0.5rem (8px),
+     with radius-sm/md/lg at radius-4px/radius-2px/radius (4px/6px/8px) --
+     --r-1 below is retuned to that 8px base; --r-2/--r-3 keep proportional
+     headroom above it for large-surface corners (cards, dialogs) rather than
+     collapsing to a single flat rung, since webjsx-toolkit itself has no
+     opinion above its one --radius value. */
+  --r-hair:      2px;
+  --r-0:         4px;
+  --r-1:         8px;
+  --r-2:         10px;
+  --r-3:         14px;
+  --r-pill:      999px;
+
+  --dur-snap:    80ms;
+  --dur-base:    160ms;
+  --dur-slow:    280ms;
+  --dur-reveal:  560ms;
+  --ease:        cubic-bezier(0.2, 0, 0, 1);
+  /* Physical tier — a slight overshoot that reads as a printed stamp landing,
+     used by presses and signature reveals (not by routine UI fades). Kept
+     available post-restyle since some existing consumers still reference it;
+     new work should prefer the webjsx-toolkit-equivalent curves below. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-exit:   cubic-bezier(0.4, 0, 1, 1);
+  /* RESTYLED (webjsx-toolkit look): its three named easing curves, ported
+     verbatim from webjsx-toolkit/src/styles.css's @theme inline block. */
+  --ease-drawer:     cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-collapse:   cubic-bezier(0.2, 0, 0, 1);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* Print texture — the prior "Acid Editorial" signature surface treatment.
+     RESTYLED: opacity zeroed so .ds-grain/.ds-halftone (currently applied by
+     no consumer, verified by grep across src/components and ui_kits) render
+     inert under the flat-surface webjsx-toolkit look, without deleting the
+     machinery in case a future editorial-mode consumer opts back in. --grain
+     itself (the data-URI) and --grain-blend are left defined for that reason. */
+  --grain-opacity:    0;
+  --grain-blend:      multiply;
+  --grain:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Offset-ink registration — the small print-mark offset used on editorial
+     edges (panel spine, expo numbering). A literal length, not a color. */
+  --ink-offset:  3px;
+
+  /* ============================================================
+     Stacking scale — the ONE ordered set of layers anything may
+     paint into. Rungs are 100 apart so a future layer can be
+     inserted between two neighbours without renumbering the rest,
+     and so a component may locally offset (+1/+2) within its own
+     rung without colliding with the next one.
+
+     Order is the contract; the numbers are just how it is spelled.
+     Read top to bottom as "what paints over what":
+
+       --z-below     -1   decorative texture UNDER its own content
+                          (.ds-grain/.ds-halftone print layer)
+       --z-base       0   in-flow content; the default plane
+       --z-raised     100 a thing lifted above its siblings inside
+                          one component (code-lang tab, timeline dot,
+                          selection checkbox, resize handle)
+       --z-sticky     200 sticky-within-a-scroller chrome: section
+                          labels, sticky table headers, save bars.
+                          Above raised content it scrolls past.
+       --z-header     300 the app's own sticky chrome band
+                          (.app-topbar/.app-chrome)
+       --z-drawer     400 off-canvas panels (sidebar/pane/session
+                          drawers) and their scrim, which must cover
+                          the header they slide over
+       --z-window     500 free-floating window-manager surfaces —
+                          the OS kit's .wm-root canvas of draggable
+                          windows. Above the shell, below all
+                          transient popups.
+       --z-dock       600 persistent OS shell furniture that must
+                          stay above windows: launcher dock, menubar,
+                          taskbar, os-root
+       --z-dropdown   700 menus/popovers anchored to a trigger; they
+                          must escape the dock that spawned them
+       --z-modal      800 blocking dialogs, lightboxes, command
+                          palettes and their backdrops
+       --z-toast      900 transient notifications — above a modal,
+                          because they report on what the modal did
+       --z-tooltip   1000 pointer-following hint; never blocked
+       --z-top       1100 last resort: boot/loading veils and
+                          full-screen takeovers that outrank
+                          everything, including a tooltip
+     ============================================================ */
+  --z-below:      -1;
+  --z-base:        0;
+  --z-raised:    100;
+  --z-raised-1:  calc(var(--z-raised) + 1);
+  --z-raised-2:  calc(var(--z-raised) + 2);
+  --z-raised-3:  calc(var(--z-raised) + 3);
+  --z-sticky:    200;
+  --z-header:    300;
+  --z-drawer:    400;
+  --z-window:    500;
+  --z-dock:      600;
+  --z-dropdown:  700;
+  --z-modal:     800;
+  --z-toast:     900;
+  --z-tooltip:  1000;
+  --z-top:      1100;
+
+  --measure:     68ch;
+  --measure-wide:   940px;
+  --measure-narrow: 760px;
+  /* Page-stage ceiling — independent of --measure-wide (which stays the
+     narrower editorial hero/prose measure). Fluid so ultra-wide viewports
+     actually gain real estate instead of flat-lining at a fixed px cap.
+     Percentage, not vw: a stage nested in a sidebar shell or an embedded
+     window has no useful viewport of its own, and a vw term there resolves
+     against the browser instead of the container it actually sits in. */
+  --stage-wide:  min(96%, 1600px);
+  /* Ultra-wide tier — past this the eye loses the line more than the layout
+     gains, so multi-column content takes the extra width instead of one
+     column growing without bound. */
+  --stage-ultra: min(96%, 2100px);
+
+  --sidebar-width:           256px;
+  --sidebar-width-collapsed: 64px;
+
+  /* Canonical breakpoint values — @media can't reference custom properties,
+     so these are documented here (not tokenized) for consistency across
+     responsive.css/responsive2-workspace.css/hero-content.css:
+       - 480px  (max-width) mobile portrait
+       - 768px  (max-width) mobile/tablet boundary, compact nav/sidebar collapse
+       - 768-1024px (min/max-width) tablet landscape band
+       - 900px  (max-width) / 901px (min-width) tablet/desktop layout reflow
+       - 1025px (min-width) desktop
+     Always use these exact values; a near-miss (e.g. 760px, 481px) should be
+     aligned to its canonical neighbour when touched. */
+
+  --lh-tall:     1.4;
+
+  /* Control size scale — heights for status/topbar/crumb + controls. */
+  --size-sm:     32px;
+  --size-base:   42px;
+  --size-lg:     56px;
+
+  /* Dense control-height ladder — the actual heights front-door controls
+     (buttons, fields, rows) snap to, one rung tighter than the --size-*
+     chrome scale so app UI reads compact instead of marketing-scale. Density
+     scales them so [data-density=compact/spacious] moves every control at once.
+     Mirrors webgeist's 30/38/46 button ladder, retuned for this system. */
+  --ctl-sm:      calc(28px * var(--density));
+  --ctl-md:      calc(34px * var(--density));
+  --ctl-lg:      calc(42px * var(--density));
+  /* The canonical single-line input/select/searchfield height (== --ctl-md)
+     and the default list-row min-height, both density-aware. */
+  --field-height: var(--ctl-md);
+  --row-height:   calc(40px * var(--density));
+
+  /* Unified focus-ring tokens (single source for the design system). Outset
+     rings (the default) tokenize colour+width+offset; bordered text fields use
+     the inset variant. Deliberate negative offsets on edge-flush/clipping
+     containers stay literal. --focus-color uses --accent-ink (the readable
+     text/UI-boundary tone), never bare --accent (the lime FILL token, which
+     measures ~1.07:1 against --paper and is nearly invisible as an outline —
+     see AGENTS.md token-split rule). */
+  --focus-color:       var(--accent-ink);
+  --focus-w:           2px;
+  --focus-offset:      2px;
+  --focus-ring-inset:  inset 0 0 0 var(--focus-w) var(--focus-color);
+
+  /* letterbox background for video/media containers */
+  --media-letterbox:   #000;
+}
+
+/* ============================================================
+   Focus-visible styles for keyboard navigation
+   ============================================================ */
+:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Button variants with focus-visible */
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Link focus-visible — all route through the single --focus-* token set so a
+   focus retune (colour/width/offset) happens in one place, never per selector. */
+a:focus-visible,
+[role="link"]:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Form inputs with focus-visible */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Interactive element focus-visible */
+[tabindex]:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+[data-theme="ink"],
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:        var(--ink);
+  --bg-2:      var(--ink-2);
+  --bg-3:      var(--ink-3-dark);
+  --fg:        var(--paper);
+  --fg-2:      var(--paper-2);
+  --fg-3:      var(--paper-3-dark);
+  --panel-bg:  var(--bg);
+  --panel-bg-2: var(--bg-2);
+  --panel-0:   var(--bg);
+  --panel-1:   var(--bg-2);
+  --panel-2:   var(--bg-3);
+  --panel-3:   color-mix(in oklab, var(--fg) 20%, transparent);
+  --panel-text:   var(--fg);
+  --panel-text-2: var(--fg-2);
+  --panel-text-3: var(--fg-3);
+  /* RESTYLED: webjsx-toolkit's dark --primary is a LIGHT neutral (0 0% 75%)
+     with a DARK --primary-foreground (0 0% 10%) -- the inverse of light mode,
+     matching shadcn's convention that dark-mode primary buttons read as a
+     light chip on the dark page, not a same-dark-as-bg chip. --accent no
+     longer aliases --acid here (a literal dark-on-dark 1.15:1 failure caught
+     by npm run a11y across every dark-rendered kit). */
+  --accent:    #BFBFBF;
+  --accent-fg: var(--ink);
+  --accent-ink: var(--paper);
+  --accent-bright: #BFBFBF;
+  --accent-tint: color-mix(in oklab, var(--accent) 30%, var(--bg));
+  --danger:    oklch(0.68 0.19 25);
+  --flame:     #FF5A1F;
+  --amber:     #D9A93A;
+  /* warn/sky dark-tuned pairs (mirror flame/amber): the :root paper values
+     (#E0241A / #3A6EFF) are too dark on ink; these clear AA 4.5:1 on --ink. */
+  --warn:      #FF5A52;
+  /* Paired foreground for --warn-as-fill (see :root's --warn-fg comment) --
+     dark theme's --warn is the lighter tuned red, so its fill needs the dark
+     --ink text, the opposite pairing from :root. */
+  --warn-fg:   var(--ink);
+  --sky:       #6E9BFF;
+  /* Category/heritage dark-tuned pairs (same convention as flame/amber/warn/
+     sky above): the :root values are the PAPER tones and go dark-on-dark here.
+     Measured on --ink (#0E0E12) / --bg-2 (#1F1F26): mascot-deep #B81F63 was
+     3.13:1 / 2.66:1, purple-2 #7F18A4 2.36:1 / 2.00:1, green #247420 3.30:1 /
+     2.80:1 — all failing AA for the text roles they carry (aicat/community
+     author names, kpi deltas, stamps, rails). The replacements clear 4.5:1 on
+     BOTH ink surfaces: #FF5C9E 6.67/5.67, #C277FF 6.77/5.75, #5CBF52 8.28/7.04.
+     These are text-tone retunes only — the paper values are untouched. */
+  --mascot-deep: #FF5C9E;
+  --purple-2:  #C277FF;
+  --green:     #5CBF52;
+  /* --cat-*-ink text tones for dark. The :root sources (--green-deep #133F10,
+     --purple-deep #220026) are near-black PAPER tones — on ink they land at
+     1.60:1 / 1.01:1, i.e. invisible. Repoint them at the dark-tuned values
+     already proven above: #5CBF52 8.28:1 on ink / 7.04:1 on --bg-2, #C277FF
+     6.77:1 / 5.75:1. --cat-mascot-ink needs no entry here: it tracks
+     --mascot-deep, which this same block already remaps to #FF5C9E. */
+  --cat-green-ink:  #5CBF52;
+  --cat-purple-ink: #C277FF;
+  --code-string:  var(--green-2);
+  --code-keyword: var(--sky);
+  --code-fn:      var(--flame);
+  --code-str-alt: var(--mascot);
+  --code-num:     var(--sun);
+}
+
+/* [data-accent="X"] overrides (below) hardcode LIGHT-tuned fills (--acid,
+   --purple, --green) with no dark-theme companion, so data-theme=dark +
+   data-accent=acid/purple/green produced a near-invisible fill against the
+   dark page bg (measured: acid 1.15:1, purple 1.04:1, green 2.98:1 on --ink
+   -- all under the 3:1 non-text UI-fill floor). Same convention as the base
+   --accent retune above: restate the fill as its dark-tuned equivalent so
+   the swatch stays visible, using tones already verified elsewhere in this
+   file (green retune 7.48:1 on --ink, purple-2 retune 6.11:1 on --ink). */
+[data-theme="ink"][data-accent="acid"],
+[data-theme="dark"][data-accent="acid"] {
+  --accent: #BFBFBF; --accent-bright: #BFBFBF; --accent-fg: var(--ink); --accent-ink: var(--paper); --panel-accent: #BFBFBF;
+}
+[data-theme="ink"][data-accent="purple"],
+[data-theme="dark"][data-accent="purple"] {
+  --accent: #C277FF; --accent-bright: #C277FF; --accent-fg: var(--ink); --accent-ink: #C277FF; --panel-accent: #C277FF;
+}
+[data-theme="ink"][data-accent="green"],
+[data-theme="dark"][data-accent="green"] {
+  --accent: #5CBF52; --accent-bright: #5CBF52; --accent-fg: var(--ink); --accent-ink: #5CBF52; --panel-accent: #5CBF52;
+}
+
+/* Restores the pre-existing (weaker) dark-theme selection tint after the
+   light-theme-only bump in app-shell.css's base ::selection rule. */
+[data-theme="ink"] ::selection,
+[data-theme="dark"] ::selection {
+  background: color-mix(in oklab, var(--accent) 24%, var(--bg-2));
+  color: var(--fg);
+}
+
+/* NOTE: the [data-theme="auto"] block below mirrors the
+   [data-theme="ink"/"dark"] block above token-for-token. 'auto + OS-dark' and
+   'explicit dark' are the same visual context and resolve every token —
+   including --danger — identically. The two are kept as separate selectors
+   only because one is media-gated; a future de-drift can consolidate them into
+   a shared selector list once a build step can hoist the media query. */
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --bg:        var(--ink);
+    --bg-2:      var(--ink-2);
+    --bg-3:      var(--ink-3-dark);
+    --fg:        var(--paper);
+    --fg-2:      var(--paper-2);
+    --fg-3:      var(--paper-3-dark);
+    --panel-bg:  var(--bg);
+    --panel-bg-2: var(--bg-2);
+    --panel-0:   var(--bg);
+    --panel-1:   var(--bg-2);
+    --panel-2:   var(--bg-3);
+    --panel-3:   color-mix(in oklab, var(--fg) 20%, transparent);
+    --panel-text:   var(--fg);
+    --panel-text-2: var(--fg-2);
+    --panel-text-3: var(--fg-3);
+    --accent:    #BFBFBF; /* mirrors [data-theme=ink/dark] retune above */
+    --accent-fg: var(--ink);
+    --accent-ink: var(--paper);
+    --accent-bright: #BFBFBF;
+    --accent-tint: color-mix(in oklab, var(--accent) 30%, var(--bg));
+    --danger:    oklch(0.68 0.19 25);
+    --flame:     #FF5A1F;
+    --amber:     #D9A93A;
+    --warn:      #FF5A52;
+    --warn-fg:   var(--ink);
+    --sky:       #6E9BFF;
+    /* Mirrors the [data-theme="ink"] category retune above token-for-token —
+       see that block for the measured before/after ratios. */
+    --mascot-deep: #FF5C9E;
+    --purple-2:  #C277FF;
+    --green:     #5CBF52;
+    --cat-green-ink:  #5CBF52;
+    --cat-purple-ink: #C277FF;
+    --code-string:  var(--green-2);
+    --code-keyword: var(--sky);
+    --code-fn:      var(--flame);
+    --code-str-alt: var(--mascot);
+    --code-num:     var(--sun);
+  }
+  [data-theme="auto"] ::selection {
+    background: color-mix(in oklab, var(--accent) 24%, var(--bg-2));
+    color: var(--fg);
+  }
+}
+
+/* Nested-scope safety: if .ds-247420 appears under another .ds-247420 (e.g.
+   mount() added the class to an inner element while the ancestor html
+   already had it), the inner element would otherwise re-trigger the root
+   light defaults and detach from the ancestor's data-theme override. Force
+   the inner element to inherit the ancestor's resolved tokens. */
+.ds-247420 .ds-247420 {
+  --bg:        inherit;
+  --bg-2:      inherit;
+  --bg-3:      inherit;
+  --fg:        inherit;
+  --fg-2:      inherit;
+  --fg-3:      inherit;
+  --panel-bg:  inherit;
+  --panel-bg-2: inherit;
+  --accent:    inherit;
+  --accent-fg: inherit;
+  --accent-ink: inherit;
+  --panel-1:   inherit;
+  --panel-2:   inherit;
+  --panel-3:   inherit;
+  --panel-text: inherit;
+  --panel-text-2: inherit;
+  --panel-text-3: inherit;
+  --panel-accent-2: inherit;
+  --panel-shadow: inherit;
+  --panel-shadow-1: inherit;
+  --on-accent: inherit;
+  --on-color: inherit;
+  --scrim: inherit;
+  --scrim-strong: inherit;
+  --scrim-media: inherit;
+  --cat-green: inherit;
+  --cat-purple: inherit;
+  --cat-mascot: inherit;
+  --cat-green-ink: inherit;
+  --cat-purple-ink: inherit;
+  --cat-mascot-ink: inherit;
+  --mascot-on-ink: inherit;
+  --success-on-ink: inherit;
+  --cat-sun: inherit;
+  --cat-flame: inherit;
+  --cat-sky: inherit;
+  --code-string: inherit;
+  --code-keyword: inherit;
+  --code-fn: inherit;
+  --code-str-alt: inherit;
+  --code-num: inherit;
+}
+
+/* ============================================================
+   Named-theme preset contract
+   ------------------------------------------------------------
+   A theme is one [data-theme="X"] block that overrides ONLY the semantic
+   surface tokens — never component rules, never raw literals in component
+   sheets. The base :root above IS the "paper" theme; [data-theme="paper"]
+   restates it so the attribute is explicit and round-trippable. To add a
+   theme: copy a block, rename the attr, retune the ~8 semantic tokens.
+   ============================================================ */
+[data-theme="paper"] {
+  color-scheme: light;
+  --bg: var(--paper); --bg-2: var(--paper-2); --bg-3: var(--paper-3);
+  --fg: var(--ink);   --fg-2: var(--ink-2);   --fg-3: var(--ink-3);
+  --accent: var(--acid); --accent-fg: var(--paper); --accent-ink: var(--acid-deep);
+  --accent-tint: color-mix(in oklab, var(--accent-ink) 22%, var(--bg));
+  /* A paper island under a dark ancestor must not inherit the dark signal pair. */
+  --flame: #C53E00; --amber: #7C570F; --warn: #C41C0C; --sky: #3A6EFF;
+}
+
+/* thebird — warm-paper brand preset. A first-class swappable theme: it lives
+   here in the canonical layer (not as a global :root override) so any consumer
+   can opt in with data-theme="thebird". The OS-shell chrome (bar heights,
+   window controls) stays in src/kits/os/theme.css; only color lives here. */
+[data-theme="thebird"] {
+  color-scheme: light;
+  --paper:   #F5F0E4;
+  --paper-2: #EFE9DB;
+  --paper-3: #E3DAC7;
+  --bg: var(--paper); --bg-2: var(--paper-2); --bg-3: var(--paper-3);
+  --fg: var(--ink);   --fg-2: var(--ink-2);   --fg-3: var(--ink-3);
+  --accent: var(--green); --accent-fg: var(--paper); --accent-ink: var(--green);
+}
+
+/* github-dark — pi-web's GitHub-dark theme. Cool dark palette with blue accent,
+   ported from pi-web (https://github.com/jmfederico/pi-web). */
+[data-theme="github-dark"] {
+  color-scheme: dark;
+  --bg:        #0d1117;
+  --bg-2:      #161b22;
+  --bg-3:      #21262d;
+  --fg:        #e6edf3;
+  --fg-2:      #c9d1d9;
+  --fg-3:      #8b949e;
+  --panel-bg:  var(--bg);
+  --panel-bg-2: var(--bg-2);
+  --panel-0:   var(--bg);
+  --panel-1:   var(--bg-2);
+  --panel-2:   var(--bg-3);
+  --panel-3:   color-mix(in oklab, var(--fg) 20%, transparent);
+  --panel-text:   var(--fg);
+  --panel-text-2: var(--fg-2);
+  --panel-text-3: var(--fg-3);
+  --accent:    #58a6ff;
+  --accent-fg: #ffffff;
+  --accent-ink: #58a6ff;
+  --accent-bright: #79c0ff;
+  --accent-tint: color-mix(in oklab, var(--accent) 30%, var(--bg));
+  --danger:    #ff7b72;
+  --flame:     #ff7b72;
+  --amber:     #d29922;
+  --warn:      #ff7b72;
+  --warn-fg:   #0d1117;
+  --sky:       #58a6ff;
+  --mascot-deep: #ff7b72;
+  --purple-2:  #d2a8ff;
+  --green:     #3fb950;
+  --green-2:   #3fb950;
+  --cat-green-ink:  #3fb950;
+  --cat-purple-ink: #d2a8ff;
+  --code-string:  var(--green-2);
+  --code-keyword: var(--sky);
+  --code-fn:      var(--flame);
+  --code-str-alt: var(--mascot-deep);
+  --code-num:     var(--amber);
+}
+
+[data-theme="github-dark"] ::selection {
+  background: #0d2847;
+  color: var(--fg);
+}
+
+[data-density="compact"]     { --density: 0.75; }
+[data-density="comfortable"] { --density: 1; }
+[data-density="spacious"]    { --density: 1.35; }
+
+[data-accent="acid"]   { --accent: var(--acid);   --accent-bright: var(--acid);     --accent-fg: var(--paper); --accent-ink: var(--acid-deep); --panel-accent: var(--acid);   }
+[data-accent="green"]  { --accent: var(--green);  --accent-bright: var(--green-2);  --accent-fg: var(--paper); --accent-ink: var(--green);     --panel-accent: var(--green);  }
+[data-accent="purple"] { --accent: var(--purple); --accent-bright: #C277FF;         --accent-fg: var(--paper); --accent-ink: var(--purple-2);  --panel-accent: var(--purple); }
+[data-accent="mascot"] { --accent: var(--mascot); --accent-bright: var(--mascot-2); --accent-fg: var(--ink);   --accent-ink: var(--mascot-deep);--panel-accent: var(--mascot); }
+
+/* Type-scale modifier — opt-in body/lg/xl bump for surfaces that want denser
+   or larger reading sizes without a custom override. */
+[data-typescale="sm"] {
+  --fs-body: 15px; --fs-lg: 17px; --fs-xl: 20px;
+  --fs-h4: clamp(22px, 1.9cqi, 24px);
+  --fs-h3: clamp(23px, 2.4cqi, 32px);
+  --fs-h2: clamp(26px, 3.4cqi, 41px);
+  --fs-h1: clamp(32px, 4.2cqi, 48px);
+}
+[data-typescale="lg"] {
+  --fs-body: 17px; --fs-lg: 20px; --fs-xl: 24px;
+  --fs-h4: clamp(27px, 2.2cqi, 31px);
+  --fs-h3: clamp(28px, 2.9cqi, 38px);
+  --fs-h2: clamp(31px, 4cqi, 49px);
+  --fs-h1: clamp(38px, 4.8cqi, 58px);
+}
+
+/* Debug grid overlay — 8px mascot grid. Toggle via class on any container. */
+.with-grid-overlay {
+  background-image:
+    linear-gradient(to right, rgba(232,75,138,0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(232,75,138,0.15) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+/* Reduced-motion guard — neutralizes every transition/animation/transform
+   inside the design-system scope when the user requests reduced motion.
+   Components remain free to opt back in with
+   `@media (prefers-reduced-motion: no-preference) { ... }`. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 *,
+  .ds-247420 *::before,
+  .ds-247420 *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   Semantic alias tier — primitive -> semantic -> component
+   ------------------------------------------------------------
+   Three layers, in order:
+     1. PRIMITIVE  (above)  raw palette values: --acid, --green, --sky, --warn,
+        --panel-1/2/3, --paper/--ink, etc. These are the only tokens that ever
+        carry a literal color/length. A re-brand edits primitives.
+     2. SEMANTIC   (here)   named-by-INTENT aliases that resolve to a primitive
+        (e.g. --accent: var(--panel-accent)). A component or a future re-brand
+        can retune ONE semantic variable (say, --rail-danger) without hunting
+        through every primitive it happens to reuse elsewhere.
+     3. COMPONENT  (app-shell.css, community.css, etc.) component sheets keep
+        consuming primitives directly today (--accent, --panel-*, --green,
+        --warn, ...) exactly as before — this tier does not repoint any
+        existing component rule. It exists so a FUTURE swap has a semantic
+        layer ready to migrate onto, one component sheet at a time, without
+        a flag-day rewrite. Purely additive: no primitive token's name or
+        value changes here, and no component references these new names yet.
+
+   Naming matches vocabulary already established elsewhere in this system:
+   --surface-1/2 mirror the --panel-1/--panel-2 tonal-surface steps already
+   used across app-shell.css/community.css; --rail-info/-success/-warning/-error
+   mirror the canonical .tone-info/.tone-success/.tone-warning/.tone-error
+   banner/badge/chip severity names (app-shell.css L592, community.css
+   .cm-banner.tone-*) rather than inventing a new severity vocabulary.
+   ============================================================ */
+:root {
+  /* --accent already exists as a primitive-facing alias (var(--acid)) above;
+     restated here under the semantic tier for discoverability alongside its
+     siblings. Same value, same token — not a second definition. */
+  --surface-1: var(--panel-1);
+  --surface-2: var(--panel-2);
+
+  /* Rail/status severity aliases — map onto the same color choices the
+     existing .cm-banner.tone-* rules in community.css already use, so a
+     future rail/indicator component can consume one semantic name instead
+     of picking the right primitive per severity by hand. */
+  --rail-info:    var(--sky);
+  --rail-success: var(--green-2);
+  --rail-warning: var(--amber);
+  --rail-error:   var(--warn);
+}
+
+/* Elevation tokens consumed by overlays (Tooltip, Popover, Dropdown, Dialog). */
+:root {
+  --shadow-1: 0 1px 2px color-mix(in oklab, var(--fg) 8%, transparent);
+  --shadow-2: 0 4px 12px color-mix(in oklab, var(--fg) 10%, transparent),
+              0 2px 4px  color-mix(in oklab, var(--fg) 6%,  transparent);
+  --shadow-3: 0 12px 32px color-mix(in oklab, var(--fg) 14%, transparent),
+              0 4px 8px   color-mix(in oklab, var(--fg) 8%,  transparent);
+  /* Overlay elevation — the float for dialogs/lightboxes that sit above a
+     scrim; heavier than --shadow-3 and theme-driven (was raw rgba(0,0,0,.4)). */
+  --shadow-overlay: 0 12px 40px color-mix(in oklab, var(--fg) 28%, transparent),
+                    0 4px 12px  color-mix(in oklab, var(--fg) 16%, transparent);
+  /* --z-popover is an alias, not a rung: popovers and dropdowns are the
+     same anchored-to-a-trigger layer and must never be able to drift
+     apart. The rungs themselves live with the stacking scale above. */
+  --z-popover:   var(--z-dropdown);
+}
