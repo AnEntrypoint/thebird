@@ -1,0 +1,114 @@
+/* collab.css — LiveCursorOverlay / RemoteSelectionRings /
+   RecentEditHighlightFlash / AgentPresenceChip / PresenceBar. Real-time
+   multiplayer co-editing UI: remote pointers, selection rings, edit flashes,
+   and a generalized collaborator presence chip row. `ds-collab-*` prefix,
+   distinct from community.js's `cm-*` voice/member chips even though the
+   presence chip visual language matches. */
+
+.ds-collab-cursor-overlay,
+.ds-collab-selection-overlay,
+.ds-collab-flash-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-raised);
+  overflow: hidden;
+}
+
+/* ---- LiveCursorOverlay -------------------------------------------------- */
+.ds-collab-cursor {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  transform: translate(-2px, -2px);
+}
+.ds-collab-cursor svg { filter: drop-shadow(0 1px 1px color-mix(in oklab, var(--ink) 30%, transparent)); }
+.ds-collab-cursor-label {
+  font-size: var(--fs-pico);
+  font-weight: 600;
+  line-height: 1.6;
+  padding: 0 var(--space-1);
+  border-radius: var(--r-hair);
+  color: var(--on-color);
+  white-space: nowrap;
+  transform: translateY(2px);
+}
+
+/* ---- RemoteSelectionRings ------------------------------------------------ */
+.ds-collab-selection-ring {
+  position: absolute;
+  border: var(--bw-hair) solid var(--ring-color, var(--accent));
+  background: color-mix(in oklab, var(--ring-color, var(--accent)) 14%, transparent);
+  border-radius: var(--r-hair);
+}
+
+/* ---- RecentEditHighlightFlash -------------------------------------------
+   Reduced-motion users get an instant flash with no animation (the fade-out
+   keyframe lives only inside the no-preference query) rather than a fade. */
+.ds-collab-flash {
+  position: absolute;
+  background: color-mix(in oklab, var(--flash-color, var(--accent)) 35%, transparent);
+  border-radius: var(--r-hair);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-collab-flash { animation: ds-collab-flash-fade var(--dur-reveal) var(--ease-exit) forwards; }
+  @keyframes ds-collab-flash-fade {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-collab-flash { opacity: 1; }
+}
+
+/* ---- AgentPresenceChip / PresenceBar -------------------------------------
+   Visual language matches community.js's cm-voice-user/cm-member-item chips
+   (avatar circle + --avatar-bg custom property + initial + name), reused
+   here under a distinct prefix since this is a different feature. */
+.ds-collab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.ds-collab-bar-empty { color: var(--fg-3); font-size: var(--fs-sm); padding: var(--space-2) 0; }
+/* workspace kit's live tab: PresenceBar summary strip stacked above
+   SessionDashboard, filling the .ws-main flex column it renders inside. */
+.ds-workspace-live { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-height: 0; }
+.ds-collab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-75);
+  padding: var(--space-1) var(--space-2-5) var(--space-1) var(--space-1);
+  border-radius: var(--r-pill);
+  background: var(--bg-2);
+}
+/* .ds-collab-chip-avatar (24px identity circle) and .ds-collab-chip-status
+   (8px status dot) below are both circular via border-radius: 50% but are
+   intentionally distinct: different sizes, different content (initial vs.
+   plain fill), different positioning role (layout box vs. absolute badge).
+   Not extracting a shared class -- there's nothing substantive to share. */
+.ds-collab-chip-avatar {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--avatar-bg, var(--bg-3));
+  color: var(--fg-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-pico);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.ds-collab-chip-status {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: var(--bw-hair) solid var(--bg-2);
+  background: var(--fg-3);
+}
+.ds-collab-chip-status-active { background: var(--green-2); }
+.ds-collab-chip-status-idle { background: var(--sun); }
+.ds-collab-chip-status-offline { background: var(--fg-3); }
+.ds-collab-chip-name { font-size: var(--fs-tiny); color: var(--fg-2); white-space: nowrap; }

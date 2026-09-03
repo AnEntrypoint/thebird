@@ -1,0 +1,10 @@
+{
+  "name": "Default",
+  "description": "A minimal empty workspace with no seed files or special configuration.",
+  "workspace": {},
+  "env": {},
+  "startupScript": null,
+  "skills": { "enabled": [] },
+  "plugins": { "enabled": [] },
+  "schemaVersion": 1
+}

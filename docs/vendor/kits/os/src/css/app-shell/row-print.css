@@ -1,0 +1,122 @@
+/* ============================================================
+   Row title highlight, expanded-row actions, filter pills.
+   ============================================================ */
+
+/* Highlighted match inside a Row title (Row `highlight` prop). */
+.ds-hl { background: color-mix(in oklab, var(--accent) 25%, transparent); color: inherit; border-radius: var(--r-hair); }
+
+/* Action strip rendered inside an EXPANDED Row (Row `actions` prop). The
+   buttons stop propagation so they never fire the row onClick. */
+.row-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); width: 100%; padding-top: var(--space-2); }
+.row-act {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 10px; min-height: 28px;
+  background: var(--bg-2); border: var(--bw-hair) solid var(--bg-3); border-radius: var(--r-1);
+  color: var(--fg-2); font-family: var(--ff-body); font-size: var(--fs-tiny); cursor: pointer;
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.row-act:hover { background: var(--bg-3); color: var(--fg); }
+.row-act:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+/* FilterPills - a group of pill toggle buttons (aria-pressed). */
+.ds-filter-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ds-filter-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 12px; min-height: 28px;
+  background: var(--bg-2); border: var(--bw-hair) solid var(--bg-3); border-radius: var(--r-pill);
+  color: var(--fg-2); font-family: var(--ff-body); font-size: var(--fs-tiny); cursor: pointer;
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.ds-filter-pill:hover { background: var(--bg-3); color: var(--fg); }
+.ds-filter-pill.active { background: var(--accent-tint); color: var(--fg); border-color: var(--accent); }
+.ds-filter-pill:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+.ds-filter-pill[class*="tone-"]::before {
+  content: '';
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: var(--space-1);
+  background: currentColor;
+}
+.ds-filter-pill.tone-accent  { color: var(--accent-ink); }
+.ds-filter-pill.tone-warn    { color: var(--amber); }
+.ds-filter-pill.tone-live    { color: var(--sky); }
+.ds-filter-pill.tone-sun     { color: var(--sun); }
+.ds-filter-pill.tone-success { color: var(--green-deep); }
+.ds-filter-pill.tone-dim     { color: var(--fg-3); }
+
+/* Touch floor for the new small controls. */
+@media (pointer: coarse) {
+  .row-act, .ds-filter-pill { min-height: 44px; }
+}
+
+/* Disabled file actions (read-only row / in-flight mutation) stay visible but inert. */
+.ds-file-act:disabled { opacity: .5; cursor: default; }
+.ds-file-act:disabled:hover { background: transparent; color: var(--fg-3); }
+.ds-file-act:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+/* ============================================================
+   Print — linearize WorkspaceShell so main content prints in full.
+   The multi-column CSS grid with overflow:auto regions clips at
+   the on-screen height in print/PDF; drop all chrome and let
+   .ws-main expand to its natural document height.
+   ============================================================ */
+@media print {
+  .ws-shell { display: block; }
+  .ws-rail,
+  .ws-sessions,
+  .ws-pane,
+  .ws-crumb,
+  .app-status { display: none; }
+  .ws-main { overflow: visible; height: auto; }
+  /* AppShell: unpin the viewport-height frame so content flows across pages,
+     and drop all chrome (it prints as page furniture otherwise). */
+  .app { height: auto; min-height: 0; overflow: visible; display: block; }
+  .app-body { display: block; }
+  .app-main { overflow: visible; height: auto; display: block; max-width: 100%; }
+  .app-topbar, .app-chrome, .app-crumb, .app-side-shell, .app-side-scrim,
+  .app-side-toggle, .btn-fab, .skip-link, .ds-marquee { display: none; }
+  /* Modals/preview: print the content, not a blurred overlay clipped to one page. */
+  .ds-modal-backdrop { position: static; background: none; backdrop-filter: none; padding: 0; }
+  .ds-modal, .ds-modal-preview { max-width: 100%; max-height: none; box-shadow: none; }
+  .ds-modal-body, .ds-preview-body, .ds-preview-code, .ds-preview-text { overflow: visible; }
+  .ds-modal-actions, .ds-preview-actions { display: none; }
+  /* Data-density: fixed-height log clips; bg-only tiles lose their boundary. */
+  .ds-live-log { height: auto; max-height: none; overflow: visible; }
+  .ds-stat, .kpi-card { border: 1px solid var(--rule); }
+  .ds-session-row { break-inside: avoid; }
+
+  /* Receipt table (Receipt() in src/components/content/panel.js, `.kv`) — the
+     project_page kit's "receipt" section, and any other kv-table consumer.
+     On screen it inherits panel/token colors that can render as near-white
+     text on a printer's assumed-white page background if the browser's
+     "background graphics" print option is off (the common default); force
+     the LIGHT-theme ink/paper tokens (real print-page colors, not a raw
+     literal — --ink/--paper are the same "true black text on true white
+     page" values the light theme already defines) and visible cell borders
+     so it stays legible without relying on background-graphics printing at
+     all. break-inside:avoid keeps a receipt from splitting a row across a
+     page boundary. */
+  .kv { border-collapse: collapse; width: 100%; color: var(--ink); background: var(--paper); }
+  .kv tr { break-inside: avoid; }
+  .kv td { border: 1px solid var(--paper-3); padding: 4px 8px; color: var(--ink); }
+
+  /* Any button/interactive-only affordance still present inside otherwise-
+     printable content (copy buttons, expand/collapse toggles, filter pills,
+     the receipt/doc section's own action row) is chrome, not content. */
+  .btn, .btn-primary, .btn-ghost, .row-act, .ds-filter-pills,
+  .app-search, input[type="search"] { display: none; }
+
+  /* Force real ink-on-paper for body copy: panel/fg tokens are tuned for
+     screen surfaces (including dark theme, where --panel-text can resolve
+     near-white) and a printer defaults to a white page regardless of
+     data-theme, so an unconverted dark-theme page would print near-invisible
+     text without this override. Same --ink/--paper light-theme pair as the
+     receipt table above, not a second raw literal. */
+  /* No !important: source order already wins here (this rule is the last
+     word inside its own @media print block, same as every other override in
+     this file), and an unconditional !important on `body` would beat even a
+     future print-specific consumer override with higher specificity. */
+  html body, .app-main, .page-body, .ds-lede { color: var(--ink); background: var(--paper); }
+  a { color: var(--ink); text-decoration: underline; }
+}
+

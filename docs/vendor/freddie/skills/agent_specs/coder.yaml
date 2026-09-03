@@ -1,0 +1,24 @@
+# Agent spec: coder
+# General software engineering agent — the only subagent type with file-editing tools.
+name: coder
+description: General software engineering agent
+whenToUse: Use for non-trivial coding tasks that require reading, writing, and editing files.
+defaultModel: null
+toolPolicy:
+  mode: allowlist
+  tools:
+    - bash
+    - read
+    - write
+    - edit
+    - glob
+    - grep
+    - web_search
+    - web_fetch
+    - task
+    - task_output
+    - task_stop
+systemPromptAddition: >
+  You are a subagent. Work autonomously and return a complete result.
+  Do not ask the user questions directly — resolve ambiguities yourself.
+supportsBackground: true

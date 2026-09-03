@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "objects": [
+    { "id": "obj-tpl-ground", "name": "ground", "kind": "rect", "x": 0, "y": 320, "w": 480, "h": 40, "color": "#4a90d9", "label": "ground" },
+    { "id": "obj-tpl-platform-1", "name": "platform 1", "kind": "rect", "x": 140, "y": 250, "w": 100, "h": 20, "color": "#4a90d9", "label": "platform" },
+    { "id": "obj-tpl-platform-2", "name": "platform 2", "kind": "rect", "x": 300, "y": 180, "w": 100, "h": 20, "color": "#4a90d9", "label": "platform" },
+    { "id": "obj-tpl-actor", "name": "player", "kind": "circle", "x": 20, "y": 284, "w": 32, "h": 32, "color": "#d94a4a", "label": "player" },
+    { "id": "obj-tpl-goal", "name": "goal", "kind": "goal", "x": 420, "y": 152, "w": 28, "h": 28, "color": "#4ad97a", "label": "goal" }
+  ]
+}

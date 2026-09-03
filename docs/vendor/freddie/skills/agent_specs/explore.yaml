@@ -1,0 +1,20 @@
+# Agent spec: explore
+# Fast codebase exploration with prompt-enforced read-only behavior.
+name: explore
+description: Fast codebase exploration with read-only behavior
+whenToUse: Use for searching files, finding code patterns, and answering codebase questions.
+defaultModel: null
+toolPolicy:
+  mode: allowlist
+  tools:
+    - read
+    - glob
+    - grep
+    - web_search
+    - web_fetch
+    - bash
+systemPromptAddition: >
+  You are a read-only exploration subagent. You can search, read, and report
+  findings but must NOT write or edit any files. Do not ask the user questions
+  — return your findings directly.
+supportsBackground: false

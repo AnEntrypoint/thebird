@@ -1,0 +1,72 @@
+/* freddie-dashboard.css — supplemental rules for the freddie dashboard surfaces.
+   Most of the dashboard renders through bible components (AppShell/Panel/Kpi/
+   Table/Receipt/Hero/Row/EmptyState/Chip) that ship their own classes via
+   247420.css. This file holds the freddie-specific chrome that AGENTS.md's
+   inline-styles ban pushed out of freddie-dashboard.js and the freddie/* page
+   modules. Tokens follow the kit --os-* namespace plus the base --space-*/
+   --fs-* 8pt scale, with the var(--token, fallback) idiom so the kit's
+   standalone theme.css resolves cleanly. */
+
+.app-fd .fd-pre {
+    font-family: var(--os-mono, monospace);
+    font-size: var(--fs-tiny, 12px);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    max-height: 320px;
+    overflow: auto;
+    background: var(--os-bg-2);
+    padding: var(--space-2, 8px) var(--space-3, 16px);
+    border-radius: var(--os-radius-sm, 6px);
+}
+
+.fd-root { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+
+.fd-btn-mini { padding: var(--space-1, 4px) var(--space-2, 8px); font-size: var(--fs-tiny, 12px); }
+
+/* chat composer fields */
+.fd-chat-form { display: flex; flex-direction: column; gap: var(--space-3, 16px); }
+.fd-chat-row  { display: flex; gap: var(--space-3, 16px); flex-wrap: wrap; }
+.fd-chat-field { display: flex; flex-direction: column; gap: var(--space-1, 4px); min-width: 120px; }
+.fd-chat-field-grow { flex: 2; min-width: 140px; }
+.fd-chat-field > label { font-family: var(--os-mono, monospace); font-size: var(--fs-micro, 11px); color: var(--os-fg-3); letter-spacing: var(--tr-label, 0.10em); text-transform: uppercase; }
+.fd-chat-field > input { width: 100%; box-sizing: border-box; }
+.fd-chat-submit { display: flex; gap: var(--space-3, 16px); align-items: flex-end; }
+.fd-chat-submit textarea { flex: 1; resize: none; min-height: 80px; }
+.fd-chat-submit > button { align-self: flex-end; }
+
+/* chatlog (legacy fd-chat-msgs container) */
+.fd-chatlog {
+    max-height: 420px; overflow-y: auto;
+    background: var(--os-bg-2);
+    border-radius: var(--os-radius-sm, 6px);
+    padding: var(--space-1, 4px); margin-top: var(--space-2, 8px);
+}
+.fd-chatlog-msg { padding: var(--space-1, 4px) var(--space-3, 16px); background: var(--os-bg-2); white-space: pre-wrap; word-break: break-word; }
+.fd-chatlog-assistant { color: var(--os-accent); }
+.fd-chatlog-tool { margin: var(--space-1, 4px) 0; padding: var(--space-1, 4px) var(--space-2, 8px); background: var(--os-bg-3); border-radius: var(--os-radius-sm, 6px); font-family: var(--os-mono, monospace); font-size: var(--fs-tiny, 12px); }
+.fd-chatlog-tool-sum { cursor: pointer; color: var(--os-red); padding: var(--space-1, 4px) 0; }
+.fd-chatlog-tool-body { margin: var(--space-1, 4px) 0 0; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+
+/* chip wraps (providers, env) */
+.fd-chip-wrap { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); }
+.fd-chip-wrap-padded { padding: var(--space-2, 8px) var(--space-1, 4px); }
+.fd-env-chip { cursor: pointer; }
+
+/* dashboard chat tab — config strip above + <ds-chat> thread below
+   --------------------------------------------------------------------- */
+.fd-chat-config { display: flex; flex-direction: column; gap: var(--space-2, 8px); padding-bottom: var(--space-3, 12px); border-bottom: 1px solid color-mix(in oklab, var(--fg) 10%, transparent); margin-bottom: var(--space-3, 12px); }
+.fd-chat-config .fd-chat-field { display: flex; flex-direction: column; gap: var(--space-1, 4px); min-width: 120px; }
+.fd-chat-config .fd-chat-field > label { font-family: var(--os-mono, monospace); font-size: var(--fs-nano, 11px); opacity: 0.6; letter-spacing: 0.05em; text-transform: uppercase; }
+.fd-chat-config .fd-chat-field > input,
+.fd-chat-config .fd-chat-field > select { width: 100%; box-sizing: border-box; padding: var(--space-1-75) var(--space-2); background: var(--panel-1, transparent); color: var(--fg, inherit); border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent); border-radius: var(--r-0); font: inherit; font-size: var(--fs-tiny, 12px); }
+.fd-chat-config .fd-chat-field > input:focus-visible,
+.fd-chat-config .fd-chat-field > select:focus-visible { outline: 2px solid var(--os-accent, #247420); outline-offset: 0; border-color: color-mix(in oklab, var(--os-accent, #247420) 60%, transparent); }
+.fd-chat-config .fd-chat-row { display: flex; gap: var(--space-2, 8px); flex-wrap: wrap; }
+.fd-chat-config .fd-chat-field-grow { flex: 1 1 140px; min-width: 0; }
+
+.app-fd ds-chat.fd-dashboard-chat { flex: 1 1 auto; min-height: 280px; display: flex; flex-direction: column; overflow: hidden; }
+
+.fd-chat-actions { display: inline-flex; gap: var(--space-1, 4px); align-items: center; }
+.fd-chat-actions .btn-secondary { background: transparent; color: var(--danger, #c0392b); border: 1px solid color-mix(in oklab, var(--danger, #c0392b) 40%, transparent); cursor: pointer; padding: var(--space-hair) var(--space-2); border-radius: var(--r-0); font: inherit; font-size: var(--fs-tiny, 12px); }
+.fd-chat-actions .btn-secondary:hover { background: color-mix(in oklab, var(--danger, #c0392b) 10%, transparent); }

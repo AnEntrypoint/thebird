@@ -1,0 +1,129 @@
+
+/* ============================================================
+   Spinner — animated loading indicator
+   ============================================================ */
+/* Dots spinner — use for small inline/compact loading states. */
+.ds-spinner {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  height: 16px;
+}
+.ds-spinner span {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: 50%;
+  background: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-spinner span { animation: ds-bounce 1.4s infinite ease-in-out; }
+  .ds-spinner span:nth-child(1) { animation-delay: 0s; }
+  .ds-spinner span:nth-child(2) { animation-delay: 0.18s; }
+  .ds-spinner span:nth-child(3) { animation-delay: 0.36s; }
+}
+
+.ds-spinner-lg { height: 24px; gap: var(--space-1-75); }
+.ds-spinner-lg span { width: var(--space-1-75); height: var(--space-1-75); }
+
+.ds-spinner-sm { height: var(--space-2-5); gap: var(--space-hair); }
+.ds-spinner-sm span { width: var(--space-hair); height: var(--space-hair); }
+
+.ds-spinner-xs { height: var(--space-2); gap: 1px; }
+.ds-spinner-xs span { width: 1.5px; height: 1.5px; }
+
+.ds-spinner-xl { height: var(--space-5); gap: var(--space-2); }
+.ds-spinner-xl span { width: var(--space-2); height: var(--space-2); }
+
+@keyframes ds-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+}
+
+/* Two spinner visual languages coexist intentionally: dots (.ds-spinner*)
+   are for small inline/compact loading states (buttons, chips, list rows),
+   the ring (.loading::after in states-interactions.css) is for larger
+   blocking/full-region loading states (panels, full views). */
+
+/* ============================================================
+   Skeleton — animated loading placeholder
+   ============================================================ */
+.ds-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ds-skeleton {
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 50%, var(--bg-2) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--r-1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-skeleton { animation: ds-shimmer 1.5s infinite; }
+}
+
+@keyframes ds-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================================
+   Alert — contextual message banner
+   ============================================================ */
+.ds-alert {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-1);
+  background: var(--panel-1);
+  border: 1px solid var(--rule-strong);
+  color: var(--fg);
+}
+
+.ds-alert-info { --alert-tone: var(--sky); }
+.ds-alert-success { --alert-tone: var(--green); }
+.ds-alert-warn { --alert-tone: var(--amber); }
+.ds-alert-error { --alert-tone: var(--warn); }
+
+.ds-alert-icon {
+  flex-shrink: 0;
+  color: var(--alert-tone);
+  font-weight: 600;
+  min-width: var(--icon-md);
+  text-align: center;
+}
+
+.ds-alert-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds-alert-title {
+  font-weight: 500;
+  font-size: var(--fs-sm);
+}
+
+.ds-alert-message {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+.ds-alert-retry { margin-top: var(--space-2); }
+
+.ds-alert-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-3);
+  padding: 0;
+  font-size: var(--fs-xs);
+  line-height: 1;
+  min-width: var(--icon-md);
+  text-align: center;
+  transition: color var(--dur-snap) var(--ease);
+}
+.ds-alert-dismiss:hover { color: var(--fg); }
+.ds-alert-dismiss:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+

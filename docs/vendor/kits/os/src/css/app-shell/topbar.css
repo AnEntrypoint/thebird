@@ -1,0 +1,523 @@
+/* ============================================================
+   AppShell — page frame. The topbar floats above a soft background;
+   the body sits inside a rounded inner shell for a friendlier feel.
+   ============================================================ */
+.app {
+  display: flex; flex-direction: column;
+  /* Offset parent for the sidebar drawer/scrim/toggle, which are absolute so
+     they overlay THIS shell (a thebird WM window) rather than the viewport. */
+  position: relative;
+  min-height: 100vh;
+  /* Definite height so the flex column resolves height:100% for descendants
+     (e.g. a full-height chat) at every breakpoint, not just where a desktop
+     media override happened to set explicit heights. dvh tracks mobile chrome. */
+  min-height: 100dvh;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  /* Notched-device safe area padding (no-op on devices without notches) */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* When the app shell is embedded inside a windowed surface (e.g. the freddie
+   dashboard mounted in a WM window via .fd-root) it is NOT a full-page app:
+   `min-height:100vh` and the absence of an explicit width make it collapse to
+   0 width at desktop, where the responsive single-column @media rules don't
+   apply. Inside .fd-root it must fill its container instead. (At <=767px the
+   grid already linearizes, which is why the bug only showed at desktop width.) */
+.fd-root .app { width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; }
+.fd-root .app-body { min-width: 0; }
+
+/* Full-bleed canvas host (e.g. a game/3D viewport that fills the page behind the
+   shell): the shell's opaque var(--bg) would paint OVER the canvas and hide it.
+   Mark the host with `canvas-host` to make the shell surfaces transparent so the
+   live canvas shows through. The canvas itself is the backdrop. */
+.canvas-host,
+.canvas-host .app,
+body.canvas-host { background: transparent !important; }
+
+:root {
+  --app-status-h: 26px;
+  --app-topbar-h: 64px;
+  --app-crumb-h: 56px;
+}
+
+.app-topbar {
+  position: sticky; top: 0; z-index: var(--z-header);
+  display: flex; flex-wrap: wrap;
+  align-items: center; gap: var(--space-4);
+  min-height: var(--app-topbar-h);
+  padding: var(--space-2-5) var(--pad-x);
+  border-bottom: var(--bw-hair, 1px) solid var(--rule);
+}
+
+/* Merged chrome: when AppShell gets both a topbar and a crumb it wraps them
+   in .app-chrome and they share ONE sticky band instead of stacking as two
+   bars. The breadcrumb provides the left identity (it already begins with the
+   brand), so the topbar's standalone brand is hidden to avoid showing the name
+   twice; nav and the crumb's right slot sit together on the right. */
+.app-chrome {
+  position: sticky; top: 0; z-index: var(--z-header);
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--pad-x);
+  border-bottom: var(--bw-hair, 1px) solid var(--rule);
+}
+.app-chrome > .app-topbar,
+.app-chrome > .app-crumb {
+  position: static; background: none; backdrop-filter: none;
+  -webkit-backdrop-filter: none; padding: 0; min-height: 0;
+  flex: 1 1 auto;
+}
+.app-chrome > .app-crumb { order: 1; flex: 1 1 auto; }
+.app-chrome > .app-topbar { order: 2; flex: 0 0 auto; }
+.app-chrome > .app-topbar > .brand { display: none; }
+.app-chrome > .app-topbar > nav { margin-left: 0; }
+.app-chrome > .app-crumb > .crumb-right { margin-left: auto; }
+.app-topbar > .brand { flex: 0 0 auto; }
+.app-topbar > .app-search { flex: 1 1 auto; }
+/* SearchInput() passed directly as Topbar's search prop renders with no
+   Topbar-owned wrapper (see Topbar's isElement branch). Its own outer span
+   (.ds-search-input-wrap) is display:contents, so .ds-search-field becomes
+   the actual direct .app-topbar flex-item child — an inline-flex box that
+   otherwise shrinks to its content and starves the input's own width:100%
+   of anything to grow into, truncating the placeholder. Matches
+   .app-search's flex-basis above so both search-slot shapes size the same. */
+.app-topbar > .ds-search-field { flex: 1 1 auto; max-width: 360px; min-width: 0; }
+.app-topbar > nav { margin-left: auto; }
+/* Utility cluster grouping: the theme toggle sits after the repo-info nav
+   links with no visual separation between the two groups, so the row read
+   as one undifferentiated strip of controls. A thin inset rule plus extra
+   left gap reads as "these are a distinct utility group", matching the
+   subtle divider already used between .app-status segments. */
+.app-topbar > .app-topbar-theme {
+  flex: 0 0 auto;
+  margin-left: var(--space-2);
+  padding-left: var(--space-3);
+  position: relative;
+}
+.app-topbar > .app-topbar-theme::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 1px; height: 18px;
+  background: var(--rule-strong);
+}
+.app-topbar nav { display: flex; gap: var(--space-1); font-size: var(--fs-sm); flex-wrap: wrap; }
+.app-topbar nav a { flex: 0 0 auto; }
+.app-topbar nav a {
+  color: var(--fg-2);
+  /* Dense desktop chrome (was a 44px pill with 12px 14px pad — marketing-scale
+     touch target in the top bar): --r-1 rounded rect, tighter padding. The 44px
+     floor is UNCONDITIONAL, not behind @media(pointer:coarse) — switch and
+     head-pointer users drive a fine pointer and are never reported as coarse,
+     so a coarse-gated floor leaves them a 39px target. Measured live at 1920:
+     the gated form rendered 39px with pointer:coarse false. Padding stays dense;
+     only the floor moves, so the compact chrome reads unchanged. */
+  padding: var(--space-2) var(--space-2-5);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-1);
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.app-topbar nav a:hover { background: var(--bg-2); color: var(--fg); }
+.app-topbar nav a:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+/* Active tab reads as a subtle tinted pill with an accent underline rather than
+   an oversized filled oval that sits taller than its inactive siblings and reads
+   as misaligned. Same height as the inactive links — only the tint + underline
+   change. */
+.app-topbar nav a.active {
+  color: var(--accent-ink);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+  font-weight: 600;
+}
+
+.brand {
+  font-family: var(--ff-display);
+  font-weight: 700; font-size: var(--fs-lg);
+  letter-spacing: var(--tr-tight);
+}
+/* The wordmark separator printed in the electric lead — the brand tell. */
+.brand .slash { color: var(--accent-ink); font-weight: 700; margin: 0 3px; }
+
+.app-search {
+  display: inline-flex; align-items: center; gap: var(--space-2-5);
+  /* Snap to the single-line control ladder (--field-height == --ctl-md, 34px,
+     density-scaled) so the topbar search aligns with sibling topbar controls and
+     shrinks under [data-density]. Was raw 9px 16px padding off the ladder — the
+     one front-door input the control-height port missed. */
+  height: var(--field-height);
+  padding: 0 var(--space-3); background: var(--bg-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm); color: var(--fg-3);
+  max-width: 360px;
+  /* Match the system-wide input border language (.ds-field / .ds-search-input:
+     tonal fill + printed baseline rule) instead of a borderless pill, so the
+     topbar search reads as the same control family as every other input. */
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-rule)) 0 var(--rule-strong);
+  transition: box-shadow var(--dur-snap) var(--ease), background var(--dur-snap) var(--ease);
+}
+.app-search .icon { opacity: 0.6; }
+.app-search input {
+  border: 0; background: transparent;
+  font-family: inherit; font-size: inherit; color: var(--fg);
+  width: 100%;
+}
+/* Same focus language as .ds-field/.ds-search-input: no outline ring, the
+   baseline rule thickens to the accent instead — matching every other form
+   input in the system rather than a one-off outline ring. */
+.app-search:focus-within {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-chunk)) 0 var(--accent);
+}
+
+.app-crumb {
+  min-height: var(--app-crumb-h);
+  padding: var(--space-1-75) var(--pad-x);
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--fs-sm); color: var(--fg-3);
+  min-width: 0;
+}
+.app-crumb .sep { opacity: 0.5; flex: 0 0 auto; }
+/* Trail segments and the current/leaf segment truncate independently instead
+   of the whole crumb bar overflowing — a long segment (deep file path, long
+   title) must not push the sibling segments or the right slot off-screen. */
+.app-crumb > span:not(.sep):not(.crumb-right) {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; flex: 0 1 auto;
+}
+/* Ancestor trail segments previously had no rule of their own and simply
+   inherited .app-crumb's base --fg-3 — the same tone the separators sit on
+   top of (before their own 0.5 opacity dims them further). That leaves only
+   two visually distinct tiers in practice (dim separator, bold leaf) rather
+   than three, since the ancestor tone reads as "default text colour", not a
+   deliberate middle step. --fg-3 is the crumb bar's OWN base, so explicitly
+   restating it here is the anchor for the 3-tier read: separator (--fg-3 at
+   0.5 opacity, dimmest) < ancestor (--fg-3, mid) < leaf (--fg bold, brightest). */
+.app-crumb > span:not(.sep):not(.leaf):not(.crumb-right) { color: var(--fg-3); }
+.app-crumb .leaf { color: var(--fg); font-weight: 600; flex: 0 1 auto; }
+.app-crumb .crumb-right { margin-left: auto; color: var(--fg-3); flex: 0 0 auto; }
+
+/* The shell is the grid cell (.app-body's fixed sidebar column); it must own
+   its own scroll, not just size to content, because .app-body's row track is
+   `minmax(0, 1fr)` — a real height the sidebar can overflow once bins +
+   labels + more exceed it. Without this the extra rows were silently chopped
+   at the viewport edge with no way to reach them. */
+/* .app-side-shell and .app-main (below) are two INDEPENDENT scroll regions
+   side by side -- correct by design (a sidebar nav and a main panel each own
+   their own overflow), but with default invisible/overlay OS scrollbars a
+   user hovering the boundary has no visual cue which region the wheel will
+   scroll, or that there even are two scrollable zones rather than one page
+   scroll. Thin always-visible scrollbar tracks make each region's own scroll
+   ownership legible without changing the (correct) two-region architecture. */
+.app-side-shell {
+  background: var(--bg); overflow-y: auto; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent;
+  /* A visible-only-while-scrolled thin scrollbar was the sole cue that this
+     and .app-main are two independent scroll regions -- easy to miss,
+     reading as a layout glitch (sidebar not moving) rather than an
+     intentional split view. A permanent hairline border reads at a glance
+     regardless of scroll/hover state. */
+  border-right: 1px solid var(--rule);
+  /* Bottom-edge fade: a rail longer than the viewport otherwise shows only
+     the thin scrollbar track as its sole "there is more below" cue. Mirrors
+     the horizontal fade already used by .os-instances (src/kits/os/theme.css)
+     for its own overflow edge, oriented top-to-bottom for this vertical
+     scroller. The top edge stays fully opaque (rows start flush under the
+     topbar with no need to hint upward scroll on initial load); only the
+     trailing 24px softens toward transparent. */
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent);
+}
+.app-side-shell::-webkit-scrollbar { width: 8px; }
+.app-side-shell::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: var(--r-pill, 999px); }
+.app-side-shell::-webkit-scrollbar-track { background: transparent; }
+.app-body { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); align-items: stretch; align-content: stretch; flex: 1; min-height: 0; }
+.app-body.no-side { grid-template-columns: minmax(0, 1fr); }
+/* When there is no sidebar, the empty side-shell must not occupy a grid row,
+   otherwise main wraps to a second (collapsed) row. Remove it from layout. */
+.app-body.no-side .app-side-shell { display: none; }
+
+.app-side {
+  display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-5) var(--space-2) var(--space-5) var(--space-3);
+  font-size: var(--fs-sm);
+}
+/* Sidebar section wrapper emitted by Side() (src/components/shell/app-shell.js).
+   It is the `role="group"` that owns the heading + its links, so it must be the
+   thing that groups them visually too: without a rule it was a bare block, and
+   the only separation between sections came from .app-side's own flex gap —
+   which meant the heading floated equidistant between the group it labels and
+   the one above it. Stacking the group's own children tightly re-attaches the
+   heading to its links. */
+.app-side-group { display: flex; flex-direction: column; gap: var(--space-hair); }
+.app-side .group {
+  font-size: var(--fs-xs); font-weight: 600;
+  color: var(--fg-3); padding: 0 var(--space-3);
+  margin-bottom: var(--space-1-75);
+}
+.app-side a {
+  display: grid; grid-template-columns: 18px 1fr auto;
+  gap: var(--space-2-5); align-items: center;
+  /* Dense rounded-rect nav row (was a 44px pill with 12px 14px padding — tall
+     and consumer-shaped). A --r-1 rounded rect reads as compact app chrome.
+     The 44px floor is UNCONDITIONAL for the same reason as .skip-link's: a
+     pointer:coarse gate misses switch and head-pointer users, who report a fine
+     pointer. Measured live at 1920 the gated form rendered 39px. Padding is
+     unchanged, so the row stays dense — only the floor moves. */
+  padding: var(--space-2) var(--space-2-5);
+  min-height: 44px;
+  border-radius: var(--r-1);
+  color: var(--fg-2);
+  margin-bottom: var(--space-hair);
+}
+@media (pointer: coarse) {
+  .app-side a { min-height: 44px; padding: var(--space-2-75) var(--space-3); }
+}
+/* A sidebar row with no href and no handler is a static label, not a control:
+   Side() emits it as an <a> only so it keeps the grid layout above. It must not
+   claim to be pressable — no pointer, no hover highlight. (An anchor without
+   href is already skipped by the tab order and exposed as generic, not link.) */
+.app-side a:not([href]) { cursor: default; }
+/* An entry naming a section/tag that does not exist yet — in the sidebar tree
+   or the topbar nav. It stays visible so the intended shape of the docs is
+   legible, but it is not a link and must not read as one: dimmed, and inert
+   like any other href-less anchor. Both selectors are needed because the two
+   navs style their anchors separately. */
+.app-side a.is-unwritten,
+.app-topbar nav a.is-unwritten { color: var(--fg-3); cursor: default; }
+.app-topbar nav a.is-unwritten:hover { background: none; color: var(--fg-3); }
+.app-side a[href]:hover { background: var(--bg-2); color: var(--fg); }
+.app-side a:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+.app-side a.active {
+  color: var(--fg);
+  background: var(--bg-3);
+  font-weight: 500;
+}
+.app-side .count {
+  background: color-mix(in oklab, var(--fg) 10%, transparent);
+  color: var(--fg-2);
+  padding: 3px 10px; font-size: var(--fs-micro); font-weight: 700;
+  border-radius: var(--r-pill);
+}
+/* Active state is a flat neutral highlight (--bg-3/--fg), not an accent
+   fill -- no hue, just a perceivable shade step up from the plain a[href]:hover
+   (--bg-2). --fg over --bg-3 is the same body-text pairing used everywhere
+   else in the sidebar, so it inherits that AA contrast for free instead of
+   depending on a per-[data-accent] retune. The count chip stays on its
+   default neutral pairing above; there is no accent-on-ink inversion to
+   double down on anymore. */
+.app-side a.active .count {
+  background: color-mix(in oklab, var(--fg) 16%, transparent);
+  color: var(--fg-2);
+}
+
+.app-main {
+  /* Bottom padding reserves clearance equal to the status bar's own height so
+     the last scrolled child never sits flush behind .app-status (a flex
+     sibling pinned below .app-main in the .app column, not a child of it).
+     --app-status-h-live tracks the bar's collapsed/expanded state (set by
+     the toggle in app-shell.js) and falls back to the full bar height when
+     unset (bar starts expanded / JS hasn't run yet). */
+  padding: var(--space-5) var(--pad-x) var(--app-status-h-live, var(--app-status-h));
+  min-width: 0;
+  /* Full-height flex column so a single flex:1 child (e.g. .chat) fills the
+     region between crumb and status instead of floating at content height. */
+  display: flex; flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+  height: 100%;
+}
+/* Document children (hero, sections, panels) keep their natural height in the
+   scrolling flex column. Without flex-shrink:0 the flex algorithm shrinks them
+   toward min-height:0 once total content exceeds the fixed-height .app-main,
+   collapsing every section to 0 and piling content on top of itself — the
+   failure mode any long-scroll page (a marketing/landing route) hits. Grow
+   children (.chat/.grow/etc.) re-assert flex:1 1 auto below via higher
+   specificity, so a single full-height pane still fills the region. */
+.app-main > * { min-height: 0; flex: none; }
+/* The main region scrolls its own overflow at every breakpoint (previously
+   only ≥901px), so a fixed-height .app never clips route content and inner
+   panels don't fight the page scroll. */
+.app-main { overflow-y: auto; }
+/* Reserve the scrollbar track so routes with/without overflow don't shift
+   the layout horizontally when the bar appears. */
+.app-main { scrollbar-gutter: stable; }
+/* Same visible-scroll-ownership rationale as .app-side-shell above -- makes
+   this the visually distinct SECOND independent scroll region rather than
+   an invisible-scrollbar mystery next to the sidebar. */
+.app-main {
+  scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent;
+}
+.app-main::-webkit-scrollbar { width: 8px; }
+.app-main::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: var(--r-pill, 999px); }
+.app-main::-webkit-scrollbar-track { background: transparent; }
+/* Jump-target anchors clear the inner-scroll top edge (no chrome overlap,
+   but a little breathing room when deep-linked within .app-main). */
+.app-main [id] { scroll-margin-top: var(--space-4); }
+/* Full-height route children fill the region instead of scrolling the page. */
+.app-main > .chat,
+.app-main > .chat-area,
+.app-main > .ds-file-stage,
+.app-main > .ds-files-stack,
+.app-main > .grow { flex: 1 1 auto; min-height: 0; }
+/* width:100% is load-bearing, not redundant with max-width: .app-body is a
+   CSS grid, and margin:auto on a grid item overrides the default stretch,
+   shrinking the item to its max-content width instead of filling the track
+   and then clamping -- confirmed live at 2560px viewport where mainWidth
+   measured 688px against a correctly-resolved 1400px max-width. Explicit
+   width:100% restores fill-then-cap for every .narrow page, not just wide
+   viewports (the shrink-to-fit bug undersized even the base 760px case). */
+.app-main.narrow { width: 100%; max-width: var(--measure-narrow); margin: 0 auto; }
+/* .narrow means "prose reading measure", not "shrink the whole shell on wide
+   screens". The old clamp(760px, 46vw, 1000px) grew too slowly to track the
+   real available column: at 1920px viewport the .app-body grid's second
+   track (.app width minus --sidebar-width) is ~1556px, but 46vw=883px sat
+   well under the 1000px ceiling, leaving a ~340px dead gutter between the
+   sidebar and the centered narrow column on an ordinary desktop screen (not
+   just ultrawide) -- confirmed live via a real 1920x1080 CDP viewport, a
+   project page (#/p/<slug>). 62vw tracks the actual column growth far closer
+   (1920*0.62=1190px, much nearer the 1556px track than 883px was) while the
+   1200px ceiling still keeps prose from stretching into an unreadable
+   full-bleed line -- sidebar-present narrow pages read the same width class
+   as the no-side variant below instead of visibly starving next to it. */
+.app-body:not(.no-side) .app-main.narrow {
+  max-width: clamp(var(--measure-narrow), 62vw, 1200px);
+}
+/* A shell with no sidebar has no competing column, so the prose clamp there was
+   leaving the whole sidebar's worth of width empty -- 760px of content inside a
+   1413px shell on a real page. Widen the clamp by the space the absent sidebar
+   would have taken so the measure still reads as prose, just not starved.
+   The floor stays a fixed 980px (no-side is still readable narrow); the
+   ceiling grows with viewport instead of staying pinned at 980px forever --
+   on a 2560px ultrawide the old fixed value left over half the shell as dead
+   side margin. 1400px ceiling keeps prose measure sane (nobody wants a
+   2400px-wide paragraph) while letting non-prose content (index rows, meta)
+   actually use the extra room. */
+.app-body.no-side .app-main.narrow {
+  max-width: clamp(calc(var(--measure-narrow) + var(--sidebar-width)), 60vw, 1400px);
+}
+/* Article-body heading rhythm and lede spacing, consumed by flatspace-rendered
+   long-form pages (docs, papers) that drop headings/panels directly into .app-main. */
+.app-main > h1,
+.app-main > h2,
+.app-main > h3 { margin-top: 36px; margin-bottom: 12px; }
+.app-main > h1:first-child { margin-top: 8px; }
+.app-main > .panel,
+.app-main > .work-detail-chips,
+.app-main > .cli { margin-top: 18px; margin-bottom: 18px; }
+.app-main .ds-lede { margin-top: 4px; margin-bottom: 18px; max-width: 64ch; line-height: 1.6; }
+.work-detail-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; row-gap: 10px; }
+@media (max-width: 720px) {
+  .app-main > h1,
+  .app-main > h2,
+  .app-main > h3 { margin-top: 28px; }
+}
+
+@media (min-width: 1400px) {
+  /* No outer ceiling: .app tracks 100vw at every width, including past 1920px
+     and 2560px+ ultrawide displays, so the shell always fills the real screen
+     edges instead of leaving dead margin on either side. Row/prose measure
+     caps (--measure-wide, --stage-wide, 64ch, etc.) own line-length
+     readability independently of the shell's own width, so letting .app grow
+     unbounded does not create unreadable rows -- text still wraps at its own
+     cap; only the surrounding chrome (panels, sidebar, status bar) stretches
+     to use the extra space. Measured live at 2560px: the prior 1920px cap
+     left a symmetric 320px dead margin on each side (640px total) -- this was
+     the root cause of pages appearing to "shrink to content" rather than fill
+     the screen on wide monitors. */
+  .app { width: 100%; margin-left: auto; margin-right: auto; }
+  .app-main .chat,
+  .app-main > .chat-area,
+  .app-main > .main-content { max-width: none; margin: 0; width: 100%; }
+  /* Status bar spans the full-width .app edge-to-edge; no separate width
+     constraint (which previously narrowed it). */
+  .app-status { width: 100%; }
+  /* Cap row text measure inside the wide main (ultrawide readability). */
+  .row .title, .row .sub { max-width: var(--measure-wide); }
+}
+
+.app-status {
+  display: flex; align-items: center; gap: var(--space-3);
+  width: 100%;
+  height: var(--app-status-h); min-height: var(--app-status-h);
+  /* A thin desktop status strip, not a webpage footer band. */
+  padding: 0 var(--space-4);
+  /* Status chrome is prose, not code - mono is reserved for code/paths. */
+  font-family: var(--ff-body); font-size: var(--fs-xs); line-height: 1.2;
+  color: var(--fg-3);
+  border-top: 1px solid var(--rule);
+}
+.app-status .item { color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: flex; align-items: center; gap: var(--space-3); }
+.app-status .item:first-of-type { color: var(--accent-ink); }
+/* Subtle divider between adjacent status segments — a thin inset rule, not a
+   full-height border, so it reads as a quiet separator rather than boxing
+   each item. */
+.app-status .item:not(:first-of-type)::before {
+  content: ''; flex: 0 0 auto;
+  width: 1px; height: 10px;
+  background: var(--rule-strong);
+}
+.app-status .spread { flex: 1; }
+/* The status bar NEVER wraps: at narrow widths the trailing items (hints,
+   agent target) drop in priority order instead of breaking mid-word onto a
+   second line. */
+.app-status { flex-wrap: nowrap; overflow: hidden; }
+
+/* Collapse control — the status bar permanently claims --app-status-h of
+   viewport on every page; this toggle lets it shrink to a thin reachable
+   strip instead. The bar itself stays a fixed-height flex child (never
+   display:none) so the toggle remains reachable to re-expand. */
+.app-status-toggle {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; margin-right: var(--space-1);
+  background: transparent; border: none; color: var(--fg-3); cursor: pointer;
+  border-radius: var(--r-0);
+}
+.app-status-toggle:hover { color: var(--fg); background: var(--bg-3); }
+.app-status-toggle:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+.app-status.is-collapsed {
+  height: var(--space-4); min-height: var(--space-4);
+  overflow: hidden;
+}
+.app-status.is-collapsed .item,
+.app-status.is-collapsed .spread { display: none; }
+@media (max-width: 1100px) {
+  .app-status .item:last-of-type:not(:only-of-type) { display: none; }
+}
+
+/* The "dateline" — ASCII bar used at the top of every preview/brand page.
+   3-4 flex slots; a .spread filler pushes the trailing slot to the far
+   edge instead of every span running together with no gap. */
+.dateline {
+  display: flex; align-items: center; gap: var(--space-3);
+  flex-wrap: nowrap; overflow: hidden;
+  font-family: var(--ff-mono); font-size: var(--fs-xs); line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--fg-3);
+}
+.dateline span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* The spreader itself only ever set flex-basis -- an empty div with no
+   background renders as blank space, not the "dotted spreader" the preview
+   page's own caption describes. border-bottom (not background-image) keeps
+   the dots crisp at 1px without a repeating-gradient banding artifact. */
+.dateline .spread {
+  flex: 1 1 auto; min-width: var(--space-3); align-self: stretch;
+  display: flex; align-items: center;
+}
+.dateline .spread::after {
+  content: ''; flex: 1 1 auto;
+  border-bottom: var(--bw-hair, 1px) dotted var(--rule-strong);
+}
+

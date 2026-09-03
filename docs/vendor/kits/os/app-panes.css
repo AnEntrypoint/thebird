@@ -1,0 +1,129 @@
+/* App-pane chrome for kit components rendered inside .wm-win bodies.
+   Bible tokens only — no hardcoded color, font, or radius. Focus = inset rail; no shadows, no gradients. */
+
+/* --- terminal-app --- */
+.terminal-app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--os-bg-1);
+    color: var(--os-fg);
+    font-family: var(--os-mono);
+}
+.terminal-app-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    background: var(--os-bg-2);
+    border-bottom: 1px solid color-mix(in oklab, var(--os-accent) 35%, transparent);
+    font-family: var(--os-mono);
+    font-size: 11px;
+    color: var(--os-fg-2);
+    text-transform: lowercase;
+    flex: 0 0 auto;
+}
+.terminal-app-title {
+    font-family: var(--os-mono);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.terminal-app-status {
+    font-family: var(--os-mono);
+    color: var(--os-accent);
+    flex: 0 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.terminal-app-slot {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--os-bg-1);
+    position: relative;
+}
+.terminal-app-slot > * { width: 100%; height: 100%; }
+
+/* --- browser-app --- */
+.browser-app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--os-bg-1);
+    color: var(--os-fg);
+    font-family: var(--os-font);
+}
+.browser-app-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    background: var(--os-bg-2);
+    flex: 0 0 auto;
+}
+.browser-app-btn {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 var(--space-2);
+    background: var(--os-bg-3);
+    color: var(--os-fg);
+    border: none;
+    border-radius: var(--os-radius-sm);
+    font: 12px var(--os-mono);
+    cursor: pointer;
+    outline: none;
+}
+.browser-app-btn:hover { background: var(--os-accent-soft); }
+.browser-app-btn:focus-visible { box-shadow: inset 0 0 0 1px var(--os-accent); }
+/* Inert back/forward when there's no history in that direction. */
+.browser-app-btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+.browser-app-btn:disabled:hover { background: var(--os-bg-3); }
+.browser-app-url {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    padding: 0 var(--space-2);
+    background: var(--os-bg-0);
+    color: var(--os-fg);
+    border: none;
+    border-radius: var(--os-radius-sm);
+    font: 12px var(--os-mono);
+    outline: none;
+}
+.browser-app-url:focus { box-shadow: inset 4px 0 0 var(--os-accent); }
+.browser-app-slot {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--os-bg-0);
+    position: relative;
+}
+.browser-app-slot > * { width: 100%; height: 100%; }
+.browser-app-status {
+    flex: 0 0 auto;
+    padding: var(--space-1) var(--space-2);
+    background: var(--os-bg-2);
+    font: 11px var(--os-mono);
+    color: var(--os-fg-3);
+    text-transform: lowercase;
+    min-height: 18px;
+}
+/* Loading: a thin indeterminate bar under the toolbar. Error: red status row. */
+.browser-app-loading .browser-app-bar { box-shadow: inset 0 -2px 0 var(--os-accent); }
+.browser-app[data-error] .browser-app-status { color: var(--os-danger, #c0392b); }
+
+/* Touch tap-target floor for the browser pane toolbar. The back/forward/reload
+ * buttons and the URL field are 28px by default (no @media anywhere), below the
+ * 44px touch minimum on tablets and phones. Lift them on coarse pointers and
+ * grow the bar so the controls fit with breathing room. */
+@media (hover: none), (pointer: coarse) {
+    .browser-app-bar { min-height: 52px; padding: 6px var(--space-2); }
+    .browser-app-btn { min-height: var(--os-tap, 44px); height: var(--os-tap, 44px); min-width: var(--os-tap, 44px); }
+    .browser-app-url { height: var(--os-tap, 44px); }
+}

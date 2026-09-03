@@ -1,0 +1,12 @@
+[submodule "vendor-src/gm"]
+	path = vendor-src/gm
+	url = https://github.com/AnEntrypoint/gm.git
+[submodule "vendor-src/acptoapi"]
+	path = vendor-src/acptoapi
+	url = https://github.com/AnEntrypoint/acptoapi.git
+[submodule "vendor-src/freddie"]
+	path = vendor-src/freddie
+	url = https://github.com/AnEntrypoint/freddie.git
+[submodule "vendor-src/design"]
+	path = vendor-src/design
+	url = https://github.com/AnEntrypoint/design.git

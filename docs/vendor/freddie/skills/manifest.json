@@ -1,0 +1,98 @@
+[
+  {
+    "id": "creative/architecture-diagram",
+    "category": "creative",
+    "shortName": "architecture-diagram",
+    "name": "creative/architecture-diagram",
+    "description": "Generate system architecture diagrams as Mermaid, PlantUML, or ASCII art from a description or codebase",
+    "path": "creative/architecture-diagram/SKILL.md"
+  },
+  {
+    "id": "creative/ascii-video",
+    "category": "creative",
+    "shortName": "ascii-video",
+    "name": "creative/ascii-video",
+    "description": "Convert images or video frames to ASCII art, or generate ASCII animations from descriptions",
+    "path": "creative/ascii-video/SKILL.md"
+  },
+  {
+    "id": "creative/concept-diagrams",
+    "category": "creative",
+    "shortName": "concept-diagrams",
+    "name": "creative/concept-diagrams",
+    "description": "Generate concept maps, mind maps, and ER diagrams from free-form descriptions",
+    "path": "creative/concept-diagrams/SKILL.md"
+  },
+  {
+    "id": "data/etl-pipelines",
+    "category": "data",
+    "shortName": "etl-pipelines",
+    "name": "data/etl-pipelines",
+    "description": "Design, implement, and debug ETL/ELT pipelines — batch or streaming, any source/sink",
+    "path": "data/etl-pipelines/SKILL.md"
+  },
+  {
+    "id": "data/sql-explainer",
+    "category": "data",
+    "shortName": "sql-explainer",
+    "name": "data/sql-explainer",
+    "description": "Explain SQL queries, execution plans, and performance issues in plain English with rewrites",
+    "path": "data/sql-explainer/SKILL.md"
+  },
+  {
+    "id": "ops/incident-response",
+    "category": "ops",
+    "shortName": "incident-response",
+    "name": "ops/incident-response",
+    "description": "Guide incident response: triage, diagnosis, mitigation, communication, and post-mortem",
+    "path": "ops/incident-response/SKILL.md"
+  },
+  {
+    "id": "ops/log-triage",
+    "category": "ops",
+    "shortName": "log-triage",
+    "name": "ops/log-triage",
+    "description": "Triage application and system logs to find root causes, anomalies, and error patterns",
+    "path": "ops/log-triage/SKILL.md"
+  },
+  {
+    "id": "planning/okr-drafter",
+    "category": "planning",
+    "shortName": "okr-drafter",
+    "name": "planning/okr-drafter",
+    "description": "Draft Objectives and Key Results from goals, strategy docs, or free-form priorities",
+    "path": "planning/okr-drafter/SKILL.md"
+  },
+  {
+    "id": "planning/weekly-review",
+    "category": "planning",
+    "shortName": "weekly-review",
+    "name": "planning/weekly-review",
+    "description": "Facilitate a structured weekly review covering what shipped, blockers, decisions, and next week's priorities",
+    "path": "planning/weekly-review/SKILL.md"
+  },
+  {
+    "id": "software-development/code-review",
+    "category": "software-development",
+    "shortName": "code-review",
+    "name": "software-development/code-review",
+    "description": "Perform thorough code reviews covering correctness, security, performance, readability, and test coverage",
+    "path": "software-development/code-review/SKILL.md"
+  },
+  {
+    "id": "software-development/rfc-writer",
+    "category": "software-development",
+    "shortName": "rfc-writer",
+    "name": "software-development/rfc-writer",
+    "description": "Write technical RFCs and design documents from a problem statement or rough notes",
+    "path": "software-development/rfc-writer/SKILL.md"
+  },
+  {
+    "id": "software-development/systematic-debugging",
+    "category": "software-development",
+    "shortName": "systematic-debugging",
+    "name": "software-development/systematic-debugging",
+    "description": "Apply systematic debugging methodology: reproduction, hypothesis, experiment, root cause, fix verification",
+    "path": "software-development/systematic-debugging/SKILL.md"
+  }
+]

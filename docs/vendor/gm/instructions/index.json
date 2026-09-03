@@ -1,0 +1,10 @@
+{
+  "keys": [
+    "gates/long-gap-no-instruction",
+    "residual/browser-open",
+    "residual/dirty-tree",
+    "residual/imperative",
+    "residual/prd-open",
+    "residual/tasks-running"
+  ]
+}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" class="ds-247420">
+<head>
+<meta charset="utf-8">
+<title>thebird · todo demo (busybase + plugkit-libsql)</title>
+<link rel="stylesheet" href="https://raw.githack.com/AnEntrypoint/design/main/dist/247420.css">
+<style>
+  body { font-family: var(--ff-ui, system-ui, sans-serif); padding: 20px; max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+  .row { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
+  .row input[type=text] { flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font: inherit; }
+  .row button { padding: 6px 14px; cursor: pointer; }
+  ul { list-style: none; padding: 0; margin: 16px 0; }
+  li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  li.done .text { text-decoration: line-through; color: #999; }
+  .text { flex: 1; }
+  .badge { font-size: 11px; color: #888; }
+  .status { font-size: 11px; color: #666; margin-top: 12px; padding: 8px; background: #f5f5f5; border-radius: 4px; min-height: 16px; }
+</style>
+</head>
+<body>
+<h1>thebird · todo demo</h1>
+<div class="sub">Powered by <code>busybase-browser</code> over <code>plugkit-libsql</code> (the bundled sqlite shim). No external server.</div>
+
+<div class="row">
+  <input id="newtodo" type="text" placeholder="What needs doing?" autofocus>
+  <button id="add">Add</button>
+</div>
+
+<ul id="list"></ul>
+
+<div class="row">
+  <button id="clear-done">Clear completed</button>
+  <span class="badge" id="counter"></span>
+</div>
+
+<div class="status" id="status">booting…</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "sqlite3-wasm": "../lib/sqlite-shim.js",
+    "busybase-browser": "../lib/busybase-browser.js"
+  }
+}
+</script>
+<script type="module">
+  import { createBusybase } from 'busybase-browser';
+
+  const $ = (s) => document.querySelector(s);
+  const statusEl = $('#status');
+  const log = (s) => { statusEl.textContent = s; console.log('[todo]', s); };
+
+  log('booting plugkit-libsql via busybase-browser…');
+  const bb = await createBusybase({ tablePrefix: 'demo_' });
+  log('ready · plugkit-libsql backed (' + (bb._sqlite3.version.libVersion) + ')');
+
+  async function refresh() {
+    const { data, error } = await bb.from('todos').select().order('created');
+    if (error) { log('select error: ' + error.message); return; }
+    const ul = $('#list');
+    ul.innerHTML = '';
+    let openCount = 0;
+    for (const t of data) {
+      const li = document.createElement('li');
+      if (t.done === '1' || t.done === 1 || t.done === true) li.classList.add('done');
+      else openCount++;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = li.classList.contains('done');
+      cb.onclick = async () => {
+        const r = await bb.from('todos').update({ done: cb.checked ? '1' : '0' }).eq('id', t.id);
+        if (r.error) log('update error: ' + r.error.message); else refresh();
+      };
+      const sp = document.createElement('span');
+      sp.className = 'text';
+      sp.textContent = t.text || '(empty)';
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.onclick = async () => {
+        const r = await bb.from('todos').delete().eq('id', t.id);
+        if (r.error) log('delete error: ' + r.error.message); else refresh();
+      };
+      li.append(cb, sp, del);
+      ul.appendChild(li);
+    }
+    $('#counter').textContent = data.length + ' total · ' + openCount + ' open';
+  }
+
+  $('#add').onclick = async () => {
+    const input = $('#newtodo');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const r = await bb.from('todos').insert({ text, done: '0', created: Date.now().toString() });
+    if (r.error) log('insert error: ' + r.error.message); else refresh();
+  };
+  $('#newtodo').addEventListener('keydown', e => { if (e.key === 'Enter') $('#add').click(); });
+
+  $('#clear-done').onclick = async () => {
+    const r = await bb.from('todos').delete().eq('done', '1');
+    if (r.error) log('clear error: ' + r.error.message); else refresh();
+  };
+
+  // Realtime — show in status when something changes from outside this tab
+  bb.channel('todo-changes').on('postgres_changes', { event: '*', table: 'todos' }, p => {
+    log('realtime · ' + p.eventType + ' · ' + (p.new?.text || p.old?.text || '?'));
+  }).subscribe();
+
+  // Expose for validate harness + console
+  window.__todoDemo = { bb, refresh };
+  await refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "Web Dev",
+  "description": "A starter workspace for front-end/web development with a seeded README and common env var placeholders.",
+  "workspace": {
+    "/README.md": "# Web Dev Workspace\n\nThis workspace was seeded by the web-dev template.\n\n## Suggested next steps\n- Drop your project files here\n- Use the terminal app to run your dev server\n- Use the browser pane to preview\n",
+    "/.env.example": "API_BASE_URL=http://localhost:3000\nNODE_ENV=development\n"
+  },
+  "env": {
+    "NODE_ENV": "development",
+    "API_BASE_URL": "http://localhost:3000"
+  },
+  "startupScript": null,
+  "skills": { "enabled": [] },
+  "plugins": { "enabled": [] },
+  "schemaVersion": 1
+}

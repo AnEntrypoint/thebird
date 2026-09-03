@@ -1,0 +1,15 @@
+{
+  "name": "Data Explorer",
+  "description": "A starter workspace for exploring datasets, with a seeded notes file and startup note.",
+  "workspace": {
+    "/README.md": "# Data Explorer Workspace\n\nThis workspace was seeded by the data-explorer template.\n\nDrop CSV/JSON datasets here and use the terminal app or chat to explore them.\n",
+    "/notes/startup.md": "# Startup Notes\n\n- No dataset loaded yet.\n- Use the files app to import a dataset into this workspace.\n"
+  },
+  "env": {
+    "DATA_DIR": "/data"
+  },
+  "startupScript": null,
+  "skills": { "enabled": [] },
+  "plugins": { "enabled": [] },
+  "schemaVersion": 1
+}

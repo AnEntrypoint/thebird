@@ -1,0 +1,53 @@
+/* ============================================================
+   Slider — generic single-value range input
+   Same overlay approach as .vx-vad-range (community.css): a real, fully
+   transparent <input type="range"> sits on top of a custom track/fill/thumb
+   so no browser's native thumb chrome ever paints, while pointer/keyboard/
+   a11y semantics stay on the real input underneath.
+   ============================================================ */
+.ds-slider { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
+.ds-slider.is-disabled { opacity: 0.5; pointer-events: none; }
+.ds-slider-track {
+  position: relative;
+  height: 12px;
+  margin: var(--space-2) 0;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  overflow: visible;
+}
+.ds-slider-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc(var(--ds-slider-pct, 0) * 1%);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--dur-snap) linear;
+}
+.ds-slider-thumb {
+  position: absolute; top: 50%; left: calc(var(--ds-slider-pct, 0) * 1%);
+  width: 18px; height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--bg-1);
+  border: var(--bw-hair) solid var(--accent);
+  box-shadow: var(--shadow-1);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: box-shadow var(--dur-snap) var(--ease);
+}
+.ds-slider-range {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  margin: 0; opacity: 0;
+  cursor: pointer;
+}
+.ds-slider-range:focus-visible ~ .ds-slider-thumb,
+.ds-slider-track:has(.ds-slider-range:focus-visible) .ds-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 40%, transparent), var(--shadow-1);
+}
+.ds-slider-range:disabled { cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-slider-fill,
+  .ds-slider-thumb {
+    transition: none !important;
+  }
+}

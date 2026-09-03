@@ -1,0 +1,902 @@
+/* ============================================================
+   Enhanced UX: Component States, Drag-and-Drop, Context Menus
+   Comprehensive improvements for perfect UX across all surfaces
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Table — clickable row focus ring
+   Table()'s onRowClick path (content.js) sets class="clickable"
+   role="button" tabindex="0" on the <tr>; the browser's native
+   :focus-visible outline on a <tr> renders inconsistently across
+   engines (often clipped by table border-collapse), so it needs
+   the same explicit outline treatment every other interactive
+   primitive in this file gets, via the shared --focus-* tokens.
+   -------------------------------------------------------------- */
+tr.clickable:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: calc(-1 * var(--focus-offset));
+}
+
+/* ------------------------------------------------------------
+   Component States — Disabled, Loading, Error, Success
+   -------------------------------------------------------------- */
+
+/* Disabled state for all interactive elements. The `.is-disabled` class
+   variants cover Btn()'s anchor-rendered case (shell.js) — an <a> has no
+   :disabled pseudo-class, so a disabled link-styled button relies entirely
+   on this class selector for its visual treatment (aria-disabled + tabindex
+   are set in JS; this is the paired CSS half). */
+/* opacity:0.6 alone barely separated from an active .btn-primary against a
+   busy background -- close enough in dark mode that users clicked disabled
+   buttons expecting them to work. grayscale flattens any color signal (no
+   more "still looks clickable-green") and the steeper opacity drop reads as
+   unmistakably inert at a glance, not just slightly dimmed. */
+.btn:disabled, .btn-primary:disabled, .btn-ghost:disabled,
+.btn.is-disabled, .btn-primary.is-disabled, .btn-ghost.is-disabled,
+button:disabled, [disabled] {
+  opacity: 0.5;
+  filter: grayscale(60%);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Systemic hover fallback — button-like elements with no design-system class
+   (a bare <button>, [role="button"], or a generic .row/.chip usage) get a
+   `transition` declared above (line ~106) but nothing to transition to, so
+   they look inert until clicked. This is a low-specificity (0,0,1)/(0,1,1)
+   catch-all: any element that also carries `.btn`/`.btn-primary`/`.btn-ghost`/
+   `.ds-icon-btn`/etc. keeps its own component `:hover` (those selectors are
+   equal-or-higher specificity and, for the shared ones, declared later in
+   the cascade), so this never overrides a deliberate per-component hover —
+   it only fills the gap for elements that don't have one. */
+button:not(:disabled):hover,
+[role="button"]:not([aria-disabled="true"]):hover {
+  background-color: var(--panel-hover, var(--bg-3));
+}
+
+/* Loading state — spinning indicator */
+@keyframes spinner-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* Reusable spin utility: rotates the element (e.g. a refresh Icon used as a
+   busy indicator) via the shared spinner-rotate keyframe. Respects reduced
+   motion. Use instead of a decorative rotation glyph.
+   Ring spinner — use for larger blocking/full-region loading states. */
+.ds-spin { animation: spinner-rotate 0.8s linear infinite; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) { .ds-spin { animation: none; } }
+
+/* Ring spinner — use for larger blocking/full-region loading states. */
+.loading { position: relative; }
+.loading::after {
+  content: '';
+  position: absolute; top: 50%; right: 12px;
+  width: 16px; height: 16px;
+  border: 2px solid var(--bg-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+/* Error state.
+   No !important: the only rule in the kit that also resets a matching element's
+   border-color is the bare-control base below (`textarea:where(:not(.input))`
+   et al, which use the `border: 0` shorthand). Those selectors are (0,0,1) —
+   the :where() guard adds nothing — so every selector in this list out-specifies
+   them on merit, and specificity beats the later source position. */
+.error, [data-state="error"],
+.row.error, input.error,
+textarea.error {
+  border-color: var(--warn);
+  background-color: color-mix(in oklab, var(--warn) 6%, var(--bg));
+}
+.error::placeholder { color: color-mix(in oklab, var(--warn) 60%, var(--fg-3)); }
+
+/* Success state */
+.success, [data-state="success"],
+.row.success { background-color: color-mix(in oklab, var(--green-2) 6%, var(--bg)); }
+
+/* Readonly state */
+[readonly], .readonly {
+  background: var(--bg-2);
+  cursor: default;
+  opacity: 0.8;
+}
+
+/* ------------------------------------------------------------
+   Enhanced Button Micro-Interactions
+   -------------------------------------------------------------- */
+
+/* Button scale feedback on active */
+.btn:active:not(:disabled),
+.btn-primary:active:not(:disabled),
+.btn-ghost:active:not(:disabled),
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Enhanced hover transitions — transition only the properties that actually
+   change (not `all`, which animates layout and is a perf trap), and drop the
+   blanket `will-change` (it forces a permanent compositor layer per element). */
+.btn, .btn-primary, .btn-ghost,
+button, a.row, .row,
+.chip, [role="button"],
+input[type="checkbox"], input[type="radio"] {
+  transition: background-color var(--dur-snap) var(--ease),
+              color var(--dur-snap) var(--ease),
+              box-shadow var(--dur-snap) var(--ease),
+              transform var(--dur-snap) var(--ease);
+}
+
+/* Native checkbox/radio tint — browser default is UA blue, which fights the
+   single lime lead accent wherever a raw control lands outside a bespoke
+   toggle (e.g. signin's "remember me"). accent-color re-tints the native
+   control box without hand-drawing a replacement. */
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--accent-ink);
+}
+
+/* Prevent double-tap zoom on buttons (iOS) */
+.btn, .btn-primary, .btn-ghost, button {
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* ------------------------------------------------------------
+   Drag-and-Drop Styles
+   -------------------------------------------------------------- */
+
+/* Draggable element */
+[draggable="true"], .draggable {
+  cursor: grab;
+  user-select: none;
+}
+[draggable="true"]:active { cursor: grabbing; }
+
+/* Drag-over state */
+.drag-over {
+  border: 2px dashed var(--accent);
+}
+
+/* Drag-ghost (semi-transparent dragging element) */
+.drag-ghost {
+  opacity: 0.5;
+  transform: rotate(2deg) scale(0.95);
+}
+
+/* Drop-zone indicator */
+.drop-zone {
+  border: 2px dashed var(--rule-strong);
+  border-radius: var(--r-2);
+  padding: var(--space-4);
+  background: color-mix(in oklab, var(--accent) 4%, var(--bg));
+  min-height: 120px;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; color: var(--fg-3);
+  /* Explicit list, never `all` — the only things `.drop-zone.active` changes
+     are the dashed border tone, the tinted fill and the label colour. `all`
+     also animated padding/min-height/border-width, so a drop target visibly
+     resized mid-drag instead of snapping. */
+  transition: background var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease),
+    color var(--dur-snap) var(--ease);
+}
+.drop-zone.active {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg));
+  color: var(--accent-ink);
+}
+
+/* List item reorder indicator */
+.list-item.dragging { opacity: 0.5; }
+.list-item.drag-before::before,
+.list-item.drag-after::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; height: 2px;
+  background: var(--accent);
+}
+.list-item.drag-before::before { top: -2px; }
+.list-item.drag-after::after { bottom: -2px; }
+
+@keyframes pulse-line {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .list-item.drag-before::before,
+  .list-item.drag-after::after { animation: pulse-line 0.6s ease-in-out infinite; }
+}
+
+/* ------------------------------------------------------------
+   Context Menu Styles
+   -------------------------------------------------------------- */
+
+.ds-context-menu {
+  position: absolute;
+  background: var(--bg-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-overlay);
+  min-width: 160px;
+  z-index: var(--z-dropdown);
+  padding: 4px 0;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-context-menu { animation: context-menu-in 0.15s ease-out; }
+}
+
+.ds-context-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  transition: background var(--dur-snap) var(--ease);
+}
+.ds-context-menu-item:hover {
+  background: var(--bg-3);
+  color: var(--accent-ink);
+}
+.ds-context-menu-item:active {
+  background: color-mix(in oklab, var(--accent) 20%, var(--bg-3));
+}
+.ds-context-menu-item.danger {
+  color: var(--warn);
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+.ds-context-menu-item.danger:hover {
+  background: color-mix(in oklab, var(--warn) 12%, var(--bg));
+}
+.ds-context-menu-divider {
+  height: 1px;
+  background: var(--rule);
+  margin: 4px 0;
+}
+.ds-context-menu-icon {
+  width: 16px; height: 16px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Context menu trigger indicator */
+[data-has-context-menu] {
+  cursor: context-menu;
+}
+
+/* ------------------------------------------------------------
+   Enhanced Form Inputs
+   -------------------------------------------------------------- */
+
+/* Base chrome for any BARE native control (outside .ds-field/.row-form/.input):
+   the same editorial tonal-fill + printed-baseline-rule as .ds-field, so a raw
+   <input> is never a browser-default white box in dark mode. The guards are
+   wrapped in :where() so they add ZERO specificity — the whole selector stays
+   at (0,1,1), exactly like `.ds-field input`, so the later .ds-field / .ds-field--sm
+   / .row-form descendant rules win by source order instead of being out-specified
+   (a bare :not(.input) counts as a class and would beat every .ds-field rule,
+   which clobbered the size variants). */
+input[type="text"]:where(:not(.input):not(.ds-search-input)),
+input[type="email"]:where(:not(.input):not(.ds-search-input)),
+input[type="password"]:where(:not(.input):not(.ds-search-input)),
+input[type="number"]:where(:not(.input):not(.ds-search-input)),
+input[type="search"]:where(:not(.input):not(.ds-search-input)),
+input[type="url"]:where(:not(.input):not(.ds-search-input)),
+input[type="tel"]:where(:not(.input):not(.ds-search-input)),
+textarea:where(:not(.input)),
+select:where(:not(.ds-select)) {
+  font: inherit; color: var(--fg);
+  background: var(--bg-2);
+  border: 0;
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-rule)) 0 var(--rule-strong);
+  border-radius: var(--r-1);
+  padding: 0 var(--space-3);
+  transition: background var(--dur-snap) var(--ease),
+              border-color var(--dur-snap) var(--ease),
+              box-shadow var(--dur-snap) var(--ease);
+}
+/* Single-line bare controls snap to the field height; textarea keeps auto
+   height with symmetric padding (its content decides the box). */
+input[type="text"]:where(:not(.input):not(.ds-search-input)),
+input[type="email"]:where(:not(.input):not(.ds-search-input)),
+input[type="password"]:where(:not(.input):not(.ds-search-input)),
+input[type="number"]:where(:not(.input):not(.ds-search-input)),
+input[type="search"]:where(:not(.input):not(.ds-search-input)),
+input[type="url"]:where(:not(.input):not(.ds-search-input)),
+input[type="tel"]:where(:not(.input):not(.ds-search-input)),
+select:where(:not(.ds-select)) {
+  height: var(--field-height);
+}
+textarea:where(:not(.input)) { padding: var(--space-2) var(--space-3); min-height: calc(4 * 1.5em); }
+input[type="text"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="email"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="password"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="number"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="search"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="url"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+input[type="tel"]:where(:not(.input):not(.ds-search-input)):focus-visible,
+textarea:where(:not(.input)):focus-visible,
+select:where(:not(.ds-select)):focus-visible {
+  outline: none;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-chunk)) 0 var(--accent);
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="number"]::placeholder,
+input[type="search"]::placeholder,
+input[type="url"]::placeholder,
+textarea::placeholder {
+  color: var(--fg-3);
+}
+
+/* Long-form reading voice — quiet sans, generous line-height, capped to a
+   readable measure so a wide viewport never stretches body copy edge to
+   edge. Links use --accent-ink (never the bare fill, which is unreadable
+   as text). */
+.prose {
+  max-width: var(--measure);
+  font-family: var(--ff-body); font-size: var(--fs-body); line-height: 1.6;
+  color: var(--fg);
+}
+.prose p { margin: 0 0 var(--space-4) 0; }
+.prose p:last-child { margin-bottom: 0; }
+.prose a { color: var(--accent-ink); text-decoration-color: var(--rule-strong); text-underline-offset: 0.15em; }
+.prose a:visited { color: color-mix(in oklab, var(--accent-ink) 70%, var(--purple-2, var(--fg-3))); }
+.prose a:hover { text-decoration-color: currentColor; }
+
+/* Rubber-stamp motif — a bordered, uppercase, letter-spaced badge with a
+   slight built-in rotation (variants may override via inline transform for
+   a stronger tilt). Max 1 per page per the component's own caption. */
+.stamp {
+  display: inline-block;
+  font-family: var(--ff-mono); font-size: var(--fs-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: var(--space-1-5, var(--space-2)) var(--space-3);
+  border: 2px solid var(--fg);
+  border-radius: var(--r-hair);
+  color: var(--fg);
+  transform: rotate(-2deg);
+  white-space: nowrap;
+}
+/* border-color previously matched background exactly (var(--ink) on both) --
+   same class of bug as the colors-core "paper" swatch: a border drawn in the
+   identical color as its own fill is invisible, so the ink-toned stamp was
+   the one variant on the page missing its box outline. --paper reads as a
+   visible ring against the ink fill (paper-on-ink is this token pair's
+   whole reason to exist), matching every other .stamp variant's contrast. */
+.stamp.ink { background: var(--ink); border-color: var(--paper); color: var(--paper); }
+.stamp.acid { background: var(--accent); border-color: var(--accent-ink); color: var(--accent-ink); }
+.stamp.purple { border-color: var(--purple-2); color: var(--purple-2); }
+.stamp.mascot { border-color: var(--mascot); color: var(--mascot-deep); }
+
+/* Same rubber-stamp face, but a real interactive <button> — resets UA button
+   chrome so it isn't blue link text in a browser default box. */
+.btn-stamp {
+  display: inline-block; cursor: pointer;
+  font-family: var(--ff-mono); font-size: var(--fs-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: var(--space-1-5, var(--space-2)) var(--space-3);
+  border: 2px solid var(--fg);
+  border-radius: var(--r-hair);
+  background: transparent; color: var(--fg);
+  /* .stamp's own caption claims the rubber-stamp motif is "always rotated
+     slightly" -- .btn-stamp is the same visual face as an interactive
+     <button> (preview/stamps-lore.html's second row) and had no rotation at
+     all, breaking that claim for every stamp in that row. */
+  transform: rotate(-2deg);
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.btn-stamp:hover { background: var(--panel-hover); }
+.btn-stamp.acid { border-color: var(--accent-ink); color: var(--accent-ink); }
+.btn-stamp.acid:hover { background: var(--accent-tint); }
+.btn-stamp.purple { border-color: var(--purple-2); color: var(--purple-2); }
+.btn-stamp.mascot { border-color: var(--mascot); color: var(--mascot-deep); }
+
+/* Structural hairlines — "no boxes, no cards, structure comes from rules."
+   Three weights: .rule (default separator), .rule-double (major section
+   break), .rule-dotted (optional/skippable). Applied to a bare <hr>, which
+   otherwise falls back to the browser's default inset groove line. */
+hr.rule, hr.rule-double, hr.rule-dotted {
+  width: 100%; height: 0; border: 0;
+}
+hr.rule { border-top: 1px solid var(--rule); }
+hr.rule-double {
+  height: 3px;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+/* 1px was indistinguishable from .rule -- border-style:dotted needs enough
+   width to actually draw a gap between dots; below ~2px (esp. at DPRs where
+   1px resolves to a sub-pixel value like 0.8px) Chrome collapses it to a
+   solid line, which is exactly what preview/rules.html's report caught live. */
+hr.rule-dotted { border-top: 2px dotted var(--rule-strong); }
+
+/* Hairline-only text input — no full box, no permanent fill. A single bottom
+   rule that thickens to 2px on focus, matching the row/rule zero-border
+   aesthetic instead of a browser-default boxed field. A completely flat,
+   static hairline reads as a static label rather than an editable control
+   at a glance (no cue at rest, nothing on hover) -- the very faint permanent
+   wash plus a stronger hover tint below signal "this is a field" without
+   reverting to the boxed/filled chrome the hairline design deliberately
+   moved away from. */
+.input {
+  display: block; width: 100%; box-sizing: border-box;
+  /* appearance:none alone is not enough: with color-scheme:dark set on the
+     page (colors_and_type.css), Chrome still paints its native dark
+     form-control ring (an inset box-shadow) on <input> regardless of
+     appearance -- confirmed live via getComputedStyle showing a real
+     border-radius/box-shadow despite appearance computing to "none". Pin
+     color-scheme:normal on the input itself to opt it out of that native
+     dark styling, and zero box-shadow explicitly so nothing survives. */
+  appearance: none; -webkit-appearance: none;
+  color-scheme: normal;
+  border: 0; border-bottom: 1px solid var(--rule-strong);
+  border-radius: var(--r-0);
+  background: color-mix(in oklab, var(--fg) 2.5%, transparent);
+  box-shadow: none;
+  padding: var(--space-2) var(--space-1);
+  font: inherit; color: var(--fg);
+  transition: background var(--dur-snap) var(--ease), border-color var(--dur-snap) var(--ease);
+}
+.input:hover { background: color-mix(in oklab, var(--fg) 5%, transparent); }
+/* Touch floor for the BASE input. Several specific inputs already carried this
+   (ds-file-filter-input, ds-modal-input, ds-term-input) but the primitive every
+   form actually uses did not, so a plain field measured 34px under a coarse
+   pointer -- measured live on the settings and gm_inspector kits. The 16px
+   font-size is not cosmetic: below 16px iOS auto-zooms the viewport on focus,
+   and max() keeps it from ever shrinking under a reduced typescale. */
+@media (pointer: coarse) {
+  .input { min-height: 44px; font-size: max(16px, var(--fs-body)); }
+  textarea.input { min-height: 88px; }
+}
+.input::placeholder { color: var(--fg-3); }
+.input:focus-visible {
+  outline: none;
+  border-bottom-width: 2px;
+  border-bottom-color: var(--accent-ink);
+}
+
+/* Switch primitive (form-primitives.js Toggle) -- track + sliding knob.
+   Canonical definition lives in editor-primitives.css alongside the rest of
+   the .ds-check/.ds-radio/.ds-toggle form-primitive family (that file loads
+   AFTER this one in the build.mjs concat order, so a second .ds-toggle block
+   here was dead weight that silently lost the cascade while still disagreeing
+   on size/colors/knob-offset with the surviving rule — a duplicate-source-of-
+   -truth foot-gun, not an intentional override). Removed; see
+   editor-primitives.css's ".ds-toggle" block for track/knob/disabled/focus. */
+
+/* -- Field controls: themed base for TextField / Select / SearchInput --
+   Root fix: previously only `transition` was set, so themed apps got
+   browser-default white boxes in dark mode and labels collided with inputs
+   because `.ds-field` had no layout. */
+.ds-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 6px);
+  align-items: stretch;
+  width: 100%;
+}
+.ds-field-label {
+  font-size: var(--fs-sm, 14px);
+  font-weight: 500;
+  color: var(--fg-2);
+  line-height: 1.3;
+}
+.ds-field-required {
+  color: var(--danger);
+  font-weight: 700;
+  margin-left: 2px;
+}
+.ds-field-hint {
+  font-size: var(--fs-tiny, 13px);
+  color: var(--fg-3);
+  line-height: 1.35;
+}
+.ds-field-error {
+  color: var(--danger);
+  font-size: var(--fs-tiny, 13px);
+  font-weight: 500;
+}
+.ds-field-count {
+  font-size: var(--fs-tiny, 13px);
+  color: var(--fg-3);
+  align-self: flex-end;
+}
+
+/* :not(.input) guards, matching the bare-native-control pattern above: without
+   them this descendant selector's (0,1,1) specificity out-ranks the hairline
+   .input rule's (0,1,0), so any <input class="input"> inside .ds-field (every
+   settings-kit field) got this boxed tonal-fill chrome instead -- confirmed
+   live via getComputedStyle showing border-radius:8px + inset box-shadow on
+   settings kit inputs despite .input declaring border-radius:var(--r-0) and
+   box-shadow:none. */
+.ds-field input:not(.input),
+.ds-field textarea:not(.input),
+.ds-field .ds-select,
+.ds-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-2);
+  border: 0;
+  /* Editorial field — tonal fill with a printed baseline rule that thickens to
+     the electric lead on focus, instead of a uniform hairline box. */
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-rule)) 0 var(--rule-strong);
+  /* Tighter corner than the old --r-2 (14px): a dense pro control, not a soft
+     consumer box. Single-line controls snap to --field-height with h-only
+     padding so they align pixel-exact with buttons on the same --ctl-md rung. */
+  border-radius: var(--r-1);
+  height: var(--field-height);
+  padding: 0 var(--space-3);
+  transition: box-shadow var(--dur-snap) var(--ease), background var(--dur-snap) var(--ease);
+}
+/* textarea is multi-line: height is auto (min-height instead), keep symmetric
+   vertical padding so text doesn't sit flush to the top edge. */
+.ds-field textarea:not(.input) { height: auto; min-height: calc(4 * 1.5em); padding: var(--space-2) var(--space-3); resize: vertical; }
+
+/* Field size ladder (size prop on TextField/Select/SearchInput). md == base.
+   sm/lg retune height + h-padding + font off the --ctl-* ladder, matching the
+   button ladder so a form of mixed controls stays on one rhythm. */
+.ds-field--sm input:not(.input), .ds-field--sm .ds-select, .ds-field--sm .ds-search-input {
+  height: var(--ctl-sm); padding: 0 var(--space-2-5); font-size: var(--fs-tiny);
+}
+.ds-field--sm textarea:not(.input) { height: auto; padding: var(--space-1-75) var(--space-2-5); font-size: var(--fs-tiny); }
+.ds-field--lg input:not(.input), .ds-field--lg .ds-select, .ds-field--lg .ds-search-input {
+  height: var(--ctl-lg); padding: 0 var(--space-4); font-size: var(--fs-body);
+}
+.ds-field--lg textarea:not(.input) { height: auto; padding: var(--space-2-5) var(--space-4); font-size: var(--fs-body); }
+.ds-search-input::placeholder { color: var(--fg-3); }
+/* Only present when SearchInput is passed resultCount or has a value (clear
+   button) - transparent to any flex/grid layout the bare input previously
+   sat in directly. */
+.ds-search-input-wrap { display: contents; }
+/* Leading-icon slot, matching .app-search's icon placement in Topbar so the
+   two search surfaces read as one control family instead of icon-vs-no-icon. */
+.ds-search-field { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.ds-search-field .ds-search-icon {
+  position: absolute; left: var(--space-3);
+  display: inline-flex; pointer-events: none;
+  color: var(--fg-3); opacity: 0.6;
+}
+.ds-search-field .ds-search-input { padding-left: calc(var(--space-3) + 15px + var(--space-2)); }
+
+/* Visible clear (X) button for SearchInput - mirrors .ds-alert-dismiss's
+   ghost-icon treatment but sized to the kit's 44px touch-target floor
+   (app-shell.css already establishes this convention for .ds-file-check /
+   .ds-density-btn / .ds-upload-act etc). Positioned by the consumer's own
+   flex/grid context (ds-search-input-wrap is display:contents), so it simply
+   sits after the input in DOM order. */
+.ds-search-clear {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--fg-3);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r-1);
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.ds-search-clear:hover { background: var(--bg-2); color: var(--fg); }
+.ds-search-clear:focus-visible { outline: var(--focus-w) solid var(--focus-color); outline-offset: var(--focus-offset); }
+
+.ds-field input:not(.input):focus-visible,
+.ds-field textarea:not(.input):focus-visible,
+.ds-field .ds-select:focus-visible,
+.ds-search-input:focus-visible {
+  outline: none;
+  background: var(--bg);
+  /* Focus thickens the baseline to the lead accent — the printed-rule tell. */
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--rule),
+              inset 0 calc(-1 * var(--bw-chunk)) 0 var(--accent);
+}
+.ds-field input:not(.input):disabled,
+.ds-field textarea:not(.input):disabled,
+.ds-field .ds-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ds-field input:not(.input)[aria-invalid="true"],
+.ds-field textarea:not(.input)[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 var(--bw-hair, 1px) var(--danger);
+}
+
+/* Clear button for text inputs */
+input[type="text"]:not(:placeholder-shown) + .input-clear,
+input[type="email"]:not(:placeholder-shown) + .input-clear,
+input[type="password"]:not(:placeholder-shown) + .input-clear {
+  display: inline-flex;
+}
+
+.input-clear {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  cursor: pointer;
+  color: var(--fg-3);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin-right: 8px;
+  border-radius: var(--r-1);
+  transition: background var(--dur-snap) var(--ease), color var(--dur-snap) var(--ease);
+}
+.input-clear:hover {
+  background: var(--bg-2);
+  color: var(--fg);
+}
+
+/* ------------------------------------------------------------
+   Accessibility Enhancements
+   -------------------------------------------------------------- */
+
+/* Base focus-visible: 2px ring + 2px offset clears dark bg-3 surfaces (WCAG 1.4.11) */
+:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Enhanced focus-visible for all interactive elements */
+[role="button"]:focus-visible,
+[role="link"]:focus-visible,
+[role="tab"]:focus-visible,
+.row:focus-visible,
+.row[tabindex]:focus-visible {
+  outline: var(--focus-w) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Reduced motion preferences — scoped to the DS surface so it doesn't reach
+   into and neutralize the host document's own motion.
+   The !important flags here are LOAD-BEARING and must not be "cleaned up":
+   `.ds-247420 *` / `.app *` is only (0,1,0) — the universal selector adds
+   nothing — yet it has to defeat every animation/transition declaration in the
+   kit, many of which are strictly more specific. Concrete rules it would
+   otherwise lose to: `.ds-dropzone.dragover` (0,2,0, files.css),
+   `.ds-upload-bar.indeterminate .ds-upload-fill` (0,3,0, files.css),
+   `.list-item.drag-after::after` (0,2,1, this file). Raising this selector to
+   out-specify an open-ended set of future component rules is not possible, so
+   the flag is the only correct mechanism — this is a WCAG 2.3.3 guarantee,
+   not a stylistic preference. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-247420 *, .app * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* Kill the residual paint frame of looping skeleton/shimmer placeholders and
+     give reduced-motion users a steady placeholder fill instead.
+     Also load-bearing: `.skeleton` is (0,1,0) and must override
+     `.ds-session-row-skeleton .ds-skel` (0,2,0), which sets its own shimmer. */
+  .skeleton, .ds-skeleton, .ds-session-row-skeleton .ds-skel {
+    animation: none !important;
+    background: var(--bg-2) !important;
+  }
+}
+
+/* ------------------------------------------------------------
+   Performance
+   -------------------------------------------------------------- */
+
+/* Limit layout/style containment to self-contained components. `paint` is
+   intentionally omitted — it clips focus rings, tooltips and dropdowns that
+   emanate from a contained .row/.btn. */
+.panel, .row {
+  contain: layout style;
+}
+
+/* ------------------------------------------------------------
+   Mobile Touch Optimizations
+   -------------------------------------------------------------- */
+
+@media (hover: none) and (pointer: coarse) {
+  /* Mobile devices: larger touch targets, faster responses */
+  .btn, .btn-primary, .btn-ghost,
+  button, a.row, [role="button"],
+  .ds-icon-btn, .composer-btn {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 20px;
+  }
+  /* Icon buttons stay square — the padding bump above would distort them. */
+  .ds-icon-btn, .composer-btn { padding: 0; }
+
+  /* Remove hover effects on touch devices (use active instead) */
+  .btn:hover, .btn-primary:hover, .btn-ghost:hover {
+    background-color: inherit;
+  }
+
+  /* Momentum scrolling for iOS */
+  .app-side, .panel, .row {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Long-press feedback for drag-enabled items */
+  [draggable="true"], .draggable {
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* Touch floor also for coarse-pointer devices that report hover (hybrid
+   laptops/tablets with mice) — the block above requires hover:none too. */
+@media (pointer: coarse) {
+  .ds-icon-btn, .ds-icon-btn-xs, .ds-icon-btn-sm, .ds-icon-btn-base {
+    min-width: 44px; min-height: 44px;
+  }
+  .btn, .btn-primary, .btn-ghost,
+  .app-topbar nav a, .app-side a { min-height: 44px; }
+}
+
+/* ------------------------------------------------------------
+   Theme Transition Smoothness
+   -------------------------------------------------------------- */
+
+/* Scoped to the DS wrapper so the design system never reaches out and
+   animates the host document's html/body. */
+.ds-247420, .app {
+  transition: background-color var(--dur-base) var(--ease),
+              color var(--dur-base) var(--ease);
+}
+
+/* ------------------------------------------------------------
+   Empty State & Loading States
+   -------------------------------------------------------------- */
+
+/* Skeleton loading state */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-2) 0%,
+    var(--bg-3) 50%,
+    var(--bg-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-load 1.5s infinite;
+  border-radius: var(--r-2);
+}
+
+@keyframes skeleton-load {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-line { height: 12px; margin-bottom: 12px; }
+.skeleton-title { height: 24px; margin-bottom: 16px; width: 60%; }
+
+/* ------------------------------------------------------------
+   Toast Notification Styles
+   -------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--bg-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  padding: var(--space-3) var(--space-4);
+  max-width: 320px;
+  box-shadow: var(--shadow-overlay);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.toast-action {
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  color: var(--fg-0);
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-action:hover { background: var(--bg-3); }
+.toast-action:disabled { opacity: 0.6; cursor: default; }
+
+.toast-dismiss {
+  flex: none;
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  font-size: 1.1em;
+  line-height: 1;
+  padding: var(--space-1);
+  cursor: pointer;
+}
+.toast-dismiss:hover { color: var(--fg-0); }
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(400px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .toast { animation: toast-slide-in 0.3s ease-out; }
+}
+
+.toast.error { border-color: var(--warn); }
+.toast.success { border-color: var(--green-2); }
+/* --sun measures well under 3:1 against every app background (1.1-1.5:1) -
+   a border effectively invisible in light theme; --amber is the tuned sibling
+   warning tone already used for this exact severity elsewhere. */
+.toast.warning { border-color: var(--amber); }
+
+@media (max-width: 480px) {
+  .toast {
+    bottom: 16px; right: 16px; left: 16px;
+    max-width: none;
+  }
+}
+
+/* Stacking host for the imperative toast()/<Toast> component
+   (src/components/editor-primitives/toast.js). One fixed-position column;
+   individual toasts are appended/removed as siblings inside it rather than
+   each toast fixed-positioning itself, so more than one toast in flight
+   stacks instead of overlapping at the same bottom-right point. */
+.ds-ep-toast-host {
+  position: fixed; z-index: var(--z-toast);
+  bottom: 24px; right: 24px;
+  display: flex; flex-direction: column-reverse; gap: var(--space-2);
+  pointer-events: none;
+}
+.ds-ep-toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: var(--space-3);
+  background: var(--bg-2); color: var(--fg);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  padding: var(--space-3) var(--space-4);
+  max-width: 320px;
+  box-shadow: var(--shadow-overlay);
+  font-size: var(--fs-sm);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-ep-toast { animation: toast-slide-in 0.3s ease-out; }
+  .ds-ep-toast.leaving { animation: toast-slide-in 0.2s ease-in reverse; }
+}
+.ds-ep-toast.kind-error   { border-color: var(--danger, var(--warn)); }
+.ds-ep-toast.kind-success { border-color: var(--green-2); }
+.ds-ep-toast.kind-warning { border-color: var(--amber); }
+.ds-ep-toast-msg { flex: 1; }
+.ds-ep-toast-action {
+  flex-shrink: 0;
+  background: transparent; border: 0; color: var(--accent-ink);
+  font: inherit; font-weight: 600; cursor: pointer; padding: 0;
+}
+.ds-ep-toast-action:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  .ds-ep-toast-host { bottom: 16px; right: 16px; left: 16px; }
+  .ds-ep-toast { max-width: none; }
+}
