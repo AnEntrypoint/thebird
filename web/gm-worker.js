@@ -48,11 +48,13 @@ try {
   ]);
   const tools = createTools({ workspace: WORKSPACE, runDir, log: openLog(`${runDir}/log.jsonl`), background: false });
   let shell;
+  let shellReady;
   let cancelRequested = false;
+  const ensureShell = () => (shellReady ??= createShell({ cwd: WORKSPACE }).then((created) => (shell = created)));
   const overrides = {
     run_shell: async (args) => {
       if (args.background || hasBackgroundOperator(args.command)) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
-      shell ??= await createShell({ cwd: WORKSPACE });
+      await ensureShell();
       if (cancelRequested) return { ok: false, exitCode: 130, signal: null, output: 'cancelled\n' };
       return shell.run(args.command, { onOutput: (stdout, stderr) => postMessage({ output: stdout + stderr }) });
     },
@@ -63,7 +65,8 @@ try {
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
     if (data.complete !== undefined) {
-      postMessage({ id: data.id, ok: true, result: completions(data.complete, shell?.cwd() ?? WORKSPACE) });
+      const result = data.command ? (await ensureShell()).commands().filter((name) => name.startsWith(data.complete)) : completions(data.complete, shell?.cwd() ?? WORKSPACE);
+      postMessage({ id: data.id, ok: true, result });
       return;
     }
     if (data.query === 'cwd') {

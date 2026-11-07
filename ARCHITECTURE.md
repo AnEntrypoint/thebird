@@ -141,8 +141,9 @@ the running command and drops the queued lines.
 The prompt shows the shell's working directory. The shell reads it back with
 `pwd` after each run, and Tab completes relative to it. Relay mode shows the plain prompt.
 The terminal keeps history for the up and down arrows, in localStorage, and
-stores only the submitted command lines (see AGENTS.md). Tab completes the last
-word against the workspace tree, which the worker lists from the OPFS shim. A
+stores only the submitted command lines (see AGENTS.md). Tab completes the first word after `shell` against the command names the shell
+resolves (`compgen -c`, kept only where `command -v` succeeds), so a listed name runs.
+Otherwise Tab completes the last word against the workspace tree, which the worker lists from the OPFS shim. A
 unique match completes with a space or a slash, and several matches complete the
 common prefix or list the candidates. Relay mode has no completion either. Ctrl-C while a command runs
 cancels it through bashkit's `cancel()`, which takes effect between commands and

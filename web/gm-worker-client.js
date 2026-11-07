@@ -53,7 +53,7 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     cancel() {
       worker.postMessage({ cancel: true });
     },
-    complete: (prefix) => request({ complete: prefix }),
+    complete: (prefix, options = {}) => request({ complete: prefix, command: Boolean(options.command) }),
     cwd: () => request({ query: 'cwd' }),
     onOutput(sink) {
       outputSink = sink;

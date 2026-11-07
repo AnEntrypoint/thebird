@@ -39,6 +39,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
+  const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
   let status = 0;
   let running = false;
   let cancelled = false;
@@ -73,6 +74,9 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     },
     cwd() {
       return current;
+    },
+    commands() {
+      return commandNames;
     },
   };
 }

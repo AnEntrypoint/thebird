@@ -116,7 +116,8 @@ line.addEventListener('keydown', async (event) => {
   } else if (event.key === 'Tab' && client.complete) {
     event.preventDefault();
     const token = /\S*$/.exec(line.value)[0];
-    const matches = await client.complete(token);
+    const before = line.value.slice(0, line.value.length - token.length);
+    const matches = await client.complete(token, { command: /^shell\s+$/.test(before) });
     if (matches.length === 1) {
       line.value = line.value.slice(0, line.value.length - token.length) + matches[0] + (matches[0].endsWith('/') ? '' : ' ');
     } else if (matches.length > 1) {

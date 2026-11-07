@@ -357,6 +357,36 @@ if (fileExists(chrome)) {
     },
   });
   check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'shell echo kept-line' && reopenedHistory.out === '', JSON.stringify(recalledAfterReload));
+  const commandTab = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+      await type('shell pyth');
+      await press('Tab');
+      await settle();
+      commandTab.python = await value();
+      await evaluate("document.getElementById('line').value = ''");
+      await type('shell sqli');
+      await press('Tab');
+      await settle();
+      commandTab.sqlite = await value();
+    },
+  });
+  check('in-page terminal completes a command name in command position with Tab', commandTab.python === 'shell python3 ' && commandTab.sqlite === 'shell sqlite3 ', JSON.stringify(commandTab));
+  const completedRuns = await terminal([['run', 'shell mkdir -p notes'], ['run', 'shell sqlite3 notes/cmd.db "select 2+3"']]);
+  check('a command completed by name really runs in-page', /^5$/m.test(completedRuns.out), completedRuns.out.split('\n').slice(-2).join(' / ').slice(0, 120));
+  const listing = await terminal([], {
+    interact: async ({ type, press }) => {
+      await type('shell ');
+      await press('Tab');
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    },
+  });
+  const offeredLine = listing.out.split('\n').filter((line) => line.includes('python3') && line.includes('sqlite3') && line.includes('  ')).pop() ?? '';
+  const offered = offeredLine.split('  ').map((name) => name.trim()).filter(Boolean);
+  const commandTable = await terminal([['run', `shell for n in ${offered.map((name) => `'${name}'`).join(' ')}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-checked`]]);
+  check('every name Tab offers in command position resolves in-page, and the custom builtins are among them', offered.length > 200 && ['git', 'sqlite3', 'python3', 'curl', 'wget'].every((name) => offered.includes(name)) && /^all-checked$/m.test(commandTable.out) && !/^missing-/m.test(commandTable.out), `${offered.length} names; ` + commandTable.out.split('\n').filter((line) => /^(all-checked|missing)/.test(line)).join(' / ').slice(0, 160));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);
