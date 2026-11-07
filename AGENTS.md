@@ -64,4 +64,5 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Working rules
 
 - Use Conventional Commits.
+- Open, flaky: once, a witness run stalled for about 16 minutes after the streamed-output checks, in the terminal block that stores submitted lines. `scripts/browser-driver.mjs` `send` has no timeout, so a DevTools reply that never arrives blocks that await, and `waitFor` checks its deadline only between `evaluate` calls. The cause is not reproduced: the re-run finished with `WITNESS-EXIT 0` and 87 PASS / 0 FAIL. A bounded timeout on `send` is the likely fix, and it is not made because the cause is not confirmed.
 - Validation: `npm run check`, `npm run lint:comments`, `npm run lint:architecture`, and `npm run witness`. The witness drives headless Chromium through `scripts/browser-driver.mjs`; set `CHROME_BIN`. There is no test suite.
