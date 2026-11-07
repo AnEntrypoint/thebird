@@ -117,6 +117,7 @@ async function handle(req, res, gm, calls) {
     controller.abort();
     return sendJson(res, 200, { ok: true });
   }
+  if (url.pathname === '/cancel') return sendJson(res, 405, { ok: false, error: 'method not allowed' });
   if (req.method === 'GET') return serveStatic(url.pathname, res);
   return sendJson(res, 405, { ok: false, error: 'method not allowed' });
 }

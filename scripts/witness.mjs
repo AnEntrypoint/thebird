@@ -96,7 +96,7 @@ check('relay refuses paths outside src and web', (await fetch(relay.url + 'web//
 check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { method: 'POST', body: '{nope' })).status === 400);
 check('relay refuses a cancel for a call that is not in flight', (await fetch(relay.url + 'cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody' }) })).status === 404);
 check('relay rejects a malformed cancel body', (await fetch(relay.url + 'cancel', { method: 'POST', body: 'not json' })).status === 400);
-check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405);
+check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405 && (await fetch(relay.url + 'cancel')).status === 405);
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
