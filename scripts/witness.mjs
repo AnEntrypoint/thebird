@@ -627,7 +627,7 @@ check('in-page gate passes sources whose names match their hash', sourceCommit.i
 await relay.close();
 const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 60000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
-check('ARCHITECTURE.md claims have no static contradictions', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} static claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
+check('ARCHITECTURE.md and AGENTS.md claims have no static contradictions', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} static claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
 process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));
 process.on('exit', () => rmSync(ws, { recursive: true, force: true }));
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
