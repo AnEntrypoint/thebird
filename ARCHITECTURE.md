@@ -134,14 +134,18 @@ full copy it replaced. Only the last line of a traceback is reported, and
 printed output comes before it. The scheme is dropped from that text, because
 bashkit cuts error text at `//`.
 
-`pip` is not available in-page, and no package beyond the Pyodide core is
-vendored. The probe checked CORS headers: the Pyodide lock lists 357 packages,
-including micropip, and the jsDelivr CDN serves them with
-`Access-Control-Allow-Origin: *`; PyPI's index, JSON API and wheel files
-(`files.pythonhosted.org`) send the same header, and answer the preflight.
-Pure-Python wheels could therefore be fetched by the page. Compiled wheels run
-only if Pyodide has built them. Nothing in the page fetches packages yet, and
-the in-page install path is not built or witnessed.
+`pip install <package>...` runs in-page (`pipBuiltin` in `web/python-in-page.js`).
+It loads micropip 0.11.1 from the jsDelivr CDN as a wheel, pinned to the same
+Pyodide version (`v314.0.7`) as the vendored core, and micropip fetches pure
+Python wheels from PyPI (JSON API and `files.pythonhosted.org`, both send
+`Access-Control-Allow-Origin: *`). Nothing is vendored. Only plain names are
+accepted: version specifiers and URLs are refused. Names in the vendored
+Pyodide lock (`pyodide-lock.json`, 357 entries) are refused with a clear
+message, because micropip would try to load them from the vendored index,
+which has no wheels. Installed packages live in Pyodide's memory for the page
+session, and are not written to OPFS. The witness checks that micropip's
+wheel name matches the lock, that a pure package installs and imports in the
+same page, and that refusals are readable and carry no URL.
 
 `which`, `command -v` and `type` are shell functions defined at shell start
 (`web/shell-lookup.js`). They answer from bashkit's own `builtin command -v` and
