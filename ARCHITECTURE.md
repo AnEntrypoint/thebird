@@ -91,7 +91,25 @@ dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
 gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
 sandbox values, not the host's.
 
-Not covered: node, python3, sqlite3, and any host binary (exit 127).
+Not covered: node, python3, and any host binary (exit 127). `sqlite3` runs
+in-page, as described below.
+
+`sqlite3 <database> <sql>` is a custom builtin (`web/sqlite-in-page.js`) over
+sql.js 1.15.2 (MIT, `web/vendor/sqljs/`, licence `web/vendor/SQLJS-LICENSE`).
+The database is a file on the OPFS tree. It is read at the start of each call
+and written back at the end, so it survives a browser restart. Output is
+sqlite's list mode, with `|` between columns. bashkit ships its own `sqlite3`
+that fails in this build, but a custom builtin overrides it.
+
+Relay-only items, ranked by what can run in the browser:
+
+| Item | In-page option | Status |
+| `sqlite3` | sql.js 1.15.2, MIT, about 670 KB of wasm | done, witnessed in headless Chromium |
+| `python3` | Pyodide, MPL-2.0, npm package about 14 MB unpacked | not implemented; next candidate |
+| `node` | none verified: WebContainers is proprietary, and a JS subset is not Node | stays relay-only |
+
+`shell` passes its text to bashkit raw, so quotes and parentheses survive. The
+runner used to strip quotes from `shell` lines.
 `curl` and `wget` report "network access not configured". Background jobs
 (`job start`) need the relay. `head` after an early-closing pipe needs the
 async `execute()` path, which the shell uses.

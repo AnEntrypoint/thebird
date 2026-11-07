@@ -75,6 +75,7 @@ export function createRunner(api) {
     let target = spec.api;
     const rawCompat = ['memory', 'cron', 'projects', 'config'].includes(target);
     let args = rawCompat ? argv : commandArgs(spec, argv);
+    if (target === 'shell') args = { command: line.trim().slice(name.length).trim() };
     if (target === 'job') {
       const [op, job, ...rest] = argv;
       const verb = { start: 'job_start', status: 'job_status', stop: 'job_stop' }[op];

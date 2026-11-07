@@ -57,6 +57,8 @@ const run = createRunner(api);
 await run('read "my file.txt" 0 20');
 await run('gm list_dir {"path":".","limit":10}');
 check('runner keeps quoted paths and JSON arguments', calls[0][1][0].path === 'my file.txt' && calls[1][1][1].limit === 10);
+await run('shell sqlite3 app.db "select count(*) from t" \'x y\'');
+check('runner passes shell commands to gm with their quotes and parentheses', calls.at(-1)[1][0].command === 'sqlite3 app.db "select count(*) from t" \'x y\'', calls.at(-1)[1][0].command);
 
 const fakeGm = { workspace: '/w', gmHome: '/g', runDir: '/r', call: async (verb, args) => ({ ok: true, verb, args }), close: async () => {} };
 const lib = createApi(fakeGm);
@@ -138,6 +140,15 @@ if (fileExists(chrome)) {
   check('in-page git commit refuses broken syntax and non-ASCII and names both', broken.out.includes('commit refused by the in-page gate') && broken.out.includes('syntax:') && broken.out.includes('ascii:'), broken.out.split('\n').find((line) => line.includes('refused by the in-page gate'))?.slice(0, 160) ?? 'no refusal line');
   const job = await terminal([['run', 'job start bg echo x']]);
   check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
+  const sqlite = await terminal([
+    ['run', 'shell mkdir -p notes'],
+    ['run', 'shell sqlite3 notes/app.db "create table t(x)"'],
+    ['run', 'shell sqlite3 notes/app.db "insert into t values (1),(2),(3)"'],
+    ['run', 'shell sqlite3 notes/app.db "select sum(x) from t"'],
+  ]);
+  check('in-page sqlite3 creates a database and answers a query through sql.js', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  const reopened = await terminal([['run', 'shell sqlite3 notes/app.db "select count(*) from t"']]);
+  check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
   process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
   const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=witness', '-c', 'user.email=witness@localhost', ...args], { cwd, encoding: 'utf8' }).trim();

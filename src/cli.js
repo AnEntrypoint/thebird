@@ -32,7 +32,7 @@ export async function runCli({ argv = process.argv.slice(2), interactive = false
     if (rest.length === 0 && !interactive) {
       stdout.write('thebird — gm-backed CLI\n\n' + helpText() + '\n');
     } else if (rest.length > 0) {
-      const line = rest.map(quoteArg).join(' ');
+      const line = /^(shell|exec)$/.test(rest[0]) ? rest.join(' ') : rest.map(quoteArg).join(' ');
       try {
         const result = await run(line);
         if (result && result.exit !== true) stdout.write(String(result) + '\n');
