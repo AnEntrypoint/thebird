@@ -57,8 +57,8 @@ node bin/thebird-relay.js --workspace /path/to/project
 
 By default the page runs gm in a Web Worker, over files kept in the browser's
 OPFS storage, so no host process is needed for file, memory, search and PRD
-commands. The shell runs in-page, and so do `git init`, `add`, `commit`, `status`,
-`log` and `diff`. Git remotes, branches, checkout and job commands need the relay. Add
+commands. The shell runs in-page, and so do `git init`, `add`, `status`, `log` and
+`diff`. Commits, git remotes, branches, checkout and job commands need the relay. Add
 `?engine=relay` to send gm calls to the relay on this machine, which runs them
 as your user. The relay binds 127.0.0.1, so do not expose its port. See
 `ARCHITECTURE.md` for the browser gaps.

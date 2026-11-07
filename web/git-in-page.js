@@ -3,8 +3,8 @@ import * as fsp from './shims/fs-promises.js';
 
 const DIR = '/workspace';
 const fs = { promises: fsp };
-const AUTHOR = { name: 'thebird', email: 'thebird@localhost' };
 const MAX_DIFF_CELLS = 4000000;
+const COMMIT_REFUSED = 'git commit needs the relay (?engine=relay): gm\'s commit gate runs Node syntax and smoke checks the browser cannot run, so the in-page shell does not commit';
 
 let library;
 const isomorphic = async () => {
@@ -35,7 +35,13 @@ async function status() {
 }
 
 async function log(count = 20) {
-  const commits = await (await isomorphic()).log({ fs, dir: DIR, depth: Math.max(1, Number(count) || 20) });
+  let commits;
+  try {
+    commits = await (await isomorphic()).log({ fs, dir: DIR, depth: Math.max(1, Number(count) || 20) });
+  } catch (err) {
+    if (err.code === 'NotFoundError') throw new Error('no commits yet');
+    throw err;
+  }
   return commits.map(({ oid, commit }) => `${oid.slice(0, 7)} ${commit.message.split('\n')[0]}`).join('\n');
 }
 
@@ -93,12 +99,6 @@ async function add(paths) {
   return `staged ${count} path${count === 1 ? '' : 's'}`;
 }
 
-async function commit(message) {
-  if (!message) throw new Error('commit needs -m <message>');
-  const oid = await (await isomorphic()).commit({ fs, dir: DIR, message, author: AUTHOR });
-  return `committed ${oid.slice(0, 7)}`;
-}
-
 async function init() {
   await (await isomorphic()).init({ fs, dir: DIR });
   return `initialized empty repository in ${DIR}/.git/`;
@@ -113,6 +113,7 @@ export const gitVerbs = {
   git_log: (args) => (args.path === undefined ? verb(() => log(args.count)) : failure('path-limited log needs the relay (?engine=relay)')),
   git_diff: (args) => (args.staged || args.paths ? failure('staged and path-limited diffs need the relay (?engine=relay)') : verb(diff)),
   git_add: (args) => (args.paths?.length ? verb(() => add(args.paths)) : failure('git_add needs explicit paths in the browser shell')),
+  git_commit: () => failure(COMMIT_REFUSED),
 };
 
 export async function gitBuiltin(argv) {
@@ -123,9 +124,9 @@ export async function gitBuiltin(argv) {
     log: () => log(valueOf(rest, '-n')),
     diff: () => diff(),
     add: () => add(rest),
-    commit: () => commit(valueOf(rest, '-m')),
+    commit: () => Promise.reject(new Error(COMMIT_REFUSED)),
   };
   const task = tasks[sub];
-  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add and commit; push, fetch, branch and checkout need the relay`);
+  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff and add; commit needs the relay, and push, fetch, branch and checkout need the relay too`);
   return task();
 }
