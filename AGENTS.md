@@ -46,6 +46,8 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Hosting
 
 - `.github/workflows/pages.yml` builds `_site/` with `scripts/build-pages.mjs` on each push to `main` and deploys it to GitHub Pages. The page needs no cross-origin isolation headers, and the witness runs the built site without them.
+- The build job has `contents: read` only. The deploy job alone has `pages: write` and `id-token: write`. The witness checks both blocks.
+- Open, not done: the actions are referenced by major tag (`@v4`), not by commit SHA. A tag can be moved, and the deploy job runs with `pages: write` and `id-token: write`, so pinning would close that path. Pinning needs each SHA resolved against its release and checked before it is written into the workflow, so it is left for a separate change.
 - Do not add a root-absolute path such as `/web/...` to browser code. The Pages site sits under `/thebird/`, so every URL in `web/` is relative to the file that holds it.
 
 ## Commit gate

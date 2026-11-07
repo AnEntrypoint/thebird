@@ -495,6 +495,16 @@ const comments = spawnSync(process.execPath, [join(root, 'scripts', 'lint-commen
 check('repo-owned code has no comments (scripts/lint-comments.mjs)', comments.status === 0 && /repo-owned files checked: 0 comments;/.test(comments.stdout), comments.stdout.split('\n').filter((line) => line.startsWith('FAIL')).slice(0, 3).join('; ') || comments.stdout.trim().split('\n').at(-1));
 const vendoredLines = comments.stdout.split('\n').filter((line) => line.startsWith('VENDORED'));
 check('every vendored bundle with comments has a provenance witness (licence grant and upstream name)', comments.status === 0 && vendoredLines.length > 0 && vendoredLines.every((line) => line.includes('(MIT grant), upstream named')) && !comments.stdout.includes('FAIL'), vendoredLines.map((line) => line.split(':')[0].replace('VENDORED ', '')).join(', ') || 'no vendored bundle reported');
+const workflow = readFileSync(join(root, '.github', 'workflows', 'pages.yml'), 'utf8');
+const scopesIn = (text, indent) => Object.fromEntries([...text.matchAll(new RegExp(`^ {${indent}}([a-z-]+): (read|write)$`, 'gm'))].map((m) => [m[1], m[2]]));
+const jobsSection = workflow.slice(workflow.indexOf('\njobs:') + 1);
+const jobHeaders = [...jobsSection.matchAll(/^ {2}([a-z]+):\n/gm)];
+const jobBlocks = Object.fromEntries(jobHeaders.map((m, i) => [m[1], jobsSection.slice(m.index + m[0].length, jobHeaders[i + 1]?.index ?? jobsSection.length)]));
+const topScopes = scopesIn(workflow.slice(0, workflow.indexOf('\njobs:')), 2);
+const buildScopes = scopesIn(jobBlocks.build ?? '', 6);
+const deployScopes = scopesIn(jobBlocks.deploy ?? '', 6);
+const sortedScopes = (scopes) => JSON.stringify(Object.entries(scopes).sort());
+check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exitCode = failures ? 1 : 0;
