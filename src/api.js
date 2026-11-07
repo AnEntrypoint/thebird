@@ -44,6 +44,16 @@ const METHODS = {
 };
 
 const MEMORY_READS = new Set(['search', 'get', 'read', 'lookup', 'find']);
+const MEMORY_WRITES = new Set(['write', 'set', 'put', 'store']);
+
+export function asciiText(text) {
+  return text.replace(/[^\x00-\x7f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+export async function sourceIdOf(text) {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
 
 export function joinPath(base, name) {
   const parts = (name.startsWith('/') ? name : base + '/' + name).split('/');
@@ -60,11 +70,15 @@ export function createApi(gm) {
   const api = {};
   for (const [name, verb] of Object.entries(METHODS)) api[name] = (args = {}) => gm.call(verb, args);
 
-  api.memory = (action, key) => {
-    if (action !== undefined && !MEMORY_READS.has(action)) {
-      throw new Error('memory ' + action + ' is not mapped; write wiki pages with `gm wiki_write <json>` (needs sources and claims)');
-    }
-    return gm.call('wiki_search', { query: String(key ?? ''), k: 5 });
+  api.memory = async (action, key, value) => {
+    if (action === undefined || MEMORY_READS.has(action)) return gm.call('wiki_search', { query: String(key ?? ''), k: 5 });
+    if (!MEMORY_WRITES.has(action)) throw new Error('memory ' + action + ' is not mapped; use memory write <key> <value> or memory search <query>');
+    if (value === undefined) throw new Error('memory write needs a key and a value');
+    const body = asciiText(String(value));
+    const id = await sourceIdOf(body);
+    await gm.call('write_file', { path: 'sources/' + id + '.txt', content: body });
+    const summary = body.split('\n')[0].trim().slice(0, 80) || String(key);
+    return gm.call('wiki_write', { page: String(key), title: String(key), body, summary, sources: [id] });
   };
   api.chat = (prompt) => gm.call('search', { query: String(prompt ?? ''), k: 5 });
   api.delegate = api.chat;

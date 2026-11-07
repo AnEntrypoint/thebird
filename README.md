@@ -34,6 +34,8 @@ node bin/thebird.js --workspace /path/to/project read package.json 0 20
 node bin/thebird.js grep "createGmClient" src
 node bin/thebird.js search "dispatch through gm"
 node bin/thebird.js shell "node --version"
+node bin/thebird.js memory write house-rule "Keep the bird quiet near the lake"
+node bin/thebird.js memory search house-rule
 node bin/thebird.js gm list_dir '{"path":".","limit":10}'
 node bin/thebird.js -i
 ```
