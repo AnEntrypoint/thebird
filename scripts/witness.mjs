@@ -506,18 +506,48 @@ const deployScopes = scopesIn(jobBlocks.deploy ?? '', 6);
 const sortedScopes = (scopes) => JSON.stringify(Object.entries(scopes).sort());
 const usesRefs = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 check('every action in pages.yml is pinned to a full 40-hex commit SHA', usesRefs.length > 0 && usesRefs.every((ref) => /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(ref)), usesRefs.join(' '));
-const pinned = [...workflow.matchAll(/uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40})/g)].map((m) => ({ action: m[1], sha: m[2] }));
-const recorded = [...readFileSync(join(root, 'AGENTS.md'), 'utf8').matchAll(/(actions\/[\w.-]+) `([0-9a-f]{40})` \((v\d+)\)/g)].map((m) => ({ action: m[1], sha: m[2], version: m[3] }));
-const resolveTag = (action, version) => {
+const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+const pinnedUses = (text) => [...text.matchAll(/uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40})/g)].map((m) => ({ action: m[1], sha: m[2] }));
+const recordedPins = (text) => [...text.matchAll(/(actions\/[\w.-]+) `([0-9a-f]{40})` \((v\d+)\)/g)].map((m) => ({ action: m[1], sha: m[2], version: m[3] }));
+const pinMismatches = (workflowText, agentsText) => {
+  const pins = pinnedUses(workflowText);
+  const rows = recordedPins(agentsText);
+  const found = [];
+  if (pins.length === 0 || rows.length !== pins.length) found.push(`count pinned=${pins.length} recorded=${rows.length}`);
+  for (const pin of pins) if (!rows.some((row) => row.action === pin.action && row.sha === pin.sha)) found.push(`${pin.action}@${pin.sha.slice(0, 7)} is not recorded in AGENTS.md`);
+  for (const row of rows) if (!pins.some((pin) => pin.action === row.action && pin.sha === row.sha)) found.push(`${row.action} ${row.sha.slice(0, 7)} (${row.version}) is not used in pages.yml`);
+  return found;
+};
+const localMismatches = pinMismatches(workflow, agents);
+check('pages.yml SHAs match the AGENTS.md Hosting mapping (local, no network)', localMismatches.length === 0, localMismatches.length ? `mismatch: ${localMismatches.join('; ')}` : `${pinnedUses(workflow).length} pins match`);
+const firstRow = recordedPins(agents)[0];
+const flipped = (sha) => (sha[0] === '0' ? '1' : '0') + sha.slice(1);
+const desyncedMapping = agents.replace(firstRow.sha, flipped(firstRow.sha));
+const desyncedWorkflow = workflow.replace(firstRow.sha, flipped(firstRow.sha));
+const caughtMapping = pinMismatches(workflow, desyncedMapping);
+const caughtWorkflow = pinMismatches(desyncedWorkflow, agents);
+check('negative witness: a desynced SHA in either the mapping or pages.yml is caught by the local check', desyncedMapping !== agents && desyncedWorkflow !== workflow && caughtMapping.length > 0 && caughtWorkflow.length > 0, `mapping caught: ${caughtMapping[0] ?? 'none'} | workflow caught: ${caughtWorkflow[0] ?? 'none'}`);
+const lookupTag = (action, version) => {
+  let reason = 'gh did not run';
   for (let attempt = 0; attempt < 3; attempt++) {
     const out = spawnSync('gh', ['api', `repos/${action}/git/ref/tags/${version}`, '-q', '.object.sha'], { encoding: 'utf8', timeout: 30000 });
-    if (out.status === 0) return out.stdout.trim();
+    if (out.status === 0) return { resolved: out.stdout.trim() };
+    reason = (out.stderr || out.error?.message || 'gh failed').trim().split('\n')[0];
+    if (/HTTP 404/.test(reason)) return { missing: reason };
   }
-  return null;
+  return { unavailable: reason };
 };
-const tagged = recorded.map((row) => ({ ...row, resolved: resolveTag(row.action, row.version) }));
-const drift = tagged.filter((row) => row.resolved !== row.sha || !pinned.some((p) => p.action === row.action && p.sha === row.sha));
-check('every pages.yml action SHA is the commit its AGENTS.md tag resolves to on GitHub', pinned.length > 0 && recorded.length === pinned.length && drift.length === 0, drift.length ? `drift: ${JSON.stringify(drift)}` : tagged.map((row) => `${row.action}@${row.version}=${row.resolved?.slice(0, 7)}`).join(' '));
+const remote = recordedPins(agents).map((row) => ({ ...row, ...lookupTag(row.action, row.version) }));
+const moved = remote.filter((row) => row.resolved && row.resolved !== row.sha);
+const missingTags = remote.filter((row) => row.missing);
+const unavailable = remote.filter((row) => row.unavailable);
+if (moved.length || missingTags.length) {
+  check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', false, `drift: ${[...moved.map((row) => `${row.action}@${row.version} is ${row.resolved.slice(0, 7)}, pinned ${row.sha.slice(0, 7)}`), ...missingTags.map((row) => `${row.action}@${row.version} ${row.missing}`)].join('; ')}`);
+} else if (unavailable.length) {
+  console.log(`UNVERIFIED every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh): network-unavailable — ${unavailable[0].unavailable}`);
+} else {
+  check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', true, remote.map((row) => `${row.action}@${row.version}=${row.resolved.slice(0, 7)}`).join(' '));
+}
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
