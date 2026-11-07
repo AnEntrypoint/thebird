@@ -153,6 +153,9 @@ if (fileExists(chrome)) {
     ['run', 'shell echo redir-ok 2>&1'],
     ['run', 'shell echo "quoted & kept"'],
   ]);
+  const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
+  const notes = emulated.out.split('in-page emulations').length - 1;
+  check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);
   check('in-page bash refuses a bare & and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs need the relay') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
   const sqlite = await terminal([
     ['run', 'shell mkdir -p notes'],

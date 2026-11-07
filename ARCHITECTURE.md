@@ -89,7 +89,8 @@ commands: echo, printf, test, seq, sed, awk, grep, sort, uniq, wc, head, tail,
 cut, tr, find, xargs, tee, ls, cp, mv, rm, mkdir, touch, cat, basename,
 dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
 gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
-sandbox values, not the host's.
+sandbox values, not the host's. When a command names `uname`, `whoami`,
+`hostname`, `id`, `ps` or `kill`, the in-page shell appends a note saying so.
 
 Not covered: node and any host binary (exit 127). `sqlite3` and `python3` run
 in-page, as described below.

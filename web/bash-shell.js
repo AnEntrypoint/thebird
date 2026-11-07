@@ -5,6 +5,8 @@ import { sqliteBuiltin } from './sqlite-in-page.js';
 import { pythonBuiltin } from './python-in-page.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
+const EMULATED = /\b(uname|whoami|hostname|id|ps|kill)\b/;
+const EMULATION_NOTE = 'note: uname, whoami, hostname, id, ps and kill are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
 
 export function hasBackgroundOperator(command) {
   let quote = null;
@@ -40,7 +42,8 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
       const result = await bash.execute(restore + command);
       status = result.exitCode;
-      return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr };
+      const note = EMULATED.test(command) ? withNewline(EMULATION_NOTE) : '';
+      return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr + note };
     },
   };
 }
