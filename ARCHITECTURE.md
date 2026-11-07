@@ -36,7 +36,8 @@ Measured in headless Chromium (`npm run witness`):
 | `shell` (bash builtins and pipelines, see below) | runs in-page through bashkit |
 | `git init`, `add`, `status`, `log`, `diff` (shell, and gm `git_status`, `git_log`, `git_diff`, `git_add`) | works in-page through isomorphic-git over the OPFS tree |
 | `git commit` (shell and gm `git_commit`) | runs the in-page gate (acorn syntax, ASCII, docs paths, scratch round trip), then commits as lanmower; refuses with the failing check names |
-| `git push/fetch/pull/branch/checkout`, `job start` | need the relay (`?engine=relay`) |
+| `git push/fetch/pull`, `job start` | need the relay (`?engine=relay`) |
+| `git branch`, `git checkout` (local branches) | in-page through isomorphic-git |
 | `fetch` | fails for hosts without CORS headers (COEP `require-corp`) |
 
 Child-process call sites in gm (from `import ... from 'node:child_process'`):
@@ -60,8 +61,9 @@ Known gaps in the browser shims:
 - Writes are write-behind, so each tool call is durable once it returns.
 - One worker, one writer, and the whole tree is held in memory.
 - `AsyncLocalStorage` only holds context for synchronous code.
-- In-page git has no branches, remotes, checkout or stash. `diff` compares the
-  working tree with HEAD and prints no hunk headers.
+- In-page git has local branches and checkout (`branch`, `checkout`,
+  `checkout -b`, through isomorphic-git), but no remotes, stash or path
+  checkout. `diff` compares the working tree with HEAD and prints no hunk headers.
 - The in-page commit gate (`web/commit-gate.js`) is not gm's gate. It runs the
   syntax check with vendored acorn, the ASCII check, the docs path check for
   README, AGENTS, ARCHITECTURE and DESIGN, and a scratch round trip whose blob

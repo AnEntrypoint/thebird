@@ -138,6 +138,27 @@ if (fileExists(chrome)) {
   const committedSha = repo.out.match(/committed ([0-9a-f]{7})/)?.[1];
   const headSha = repo.out.match(/^([0-9a-f]{7}) first$/m)?.[1];
   check('in-page git commit runs the gate and sets HEAD', repo.out.includes('gate smoke:') && repo.out.includes('gate syntax:') && repo.out.includes('not run in-page') && committedSha !== undefined && committedSha === headSha, `committed ${committedSha} / log HEAD ${headSha}`);
+  const branchOne = await terminal([
+    ['run', 'shell git branch'],
+    ['run', 'shell git branch feature-x'],
+    ['run', 'shell git checkout feature-x'],
+    ['run', 'shell git status'],
+    ['run', 'shell echo branch-change > notes/a.txt'],
+    ['run', 'shell git add notes/a.txt'],
+    ['run', 'shell git commit -m branch-change'],
+    ['run', 'shell git branch'],
+  ]);
+  const original = branchOne.out.match(/^\* (\S+)$/m)?.[1];
+  check('in-page git lists branches, creates one and switches to it', original !== undefined && branchOne.out.includes('created branch feature-x') && branchOne.out.includes('switched to feature-x') && /^## feature-x$/m.test(branchOne.out) && /^\* feature-x$/m.test(branchOne.out), `original ${original}`);
+  const branchTwo = await terminal([
+    ['run', `shell git checkout ${original ?? 'missing'}`],
+    ['run', 'shell cat notes/a.txt'],
+    ['run', 'shell git status'],
+    ['run', 'shell git checkout no-such-branch'],
+    ['run', 'shell git branch'],
+  ]);
+  check('in-page git checkout restores the working tree of the branch it returns to', original !== undefined && branchTwo.out.includes(`switched to ${original}`) && /^one$/m.test(branchTwo.out) && !/^branch-change$/m.test(branchTwo.out) && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').slice(0, 4).join(' / ').slice(0, 160));
+  check('in-page git checkout refuses an unknown branch and leaves HEAD where it was', /^git: Could not find .*no-such-branch/m.test(branchTwo.out) &&!branchTwo.out.includes('switched to no-such-branch') && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').find((line) => line.includes('no-such-branch') && !line.startsWith('thebird>'))?.slice(0, 160) ?? 'no refusal line');
   const broken = await terminal([
     ['run', 'shell mkdir -p notes'],
     ['run', 'shell git init'],

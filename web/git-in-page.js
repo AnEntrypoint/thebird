@@ -105,6 +105,27 @@ async function init() {
   return `initialized empty repository in ${DIR}/.git/`;
 }
 
+async function branches() {
+  const lib = await isomorphic();
+  const current = await lib.currentBranch({ fs, dir: DIR });
+  return (await lib.listBranches({ fs, dir: DIR })).map((name) => `${name === current ? '*' : ' '} ${name}`).join('\n');
+}
+
+async function createBranch(name) {
+  await (await isomorphic()).branch({ fs, dir: DIR, ref: name });
+  return `created branch ${name}`;
+}
+
+async function checkout(args) {
+  const create = args[0] === '-b';
+  const name = create ? args[1] : args[0];
+  if (!name || args.length !== (create ? 2 : 1)) throw new Error('checkout takes one branch name, or -b <name>; paths and other flags need the relay (?engine=relay)');
+  const lib = await isomorphic();
+  if (create) await lib.branch({ fs, dir: DIR, ref: name });
+  await lib.checkout({ fs, dir: DIR, ref: name });
+  return `switched to ${name}`;
+}
+
 async function commit(message) {
   if (!message) throw new Error('commit needs -m <message>');
   const lib = await isomorphic();
@@ -147,8 +168,14 @@ export async function gitBuiltin(argv) {
     diff: () => diff(),
     add: () => add(rest),
     commit: () => commit(valueOf(rest, '-m')),
+    branch: () => {
+      if (rest.length === 0) return branches();
+      if (rest[0].startsWith('-') || rest.length > 1) throw new Error('branch flags and multiple names need the relay (?engine=relay)');
+      return createBranch(rest[0]);
+    },
+    checkout: () => checkout(rest),
   };
   const task = tasks[sub];
-  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add and commit; push, fetch, branch and checkout need the relay`);
+  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add, commit, and local branch and checkout; push, fetch and pull need the relay`);
   return task();
 }
