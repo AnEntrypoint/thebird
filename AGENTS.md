@@ -32,7 +32,8 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   does not need the relay, except for loading the static files. `?engine=relay`
   sends gm calls to the relay on the host instead.
 - The browser terminal (relay mode) runs in a page served by the relay. Its gm calls go
-  to the relay over same-origin HTTP (`GET /meta`, `POST /call`), so shell,
+  to the relay over same-origin HTTP (`GET /meta`, `POST /call`, and `POST /cancel`
+  to abort a `/call` by its id), so shell,
   git, jobs and filesystem run on the host. The relay binds 127.0.0.1 by
   default, runs commands as the user, and answers only JSON POSTs, which a
   cross-origin page cannot send without a CORS preflight the relay does not

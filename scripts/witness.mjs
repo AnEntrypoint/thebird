@@ -94,6 +94,9 @@ check('relay serves the browser terminal page', (await fetch(relay.url)).status 
 check('relay serves src and web files', (await fetch(relay.url + 'src/runner.js')).status === 200 && (await fetch(relay.url + 'web/terminal.js')).status === 200);
 check('relay refuses paths outside src and web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'src/../package.json')).status === 404);
 check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { method: 'POST', body: '{nope' })).status === 400);
+check('relay refuses a cancel for a call that is not in flight', (await fetch(relay.url + 'cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody' }) })).status === 404);
+check('relay rejects a malformed cancel body', (await fetch(relay.url + 'cancel', { method: 'POST', body: 'not json' })).status === 400);
+check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405);
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
@@ -130,6 +133,23 @@ if (fileExists(chrome)) {
   ]);
   check('in-page curl refuses a host that sends no CORS headers, and the shell goes on', refused.out.includes(`could not fetch from 127.0.0.1:${plainPort}`) && refused.out.includes('CORS') && /^after-refusal$/m.test(refused.out) && !/^plain-host-hello$/m.test(refused.out), refused.out.split('\n').find((line) => line.includes('could not fetch'))?.slice(0, 160) ?? 'no refusal line');
   for (const host of [corsHost, plainHost]) host.close();
+  const relayCancel = {};
+  const relayInterrupted = await terminal([['engine', 'relay']], {
+    interact: async ({ type, press, waitFor }) => {
+      await type('shell for i in $(seq 1 200); do sleep 0.1371; done');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy === 'true'", 20000);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const started = Date.now();
+      await press('c', { ctrl: true });
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+      relayCancel.elapsed = Date.now() - started;
+      await type('shell echo after-relay-cancel');
+      await press('Enter');
+      await waitFor("/^after-relay-cancel$/m.test(document.getElementById('out').textContent)", 20000);
+    },
+  });
+  check('relay Ctrl-C cancels a running host command in about a second and the shell carries on', relayInterrupted.out.includes('^C') && relayInterrupted.out.includes('cancelled by the host') && relayCancel.elapsed < 10000 && /^after-relay-cancel$/m.test(relayInterrupted.out), `cancel took ${relayCancel.elapsed} ms`);
   const relayNode = await terminal([['engine', 'relay'], ['run', 'shell node -v']]);
   check('relay mode runs the host node, which the in-page shell cannot', relayNode.engine === 'ready' && /^v\d+\.\d+\.\d+$/m.test(relayNode.out), relayNode.out.split('\n').find((line) => line.startsWith('v')) ?? relayNode.out.slice(0, 140));
   const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);

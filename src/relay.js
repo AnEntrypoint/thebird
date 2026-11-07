@@ -77,7 +77,7 @@ async function serveGm(pathname, res, gmHome) {
   }
 }
 
-async function handle(req, res, gm) {
+async function handle(req, res, gm, calls) {
   const url = new URL(req.url, 'http://relay');
   if (req.method === 'GET' && (url.pathname.startsWith('/gm/') || url.pathname.startsWith('/gm-raw/'))) {
     return serveGm(url.pathname, res, gm.gmHome);
@@ -93,12 +93,29 @@ async function handle(req, res, gm) {
       return sendJson(res, 400, { ok: false, error: 'request body must be JSON' });
     }
     if (typeof request.verb !== 'string') return sendJson(res, 400, { ok: false, error: 'verb must be a string' });
+    const controller = new AbortController();
+    const id = typeof request.id === 'string' ? request.id : undefined;
+    if (id !== undefined) calls.set(id, controller);
     try {
-      const result = await gm.call(request.verb, request.args ?? {});
+      const result = await gm.call(request.verb, request.args ?? {}, { signal: controller.signal });
       return sendJson(res, 200, { ok: true, result });
     } catch (err) {
       return sendJson(res, 200, { ok: false, error: err.message });
+    } finally {
+      if (id !== undefined) calls.delete(id);
     }
+  }
+  if (req.method === 'POST' && url.pathname === '/cancel') {
+    let request;
+    try {
+      request = JSON.parse(await readBody(req));
+    } catch {
+      return sendJson(res, 400, { ok: false, error: 'request body must be JSON' });
+    }
+    const controller = typeof request.id === 'string' ? calls.get(request.id) : undefined;
+    if (!controller) return sendJson(res, 404, { ok: false, error: 'no call in flight with that id' });
+    controller.abort();
+    return sendJson(res, 200, { ok: true });
   }
   if (req.method === 'GET') return serveStatic(url.pathname, res);
   return sendJson(res, 405, { ok: false, error: 'method not allowed' });
@@ -106,10 +123,11 @@ async function handle(req, res, gm) {
 
 export async function startRelay({ host = '127.0.0.1', port = 0, workspace, gmHome } = {}) {
   const gm = await createGmClient({ workspace, gmHome });
+  const calls = new Map();
   const server = createServer((req, res) => {
     res.setHeader('cross-origin-opener-policy', 'same-origin');
     res.setHeader('cross-origin-embedder-policy', 'require-corp');
-    handle(req, res, gm).catch((err) => {
+    handle(req, res, gm, calls).catch((err) => {
       if (!res.headersSent) sendJson(res, 500, { ok: false, error: err.message });
     });
   });

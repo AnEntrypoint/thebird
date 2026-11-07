@@ -147,7 +147,10 @@ Otherwise Tab completes the last word against the workspace tree, which the work
 unique match completes with a space or a slash, and several matches complete the
 common prefix or list the candidates. Relay mode has no completion either. Ctrl-C while a command runs
 cancels it through bashkit's `cancel()`, which takes effect between commands and
-sleeps, not inside one blocking step. Relay mode has no cancel, so Ctrl-C does nothing there.
+sleeps, not inside one blocking step. Relay mode cancels the same way through `POST /cancel`, which aborts the in-flight
+`/call` with that id; the relay's gm call receives an AbortSignal, which gm's run_shell stops by
+killing the command's process group. `/cancel` answers 404 for an unknown id, 400 for a
+non-JSON body and 405 for other methods, and it adds no CORS headers.
 `curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send
 CORS headers to this page. A host without them is refused with a pointer to the
 relay, and flags beyond `-sf`, `-o` (curl) and `-q`, `-O` (wget) need the relay.
