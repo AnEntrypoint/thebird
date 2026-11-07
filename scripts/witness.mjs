@@ -112,10 +112,17 @@ if (fileExists(chrome)) {
     ['run', 'shell mkdir -p notes'],
     ['run', 'shell git init'],
     ['run', 'shell echo one > notes/a.txt'],
-    ['run', 'shell git add notes/a.txt'],
+    ['run', 'shell echo readme > README.md'],
+    ['run', 'shell echo agents > AGENTS.md'],
+    ['run', 'shell echo arch > ARCHITECTURE.md'],
+    ['run', 'shell git add notes/a.txt README.md AGENTS.md ARCHITECTURE.md'],
+    ['run', 'shell git commit -m first'],
+    ['run', 'shell echo design > DESIGN.md'],
+    ['run', 'shell git add DESIGN.md'],
     ['run', 'shell git commit -m first'],
     ['run', 'shell git log'],
   ]);
+  check('in-page git commit without DESIGN.md is refused and names it', repo.out.includes('commit refused by the in-page gate') && repo.out.includes('DESIGN.md is not in the commit'), repo.out.split('\n').find((line) => line.includes('DESIGN.md is not in the commit'))?.slice(0, 160) ?? 'no refusal line');
   check('in-page git inits and stages over OPFS', repo.engine === 'ready' && repo.out.includes('initialized empty repository') && repo.out.includes('staged 1 path'), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
   const committedSha = repo.out.match(/committed ([0-9a-f]{7})/)?.[1];
   const headSha = repo.out.match(/^([0-9a-f]{7}) first$/m)?.[1];
@@ -139,8 +146,13 @@ const seeded = await import('../web/shims/fs.js');
 const { gitBuiltin } = await import('../web/git-in-page.js');
 seeded.mkdirSync('/workspace/notes', { recursive: true });
 seeded.writeFileSync('/workspace/notes/a.txt', 'one\n');
+for (const doc of ['README.md', 'AGENTS.md', 'ARCHITECTURE.md']) seeded.writeFileSync(`/workspace/${doc}`, `${doc}\n`);
 await gitBuiltin(['init']);
-await gitBuiltin(['add', 'notes/a.txt']);
+await gitBuiltin(['add', 'notes/a.txt', 'README.md', 'AGENTS.md', 'ARCHITECTURE.md']);
+const withoutDesign = await gitBuiltin(['commit', '-m', 'first']).then(() => 'committed', (err) => err.message);
+check('Node-side in-page commit without DESIGN.md is refused and names it', withoutDesign.includes('DESIGN.md is not in the commit'), withoutDesign.slice(0, 160));
+seeded.writeFileSync('/workspace/DESIGN.md', 'DESIGN.md\n');
+await gitBuiltin(['add', 'DESIGN.md']);
 const committed = await gitBuiltin(['commit', '-m', 'first']);
 check('Node-side in-page commit passes the gate and commits as lanmower', committed.includes('gate smoke:') && committed.includes('committed '), committed.split('\n').slice(-1)[0]);
 seeded.writeFileSync('/workspace/notes/a.txt', 'two\n');

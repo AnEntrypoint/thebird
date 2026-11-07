@@ -88,7 +88,10 @@ export async function runCommitGate({ lib, fs, dir, rows }) {
   let paths = 0;
   for (const doc of DOCS) {
     const file = files.find(({ path }) => path === doc);
-    if (!file) continue;
+    if (!file) {
+      missing.push(`${doc} is not in the commit`);
+      continue;
+    }
     for (const match of new TextDecoder().decode(file.bytes).matchAll(/`([^`\s]+)`/g)) {
       const token = match[1].replace(/:\d+(?::\d+)?$/, '');
       if (!isRepoPath(token, tops)) continue;

@@ -65,7 +65,8 @@ Known gaps in the browser shims:
 - The in-page commit gate (`web/commit-gate.js`) is not gm's gate. It runs the
   syntax check with vendored acorn, the ASCII check, the docs path check for
   README, AGENTS, ARCHITECTURE and DESIGN, and a scratch round trip whose blob
-  hash must match git's. It does not run gm's sources, wiki, skills, connect,
+  hash must match git's. A missing README, AGENTS, ARCHITECTURE or DESIGN in
+  the commit fails the docs check and is named. It does not run gm's sources, wiki, skills, connect,
   workers, prompt or KEEP checks, or gm's agent smoke run. The relay's
   `git_commit` still runs the full Node gate, unchanged.
 - The relay must send `Cross-Origin-Opener-Policy: same-origin` and
