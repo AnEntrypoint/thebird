@@ -1,10 +1,11 @@
 import { Buffer } from './shims/buffer.js';
 import * as fsp from './shims/fs-promises.js';
+import { runCommitGate } from './commit-gate.js';
 
 const DIR = '/workspace';
 const fs = { promises: fsp };
 const MAX_DIFF_CELLS = 4000000;
-const COMMIT_REFUSED = 'git commit needs the relay (?engine=relay): gm\'s commit gate runs Node syntax and smoke checks the browser cannot run, so the in-page shell does not commit';
+const AUTHOR = { name: 'lanmower', email: 'almagestfraternite@gmail.com' };
 
 let library;
 const isomorphic = async () => {
@@ -104,6 +105,22 @@ async function init() {
   return `initialized empty repository in ${DIR}/.git/`;
 }
 
+async function commit(message) {
+  if (!message) throw new Error('commit needs -m <message>');
+  const lib = await isomorphic();
+  const gate = await runCommitGate({ lib, fs, dir: DIR, rows: await rows() });
+  if (!gate.ok) {
+    const failed = gate.checks.filter((item) => !item.ok).map((item) => `${item.name}: ${item.detail}`);
+    throw new Error(`commit refused by the in-page gate: ${failed.join('; ')}`);
+  }
+  const oid = await lib.commit({ fs, dir: DIR, message, author: AUTHOR });
+  return [
+    ...gate.checks.map((item) => `gate ${item.name}: ${item.detail}`),
+    `gate not run in-page: ${gate.notRun.join(', ')}`,
+    `committed ${oid.slice(0, 7)}`,
+  ].join('\n');
+}
+
 const reply = (output) => ({ ok: true, output });
 const failure = (error) => ({ ok: false, error });
 const verb = (task) => task().then(reply, (err) => failure(err.message));
@@ -113,7 +130,11 @@ export const gitVerbs = {
   git_log: (args) => (args.path === undefined ? verb(() => log(args.count)) : failure('path-limited log needs the relay (?engine=relay)')),
   git_diff: (args) => (args.staged || args.paths ? failure('staged and path-limited diffs need the relay (?engine=relay)') : verb(diff)),
   git_add: (args) => (args.paths?.length ? verb(() => add(args.paths)) : failure('git_add needs explicit paths in the browser shell')),
-  git_commit: () => failure(COMMIT_REFUSED),
+  git_commit: (args) => {
+    if (args.paths?.length) return failure('in-page commit commits the whole index: stage with git_add and omit paths');
+    if (args.author !== undefined) return failure('in-page commits are authored lanmower; omit author');
+    return verb(() => commit(args.message));
+  },
 };
 
 export async function gitBuiltin(argv) {
@@ -124,9 +145,9 @@ export async function gitBuiltin(argv) {
     log: () => log(valueOf(rest, '-n')),
     diff: () => diff(),
     add: () => add(rest),
-    commit: () => Promise.reject(new Error(COMMIT_REFUSED)),
+    commit: () => commit(valueOf(rest, '-m')),
   };
   const task = tasks[sub];
-  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff and add; commit needs the relay, and push, fetch, branch and checkout need the relay too`);
+  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add and commit; push, fetch, branch and checkout need the relay`);
   return task();
 }

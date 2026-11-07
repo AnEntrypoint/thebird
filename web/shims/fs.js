@@ -199,13 +199,13 @@ export function rmSync(path, options) {
   }
   const hasChildren = childrenOf(target).length > 0;
   if (hasChildren && !options?.recursive) throw fail('ENOTEMPTY', 'rm', target, 'directory not empty');
+  markTree(target, 'delete');
   const prefix = target + '/';
   for (const file of [...files.keys()]) if (file.startsWith(prefix)) {
     files.delete(file);
     meta.delete(file);
   }
   for (const dir of [...dirs]) if (dir === target || dir.startsWith(prefix)) dirs.delete(dir);
-  markTree(target, 'delete');
 }
 
 export function unlinkSync(path) {
@@ -330,6 +330,7 @@ async function writeOne(path, op) {
     for (const part of parts) dir = await dir.getDirectoryHandle(part, { create: true });
     return;
   }
+  if (!files.has(path)) return;
   let dir = root;
   for (const part of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(part, { create: true });
   const handle = await dir.getFileHandle(parts.at(-1), { create: true });

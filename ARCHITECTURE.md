@@ -35,7 +35,7 @@ Measured in headless Chromium (`npm run witness`):
 | `memory write`, `memory search`, `prd add`, `prd list`, `log`, `config` | works |
 | `shell` (bash builtins and pipelines, see below) | runs in-page through bashkit |
 | `git init`, `add`, `status`, `log`, `diff` (shell, and gm `git_status`, `git_log`, `git_diff`, `git_add`) | works in-page through isomorphic-git over the OPFS tree |
-| `git commit` (shell and gm `git_commit`) | refused in-page with a message; needs the relay (`?engine=relay`) so gm's commit gate runs |
+| `git commit` (shell and gm `git_commit`) | runs the in-page gate (acorn syntax, ASCII, docs paths, scratch round trip), then commits as lanmower; refuses with the failing check names |
 | `git push/fetch/pull/branch/checkout`, `job start` | need the relay (`?engine=relay`) |
 | `fetch` | fails for hosts without CORS headers (COEP `require-corp`) |
 
@@ -62,8 +62,12 @@ Known gaps in the browser shims:
 - `AsyncLocalStorage` only holds context for synchronous code.
 - In-page git has no branches, remotes, checkout or stash. `diff` compares the
   working tree with HEAD and prints no hunk headers.
-- In-page `git commit` is refused, because gm's commit gate runs Node syntax and
-  smoke checks that the browser cannot run. Committing needs the relay.
+- The in-page commit gate (`web/commit-gate.js`) is not gm's gate. It runs the
+  syntax check with vendored acorn, the ASCII check, the docs path check for
+  README, AGENTS, ARCHITECTURE and DESIGN, and a scratch round trip whose blob
+  hash must match git's. It does not run gm's sources, wiki, skills, connect,
+  workers, prompt or KEEP checks, or gm's agent smoke run. The relay's
+  `git_commit` still runs the full Node gate, unchanged.
 - The relay must send `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp`, because gm's `pending.mjs`
   uses `SharedArrayBuffer`. A static host needs the same headers.
@@ -95,10 +99,13 @@ async `execute()` path, which the shell uses.
 backed by isomorphic-git 1.44.11 (MIT). The bundle is `web/vendor/isomorphic-git.mjs`,
 built with esbuild, and its licence is `web/vendor/ISOMORPHIC-GIT-LICENSE`.
 `init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree, and
-`status` prints porcelain v1 lines. `commit` is refused in-page. The worker
-answers the gm verbs `git_status`, `git_log`, `git_diff` and `git_add` with the
-same functions and refuses `git_commit` (`web/git-in-page.js`). `.thebird/` is
-excluded from the index. The browser witness checks init, add, the commit
-refusal and status. A Node-side witness check seeds one commit through the
-library, then checks status, log and diff.
+`status` prints porcelain v1 lines. `commit -m` runs the in-page gate
+(`web/commit-gate.js`) and commits as lanmower; a failing gate refuses the
+commit and names each failed check. The worker answers the gm verbs
+`git_status`, `git_log`, `git_diff`, `git_add` and `git_commit` with the same
+functions (`web/git-in-page.js`); `git_commit` refuses `paths` and `author`
+arguments. `.thebird/` is excluded from the index. The browser witness commits
+in-page and checks that the log HEAD matches the commit it printed, then
+checks that broken syntax and non-ASCII are refused. A Node-side witness check
+commits through the same builtin, then checks status, log and diff.
 

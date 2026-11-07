@@ -114,11 +114,21 @@ if (fileExists(chrome)) {
     ['run', 'shell echo one > notes/a.txt'],
     ['run', 'shell git add notes/a.txt'],
     ['run', 'shell git commit -m first'],
-    ['run', 'shell git status'],
+    ['run', 'shell git log'],
   ]);
   check('in-page git inits and stages over OPFS', repo.engine === 'ready' && repo.out.includes('initialized empty repository') && repo.out.includes('staged 1 path'), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
-  check('in-page git refuses commit and names the relay and the gate', repo.out.includes('commit needs the relay') && repo.out.includes('commit gate'), repo.out.split('\n').find((line) => line.includes('commit gate'))?.slice(0, 160) ?? 'no refusal line');
-  check('in-page git status lists the staged file', repo.out.includes('A  notes/a.txt'), repo.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const committedSha = repo.out.match(/committed ([0-9a-f]{7})/)?.[1];
+  const headSha = repo.out.match(/^([0-9a-f]{7}) first$/m)?.[1];
+  check('in-page git commit runs the gate and sets HEAD', repo.out.includes('gate smoke:') && repo.out.includes('gate syntax:') && repo.out.includes('not run in-page') && committedSha !== undefined && committedSha === headSha, `committed ${committedSha} / log HEAD ${headSha}`);
+  const broken = await terminal([
+    ['run', 'shell mkdir -p notes'],
+    ['run', 'shell git init'],
+    ['run', 'shell echo "const =" > notes/bad.js'],
+    ['run', 'shell echo café > notes/u.txt'],
+    ['run', 'shell git add notes/bad.js notes/u.txt'],
+    ['run', 'shell git commit -m broken'],
+  ]);
+  check('in-page git commit refuses broken syntax and non-ASCII and names both', broken.out.includes('commit refused by the in-page gate') && broken.out.includes('syntax:') && broken.out.includes('ascii:'), broken.out.split('\n').find((line) => line.includes('refused by the in-page gate'))?.slice(0, 160) ?? 'no refusal line');
   const job = await terminal([['run', 'job start bg echo x']]);
   check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
   rmSync(profile, { recursive: true, force: true });
@@ -126,15 +136,13 @@ if (fileExists(chrome)) {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
 }
 const seeded = await import('../web/shims/fs.js');
-const fsp = await import('../web/shims/fs-promises.js');
 const { gitBuiltin } = await import('../web/git-in-page.js');
-const isomorphic = (await import('../web/vendor/isomorphic-git.mjs')).default;
-const repoFs = { promises: fsp };
 seeded.mkdirSync('/workspace/notes', { recursive: true });
 seeded.writeFileSync('/workspace/notes/a.txt', 'one\n');
-await isomorphic.init({ fs: repoFs, dir: '/workspace' });
-await isomorphic.add({ fs: repoFs, dir: '/workspace', filepath: 'notes/a.txt' });
-await isomorphic.commit({ fs: repoFs, dir: '/workspace', message: 'first', author: { name: 'lanmower', email: 'almagestfraternite@gmail.com' } });
+await gitBuiltin(['init']);
+await gitBuiltin(['add', 'notes/a.txt']);
+const committed = await gitBuiltin(['commit', '-m', 'first']);
+check('Node-side in-page commit passes the gate and commits as lanmower', committed.includes('gate smoke:') && committed.includes('committed '), committed.split('\n').slice(-1)[0]);
 seeded.writeFileSync('/workspace/notes/a.txt', 'two\n');
 const status = await gitBuiltin(['status']);
 check('git status marks the modified file after a commit', status.includes('M notes/a.txt') && status.includes('## '), status.split('\n').join(' / ').slice(0, 140));
@@ -143,7 +151,7 @@ check('git log lists the seeded commit', log.includes('first'), log.slice(0, 120
 const diff = await gitBuiltin(['diff']);
 check('git diff shows the removed and added lines', diff.includes('-one') && diff.includes('+two'), diff.split('\n').join(' / ').slice(0, 140));
 const refused = await gitBuiltin(['commit', '-m', 'second']).then(() => 'committed', (err) => err.message);
-check('git commit is refused in-page and says why', refused.includes('commit needs the relay') && refused.includes('commit gate'), refused.slice(0, 140));
+check('git commit with nothing staged is refused by the gate', refused.includes('commit refused by the in-page gate') && refused.includes('staged: nothing staged'), refused.slice(0, 160));
 await relay.close();
 process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));
 process.on('exit', () => rmSync(ws, { recursive: true, force: true }));
