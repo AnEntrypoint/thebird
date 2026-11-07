@@ -4,7 +4,7 @@
 bin/thebird.js -> src/cli.js -> src/runner.js -> src/commands.js
                        |
                        v
-                  src/index.js (library)
+                  src/index.js (library) -> src/api.js
                        |
                        v
               src/gm.js -> gm createTools() -> gm verbs

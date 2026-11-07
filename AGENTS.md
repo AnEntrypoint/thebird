@@ -2,11 +2,12 @@
 
 A Node CLI and library whose every operation dispatches through gm tooling.
 
-- Runtime surface: `bin/thebird.js`, `src/index.js`, `src/gm.js`,
-  `src/commands.js`, `src/runner.js`, `src/cli.js`.
-- `src/commands.js` and `src/runner.js` import nothing from Node, so the
-  command parser runs in a browser. Keep them free of `node:` imports and
-  `process`; only `src/gm.js`, `src/index.js` and `src/cli.js` may use Node.
+- Runtime surface: `bin/thebird.js`, `src/index.js`, `src/api.js`,
+  `src/gm.js`, `src/commands.js`, `src/runner.js`, `src/cli.js`.
+- `src/api.js`, `src/commands.js` and `src/runner.js` import nothing from
+  Node and run in a browser given a gm client. Keep them free of `node:`
+  imports and `process`; only `src/gm.js`, `src/index.js`, `src/cli.js` and
+  `bin/` may use Node.
 - gm is the only execution engine. Do not reimplement filesystem, search,
   shell, git, job, log, wiki, row or fetch behavior locally.
 - `createGmClient()` resolves `--gm-home` / `GM_HOME` / an installed `gm`
