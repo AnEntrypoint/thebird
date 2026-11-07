@@ -328,6 +328,7 @@ if (fileExists(chrome)) {
   });
   check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
   check('in-page terminal Ctrl-L clears the output', editing.afterClear === '', JSON.stringify(editing.afterClear.slice(0, 80)));
+  let recalledAfterReload;
   const streaming = {};
   const ticks = await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
@@ -342,6 +343,20 @@ if (fileExists(chrome)) {
   const seen = ticks.out.match(/^tick[1-5]$/gm) ?? [];
   check('in-page terminal shows shell output while the command is still running', streaming.busy === true && streaming.beforeLast === true, JSON.stringify(streaming));
   check('in-page terminal prints each streamed line once, in order', seen.join(' ') === 'tick1 tick2 tick3 tick4 tick5', seen.join(' '));
+  await terminal([], {
+    interact: async ({ type, press, waitFor }) => {
+      await type('shell echo kept-line');
+      await press('Enter');
+      await waitFor("/^kept-line$/m.test(document.getElementById('out').textContent)", 20000);
+    },
+  });
+  const reopenedHistory = await terminal([], {
+    interact: async ({ press, evaluate }) => {
+      await press('ArrowUp');
+      recalledAfterReload = await evaluate("document.getElementById('line').value");
+    },
+  });
+  check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'shell echo kept-line' && reopenedHistory.out === '', JSON.stringify(recalledAfterReload));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);

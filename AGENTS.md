@@ -16,6 +16,9 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   `src/gm-client.js`, `src/gm-remote.js`, `web/terminal.js`. They import
   nothing from Node and run in a browser. Node-only: `src/gm.js`,
   `src/relay.js`, `src/index.js`, `src/cli.js`, `bin/`.
+- The browser terminal keeps its command history in the page's localStorage under
+  `thebird.history`. It stores only the submitted command lines, capped at 500, and
+  no output, cwd or other state.
 - `web/shims/*.js` are browser-only and import only each other. They replace
   the `node:` modules gm uses: fs (OPFS-backed, sync), fs/promises, path,
   crypto (sha1 and sha256), and stubs for child_process, os, util and friends.

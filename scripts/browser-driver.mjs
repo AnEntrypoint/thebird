@@ -90,7 +90,9 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       await interact({ evaluate, waitFor, press, type });
     }
     const state = await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent })");
+    await send('Browser.close').catch(() => {});
     socket.close();
+    await Promise.race([once(child, 'exit'), sleep(10000)]);
     return state;
   } finally {
     if (child.exitCode === null) {

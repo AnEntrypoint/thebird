@@ -31,9 +31,25 @@ try {
 
 const run = createRunner(createApi(client));
 
-const typed = [];
-let position = 0;
+const HISTORY_KEY = 'thebird.history';
+const HISTORY_LIMIT = 500;
+let saved = [];
+try {
+  saved = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');
+} catch {
+  saved = [];
+}
+const typed = Array.isArray(saved) ? saved.filter((command) => typeof command === 'string') : [];
+let position = typed.length;
 let busy = false;
+const remember = (command) => {
+  typed.push(command);
+  if (typed.length > HISTORY_LIMIT) typed.splice(0, typed.length - HISTORY_LIMIT);
+  position = typed.length;
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(typed));
+  } catch {}
+};
 let queue = Promise.resolve();
 let generation = 0;
 
@@ -63,7 +79,7 @@ document.getElementById('form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const command = line.value;
   line.value = '';
-  if (command.trim() && typed.at(-1) !== command) typed.push(command);
+  if (command.trim() && typed.at(-1) !== command) remember(command);
   position = typed.length;
   const current = generation;
   queue = queue.then(() => (current === generation ? execute(command) : undefined)).catch((err) => write('error: ' + err.message));
