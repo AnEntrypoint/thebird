@@ -4,6 +4,8 @@ A bash terminal that runs in the browser. Commands run in bashkit, a WebAssembly
 
 The earlier gm-backed CLI and library were removed.
 
+Live: https://anentrypoint.github.io/thebird/ (GitHub Pages, deployed from `main` by `.github/workflows/pages.yml`).
+
 ## Requirements
 
 - Node >= 22, for the static server.
