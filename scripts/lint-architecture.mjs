@@ -221,6 +221,10 @@ function agentsStatic() {
   cites('Ctrl-C does not end a builtin', ['in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy']);
   cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers']);
   cites('The build job has `contents: read` only', ['pages.yml gives the build job contents read only, and the deploy job only pages and id-token write']);
+  record('The actions in `pages.yml` are pinned', all(
+    outcome(['11d5960a326750d5838078e36cf38b85af677262', '49933ea5288caeca8642d1e84afbd3f7d6820020', '56afc609e74202658d3ffba0e8f6dda462b719fa', 'd6db90164ac5ed86f2b6aed7e0febac5b3c0c03e'].every((sha) => fileHas('.github/workflows/pages.yml', sha) && docLines.join('\n').includes(sha)), 'each SHA in the AGENTS.md mapping is the one pages.yml uses'),
+    outcome(witness.includes('every action in pages.yml is pinned to a full 40-hex commit SHA'), 'witness: every uses ref is a 40-hex SHA'),
+  ));
   record('Do not add a root-absolute path such as `/web/...`', outcome(!walk(repo('web')).filter((file) => /\.(m?js|html)$/.test(file) && !file.includes('/vendor/')).some((file) => /['"`]\/web\//.test(readFileSync(file, 'utf8'))), 'no browser file outside web/vendor uses a root-absolute /web/ path'));
   record('Use Conventional Commits', (() => {
     const subjects = execFileSync('git', ['log', '-n', '20', '--format=%s'], { cwd: root, encoding: 'utf8' }).trim().split('\n');

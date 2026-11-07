@@ -47,7 +47,8 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 - `.github/workflows/pages.yml` builds `_site/` with `scripts/build-pages.mjs` on each push to `main` and deploys it to GitHub Pages. The page needs no cross-origin isolation headers, and the witness runs the built site without them.
 - The build job has `contents: read` only. The deploy job alone has `pages: write` and `id-token: write`. The witness checks both blocks.
-- Open, not done: the actions are referenced by major tag (`@v4`), not by commit SHA. A tag can be moved, and the deploy job runs with `pages: write` and `id-token: write`, so pinning would close that path. Pinning needs each SHA resolved against its release and checked before it is written into the workflow, so it is left for a separate change.
+- The actions in `pages.yml` are pinned to full commit SHAs: actions/checkout `11d5960a326750d5838078e36cf38b85af677262` (v4), actions/setup-node `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4), actions/upload-pages-artifact `56afc609e74202658d3ffba0e8f6dda462b719fa` (v3), actions/deploy-pages `d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e` (v4). Each SHA was resolved with `git ls-remote` and confirmed as a commit by `gh api repos/<repo>/git/ref/tags/<tag>`.
+- Pinning matters because the deploy job holds `pages: write` and `id-token: write`, and a moved tag would change the code that runs with them. To upgrade, resolve the new SHA the same way, change the `uses:` line, and update this list.
 - Do not add a root-absolute path such as `/web/...` to browser code. The Pages site sits under `/thebird/`, so every URL in `web/` is relative to the file that holds it.
 
 ## Commit gate

@@ -504,6 +504,8 @@ const topScopes = scopesIn(workflow.slice(0, workflow.indexOf('\njobs:')), 2);
 const buildScopes = scopesIn(jobBlocks.build ?? '', 6);
 const deployScopes = scopesIn(jobBlocks.deploy ?? '', 6);
 const sortedScopes = (scopes) => JSON.stringify(Object.entries(scopes).sort());
+const usesRefs = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
+check('every action in pages.yml is pinned to a full 40-hex commit SHA', usesRefs.length > 0 && usesRefs.every((ref) => /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(ref)), usesRefs.join(' '));
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
