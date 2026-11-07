@@ -2,6 +2,7 @@ import { Bash, initBashkit } from '/web/vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
 import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-page.js';
+import { pythonBuiltin } from './python-in-page.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 
@@ -10,6 +11,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   const customBuiltins = {
     git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
     sqlite3: (ctx) => sqliteBuiltin(ctx.argv).then(withNewline),
+    python3: (ctx) => pythonBuiltin(ctx.argv).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
   return {

@@ -11,6 +11,7 @@ import { startRelay } from '../src/relay.js';
 import { remoteClient } from '../src/gm-remote.js';
 import { runTerminal } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
+import { vendorPyodide } from './vendor-pyodide.mjs';
 import { existsSync as fileExists } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -96,6 +97,7 @@ check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
   if (!fileExists(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
+  if (!fileExists(join(root, 'web', 'vendor', 'pyodide', 'pyodide.asm.wasm'))) await vendorPyodide();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
   const relayTerminal = await terminal([['engine', 'relay'], ['run', 'help'], ['run', 'shell echo browser-ok']]);
@@ -149,6 +151,19 @@ if (fileExists(chrome)) {
   check('in-page sqlite3 creates a database and answers a query through sql.js', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const reopened = await terminal([['run', 'shell sqlite3 notes/app.db "select count(*) from t"']]);
   check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  const python = await terminal([
+    ['run', 'shell python3 -c "print(6*7)"'],
+    ['run', 'shell python3 -c "1/0"'],
+    ['run', 'shell echo py-hello > notes/in.txt'],
+    ['run', `shell echo "open('notes/out.txt','w').write(open('notes/in.txt').read().upper())" > notes/script.py`],
+    ['run', 'shell python3 notes/script.py'],
+    ['run', 'shell cat notes/out.txt'],
+  ]);
+  check('in-page python3 runs a one-line script through Pyodide', python.engine === 'ready' && /^42$/m.test(python.out), python.out.split('\n').slice(0, 2).join(' / ').slice(0, 140));
+  check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
+  check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  const pythonReopened = await terminal([['run', 'shell cat notes/out.txt'], ['run', 'shell python3 -c "print(open(\'notes/out.txt\').read().strip())"']]);
+  check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
   process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
   const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=witness', '-c', 'user.email=witness@localhost', ...args], { cwd, encoding: 'utf8' }).trim();

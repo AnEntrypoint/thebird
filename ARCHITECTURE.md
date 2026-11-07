@@ -91,7 +91,7 @@ dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
 gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
 sandbox values, not the host's.
 
-Not covered: node, python3, and any host binary (exit 127). `sqlite3` runs
+Not covered: node and any host binary (exit 127). `sqlite3` and `python3` run
 in-page, as described below.
 
 `sqlite3 <database> <sql>` is a custom builtin (`web/sqlite-in-page.js`) over
@@ -105,8 +105,17 @@ Relay-only items, ranked by what can run in the browser:
 
 | Item | In-page option | Status |
 | `sqlite3` | sql.js 1.15.2, MIT, about 670 KB of wasm | done, witnessed in headless Chromium |
-| `python3` | Pyodide, MPL-2.0, npm package about 14 MB unpacked | not implemented; next candidate |
+| `python3` | Pyodide 314.0.7, MPL-2.0, about 14 MB unpacked | done, witnessed in headless Chromium |
 | `node` | none verified: WebContainers is proprietary, and a JS subset is not Node | stays relay-only |
+
+`python3 -c <code>` and `python3 <file>` are a custom builtin
+(`web/python-in-page.js`) over Pyodide 314.0.7 (MPL-2.0, notice in
+`web/vendor/PYODIDE-NOTICE.md`). The runtime is fetched by
+`scripts/vendor-pyodide.mjs`, checks each file's pinned SHA-256, and is
+gitignored. Pyodide loads on the first call. Each call copies the `/workspace`
+tree into Pyodide's memory filesystem, runs the code, and syncs changed, new and
+deleted files back to OPFS, so every call costs one full copy of the tree. Only
+the last line of a traceback is reported, and printed output comes before it.
 
 `shell` passes its text to bashkit raw, so quotes and parentheses survive. The
 runner used to strip quotes from `shell` lines.
