@@ -53,7 +53,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 
 bashkit's default is 30 s, which was too short. In one of seven recorded witness runs a cold `pip install` of tabulate failed with `execution timeout (30s)`. With 300 s, a cold tabulate install completes in about 19-28 s in the in-page shell, and `sleep 40` completes.
 
-The expiry was seen once in a manual run (six 55 s sleeps in a loop; the sixth was cut at 300 s with `execution timeout (300s)`). The witness does not run that long loop, so the expiry is not a witness check.
+The witness checks the expiry: six 55 s sleeps in a loop are cut at 300 s with `execution timeout (300s)`. That check takes about five and a half minutes.
 
 ## In-page builtins
 
@@ -120,3 +120,5 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 ## Decision: txiki.js rejected
 
 txiki.js was evaluated as an in-page runtime and rejected. It is a native runtime (QuickJS-ng and libuv) with no browser or WebAssembly build, so it cannot run the in-page code. Node stays only as the static server.
+
+The before-state of the gm removal is commit `6b060f7`. `git diff --name-status 6b060f7 0538b2c` lists the 29 paths of that change.

@@ -114,7 +114,7 @@ function architectureStatic() {
     outcome(fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js passes it to Bash as timeoutMs'),
   ));
   cites('In one of seven recorded witness runs', ['in-page bash runs a 40-second sleep without a timeout']);
-  record('The expiry was seen once in a manual run', outcome(null, 'the 300 s expiry is observed in a manual run and is not a witness check, so it stays unverified by the witness'));
+  cites('The witness checks the expiry', ['a command past 300 s is cut at the limit with the expiry message']);
   cites('With 300 s, a cold tabulate install completes', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page']);
 
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));

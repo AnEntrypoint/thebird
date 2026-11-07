@@ -414,6 +414,8 @@ if (existsSync(chrome)) {
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
   check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
+  const expiry = await terminal([['run', 'for i in 1 2 3 4 5 6; do sleep 55; echo tick$i; done; echo late-finish']], { timeoutMs: 900000 });
+  check('a command past 300 s is cut at the limit with the expiry message', expiry.out.includes('error: resource limit exceeded: execution timeout (300s)') && /^tick5$/m.test(expiry.out) && !/^late-finish$/m.test(expiry.out), expiry.out.split('\n').slice(-2).join(' / ').slice(0, 160));
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
