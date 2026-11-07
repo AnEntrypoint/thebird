@@ -54,7 +54,7 @@ try {
       if (args.background || hasBackgroundOperator(args.command)) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
       shell ??= await createShell({ cwd: WORKSPACE });
       if (cancelRequested) return { ok: false, exitCode: 130, signal: null, output: 'cancelled\n' };
-      return shell.run(args.command);
+      return shell.run(args.command, { onOutput: (stdout, stderr) => postMessage({ output: stdout + stderr }) });
     },
     ...gitVerbs,
   };

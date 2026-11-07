@@ -5,7 +5,8 @@ import { workerClient } from '/web/gm-worker-client.js';
 
 const out = document.getElementById('out');
 const line = document.getElementById('line');
-const write = (text) => { out.textContent += text + '\n'; };
+const endLine = () => { if (!out.textContent.endsWith('\n')) out.textContent += '\n'; };
+const write = (text) => { endLine(); out.textContent += text + '\n'; };
 const params = new URLSearchParams(location.search);
 
 async function engine() {
@@ -14,6 +15,7 @@ async function engine() {
 }
 
 const client = await engine();
+if (client.onOutput) client.onOutput((text) => { out.textContent += text; });
 const prompt = document.getElementById('prompt');
 const showPrompt = async () => {
   if (client.cwd) prompt.textContent = `thebird ${await client.cwd()}> `;
@@ -45,6 +47,7 @@ async function execute(command) {
   } catch (err) {
     write('error: ' + err.message);
   } finally {
+    endLine();
     busy = false;
     delete document.body.dataset.busy;
     await showPrompt();

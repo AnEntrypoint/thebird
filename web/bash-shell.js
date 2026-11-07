@@ -44,15 +44,17 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   let cancelled = false;
   let current = cwd;
   return {
-    async run(command) {
+    async run(command, { onOutput } = {}) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
       running = true;
       cancelled = false;
       let result;
+      let streamed = Boolean(onOutput);
       try {
-        result = await bash.execute(restore + command);
+        result = await bash.execute(restore + command, onOutput ? { onOutput } : {});
       } catch (err) {
         if (!cancelled) throw err;
+        streamed = false;
         result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };
       } finally {
         running = false;
@@ -61,7 +63,8 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       status = result.exitCode;
       current = (await bash.execute('pwd')).stdout.trim() || current;
       const note = EMULATED.test(command) ? withNewline(EMULATION_NOTE) : '';
-      return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr + note };
+      const text = streamed ? '' : result.stdout + result.stderr;
+      return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: text + note };
     },
     cancel() {
       if (!running) return;

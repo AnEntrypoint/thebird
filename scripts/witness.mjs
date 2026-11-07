@@ -328,6 +328,20 @@ if (fileExists(chrome)) {
   });
   check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
   check('in-page terminal Ctrl-L clears the output', editing.afterClear === '', JSON.stringify(editing.afterClear.slice(0, 80)));
+  const streaming = {};
+  const ticks = await terminal([], {
+    interact: async ({ type, press, waitFor, evaluate }) => {
+      await type('shell for i in 1 2 3 4 5; do echo tick$i; sleep 0.4; done');
+      await press('Enter');
+      await waitFor("document.getElementById('out').textContent.includes('tick1')", 20000);
+      streaming.busy = await evaluate("document.body.dataset.busy === 'true'");
+      streaming.beforeLast = await evaluate("!document.getElementById('out').textContent.includes('tick5')");
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+    },
+  });
+  const seen = ticks.out.match(/^tick[1-5]$/gm) ?? [];
+  check('in-page terminal shows shell output while the command is still running', streaming.busy === true && streaming.beforeLast === true, JSON.stringify(streaming));
+  check('in-page terminal prints each streamed line once, in order', seen.join(' ') === 'tick1 tick2 tick3 tick4 tick5', seen.join(' '));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);

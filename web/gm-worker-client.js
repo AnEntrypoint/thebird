@@ -9,7 +9,12 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     markFailed = fail;
   });
 
+  let outputSink = () => {};
   worker.onmessage = ({ data }) => {
+    if (data.output !== undefined) {
+      outputSink(data.output);
+      return;
+    }
     if ('ready' in data) {
       if (data.ready) markReady();
       else markFailed(new Error(data.error));
@@ -50,6 +55,9 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     },
     complete: (prefix) => request({ complete: prefix }),
     cwd: () => request({ query: 'cwd' }),
+    onOutput(sink) {
+      outputSink = sink;
+    },
     async close() {
       worker.terminate();
     },
