@@ -414,13 +414,22 @@ if (fileExists(chrome)) {
   const seen = ticks.out.match(/^tick[1-5]$/gm) ?? [];
   check('in-page terminal shows shell output while the command is still running', streaming.busy === true && streaming.beforeLast === true, JSON.stringify(streaming));
   check('in-page terminal prints each streamed line once, in order', seen.join(' ') === 'tick1 tick2 tick3 tick4 tick5', seen.join(' '));
+  const storedBefore = {};
   await terminal([], {
-    interact: async ({ type, press, waitFor }) => {
+    interact: async ({ type, press, waitFor, evaluate }) => {
       await type('shell echo kept-line');
       await press('Enter');
       await waitFor("/^kept-line$/m.test(document.getElementById('out').textContent)", 20000);
+      storedBefore.raw = await evaluate("localStorage.getItem('thebird.history')");
     },
   });
+  let storedLines = null;
+  try {
+    storedLines = JSON.parse(storedBefore.raw);
+  } catch {
+    storedLines = null;
+  }
+  check('in-page terminal stores only the submitted command lines in localStorage', Array.isArray(storedLines) && storedLines.at(-1) === 'shell echo kept-line' && storedLines.every((line) => typeof line === 'string' && !line.includes('\n')), JSON.stringify(storedBefore.raw?.slice(-120)));
   const reopenedHistory = await terminal([], {
     interact: async ({ press, evaluate }) => {
       await press('ArrowUp');

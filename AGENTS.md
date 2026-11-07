@@ -45,13 +45,19 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   default, runs commands as the user, and answers only JSON POSTs, which a
   cross-origin page cannot send without a CORS preflight the relay does not
   answer. Keep it that way.
-- gm is the only execution engine. Do not reimplement filesystem, search,
-  shell, git, job, log, wiki, row or fetch behavior locally.
+- gm is the only execution engine on the relay: gm's tools run unchanged, except
+  `git_push`, which goes through gm's gate. In the browser, `web/gm-worker.js` runs
+  gm's tools but overrides `run_shell` and the git verbs (`git_status`, `git_log`,
+  `git_diff`, `git_add`, `git_commit`) with bashkit and isomorphic-git. Do not
+  reimplement filesystem, search,
+  shell, git, job, log, wiki, row or fetch behavior locally beyond those overrides.
 - In-page `which`, `type` and `command -v` are one answer. `web/shell-lookup.js` defines shell functions for `which`, `command` and `type` at shell start, over bashkit's own `builtin command -v` and `builtin type`, so each name resolves the same way in all three. The five in-page builtins (`git`, `sqlite3`, `python3`, `curl`, `wget`) report as builtins, not as `/usr/bin` paths. `which` prints the name for a builtin, as `command -v` does, and `type -t` says `builtin`. Shell functions are visible to `type` and `compgen -c`, so the prologue's three names appear as functions; `type -a` is not handled.
 - `node` is relay-only. No in-page runtime is verified: WebContainers is proprietary, and a JS subset is not Node, so the in-page shell answers `node` with exit 127 and says that compilers and build tools are not available in the sandbox; `?engine=relay` runs the host's `node`.
 - `createGmClient()` resolves `--gm-home` / `GM_HOME` (or `THEBIRD_GM_HOME`) / an installed `gm`
   package / `../gm` / `./gm`, then imports gm's `createTools()` verb engine.
-- CLI commands and library methods must be thin mappings to gm verbs.
+- CLI commands and library methods must be thin mappings to gm verbs. `help`, `tools`,
+  `repl` and `exit` make no gm call; `projects` and `config` report the client's own
+  workspace and configuration.
 - Unknown gm verbs pass through unchanged, so new gm verbs need no thebird change.
 - `job_start` maps to gm's `run_shell` with `background: true` because gm's in-process engine has no separate job-start verb.
 - Validation is `npm run witness`, which runs the real CLI paths plus the

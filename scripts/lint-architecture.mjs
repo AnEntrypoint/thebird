@@ -4,6 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createApi } from '../src/api.js';
+import { COMMANDS as CLI_COMMANDS } from '../src/commands.js';
+import { createRunner } from '../src/runner.js';
+import { shimFor } from '../src/shim-map.js';
 import { startRelay } from '../src/relay.js';
 import { runTerminal } from './browser-driver.mjs';
 
@@ -30,7 +34,6 @@ const all = (...items) => {
   const ok = items.some((item) => item.ok === false) ? false : items.every((item) => item.ok === true) ? true : null;
   return outcome(ok, items.map((item) => item.detail).join('; '));
 };
-const partial = (item, note) => outcome(item.ok === true ? null : item.ok, `${item.detail}; ${note}`);
 
 const record = (needle, result) => {
   const index = docLines.findIndex((line) => line.includes(needle));
@@ -68,7 +71,53 @@ const isIgnored = (path) => {
 const cites = (needle, labels) => record(needle, all(...labels.map((label) => (witness.includes(label)
   ? outcome(true, `witness: ${label}`)
   : outcome(false, `missing from scripts/witness.mjs: ${label}`)))));
-const rule = (needle, note) => record(needle, outcome(null, `${note}; a rule, not a checkable claim`));
+const bulletOf = (needle) => {
+  const start = docLines.findIndex((line) => line.includes(needle));
+  let end = start + 1;
+  while (end < docLines.length && docLines[end].startsWith('  ')) end++;
+  return docLines.slice(start, end).join(' ');
+};
+const SAMPLE_LINES = {
+  help: 'help', tools: 'tools', skills: 'skills', read: 'read a.txt', write: 'write a.txt hi', edit: 'edit a.txt x y',
+  stat: 'stat a.txt', ls: 'ls', list: 'list', grep: 'grep pat', search: 'search q', shell: 'shell echo hi', exec: 'exec echo hi',
+  run: 'run hi', memory: 'memory search k', chat: 'chat hi', delegate: 'delegate hi', 'web-search': 'web-search q',
+  fetch: 'fetch http://x', job: 'job status x', log: 'log', git: 'git status', prd: 'prd list', unknown: 'unknown list',
+  cron: 'cron list', sessions: 'sessions', projects: 'projects list', config: 'config', batch: 'batch read_file {"path":"a.txt"}',
+  gm: 'gm read_file {"path":"a.txt"}', repl: 'repl', exit: 'exit',
+};
+const LOCAL_COMMANDS = ['help', 'tools', 'repl', 'exit', 'projects', 'config'];
+async function thinMapping() {
+  const dispatched = {};
+  for (const [name, line] of Object.entries(SAMPLE_LINES)) {
+    const verbs = [];
+    const gm = { call: async (verb) => { verbs.push(verb); return {}; } };
+    const error = await createRunner(createApi(gm))(line).then(() => '', (failure) => failure.message);
+    dispatched[name] = { verbs, error };
+  }
+  return dispatched;
+}
+const thin = await thinMapping();
+const shimExports = (file) => {
+  const source = readFileSync(file, 'utf8');
+  const names = new Set([...source.matchAll(/export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+(\w+)/g)].map((match) => match[1]));
+  for (const [, list] of source.matchAll(/export\s*\{([^}]*)\}/g)) for (const item of list.split(',')) names.add(item.trim().split(/\s+as\s+/).pop());
+  return { names, hasDefault: /export\s+default\b/.test(source) || /\bas default\b/.test(source) };
+};
+function inPageNodeImports() {
+  const seen = new Set();
+  const found = [];
+  const visit = (file) => {
+    if (seen.has(file) || !existsSync(file)) return;
+    seen.add(file);
+    for (const [, clause, spec] of readFileSync(file, 'utf8').matchAll(/^import\s+([^;]*?)\s+from\s+'([^']+)'/gms)) {
+      if (spec.startsWith('node:')) found.push({ file: file.slice(gmSrc.length + 1), spec, clause: clause.trim() });
+      else if (spec.startsWith('.')) visit(join(dirname(file), spec));
+    }
+  };
+  visit(join(gmSrc, 'tools.mjs'));
+  visit(join(gmSrc, 'log.mjs'));
+  return found;
+}
 
 const sourceText = [...walk(repo('src')), ...walk(repo('web')).filter((path) => !path.includes('/vendor/')), ...walk(repo('scripts')), ...walk(repo('bin'))]
   .filter((path) => /\.(m?js|html|js)$/.test(path))
@@ -258,7 +307,10 @@ function agentsStatic() {
     outcome(witness.includes('the micropip wheel the page loads is the one pinned in the Pyodide lock') && fileHas('web/python-in-page.js', 'v314.0.7'), 'the micropip pin is checked by the witness, and python-in-page.js pins v314.0.7'),
     outcome(!filesUnder('web/vendor').some((file) => file.endsWith('.whl')), 'no wheel is vendored under web/vendor'),
   ));
-  record('capped at 500', partial(outcome(fileHas('web/terminal.js', 'HISTORY_LIMIT = 500') && fileHas('web/terminal.js', "'thebird.history'"), 'terminal.js sets the thebird.history key and a 500 cap'), 'the stored content beyond the cap and key is not probed'));
+  record('`thebird.history`. It stores only', all(
+    outcome(fileHas('web/terminal.js', 'HISTORY_LIMIT = 500') && fileHas('web/terminal.js', "'thebird.history'"), 'terminal.js sets the thebird.history key and a 500 cap'),
+    outcome(witness.includes('in-page terminal stores only the submitted command lines in localStorage'), 'witness: localStorage holds only the submitted command lines'),
+  ));
   record('The browser terminal shows plain text by default', all(
     outcome(witness.includes('ANSI off by default: escape sequences are stripped and the text copies as plain'), 'witness: ANSI off by default'),
     outcome(witness.includes('?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain'), 'witness: ?ansi=color renders SGR colour'),
@@ -276,10 +328,48 @@ function agentsStatic() {
     const matching = subjects.filter((subject) => /^(feat|fix|docs|test|chore|refactor|perf|build|ci|style|revert)(\([^)]+\))?!?: /.test(subject)).length;
     return outcome(matching === subjects.length ? true : null, `${matching} of the last ${subjects.length} commit subjects are Conventional`);
   })());
-  rule('gm is the only execution engine', 'a design rule; the browser shell is checked to run through gm, not to forbid local code');
-  rule('CLI commands and library methods must be thin mappings', 'a design rule');
-  rule('Add a shim here before adding a `node:` import', 'a rule for future changes');
-  rule('`type -a` is not handled.', 'the behaviour of type -a is not probed');
+  record('gm is the only execution engine', (() => {
+    const named = bulletOf('gm is the only execution engine');
+    const workerOverrides = [...read('web/gm-worker.js').matchAll(/^\s+(\w+): async \(args\)/gm)].map((match) => match[1]);
+    const gitVerbs = [...read('web/git-in-page.js').split('export const gitVerbs = {')[1].split('\n};')[0].matchAll(/^\s+(git_\w+):/gm)].map((match) => match[1]);
+    const relayOverrides = [...read('src/gm.js').matchAll(/^\s+(git_push): \(/gm)].map((match) => match[1]);
+    const inPage = [...workerOverrides, ...gitVerbs];
+    const unnamed = inPage.filter((name) => !named.includes(`\`${name}\``));
+    const relayNamed = relayOverrides.every((name) => named.includes(`\`${name}\``));
+    const bothCreateTools = fileHas('src/gm.js', 'createTools({') && fileHas('web/gm-worker.js', 'tools.mjs');
+    return outcome(unnamed.length === 0 && relayNamed && bothCreateTools, unnamed.length || !relayNamed || !bothCreateTools
+      ? `overrides not named in the rule: ${unnamed.join(', ') || relayOverrides.filter((name) => !named.includes(`\`${name}\``)).join(', ') || 'gm tools are not created in both engines'}`
+      : `in-page overrides ${inPage.join(', ')} and relay override ${relayOverrides.join(', ')} are all named; both engines create gm's tools`);
+  })());
+  record('CLI commands and library methods must be thin mappings', (() => {
+    const failures = Object.keys(CLI_COMMANDS).flatMap((name) => {
+      if (!(name in SAMPLE_LINES)) return [`${name} has no sample line`];
+      const { verbs, error } = thin[name];
+      if (LOCAL_COMMANDS.includes(name)) return verbs.length === 0 ? [] : [`${name} sends ${verbs.join(', ')}`];
+      return verbs.length > 0 ? [] : [`${name} sends no gm verb${error ? ` (${error})` : ''}`];
+    });
+    return outcome(failures.length === 0, failures.length
+      ? failures.join('; ')
+      : `${Object.keys(CLI_COMMANDS).length} commands: each sends a gm verb except ${LOCAL_COMMANDS.join(', ')}, which send none`);
+  })());
+  record('Add a shim here before adding a `node:` import', (() => {
+    if (!existsSync(gmSrc)) return outcome(null, 'gm is not present, so the in-page imports are unverified');
+    const imports = inPageNodeImports();
+    const gaps = imports.flatMap(({ file, spec, clause }) => {
+      const { names, hasDefault } = shimExports(repo(shimFor(spec)));
+      const named = [...clause.matchAll(/\{([^}]*)\}/g)].flatMap((match) => match[1].split(',')).map((item) => item.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+      const missing = named.filter((name) => !names.has(name));
+      if (/^\w/.test(clause) && !hasDefault) missing.push('default');
+      return missing.length ? [`${file} ${spec} needs ${missing.join(', ')} from ${shimFor(spec)}`] : [];
+    });
+    return outcome(gaps.length === 0, gaps.length
+      ? gaps.join('; ')
+      : `${imports.length} node: imports reachable from the in-page gm entry points are provided by their shims`);
+  })());
+  record('`type -a` is not handled.', (() => {
+    const body = read('web/shell-lookup.js').split('type() {')[1]?.split('\n}')[0] ?? '';
+    return outcome(/case "\$1" in -t\|-p\)/.test(body) && !/-a\b/.test(body), 'the prologue type takes only -t and -p as its first word, and has no -a case');
+  })());
 }
 
 function probe(blocks, id, pass, detail) {
@@ -543,15 +633,17 @@ if (!staticOnly) {
   }
 }
 
+for (const doc of Object.keys(docs).filter(() => !staticOnly)) {
+  docs[doc].forEach((raw, index) => {
+    const line = raw.trim();
+    if (line && !/^(\||```|#)/.test(line) && !covered.has(`${doc}:${index + 1}`)) results.push({ doc, line: index + 1, text: line, ok: 'NO_CLAIM', detail: 'prose line with no claim record' });
+  });
+}
 results.sort((a, b) => a.doc.localeCompare(b.doc) || a.line - b.line);
-const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : 'UNVERIFIED');
+const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : ok === 'NO_CLAIM' ? 'NO_CLAIM' : 'UNVERIFIED');
 for (const result of results) {
   console.log(`${label(result.ok).padEnd(10)} ${result.doc}:${result.line}  ${result.text.slice(0, 100)}\n           ${result.detail}`);
 }
-const prose = Object.keys(docs).flatMap((name) => docs[name]
-  .map((line, index) => ({ doc: name, line: line.trim(), number: index + 1 }))
-  .filter(({ doc, line, number }) => line && !/^(\||```|#)/.test(line) && !covered.has(`${doc}:${number}`))
-  .map(({ doc, number }) => `${doc}:${number}`));
 const count = (ok) => results.filter((result) => result.ok === ok).length;
-console.log(`\n${results.length} claims: ${count(true)} pass, ${count(false)} fail, ${count(null)} unverified; prose lines without a claim: ${prose.length}`);
+console.log(`\n${count(true) + count(false) + count(null)} claims: ${count(true)} pass, ${count(false)} fail, ${count(null)} unverified; ${count('NO_CLAIM')} prose lines with NO_CLAIM`);
 if (count(false)) process.exitCode = 1;
