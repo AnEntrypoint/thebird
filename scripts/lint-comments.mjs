@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '../web/vendor/acorn.mjs';
 
@@ -13,6 +13,8 @@ const CODE = /\.(m?js|cjs)$/;
 const HTML = /\.html$/;
 const MARKDOWN = /\.md$/;
 const YAML = /\.ya?ml$/;
+const C_SOURCE = /\.[ch]$/;
+const DOTFILE_HASH = '.gitignore';
 const NO_COMMENT_SYNTAX = /\.(json|wasm)$|LICENSE|NOTICE/;
 const MIT_GRANT = 'Permission is hereby granted, free of charge';
 const PROVENANCE = {
@@ -59,16 +61,24 @@ function markdownComments(text) {
   return [...text.matchAll(/<!--[\s\S]*?-->/g)].map((match) => ({ start: match.index, value: match[0] }));
 }
 
+function cComments(text) {
+  const pattern = /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+  return [...text.matchAll(pattern)].filter((match) => match[0].startsWith('/')).map((match) => ({ start: match.index, value: match[0] }));
+}
+
+const hashComments = (text) => text.split('\n').flatMap((line, index) => (/^\s*#/.test(line) ? [{ start: index, value: line, line: index + 1 }] : []));
+
 function commentsOf(file) {
   const text = readFileSync(join(root, file), 'utf8');
   if (CODE.test(file)) return codeComments(text);
   if (HTML.test(file)) return htmlComments(text);
   if (MARKDOWN.test(file)) return markdownComments(text);
-  if (file === '.gitignore' || YAML.test(file)) return text.split('\n').flatMap((line, index) => (/^\s*#/.test(line) ? [{ start: index, value: line, line: index + 1 }] : []));
+  if (C_SOURCE.test(file)) return cComments(text);
+  if (basename(file) === DOTFILE_HASH || YAML.test(file)) return hashComments(text);
   return [];
 }
 
-const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || YAML.test(file) || file === '.gitignore' || NO_COMMENT_SYNTAX.test(file);
+const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || C_SOURCE.test(file) || YAML.test(file) || basename(file) === DOTFILE_HASH || NO_COMMENT_SYNTAX.test(file);
 
 function provenanceProblem(file) {
   const entry = PROVENANCE[file];

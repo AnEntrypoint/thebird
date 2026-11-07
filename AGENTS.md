@@ -6,8 +6,9 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
 - Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
-- Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/` and `web/vendor/pyodide/`.
-- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/witness.mjs`.
+- Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/quickjs/`.
+- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
+- QuickJS-ng wasm wrapper: `scripts/quickjs/thebird-eval.c`, built only by `scripts/vendor-quickjs.mjs`.
 
 ## Browser and Node split
 
@@ -54,6 +55,15 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Commit gate
 
 `web/commit-gate.js` is the in-page gate for `git commit`. It checks the index, staging, syntax (acorn), ASCII, the four docs and their repo paths, and a git object round trip. It is not a semantic review. Keep its checks and its `NOT_COVERED` list in step with the code, and with `ARCHITECTURE.md`.
+
+## QuickJS-ng milestone 1
+
+- `scripts/vendor-quickjs.mjs` builds quickjs-ng v0.18.0 (source archive sha256 `28bcd89aa3683fd2a946537e5ce3f11cc46b5cbf3383c7561aaef3df5ff9f1dd`) into `web/vendor/quickjs/qjs.wasm`, a WASI reactor, with zig 0.17.1 (the PyPI `ziglang==0.17.1` wheel). Run it with `ZIG=/path/to/zig npm run vendor:quickjs`. `web/vendor/quickjs/` carries its own `.gitignore` that ignores everything but itself.
+- The wasm pin is `b279cdae2373a333366c1596083a48bb8955b919e6ee6e56394eba1cf1a5a62d`, recorded in `scripts/vendor-quickjs.mjs`. Two clean builds with the script produced identical bytes on this machine. The vendor script and the witness both fail when the artifact does not match the pin.
+- The build is reproducible only with fixed paths. The script builds in `$TMPDIR/thebird-quickjs/src` with relative source names, uses the cache `$TMPDIR/thebird-quickjs/zig-cache`, and prefix-maps the repo root and zig's lib dir. The binary still embeds zig's libc source paths, and those and the build paths are specific to this machine. Another zig install or temp directory needs a re-pin.
+- `scripts/witness-quickjs.mjs` (`npm run witness:quickjs`) instantiates the wasm with `node:wasi` and runs 10 evaluations: arithmetic, JSON, BigInt, a regex, Unicode case mapping, an uncaught `TypeError`, and a `SyntaxError`. It exits 0 only when the artifact matches the pin and every evaluation matches.
+- `scripts/quickjs/thebird-eval.c` exports `thebird_eval(ptr, len)`. It copies the input into a NUL-terminated buffer, evaluates it in global scope, and returns the value or `Uncaught <message>`. QuickJS's lexer reads past the input length, so the copy is required.
+- Milestone 1 runs the engine under Node with `node:wasi`. The browser WASI shim and the libuv replacement are not started.
 
 ## Fresh-tree notes
 

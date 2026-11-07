@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -193,6 +194,16 @@ function nodeReach(file, seen = new Set()) {
 const BROWSER_FILES = ['web/terminal.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/curl-in-page.js', 'web/ansi.js'];
 
 function agentsStatic() {
+  record('quickjs-ng v0.18.0', (() => {
+    const pin = 'b279cdae2373a333366c1596083a48bb8955b919e6ee6e56394eba1cf1a5a62d';
+    const recorded = all(
+      outcome(fileHas('scripts/vendor-quickjs.mjs', pin), 'vendor-quickjs.mjs records the wasm pin'),
+      outcome(fileHas('AGENTS.md', pin), 'AGENTS.md records the wasm pin'),
+    );
+    if (!existsSync(repo('web/vendor/quickjs/qjs.wasm'))) return all(recorded, outcome(null, 'web/vendor/quickjs/qjs.wasm is not present in this checkout'));
+    const digest = createHash('sha256').update(readFileSync(repo('web/vendor/quickjs/qjs.wasm'))).digest('hex');
+    return all(recorded, outcome(digest === pin, `vendored qjs.wasm sha256 ${digest === pin ? 'matches' : 'does not match'} the pin`));
+  })());
   record('Browser (page and worker)', outcome(BROWSER_FILES.every((file) => existsSync(repo(file)) && !nodeReach(repo(file))), 'none of the browser files reaches a Node module, directly or through a relative import'));
   record('Node only: `bin/thebird-relay.js`', outcome(['bin/thebird-relay.js', 'src/relay.js'].every((file) => nodeReach(repo(file))), 'each Node-only file reaches a node: module, directly or through a relative import'));
   record('Everything under `web/` is browser-only', outcome(!walk(repo('web')).filter((file) => /\.m?js$|\.js$/.test(file) && !file.includes('/vendor/')).some((file) => /from 'node:/.test(readFileSync(file, 'utf8'))), 'no web file outside vendor imports a node: module'));

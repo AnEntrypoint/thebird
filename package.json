@@ -15,7 +15,9 @@
     "lint:architecture": "node scripts/lint-architecture.mjs",
     "lint:comments": "node scripts/lint-comments.mjs",
     "start": "node bin/thebird-relay.js",
-    "witness": "node scripts/witness.mjs"
+    "vendor:quickjs": "node scripts/vendor-quickjs.mjs",
+    "witness": "node scripts/witness.mjs",
+    "witness:quickjs": "node scripts/witness-quickjs.mjs"
   },
   "repository": "https://github.com/AnEntrypoint/thebird.git"
 }
