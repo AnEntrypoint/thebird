@@ -7,3 +7,4 @@ node_modules/
 .agentplug-kv/
 .env
 config.bat
+runs/

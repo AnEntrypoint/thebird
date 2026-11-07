@@ -15,5 +15,6 @@ A Node CLI and library whose every operation dispatches through gm tooling.
 - CLI commands and library methods must be thin mappings to gm verbs.
 - Unknown gm verbs pass through unchanged, so new gm verbs need no thebird change.
 - `job_start` maps to gm's `run_shell` with `background: true` because gm's in-process engine has no separate job-start verb.
-- Validation is running the real CLI paths; there is no test suite.
+- Validation is `npm run witness`, which runs the real CLI paths plus the
+  Node-side runner and library checks. There is no test suite.
 - Use Conventional Commits.

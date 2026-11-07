@@ -17,7 +17,8 @@
   },
   "scripts": {
     "check": "node --check bin/thebird.js && node --check src/*.js",
-    "start": "node bin/thebird.js"
+    "start": "node bin/thebird.js",
+    "witness": "node scripts/witness.mjs"
   },
   "repository": "https://github.com/AnEntrypoint/thebird.git"
 }
