@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -170,6 +170,32 @@ if (fileExists(chrome)) {
     },
   });
   check('relay Ctrl-C cancels a running host command in about a second and the shell carries on', relayInterrupted.out.includes('^C') && relayInterrupted.out.includes('cancelled by the host') && relayCancel.elapsed < 10000 && /^after-relay-cancel$/m.test(relayInterrupted.out), `cancel took ${relayCancel.elapsed} ms`);
+  mkdirSync(join(relayWs, 'tabrelay'), { recursive: true });
+  writeFileSync(join(relayWs, 'tabrelay', 'alpha.txt'), 'a\n');
+  writeFileSync(join(relayWs, 'tabrelay', 'beta.txt'), 'b\n');
+  const relayTab = {};
+  const relayTabState = await terminal([['engine', 'relay']], {
+    interact: async ({ type, press, evaluate }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 800));
+      await type('shell cat tabrelay/al');
+      await press('Tab');
+      await settle();
+      relayTab.file = await value();
+      await evaluate("document.getElementById('line').value = ''");
+      await type('shell cat tabrelay/');
+      await press('Tab');
+      await settle();
+      await evaluate("document.getElementById('line').value = ''");
+      await type('shell ech');
+      await press('Tab');
+      await settle();
+      relayTab.command = await value();
+      relayTab.prompt = await evaluate("document.getElementById('prompt').textContent");
+    },
+  });
+  check('relay Tab completes a file name, lists several matches and completes a command name', relayTab.file === 'shell cat tabrelay/alpha.txt ' && /tabrelay\/alpha\.txt {2}tabrelay\/beta\.txt/.test(relayTabState.out) && relayTab.command === 'shell echo ', JSON.stringify({ file: relayTab.file, command: relayTab.command }));
+  check('relay prompt shows the workspace, where host commands run', relayTab.prompt === `thebird ${relayWs}> `, JSON.stringify(relayTab.prompt));
   const relayNode = await terminal([['engine', 'relay'], ['run', 'shell node -v']]);
   check('relay mode runs the host node, which the in-page shell cannot', relayNode.engine === 'ready' && /^v\d+\.\d+\.\d+$/m.test(relayNode.out), relayNode.out.split('\n').find((line) => line.startsWith('v')) ?? relayNode.out.slice(0, 140));
   const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);

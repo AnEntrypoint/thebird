@@ -162,13 +162,13 @@ caret to the start and end of the line; each is handled in the page, not by the 
 Lines typed while a command runs wait in a queue and run in order. Ctrl-C cancels
 the running command and drops the queued lines.
 The prompt shows the shell's working directory. The shell reads it back with
-`pwd` after each run, and Tab completes relative to it. Relay mode shows the plain prompt.
+`pwd` after each run, and Tab completes relative to it. Relay mode shows the workspace in the prompt, because each host command starts in the workspace and `cd` does not carry over.
 The terminal keeps history for the up and down arrows, in localStorage, and
 stores only the submitted command lines (see AGENTS.md). Tab completes the first word after `shell` against the command names the shell
 resolves (`compgen -c`, kept only where `command -v` succeeds), so a listed name runs.
 Otherwise Tab completes the last word against the workspace tree, which the worker lists from the OPFS shim. A
 unique match completes with a space or a slash, and several matches complete the
-common prefix or list the candidates. Relay mode has no completion either. Ctrl-C while a command runs
+common prefix or list the candidates. Relay mode completes the same way: `src/gm-remote.js` answers command names with `compgen -c` through `run_shell`, and file names with `list_dir`, both over `/call`, so the relay surface is unchanged. Ctrl-C while a command runs
 cancels it through bashkit's `cancel()`, which takes effect between commands and
 sleeps, not inside one blocking step. Relay mode cancels the same way through `POST /cancel`, which aborts the in-flight
 `/call` with that id; the relay's gm call receives an AbortSignal, which gm's run_shell stops by
