@@ -461,9 +461,9 @@ if (fileExists(chrome)) {
   const lookupTable = await terminal(lookupChunks.map((chunk) => ['run', `shell for n in ${chunk.map((name) => `'${name}'`).join(' ')}; do a=$(command -v "$n"); w=$(which "$n"); k=$(type -t "$n"); [ "$a" = "$w" ] || echo mismatch-which-$n; case "$a" in /*) [ "$k" = file ] || echo mismatch-kind-$n ;; *) case "$k" in builtin|keyword|function) ;; *) echo mismatch-kind-$n ;; esac ;; esac; done; echo lookup-chunk-done`]));
   const chunksDone = lookupTable.out.split('\n').filter((line) => line === 'lookup-chunk-done').length;
   check('which, command -v and type agree for every name Tab offers, path or builtin', chunksDone === lookupChunks.length && !/^mismatch-/m.test(lookupTable.out), `${chunksDone}/${lookupChunks.length} chunks; ` + lookupTable.out.split('\n').filter((line) => /^mismatch-/.test(line)).slice(0, 4).join(' / ').slice(0, 160));
-  const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
+  const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami'], ['run', 'shell tar --version']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
-  check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);
+  check('in-page uname, whoami and tar are labelled as emulations, and plain commands are not', notes === 3 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out) && /^tar \(bashkit\) /m.test(emulated.out), `notes ${notes}`);
   check('in-page bash refuses a bare & and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs need the relay') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
   const sqlite = await terminal([
     ['run', 'shell mkdir -p notes'],

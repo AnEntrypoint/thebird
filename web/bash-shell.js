@@ -7,8 +7,8 @@ import { curlBuiltin } from './curl-in-page.js';
 import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
-const EMULATED = /\b(uname|whoami|hostname|id|ps|kill)\b/;
-const EMULATION_NOTE = 'note: uname, whoami, hostname, id, ps and kill are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
+const EMULATED = /\b(uname|whoami|hostname|id|ps|kill|tar)\b/;
+const EMULATION_NOTE = 'note: uname, whoami, hostname, id, ps, kill and tar are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
 
 export function hasBackgroundOperator(command) {
   let quote = null;
