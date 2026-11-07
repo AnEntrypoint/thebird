@@ -99,6 +99,11 @@ check('relay rejects a malformed cancel body', (await fetch(relay.url + 'cancel'
 check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405 && (await fetch(relay.url + 'cancel')).status === 405);
 
 const { AnsiParser } = await import('../web/ansi.js');
+const { AsyncLocalStorage } = await import('../web/shims/node-stubs.js');
+const storage = new AsyncLocalStorage();
+const syncStore = storage.run('held', () => storage.getStore());
+const asyncStore = await storage.run('held', async () => { await null; return storage.getStore(); });
+check('AsyncLocalStorage holds its store for synchronous code and loses it after an await', syncStore === 'held' && asyncStore === undefined, `sync ${syncStore}, after await ${asyncStore}`);
 const ansiParser = new AnsiParser();
 const parsedWhole = ansiParser.push('\u001b[1;31mred\u001b[0m plain \u001b]0;title\u0007ok');
 check('ansi parser keeps the text of escape sequences out of plain output', parsedWhole.map((segment) => segment.text).join('') === 'red plain ok' && parsedWhole[0].classes === 'fg-1 bold', JSON.stringify(parsedWhole));
@@ -495,6 +500,8 @@ if (fileExists(chrome)) {
     ['run', 'shell pip install definitely-not-a-real-package-xyz'],
   ]);
   check('in-page pip installs a pure package from PyPI, and python3 imports it in the same page', /^installed tabulate \S+$/m.test(pipInstall.out) && /^\d+\.\d+\.\d+$/m.test(pipInstall.out), pipInstall.out.split('\n').filter((line) => /installed|^\d/.test(line)).join(' / ').slice(0, 160));
+  const pipFiles = await terminal([['run', 'shell find /workspace -iname "*tabulate*" | wc -l']]);
+  check('pip installs stay in Pyodide memory: no tabulate file reaches OPFS', /^0$/m.test(pipFiles.out), pipFiles.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   check('in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', pipInstall.out.includes('version specifiers and URLs are not supported') && pipInstall.out.includes('part of the Pyodide package set') && pipInstall.out.includes("Can't fetch metadata for 'definitely-not-a-real-package-xyz'") && !/https?:\/\//.test(pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join('\n')), pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join(' / ').slice(0, 200));
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const pythonReopened = await terminal([['run', 'shell cat notes/out.txt'], ['run', 'shell python3 -c "print(open(\'notes/out.txt\').read().strip())"']]);
@@ -519,7 +526,7 @@ if (fileExists(chrome)) {
     ['run', `shell python3 -c "print(0)"; t0=$(date +%s%N); ${warmCalls}; t1=$(date +%s%N); echo $(( (t1 - t0) / 1000000 ))`],
   ]);
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
-  check('python3 warm calls are timed in-page over 300 files', Number.isFinite(totalMs) && totalMs > 0, `${totalMs} ms for 30 calls`);
+  check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
   const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
   process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
@@ -582,6 +589,9 @@ if (fileExists(chrome)) {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
 }
 const seeded = await import('../web/shims/fs.js');
+const watcher = seeded.watch();
+const chained = watcher.on('change', () => {}) === watcher && watcher.once('change', () => {}) === watcher;
+check('fs.watch returns an inert handle: close is a no-op and on/once return the handle', typeof watcher.close === 'function' && chained && watcher.close() === undefined);
 const { gitBuiltin } = await import('../web/git-in-page.js');
 seeded.mkdirSync('/workspace/notes', { recursive: true });
 seeded.writeFileSync('/workspace/notes/a.txt', 'one\n');

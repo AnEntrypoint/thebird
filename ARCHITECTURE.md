@@ -65,7 +65,7 @@ Known gaps in the browser shims:
   the link, `ls -l`, `rm` on the link, and a browser restart.
 - `fs.watch` is a no-op, and there are no file modes or locks.
 - Writes are write-behind, so each tool call is durable once it returns.
-- One worker, one writer, and the whole tree is held in memory.
+- The gm worker holds the whole tree in memory, and each reply waits for the flush to OPFS.
 - `AsyncLocalStorage` only holds context for synchronous code.
 - In-page git has local branches and checkout (`branch`, `checkout`,
   `checkout -b`, through isomorphic-git), but no remotes, stash or path
@@ -91,7 +91,7 @@ against the package's `build-info.json`. The output lands in
 Its host filesystem is `web/shims/bashkit-host.js`, which wraps the same OPFS
 tree that gm uses, so a write from bash is visible to gm and the reverse holds.
 
-Probed coverage (Node, 0.20.3): bash syntax (variables, arithmetic, loops,
+Probed coverage (in-page, 0.20.3): bash syntax (variables, arithmetic, loops,
 functions, command substitution, redirects, pipes, `&&`), and these
 commands: echo, printf, test, seq, sed, awk, grep, sort, uniq, wc, head, tail,
 cut, tr, find, xargs, tee, ls, cp, mv, rm, mkdir, touch, cat, basename,
@@ -105,16 +105,14 @@ Not covered: node and any host binary (exit 127). `sqlite3` and `python3` run
 in-page, as described below.
 
 `sqlite3 <database> <sql>` is a custom builtin (`web/sqlite-in-page.js`) over
-sql.js 1.15.2 (MIT, `web/vendor/sqljs/`, licence `web/vendor/SQLJS-LICENSE`).
+sql.js (MIT, `web/vendor/sqljs/`, licence `web/vendor/SQLJS-LICENSE`).
 The database is a file on the OPFS tree. It is read at the start of each call
 and written back at the end, so it survives a browser restart. Output is
-sqlite's list mode, with `|` between columns. bashkit ships its own `sqlite3`
-that fails in this build, but a custom builtin overrides it.
-
+sqlite's list mode, with `|` between columns. 
 Relay-only items, ranked by what can run in the browser:
 
 | Item | In-page option | Status |
-| `sqlite3` | sql.js 1.15.2, MIT, about 670 KB of wasm | done, witnessed in headless Chromium |
+| `sqlite3` | sql.js, MIT, about 670 KB of wasm | done, witnessed in headless Chromium |
 | `python3` | Pyodide 314.0.7, MPL-2.0, about 14 MB unpacked | done, witnessed in headless Chromium |
 | `node` | none verified: WebContainers is proprietary, and a JS subset is not Node | stays relay-only |
 
@@ -127,10 +125,9 @@ into Pyodide's memory filesystem. Before each call, only files whose shim
 revision changed are uploaded; the shim's per-file revision counter comes from
 `mark()` in `web/shims/fs.js`. After the call, every Pyodide file is read and
 compared with the mirror, and changed, new and deleted files are written back
-to OPFS. The read-back is O(n) by design: detecting changes by timestamp could
+to OPFS. The read-back reads every Pyodide file after each call, so it does not rely on timestamps: a timestamp check could
 miss a same-size write within one millisecond. Measured in headless Chromium,
-over 300 files, a warm call takes 0.9 ms with this sync and 1.3 ms with the
-full copy it replaced. Only the last line of a traceback is reported, and
+over 300 files, a warm call takes under 5 ms with this sync. Only the last line of a traceback is reported, and
 printed output comes before it. The scheme is dropped from that text, because
 bashkit cuts error text at `//`.
 
@@ -151,8 +148,7 @@ same page, and that refusals are readable and carry no URL.
 (`web/shell-lookup.js`). They answer from bashkit's own `builtin command -v` and
 `builtin type`, except that the five in-page builtins report as builtins. A
 witnessed loop checks that the three agree for every name Tab offers.
-`shell` passes its text to bashkit raw, so quotes and parentheses survive. The
-runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
+`shell` passes its text to bashkit raw, so quotes and parentheses survive. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
 Shell output streams while a command runs. bashkit calls `onOutput` with stdout and

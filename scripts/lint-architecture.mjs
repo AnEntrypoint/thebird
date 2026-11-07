@@ -118,8 +118,7 @@ function staticChecks() {
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
   record('which verifies the wasm SHA-256', outcome(fileHas('scripts/vendor-bashkit.mjs', 'build-info.json') && fileHas('scripts/vendor-bashkit.mjs', 'sha256'), 'vendor-bashkit.mjs reads build-info.json and checks sha256'));
   record('backed by isomorphic-git 1.44.11', versionIn('web/vendor/isomorphic-git.mjs', '1.44.11'));
-  record('sql.js 1.15.2 (MIT', versionIn('web/vendor/sqljs', '1.15.2'));
-  record('bashkit ships its own `sqlite3`', outcome(null, 'bashkit\'s own sqlite3 failure is not reproduced here'));
+  record('sql.js (MIT', outcome(fileHas('web/vendor/SQLJS-LICENSE', 'MIT'), 'the vendored licence names MIT'));
   record('about 670 KB of wasm', (() => {
     const wasm = filesUnder('web/vendor/sqljs').filter((file) => file.endsWith('.wasm'));
     if (wasm.length === 0) return outcome(null, 'no sql.js wasm is vendored in this checkout');
@@ -148,7 +147,6 @@ function staticChecks() {
     'shell-lookup.js defines the functions over builtin command -v and builtin type',
   ));
   record('`git` is a bashkit custom builtin', outcome(fileHas('web/bash-shell.js', 'git: (ctx)') && fileHas('web/bash-shell.js', 'customBuiltins'), 'bash-shell.js registers git in customBuiltins'));
-  record('`git_commit` refuses `paths` and `author`', outcome(null, 'the argument refusal is not probed'));
   record('because gm\'s `pending.mjs`', (() => {
     const path = join(gmSrc, 'pending.mjs');
     if (!existsSync(path)) return outcome(null, 'gm pending.mjs is not present');
@@ -157,15 +155,15 @@ function staticChecks() {
   record('hydrated from OPFS at start', outcome(fileHas('web/shims/fs.js', 'hydrate'), 'fs.js hydrates the tree from OPFS'));
   record('table is kept in `/.thebird/links.json`', outcome(fileHas('web/shims/fs.js', 'links.json'), 'fs.js stores the link table in links.json'));
 
-  record('Measured in headless Chromium', outcome(null, 'the 0.9 ms and 1.3 ms figures are timed by a witness check, but the witness does not assert the numbers'));
-  record('`fs.watch` is a no-op', outcome(null, 'no witness check or probe covers fs.watch'));
-  record('One worker, one writer', outcome(null, 'no witness check or probe covers the single-writer design'));
-  record('`AsyncLocalStorage` only holds', outcome(null, 'no witness check or probe covers AsyncLocalStorage'));
-  record('The read-back is O(n) by design', outcome(null, 'the design is not measured by a check'));
-  record('Installed packages live in Pyodide', outcome(null, 'no check covers that packages are not written to OPFS'));
-  record('bashkit cuts error text at', outcome(null, 'bashkit cutting error text at // is not reproduced separately'));
-  record('runner used to strip quotes',outcome(null, 'a historical note; no check covers the old behaviour'));
-  record('It does not run gm\'s sources', outcome(null, 'the gate\'s omissions are not probed; the gate\'s checks are witnessed'));
+  cites('Measured in headless Chromium (`npm run witness`)', ['browser terminal runs shell through the relay in headless Chromium']);
+  cites('over 300 files, a warm call takes under 5 ms', ['python3 warm calls are timed in-page over 300 files']);
+  record('`fs.watch` is a no-op', outcome(witness.includes('fs.watch returns an inert handle') && !fileHas('web/shims/fs.js', 'chmod') && !fileHas('web/shims/fs.js', 'lock'), 'the witness checks the inert handle, and fs.js has no file modes or locks'));
+  record('The gm worker holds the whole tree in memory', outcome(/await flushFs\(\);\n\s+postMessage\(reply\);/.test(readFileSync(repo('web/gm-worker.js'), 'utf8')), 'gm-worker.js waits for flushFs before each reply'));
+  record('`AsyncLocalStorage` only holds', outcome(witness.includes('AsyncLocalStorage holds its store for synchronous code and loses it after an await'), 'the witness checks the store before and after an await'));
+  cites('The read-back reads every Pyodide file', ['in-page python3 removes a file it deletes and the shell sees it gone']);
+  cites('Installed packages live in Pyodide', ['pip installs stay in Pyodide memory: no tabulate file reaches OPFS']);
+  cites('bashkit cuts error text at', ['in-page python3 error text keeps a readable link instead of bashkit cutting it at //']);
+  record('It does not run gm\'s sources', outcome(['wiki', 'skills', 'connect', 'workers', 'prompt', 'KEEP'].every((name) => fileHas('web/commit-gate.js', `'${name}'`)), 'commit-gate.js names each of these as not run in-page'));
 
   cites('`?gm=raw` loads gm without', ['before: raw gm cannot load in the browser worker']);
   cites('the file survives a browser restart', ['after: the OPFS file survives a browser restart']);
@@ -267,13 +265,14 @@ function liveRecords(page, remote, facts) {
     P('grep', (t) => t.includes('a.txt'), 'grep finds the text'),
     P('search', (t) => !/error/i.test(t), 'search runs'),
   ));
-  record('`memory write`, `memory search`, `prd add`, `prd list`, `log`, `config`', partial(all(
+  record('`memory write`, `memory search`, `prd add`, `prd list`, `log`, `config`', all(
     P('memory', noError, 'memory write runs'),
     P('memory-search', noError, 'memory search runs'),
     P('prd', noError, 'prd list runs'),
     P('log-tool', noError, 'log runs'),
     P('config', noError, 'config runs'),
-  ), 'prd add is not probed'));
+    P('prd-add', (t) => /^prd-\S+$/m.test(t), 'prd add returns an id'),
+  ));
   record('`shell` (bash builtins and pipelines, see below)', all(
     P('pipe', (t) => t === 'b', 'a pipeline runs in-page'),
     P('commands', (t) => t.includes('all-resolved') && !t.includes('missing-'), 'every listed command resolves'),
@@ -309,12 +308,15 @@ function liveRecords(page, remote, facts) {
   record('`head` after an early-closing pipe', P('head', (t) => t === '1', 'head closes the pipe'));
   record('`sqlite3 <database> <sql>` is a custom builtin', P('sqlite', (t) => t.includes('1|two'), 'sqlite3 prints list mode'));
   record('sqlite\'s list mode',P('sqlite', (t) => t.includes('1|two'), 'sqlite3 list mode uses |'));
-  record('sql.js 1.15.2 (MIT', outcome(null, 'sql.js 1.15.2 is unverified; the wasm size is checked statically'));
   record('| `node` | none verified', P('node', (t) => /rc=127/.test(t) && /not available in the sandbox/.test(t), 'node exits 127 with the sandbox message'));
   record('Not covered: node and any host binary (exit 127)', P('node', (t) => /rc=127/.test(t), 'node exits 127'));
   record('`ps`, `uname`, `hostname` and `tar` are emulated', P('tar', (t) => t.includes('tar (bashkit) 0.1'), 'tar reports bashkit'));
   record('`tar --version` reports `tar (bashkit) 0.1`', P('tar', (t) => t.includes('tar (bashkit) 0.1'), 'tar --version reports bashkit'));
-  record('Probed coverage (Node, 0.20.3)', partial(P('commands', (t) => t.includes('all-resolved') && !t.includes('missing-'), 'the listed commands resolve in-page'), 'the Node probe is not repeated here'));
+  record('Probed coverage (in-page, 0.20.3)', P('commands', (t) => t.includes('all-resolved') && !t.includes('missing-'), 'the listed commands resolve in-page'));
+  record('`git_commit` refuses `paths` and `author`', all(
+    P('commit-paths', (t) => t.includes('stage with git_add and omit paths'), 'paths are refused'),
+    P('commit-author', (t) => t.includes('authored lanmower'), 'author is refused'),
+  ));
   record('`python3 -c <code>` and `python3 <file>`', all(
     P('python-c', (t) => /^42$/m.test(t), 'python3 -c runs'),
     P('python-file', (t) => /^42$/m.test(t), 'python3 <file> runs'),
@@ -404,6 +406,9 @@ async function liveChecks() {
       ['python-file', 'shell echo "print(40+2)" > lint.py && python3 lint.py'],
       ['tar', 'shell tar --version'],
       ['head', 'shell seq 1 100000 | head -1'],
+      ['prd-add', 'prd add lint-probe-title'],
+      ['commit-paths', 'gm git_commit {"message":"x","paths":["a.txt"]}'],
+      ['commit-author', 'gm git_commit {"message":"x","author":"me"}'],
     ];
     const remoteProbes = [
       ['relay-push', 'git push'],
