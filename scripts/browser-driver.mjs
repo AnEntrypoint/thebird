@@ -4,7 +4,14 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000 }) {
+const KEYS = {
+  Enter: { code: 'Enter', keyCode: 13, text: '\r' },
+  ArrowUp: { code: 'ArrowUp', keyCode: 38 },
+  ArrowDown: { code: 'ArrowDown', keyCode: 40 },
+  c: { code: 'KeyC', keyCode: 67 },
+};
+
+export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact }) {
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
     '--headless',
@@ -59,6 +66,23 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000 }) 
     while (!(await evaluate("document.body && document.body.dataset.done === 'true'"))) {
       if (Date.now() > until) throw new Error('terminal did not finish: ' + url);
       await sleep(300);
+    }
+    if (interact) {
+      const waitFor = async (expression, limit = timeoutMs) => {
+        const deadline = Date.now() + limit;
+        while (!(await evaluate(expression))) {
+          if (Date.now() > deadline) throw new Error('timed out waiting for: ' + expression);
+          await sleep(100);
+        }
+      };
+      const press = async (key, { ctrl = false } = {}) => {
+        const spec = KEYS[key];
+        const base = { key, code: spec.code, windowsVirtualKeyCode: spec.keyCode, nativeVirtualKeyCode: spec.keyCode, modifiers: ctrl ? 2 : 0 };
+        await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: spec.text }, sessionId);
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+      };
+      const type = (text) => send('Input.insertText', { text }, sessionId);
+      await interact({ evaluate, waitFor, press, type });
     }
     const state = await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent })");
     socket.close();

@@ -24,13 +24,22 @@ try {
 
 const run = createRunner(createApi(client));
 
+const typed = [];
+let position = 0;
+let busy = false;
+
 async function execute(command) {
   write('thebird> ' + command);
+  busy = true;
+  document.body.dataset.busy = 'true';
   try {
     const result = await run(command);
     if (result && result.exit !== true && result !== '') write(String(result));
   } catch (err) {
     write('error: ' + err.message);
+  } finally {
+    busy = false;
+    delete document.body.dataset.busy;
   }
 }
 
@@ -43,5 +52,19 @@ document.getElementById('form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const command = line.value;
   line.value = '';
+  if (command.trim() && typed.at(-1) !== command) typed.push(command);
+  position = typed.length;
   await execute(command);
+});
+
+line.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    position = Math.min(typed.length, Math.max(0, position + (event.key === 'ArrowUp' ? -1 : 1)));
+    line.value = typed[position] ?? '';
+  } else if (event.ctrlKey && event.key === 'c' && busy && client.cancel) {
+    event.preventDefault();
+    client.cancel();
+    write('^C');
+  }
 });

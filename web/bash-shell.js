@@ -40,13 +40,31 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
   let status = 0;
+  let running = false;
+  let cancelled = false;
   return {
     async run(command) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
-      const result = await bash.execute(restore + command);
+      running = true;
+      cancelled = false;
+      let result;
+      try {
+        result = await bash.execute(restore + command);
+      } catch (err) {
+        if (!cancelled) throw err;
+        result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };
+      } finally {
+        running = false;
+        bash.clearCancel();
+      }
       status = result.exitCode;
       const note = EMULATED.test(command) ? withNewline(EMULATION_NOTE) : '';
       return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr + note };
+    },
+    cancel() {
+      if (!running) return;
+      cancelled = true;
+      bash.cancel();
     },
   };
 }

@@ -31,10 +31,12 @@ try {
   ]);
   const tools = createTools({ workspace: WORKSPACE, runDir, log: openLog(`${runDir}/log.jsonl`), background: false });
   let shell;
+  let cancelRequested = false;
   const overrides = {
     run_shell: async (args) => {
       if (args.background || hasBackgroundOperator(args.command)) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
       shell ??= await createShell({ cwd: WORKSPACE });
+      if (cancelRequested) return { ok: false, exitCode: 130, signal: null, output: 'cancelled\n' };
       return shell.run(args.command);
     },
     ...gitVerbs,
@@ -43,6 +45,12 @@ try {
   await flushFs();
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
+    if (data.cancel) {
+      cancelRequested = true;
+      shell?.cancel();
+      return;
+    }
+    cancelRequested = false;
     let reply;
     try {
       reply = { id: data.id, ok: true, result: await client.call(data.verb, data.args ?? {}) };

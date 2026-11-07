@@ -194,6 +194,43 @@ if (fileExists(chrome)) {
     ['run', 'shell echo redir-ok 2>&1'],
     ['run', 'shell echo "quoted & kept"'],
   ]);
+  const recalled = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      await type('shell echo first-typed');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'");
+      await type('shell echo second-typed');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'");
+      await press('ArrowUp');
+      recalled.up1 = await value();
+      await press('ArrowUp');
+      recalled.up2 = await value();
+      await press('ArrowDown');
+      recalled.down1 = await value();
+      await press('ArrowDown');
+      recalled.down2 = await value();
+    },
+  });
+  check('in-page terminal recalls submitted commands with the up and down arrows', recalled.up1 === 'shell echo second-typed' && recalled.up2 === 'shell echo first-typed' && recalled.down1 === 'shell echo second-typed' && recalled.down2 === '', JSON.stringify(recalled));
+  const cancelled = {};
+  const interrupted = await terminal([], {
+    interact: async ({ type, press, waitFor }) => {
+      await type('shell for i in $(seq 1 200); do sleep 0.1; done');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy === 'true'");
+      const started = Date.now();
+      await press('c', { ctrl: true });
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+      cancelled.elapsed = Date.now() - started;
+      await type('shell echo after-cancel');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'");
+    },
+  });
+  check('in-page terminal Ctrl-C cancels a running command and the shell carries on', interrupted.out.includes('^C') && cancelled.elapsed < 10000 && /^after-cancel$/m.test(interrupted.out), `cancel took ${cancelled.elapsed} ms`);
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);

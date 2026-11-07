@@ -41,6 +41,9 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     tools: () => {
       throw new Error('tools are not available through a worker client');
     },
+    cancel() {
+      worker.postMessage({ cancel: true });
+    },
     async close() {
       worker.terminate();
     },

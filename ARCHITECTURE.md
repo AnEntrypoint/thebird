@@ -130,6 +130,9 @@ printed output comes before it.
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
+The terminal keeps history for the up and down arrows. Ctrl-C while a command runs
+cancels it through bashkit's `cancel()`, which takes effect between commands and
+sleeps, not inside one blocking step. Relay mode has no cancel, so Ctrl-C does nothing there.
 `curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send
 CORS headers to this page. A host without them is refused with a pointer to the
 relay, and flags beyond `-sf`, `-o` (curl) and `-q`, `-O` (wget) need the relay.
