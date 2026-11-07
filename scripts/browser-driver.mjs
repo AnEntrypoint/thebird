@@ -16,6 +16,18 @@ const KEYS = {
   u: { code: 'KeyU', keyCode: 85 },
 };
 
+const CDP_TIMEOUT_MS = 60000;
+
+export function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, fail) => {
+      timer = setTimeout(() => fail(new Error(`${label} did not answer within ${ms} ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact }) {
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
@@ -45,11 +57,11 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     let nextId = 1;
     const waiting = new Map();
     const logs = [];
-    const send = (method, params = {}, sessionId) => new Promise((ok, fail) => {
+    const send = (method, params = {}, sessionId) => withTimeout(new Promise((ok, fail) => {
       const id = nextId++;
       waiting.set(id, { ok, fail });
       socket.send(JSON.stringify({ id, method, params, sessionId }));
-    });
+    }), CDP_TIMEOUT_MS, method);
     const onEvent = ({ method, params = {}, sessionId: from }) => {
       if (method === 'Target.attachedToTarget') {
         if (['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {

@@ -64,5 +64,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Working rules
 
 - Use Conventional Commits.
-- Open, flaky: once, a witness run stalled for about 16 minutes after the streamed-output checks, in the terminal block that stores submitted lines. `scripts/browser-driver.mjs` `send` has no timeout, so a DevTools reply that never arrives blocks that await, and `waitFor` checks its deadline only between `evaluate` calls. The cause is not reproduced: the re-run finished with `WITNESS-EXIT 0` and 87 PASS / 0 FAIL. A bounded timeout on `send` is the likely fix, and it is not made because the cause is not confirmed.
+- Open, flaky: once, a witness run stalled for about 16 minutes after the streamed-output checks, in the terminal block that stores submitted lines. `send` in `scripts/browser-driver.mjs` had no timeout, and `waitFor` checks its deadline only between `evaluate` calls. The stall is not reproduced: the re-run finished with `WITNESS-EXIT 0`. `send` is now bounded at 60 s through `withTimeout`, and the witness checks that a call which never answers aborts.
+- `THEBIRD_WITNESS_FIXTURE=desynced-mapping npm run witness` feeds a desynced mapping to the drift check in memory, with gh unavailable. The run must exit 1 with the local FAIL line. Without the variable the run exits 0. No file on disk changes.
+- On a slow link the bashkit wasm (7.8 MB) can take minutes to load. The live check passed in 238738 ms with a 1200 s limit, so use a long timeout for live checks on such a network.
 - Validation: `npm run check`, `npm run lint:comments`, `npm run lint:architecture`, and `npm run witness`. The witness drives headless Chromium through `scripts/browser-driver.mjs`; set `CHROME_BIN`. There is no test suite.

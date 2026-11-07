@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
-import { runTerminal } from './browser-driver.mjs';
+import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorPyodide } from './vendor-pyodide.mjs';
 import { buildPages } from './build-pages.mjs';
@@ -507,6 +507,9 @@ const sortedScopes = (scopes) => JSON.stringify(Object.entries(scopes).sort());
 const usesRefs = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 check('every action in pages.yml is pinned to a full 40-hex commit SHA', usesRefs.length > 0 && usesRefs.every((ref) => /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(ref)), usesRefs.join(' '));
 const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+const desyncFirstPin = (text) => text.replace(/(actions\/[\w.-]+ `)([0-9a-f])/, (match, head, first) => head + (first === '0' ? '1' : '0'));
+const desyncFixture = process.env.THEBIRD_WITNESS_FIXTURE === 'desynced-mapping';
+const mappingUnderTest = desyncFixture ? desyncFirstPin(agents) : agents;
 const pinnedUses = (text) => [...text.matchAll(/uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40})/g)].map((m) => ({ action: m[1], sha: m[2] }));
 const recordedPins = (text) => [...text.matchAll(/(actions\/[\w.-]+) `([0-9a-f]{40})` \((v\d+)\)/g)].map((m) => ({ action: m[1], sha: m[2], version: m[3] }));
 const pinMismatches = (workflowText, agentsText) => {
@@ -518,7 +521,7 @@ const pinMismatches = (workflowText, agentsText) => {
   for (const row of rows) if (!pins.some((pin) => pin.action === row.action && pin.sha === row.sha)) found.push(`${row.action} ${row.sha.slice(0, 7)} (${row.version}) is not used in pages.yml`);
   return found;
 };
-const localMismatches = pinMismatches(workflow, agents);
+const localMismatches = pinMismatches(workflow, mappingUnderTest);
 check('pages.yml SHAs match the AGENTS.md Hosting mapping (local, no network)', localMismatches.length === 0, localMismatches.length ? `mismatch: ${localMismatches.join('; ')}` : `${pinnedUses(workflow).length} pins match`);
 const firstRow = recordedPins(agents)[0];
 const flipped = (sha) => (sha[0] === '0' ? '1' : '0') + sha.slice(1);
@@ -557,7 +560,7 @@ const offlineLookup = (action, version) => {
     process.env.PATH = saved;
   }
 };
-const verdict = driftVerdict(workflow, agents, lookupTag);
+const verdict = driftVerdict(workflow, mappingUnderTest, desyncFixture ? offlineLookup : lookupTag);
 if (verdict.status === 'FAIL') check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', false, verdict.detail);
 else if (verdict.status === 'UNVERIFIED') console.log(`UNVERIFIED every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh): ${verdict.detail}`);
 else check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', true, verdict.detail);
@@ -569,6 +572,11 @@ check('gh unavailable with every pin matching gives UNVERIFIED and no FAIL', Boo
 check('negative control: a tag that resolves to another SHA is a FAIL when gh is available', driftVerdict(workflow, agents, () => ({ resolved: flipped(firstRow.sha) })).status === 'FAIL', 'a moved tag is reported as drift');
 check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
+check('the desynced-mapping fixture is used only when THEBIRD_WITNESS_FIXTURE is set', desyncFixture ? mappingUnderTest !== agents : mappingUnderTest === agents, `fixture=${desyncFixture}`);
+const hungCall = await withTimeout(new Promise(() => {}), 50, 'Runtime.evaluate').then(() => 'answered', (err) => err.message);
+check('a DevTools call that never answers aborts with a timeout instead of stalling', hungCall === 'Runtime.evaluate did not answer within 50 ms', hungCall);
+const promptCall = await withTimeout(Promise.resolve('answered'), 50, 'Runtime.evaluate');
+check('a DevTools call that answers in time is returned unchanged (negative control)', promptCall === 'answered', promptCall);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exitCode = failures ? 1 : 0;
