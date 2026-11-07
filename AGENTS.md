@@ -35,6 +35,7 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   answer. Keep it that way.
 - gm is the only execution engine. Do not reimplement filesystem, search,
   shell, git, job, log, wiki, row or fetch behavior locally.
+- In-page `which`, `type` and `command -v` answer from bashkit's fixed host-path table, so `which git` prints `/usr/bin/git` for the in-page git subset, and a script that branches on `if which jq` sees bashkit's answer, not the in-page commands; a replacement table is not built yet.
 - `createGmClient()` resolves `--gm-home` / `GM_HOME` / an installed `gm`
   package / `../gm` / `./gm`, then imports gm's `createTools()` verb engine.
 - CLI commands and library methods must be thin mappings to gm verbs.
