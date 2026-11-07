@@ -34,7 +34,8 @@ Measured in headless Chromium (`npm run witness`):
 | `write`, `read`, `ls`, `stat`, `grep`, `search` | works; the file survives a browser restart |
 | `memory write`, `memory search`, `prd add`, `prd list`, `log`, `config` | works |
 | `shell` (bash builtins and pipelines, see below) | runs in-page through bashkit |
-| `git status`, `job start` | `git` is not present (exit 127); jobs need the relay |
+| `git init`, `add`, `commit -m`, `status`, `log`, `diff` (shell, and gm `git_status`, `git_log`, `git_diff`, `git_add`) | works in-page through isomorphic-git over the OPFS tree |
+| `git push/fetch/pull/branch/checkout`, `job start` | need the relay (`?engine=relay`) |
 | `fetch` | fails for hosts without CORS headers (COEP `require-corp`) |
 
 Child-process call sites in gm (from `import ... from 'node:child_process'`):
@@ -42,9 +43,9 @@ Child-process call sites in gm (from `import ... from 'node:child_process'`):
 | gm module | Calls | Verbs | In-page replacement |
 | `exec.mjs` | 4 `spawn` | `run_shell`, `job_*`, and every git verb through `runCommand` | blocked; bash-in-wasm covers builtins only |
 | `tools.mjs` | 1 `spawnSync` | `run_shell` path | blocked |
-| `git.mjs` | via `exec.mjs` | `git_*`, `ci_status` | partial: a JS git library could replace a subset |
+| `git.mjs` | via `exec.mjs` | `git_*`, `ci_status` | partial: isomorphic-git answers `git_status`, `git_log`, `git_diff`, `git_add` |
 | `search.mjs` | 1 `execFileAsync` (git file listing) | `search`, `wiki_search` | partial: list files from OPFS |
-| `code-ast.mjs` | 1 `execFileAsync` (git file listing) + acorn | `callers`, `impact` | blocked: acorn is not bundled and git is needed |
+| `code-ast.mjs` | 1 `execFileAsync` (git file listing) + acorn | `callers`, `impact` | partial: vendored acorn and an emulated git file listing |
 | `review.mjs` | 1 `spawnSync` | `review_*` | blocked |
 | `gate.mjs` | 1 `spawnSync` and 1 `execFileSync` | gate checks | blocked |
 | `body-worker.mjs` | 1 `spawnSync` (`node --check`) | `run_code` | partial: Web Worker runs code, syntax check needs host |
@@ -58,7 +59,10 @@ Known gaps in the browser shims:
 - Writes are write-behind, so each tool call is durable once it returns.
 - One worker, one writer, and the whole tree is held in memory.
 - `AsyncLocalStorage` only holds context for synchronous code.
-- `acorn` is not bundled, so AST verbs fail.
+- In-page git has no branches, remotes, checkout or stash. `diff` compares the
+  working tree with HEAD and prints no hunk headers.
+- In-page `git commit` skips gm's commit gate, which runs Node syntax and smoke
+  checks. The gm `git_commit` verb is not overridden in-page, so it fails there.
 - The relay must send `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp`, because gm's `pending.mjs`
   uses `SharedArrayBuffer`. A static host needs the same headers.
@@ -81,8 +85,17 @@ dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
 gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
 sandbox values, not the host's.
 
-Not covered: git, node, python3, sqlite3, and any host binary (exit 127).
+Not covered: node, python3, sqlite3, and any host binary (exit 127).
 `curl` and `wget` report "network access not configured". Background jobs
 (`job start`) need the relay. `head` after an early-closing pipe needs the
 async `execute()` path, which the shell uses.
+
+`git` is a bashkit custom builtin (`customBuiltins` in `web/bash-shell.js`)
+backed by isomorphic-git 1.44.11 (MIT). The bundle is `web/vendor/isomorphic-git.mjs`,
+built with esbuild, and its licence is `web/vendor/ISOMORPHIC-GIT-LICENSE`.
+`init`, `add`, `commit -m`, `status`, `log [-n N]` and `diff` run over the
+OPFS tree, and `status` prints porcelain v1 lines. The worker answers the gm
+verbs `git_status`, `git_log`, `git_diff` and `git_add` with the same functions
+(`web/git-in-page.js`). `.thebird/` is excluded from the index. The witness
+creates a repository, commits, modifies a file, and checks status, log and diff.
 

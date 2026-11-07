@@ -46,8 +46,15 @@ function statOf(path) {
     const info = meta.get(path) ?? { mtimeMs: Date.now() };
     return {
       size: files.get(path).byteLength,
+      mode: 0o100644,
+      ino: 0,
+      dev: 0,
+      uid: 0,
+      gid: 0,
       mtimeMs: info.mtimeMs,
+      ctimeMs: info.mtimeMs,
       mtime: new Date(info.mtimeMs),
+      ctime: new Date(info.mtimeMs),
       isFile: () => true,
       isDirectory: () => false,
       isSymbolicLink: () => false,
@@ -56,8 +63,15 @@ function statOf(path) {
   if (dirs.has(path)) {
     return {
       size: 0,
+      mode: 0o40755,
+      ino: 0,
+      dev: 0,
+      uid: 0,
+      gid: 0,
       mtimeMs: 0,
+      ctimeMs: 0,
       mtime: new Date(0),
+      ctime: new Date(0),
       isFile: () => false,
       isDirectory: () => true,
       isSymbolicLink: () => false,
@@ -278,6 +292,10 @@ export function writeSync(fd, data, ...rest) {
   mark(handle.path, 'write');
   if (!handle.append) handle.position = at + bytes.byteLength;
   return bytes.byteLength;
+}
+
+export function rmdirSync(path) {
+  rmSync(path);
 }
 
 export function closeSync(fd) {

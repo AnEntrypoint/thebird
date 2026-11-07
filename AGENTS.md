@@ -8,7 +8,8 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   `web/terminal.html`, `web/terminal.js`, `web/gm-worker.js`,
   `web/gm-worker-client.js`, `web/shims/*.js`, `src/shim-map.js`,
   `scripts/browser-driver.mjs`, `scripts/vendor-bashkit.mjs`, `web/bash-shell.js`,
-  `web/shims/bashkit-host.js`, `web/vendor/acorn.mjs`.
+  `web/shims/bashkit-host.js`, `web/vendor/acorn.mjs`, `web/git-in-page.js`,
+  `web/vendor/isomorphic-git.mjs`.
 - Browser-safe: `src/api.js`, `src/commands.js`, `src/runner.js`,
   `src/gm-client.js`, `src/gm-remote.js`, `web/terminal.js`. They import
   nothing from Node and run in a browser. Node-only: `src/gm.js`,

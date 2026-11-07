@@ -106,8 +106,21 @@ if (fileExists(chrome)) {
   check('after: the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
   const script = await terminal([['run', 'shell cat notes/a.txt | tr a-z A-Z > notes/upper.txt && cat notes/upper.txt']]);
   check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
-  const host = await terminal([['run', 'shell git status']]);
-  check('in-page bash reports host tools it lacks as exit 127', host.out.includes('git: command not found'));
+  const host = await terminal([['run', 'shell node -v']]);
+  check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
+  const repo = await terminal([
+    ['run', 'shell mkdir -p notes'],
+    ['run', 'shell git init'],
+    ['run', 'shell echo one > notes/a.txt'],
+    ['run', 'shell git add notes/a.txt'],
+    ['run', 'shell git commit -m first'],
+    ['run', 'shell echo two > notes/a.txt'],
+    ['run', 'shell git status'],
+    ['run', 'shell git log'],
+    ['run', 'shell git diff'],
+  ]);
+  check('in-page git inits, stages and commits over OPFS', repo.engine === 'ready' && repo.out.includes('initialized empty repository') && repo.out.includes('staged 1 path') && repo.out.includes('committed '), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
+  check('in-page git status, log and diff show the change', repo.out.includes('M notes/a.txt') && repo.out.includes('first') && repo.out.includes('-one') && repo.out.includes('+two'), repo.out.split('\n').slice(-6).join(' / ').slice(0, 160));
   const job = await terminal([['run', 'job start bg echo x']]);
   check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
   rmSync(profile, { recursive: true, force: true });

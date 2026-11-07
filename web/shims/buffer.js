@@ -70,6 +70,83 @@ export class Buffer extends Uint8Array {
     return offset + 4;
   }
 
+  write(string, offset = 0, length, encoding = 'utf8') {
+    if (typeof offset === 'string') {
+      encoding = offset;
+      offset = 0;
+    }
+    const bytes = bytesOf(string, encoding);
+    const count = Math.min(bytes.byteLength, length ?? this.byteLength - offset, this.byteLength - offset);
+    this.set(bytes.subarray(0, count), offset);
+    return count;
+  }
+
+  view() {
+    return new DataView(this.buffer, this.byteOffset, this.byteLength);
+  }
+
+  readUInt8(offset = 0) {
+    return this.view().getUint8(offset);
+  }
+
+  writeUInt8(value, offset = 0) {
+    this.view().setUint8(offset, value);
+    return offset + 1;
+  }
+
+  readUInt16BE(offset = 0) {
+    return this.view().getUint16(offset, false);
+  }
+
+  readUInt16LE(offset = 0) {
+    return this.view().getUint16(offset, true);
+  }
+
+  writeUInt16BE(value, offset = 0) {
+    this.view().setUint16(offset, value, false);
+    return offset + 2;
+  }
+
+  writeUInt16LE(value, offset = 0) {
+    this.view().setUint16(offset, value, true);
+    return offset + 2;
+  }
+
+  readUInt32BE(offset = 0) {
+    return this.view().getUint32(offset, false);
+  }
+
+  writeUInt32BE(value, offset = 0) {
+    this.view().setUint32(offset, value >>> 0, false);
+    return offset + 4;
+  }
+
+  readInt32BE(offset = 0) {
+    return this.view().getInt32(offset, false);
+  }
+
+  writeInt32BE(value, offset = 0) {
+    this.view().setInt32(offset, value, false);
+    return offset + 4;
+  }
+
+  readInt32LE(offset = 0) {
+    return this.view().getInt32(offset, true);
+  }
+
+  writeInt32LE(value, offset = 0) {
+    this.view().setInt32(offset, value, true);
+    return offset + 4;
+  }
+
+  static compare(a, b) {
+    const length = Math.min(a.byteLength, b.byteLength);
+    for (let i = 0; i < length; i++) {
+      if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return a.byteLength === b.byteLength ? 0 : a.byteLength < b.byteLength ? -1 : 1;
+  }
+
   readDoubleLE(offset = 0) {
     return new DataView(this.buffer, this.byteOffset).getFloat64(offset, true);
   }
