@@ -33,7 +33,8 @@ Measured in headless Chromium (`npm run witness`):
 | Command | In-page result |
 | `write`, `read`, `ls`, `stat`, `grep`, `search` | works; the file survives a browser restart |
 | `memory write`, `memory search`, `prd add`, `prd list`, `log`, `config` | works |
-| `shell`, `job start`, `git status` | `ENOSYS` (child processes) |
+| `shell` (bash builtins and pipelines, see below) | runs in-page through bashkit |
+| `git status`, `job start` | `git` is not present (exit 127); jobs need the relay |
 | `fetch` | fails for hosts without CORS headers (COEP `require-corp`) |
 
 Child-process call sites in gm (from `import ... from 'node:child_process'`):
@@ -61,4 +62,27 @@ Known gaps in the browser shims:
 - The relay must send `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp`, because gm's `pending.mjs`
   uses `SharedArrayBuffer`. A static host needs the same headers.
+
+## In-page bash
+
+`shell` runs in-page through `@everruns/bashkit-wasm` 0.20.3 (MIT, a Rust
+bash interpreter compiled to wasm, single-threaded). The package is fetched
+and checked by `scripts/vendor-bashkit.mjs`, which verifies the wasm SHA-256
+against the package's `build-info.json`. The output lands in
+`web/vendor/bashkit/`, which is gitignored and is fetched on first witness run.
+Its host filesystem is `web/shims/bashkit-host.js`, which wraps the same OPFS
+tree that gm uses, so a write from bash is visible to gm and the reverse holds.
+
+Probed coverage (Node, 0.20.3): bash syntax (variables, arithmetic, loops,
+functions, command substitution, redirects, pipes, `&&`), and these
+commands: echo, printf, test, seq, sed, awk, grep, sort, uniq, wc, head, tail,
+cut, tr, find, xargs, tee, ls, cp, mv, rm, mkdir, touch, cat, basename,
+dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
+gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
+sandbox values, not the host's.
+
+Not covered: git, node, python3, sqlite3, and any host binary (exit 127).
+`curl` and `wget` report "network access not configured". Background jobs
+(`job start`) need the relay. `head` after an early-closing pipe needs the
+async `execute()` path, which the shell uses.
 

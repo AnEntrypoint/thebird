@@ -1,6 +1,7 @@
-export function clientFrom(tools, { gmHome, workspace, runDir }) {
+export function clientFrom(tools, { gmHome, workspace, runDir }, overrides = {}) {
   async function call(name, args = {}) {
     if (name === 'job_start') return call('run_shell', { ...args, background: true });
+    if (overrides[name]) return overrides[name](args);
     const result = await tools.run(name, args);
     if (result && result.ok === false) {
       throw new Error(result.error || result.refused || ('gm ' + name + ' failed'));

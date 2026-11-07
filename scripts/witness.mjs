@@ -10,6 +10,7 @@ import { createThebird } from '../src/index.js';
 import { startRelay } from '../src/relay.js';
 import { remoteClient } from '../src/gm-remote.js';
 import { runTerminal } from './browser-driver.mjs';
+import { vendorBashkit } from './vendor-bashkit.mjs';
 import { existsSync as fileExists } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,6 +93,7 @@ check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { 
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
+  if (!fileExists(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
   const relayTerminal = await terminal([['engine', 'relay'], ['run', 'help'], ['run', 'shell echo browser-ok']]);
@@ -102,10 +104,12 @@ if (fileExists(chrome)) {
   check('after: in-page gm writes and lists files over OPFS', after.engine === 'ready' && after.out.includes('wrote notes/a.txt') && after.out.includes('notes/'), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
   const reloaded = await terminal([['run', 'read notes/a.txt']]);
   check('after: the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
-  const shell = await terminal([['run', 'shell echo in-page']]);
-  check('in-page shell reports ENOSYS instead of crashing', shell.out.includes('ENOSYS'), shell.out.split('\n')[1]?.slice(0, 120));
-  const callers = await terminal([['run', 'gm write_file {"path":"notes/app.js","content":"function foo(){return 1}\\nfunction bar(){return foo()}\\n"}'], ['run', 'gm callers {"name":"foo"}']]);
-  check('after: callers runs in-page with vendored acorn and an OPFS file listing', callers.engine === 'ready' && callers.out.includes('notes/app.js:2 [direct]'), callers.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const script = await terminal([['run', 'shell cat notes/a.txt | tr a-z A-Z > notes/upper.txt && cat notes/upper.txt']]);
+  check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
+  const host = await terminal([['run', 'shell git status']]);
+  check('in-page bash reports host tools it lacks as exit 127', host.out.includes('git: command not found'));
+  const job = await terminal([['run', 'job start bg echo x']]);
+  check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');

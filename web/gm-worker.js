@@ -1,5 +1,6 @@
 import { Buffer } from './shims/buffer.js';
 import { flushFs, hydrate, mkdirSync } from './shims/fs.js';
+import { createShell } from './bash-shell.js';
 
 const WORKSPACE = '/workspace';
 globalThis.Buffer = Buffer;
@@ -28,7 +29,15 @@ try {
     import('/src/gm-client.js'),
   ]);
   const tools = createTools({ workspace: WORKSPACE, runDir, log: openLog(`${runDir}/log.jsonl`), background: false });
-  const client = clientFrom(tools, { gmHome: gmPrefix, workspace: WORKSPACE, runDir });
+  let shell;
+  const overrides = {
+    run_shell: async (args) => {
+      if (args.background) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
+      shell ??= await createShell({ cwd: WORKSPACE });
+      return shell.run(args.command);
+    },
+  };
+  const client = clientFrom(tools, { gmHome: gmPrefix, workspace: WORKSPACE, runDir }, overrides);
   await flushFs();
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
