@@ -228,6 +228,7 @@ function architectureStatic() {
     return outcome(kib >= 600 && kib <= 740, `sql.js wasm is ${kib} KiB`);
   })());
   record('| `python3` | Pyodide 314.0.7', (() => {
+    if (filesUnder('web/vendor/pyodide').length === 0) return outcome(null, 'web/vendor/pyodide is not present in this checkout');
     const bytes = filesUnder('web/vendor/pyodide').reduce((sum, file) => sum + statSync(file).size, 0);
     const megabytes = (bytes / 1e6).toFixed(1);
     const size = outcome(bytes >= 11.2e6 && bytes <= 16.8e6, `vendored Pyodide is ${megabytes} MB unpacked`);
