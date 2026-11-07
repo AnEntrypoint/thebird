@@ -104,7 +104,8 @@ export async function pythonBuiltin(argv) {
   py.FS.mkdirTree(WORKSPACE);
   syncIn(py);
   py.FS.chdir(WORKSPACE);
-  captured = [];
+  const buffer = [];
+  captured = buffer;
   let failure = null;
   try {
     py.runPython(source, { filename });
@@ -112,8 +113,8 @@ export async function pythonBuiltin(argv) {
     failure = err;
   }
   syncOut(py);
-  const output = captured.join('\n');
-  captured = null;
+  const output = buffer.join('\n');
+  if (captured === buffer) captured = null;
   if (failure) {
     const summary = failure.message.trim().split('\n').pop();
     throw new Error([output, summary].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
@@ -149,15 +150,16 @@ export async function pipBuiltin(argv) {
   });
   await micropipLoaded;
   const list = JSON.stringify(names);
-  captured = [];
+  const buffer = [];
+  captured = buffer;
   let failure = null;
   try {
     await py.runPythonAsync(`import micropip, importlib.metadata\nawait micropip.install(${list})\nfor name in ${list}:\n    print('installed', name, importlib.metadata.version(name))`);
   } catch (err) {
     failure = err;
   }
-  const output = captured.join('\n');
-  captured = null;
+  const output = buffer.join('\n');
+  if (captured === buffer) captured = null;
   if (failure) {
     const summary = failure.message.trim().split('\n').pop();
     throw new Error([output, summary].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
