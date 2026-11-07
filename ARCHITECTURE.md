@@ -144,6 +144,10 @@ status, and `$?` carries across terminal lines.
 Shell output streams while a command runs. bashkit calls `onOutput` with stdout and
 stderr chunks, the worker posts each one to the page, and the page appends it. The
 final result carries only the notes and any cancel text, so nothing prints twice.
+Output is plain text by default: `web/ansi.js` strips every escape sequence, including
+across streamed chunks, so the page's text copies cleanly. `?ansi=color` renders
+SGR colour and style (the 16 palette colours, bold, underline) as classed spans in
+`web/terminal.html`; the copied text is the same either way.
 Ctrl-L clears the output, Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the
 caret to the start and end of the line; each is handled in the page, not by the browser.
 Lines typed while a command runs wait in a queue and run in order. Ctrl-C cancels

@@ -2,12 +2,25 @@ import { createRunner } from '/src/runner.js';
 import { createApi } from '/src/api.js';
 import { remoteClient } from '/src/gm-remote.js';
 import { workerClient } from '/web/gm-worker-client.js';
+import { AnsiParser } from '/web/ansi.js';
 
 const out = document.getElementById('out');
 const line = document.getElementById('line');
-const endLine = () => { if (!out.textContent.endsWith('\n')) out.textContent += '\n'; };
-const write = (text) => { endLine(); out.textContent += text + '\n'; };
 const params = new URLSearchParams(location.search);
+const colour = params.get('ansi') === 'color';
+const ansi = new AnsiParser();
+const append = (text) => {
+  for (const segment of ansi.push(text)) {
+    if (colour && segment.classes) {
+      const span = document.createElement('span');
+      span.className = segment.classes;
+      span.textContent = segment.text;
+      out.append(span);
+    } else out.append(segment.text);
+  }
+};
+const endLine = () => { if (!out.textContent.endsWith('\n')) append('\n'); };
+const write = (text) => { endLine(); append(text + '\n'); };
 
 async function engine() {
   if (params.get('engine') === 'relay') return remoteClient({ url: location.origin + '/' });
@@ -15,7 +28,7 @@ async function engine() {
 }
 
 const client = await engine();
-if (client.onOutput) client.onOutput((text) => { out.textContent += text; });
+if (client.onOutput) client.onOutput(append);
 const prompt = document.getElementById('prompt');
 const showPrompt = async () => {
   if (client.cwd) prompt.textContent = `thebird ${await client.cwd()}> `;
@@ -63,6 +76,7 @@ async function execute(command) {
   } catch (err) {
     write('error: ' + err.message);
   } finally {
+    ansi.reset();
     endLine();
     busy = false;
     delete document.body.dataset.busy;

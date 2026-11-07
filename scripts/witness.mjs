@@ -98,6 +98,15 @@ check('relay refuses a cancel for a call that is not in flight', (await fetch(re
 check('relay rejects a malformed cancel body', (await fetch(relay.url + 'cancel', { method: 'POST', body: 'not json' })).status === 400);
 check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405 && (await fetch(relay.url + 'cancel')).status === 405);
 
+const { AnsiParser } = await import('../web/ansi.js');
+const ansiParser = new AnsiParser();
+const parsedWhole = ansiParser.push('\u001b[1;31mred\u001b[0m plain \u001b]0;title\u0007ok');
+check('ansi parser keeps the text of escape sequences out of plain output', parsedWhole.map((segment) => segment.text).join('') === 'red plain ok' && parsedWhole[0].classes === 'fg-1 bold', JSON.stringify(parsedWhole));
+const split = new AnsiParser();
+const firstHalf = split.push('a\u001b[3');
+const secondHalf = split.push('1;48;5;4mred\u001b[0m');
+check('ansi parser carries a sequence split across chunks, and 256-colour indexes map to the palette', firstHalf.map((segment) => segment.text).join('') === 'a' && secondHalf.length === 1 && secondHalf[0].text === 'red' && secondHalf[0].classes === 'fg-1 bg-4', JSON.stringify([firstHalf, secondHalf]));
+
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
   if (!fileExists(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
@@ -117,7 +126,14 @@ if (fileExists(chrome)) {
   const links = await terminal([['run', 'shell mkdir -p notes/links && echo link-target > notes/links/target.txt && ln -s target.txt notes/links/alias.txt && readlink notes/links/alias.txt && cat notes/links/alias.txt && test -f notes/links/alias.txt && echo stat-follows && echo via-link > notes/links/alias.txt && cat notes/links/target.txt']]);
   check('in-page ln -s makes a link that readlink reports, and a read and a stat follow it', /^target\.txt$/m.test(links.out) && /^link-target$/m.test(links.out) && /^stat-follows$/m.test(links.out) && /^via-link$/m.test(links.out), links.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const kept = await terminal([['run', 'shell readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']]);
-  check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link', /^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+  const ansiCommand = "shell printf '\\033[31mred-line\\033[0m\\n\\033[1;4;42mstyled-line\\033[0m\\n'";
+  const ansiPlain = await terminal([['run', ansiCommand]]);
+  const plainLines = ansiPlain.out.split('\n').filter((line) => !line.startsWith('thebird> '));
+  check('ANSI off by default: escape sequences are stripped and the text copies as plain', plainLines.includes('red-line') && plainLines.includes('styled-line') && !plainLines.some((line) => line.includes('[31m') || line.includes('[0m')) && !ansiPlain.out.includes('\u001b') && ansiPlain.spans.length === 0, plainLines.slice(0, 3).join(' / ').slice(0, 160));
+  const ansiColour = await terminal([['ansi', 'color'], ['run', ansiCommand]]);
+  const coloured = (cls, text) => ansiColour.spans.some((span) => span.cls === cls && span.text === text);
+  check('?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain', coloured('fg-1', 'red-line') && coloured('bg-2 bold underline', 'styled-line') && !ansiColour.out.split('\n').filter((line) => !line.startsWith('thebird> ')).some((line) => line.includes('[31m')) && ansiColour.spans.length >= 2, JSON.stringify(ansiColour.spans).slice(0, 160));
+  check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link',/^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const host = await terminal([['run', 'shell node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });

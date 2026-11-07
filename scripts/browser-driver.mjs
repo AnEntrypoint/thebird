@@ -89,7 +89,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       const type = (text) => send('Input.insertText', { text }, sessionId);
       await interact({ evaluate, waitFor, press, type });
     }
-    const state = await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent })");
+    const state = await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent, spans: [...document.querySelectorAll('#out span')].map((span) => ({ cls: span.className, text: span.textContent })) })");
     await send('Browser.close').catch(() => {});
     socket.close();
     await Promise.race([once(child, 'exit'), sleep(10000)]);
