@@ -18,6 +18,7 @@
   "scripts": {
     "check": "node --check bin/thebird.js && node --check bin/thebird-relay.js && node --check src/*.js && node --check scripts/*.mjs && node --check web/*.js && node --check web/shims/*.js",
     "lint:architecture": "node scripts/lint-architecture.mjs",
+    "lint:comments": "node scripts/lint-comments.mjs",
     "start": "node bin/thebird.js",
     "witness": "node scripts/witness.mjs"
   },

@@ -345,6 +345,7 @@ function agentsStatic() {
     const scripts = JSON.parse(read('package.json')).scripts ?? {};
     return outcome(Boolean(scripts.witness) && !scripts.test, `witness script ${scripts.witness ? 'is defined' : 'is missing'}; test script ${scripts.test ? 'exists' : 'is absent'}`);
   })());
+  cites('- Repo-owned code has no comments', ['repo-owned code has no comments']);
   record('Use Conventional Commits', (() => {
     const subjects = execFileSync('git', ['log', '-n', '20', '--format=%s'], { cwd: root, encoding: 'utf8' }).trim().split('\n');
     const matching = subjects.filter((subject) => /^(feat|fix|docs|test|chore|refactor|perf|build|ci|style|revert)(\([^)]+\))?!?: /.test(subject)).length;

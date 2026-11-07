@@ -637,6 +637,8 @@ await relay.close();
 const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 60000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
 check('ARCHITECTURE.md and AGENTS.md claims have no static contradictions', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} static claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
+const comments = spawnSync(process.execPath, [join(root, 'scripts', 'lint-comments.mjs')], { cwd: root, encoding: 'utf8', timeout: 60000 });
+check('repo-owned code has no comments (scripts/lint-comments.mjs)', comments.status === 0 && /: 0 comments$/m.test(comments.stdout), comments.stdout.split('\n').filter((line) => line.startsWith('FAIL')).slice(0, 3).join('; ') || comments.stdout.trim().split('\n').at(-1));
 process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));
 process.on('exit', () => rmSync(ws, { recursive: true, force: true }));
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

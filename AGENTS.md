@@ -62,4 +62,8 @@ A Node CLI and library whose every operation dispatches through gm tooling.
 - `job_start` maps to gm's `run_shell` with `background: true` because gm's in-process engine has no separate job-start verb.
 - Validation is `npm run witness`, which runs the real CLI paths plus the
   Node-side runner and library checks. There is no test suite.
+- Repo-owned code has no comments: `npm run lint:comments` lists each one with file and line,
+  and the witness fails on any. Shebang lines in `bin/` are syntax, not comments.
+  `web/vendor/` holds third-party bundles that keep their own comments and licence notices;
+  they are reported as vendored and are not edited.
 - Use Conventional Commits.
