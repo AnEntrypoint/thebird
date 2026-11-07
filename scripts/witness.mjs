@@ -115,6 +115,8 @@ if (fileExists(chrome)) {
   const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);
   const statuses = status.out.match(/^rc=\d+$/gm) ?? [];
   check('in-page bash keeps $? across terminal lines', statuses.join(' ') === 'rc=1 rc=3 rc=0', statuses.join(' ') || status.out.slice(0, 140));
+  const version = await terminal([['run', 'shell git --version']]);
+  check('in-page git --version names the in-page library, not a host git', /^git version \S+ \(in-page, isomorphic-git\)$/m.test(version.out), version.out.split('\n').find((line) => line.startsWith('git')) ?? version.out.slice(0, 140));
   const repo = await terminal([
     ['run', 'shell mkdir -p notes'],
     ['run', 'shell git init'],

@@ -140,6 +140,7 @@ export const gitVerbs = {
 export async function gitBuiltin(argv) {
   const [sub, ...rest] = argv;
   const tasks = {
+    '--version': async () => `git version ${(await isomorphic()).version()} (in-page, isomorphic-git)`,
     init: () => init(),
     status: () => status(),
     log: () => log(valueOf(rest, '-n')),

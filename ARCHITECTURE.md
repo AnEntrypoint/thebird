@@ -134,6 +134,7 @@ async `execute()` path, which the shell uses.
 `git` is a bashkit custom builtin (`customBuiltins` in `web/bash-shell.js`)
 backed by isomorphic-git 1.44.11 (MIT). The bundle is `web/vendor/isomorphic-git.mjs`,
 built with esbuild, and its licence is `web/vendor/ISOMORPHIC-GIT-LICENSE`.
+`--version` reports the in-page library version, not a host git.
 `init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree, and
 `status` prints porcelain v1 lines. `commit -m` runs the in-page gate
 (`web/commit-gate.js`) and commits as lanmower; a failing gate refuses the
