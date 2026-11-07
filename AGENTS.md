@@ -39,6 +39,10 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 `COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 300000 and is passed to bashkit's `Bash` as `timeoutMs`. Do not lower it. bashkit's 30 s default is too short for a cold `pip install`, as recorded in `ARCHITECTURE.md`. Change the value only with a witnessed cold install.
 
+## Cancel
+
+- Ctrl-C does not end a builtin that is waiting on a network response, such as `curl`: the page stays busy while the response is pending.
+
 ## Commit gate
 
 `web/commit-gate.js` is the in-page gate for `git commit`. It checks the index, staging, syntax (acorn), ASCII, the four docs and their repo paths, and a git object round trip. It is not a semantic review. Keep its checks and its `NOT_COVERED` list in step with the code, and with `ARCHITECTURE.md`.

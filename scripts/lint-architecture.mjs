@@ -218,6 +218,7 @@ function agentsStatic() {
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
+  cites('Ctrl-C does not end a builtin', ['in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy']);
   record('Use Conventional Commits', (() => {
     const subjects = execFileSync('git', ['log', '-n', '20', '--format=%s'], { cwd: root, encoding: 'utf8' }).trim().split('\n');
     const matching = subjects.filter((subject) => /^(feat|fix|docs|test|chore|refactor|perf|build|ci|style|revert)(\([^)]+\))?!?: /.test(subject)).length;

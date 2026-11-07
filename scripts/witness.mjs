@@ -256,6 +256,26 @@ if (existsSync(chrome)) {
     },
   });
   check('in-page terminal Ctrl-C drops lines queued behind the cancelled command', !/^dropped-line$/m.test(dropped.out) && dropped.out.includes('^C'), dropped.out.split('\n').filter((line) => line === '^C' || line.includes('dropped')).join(' / ').slice(0, 140));
+  let heldRequests = 0;
+  const holdServer = createServer(() => { heldRequests++; });
+  await new Promise((resolve) => holdServer.listen(0, '127.0.0.1', resolve));
+  const held = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await type(`curl -s http://127.0.0.1:${holdServer.address().port}/held`);
+      await press('Enter');
+      await waitFor("document.body.dataset.busy === 'true'", 20000);
+      const reachedBy = Date.now() + 20000;
+      while (heldRequests === 0 && Date.now() < reachedBy) await new Promise((resolve) => setTimeout(resolve, 100));
+      await press('c', { ctrl: true });
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      held.busy = await evaluate("document.body.dataset.busy");
+      held.echoed = (await evaluate("document.getElementById('out').textContent")).includes('^C');
+    },
+  });
+  holdServer.closeAllConnections();
+  holdServer.close();
+  check('in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy', held.busy === 'true' && held.echoed && heldRequests > 0, `busy=${held.busy} ^C echoed=${held.echoed} requests reaching the held server=${heldRequests}`);
   const editing = {};
   await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
