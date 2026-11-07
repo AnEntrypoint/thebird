@@ -124,7 +124,8 @@ to OPFS. The read-back is O(n) by design: detecting changes by timestamp could
 miss a same-size write within one millisecond. Measured in headless Chromium,
 over 300 files, a warm call takes 0.9 ms with this sync and 1.3 ms with the
 full copy it replaced. Only the last line of a traceback is reported, and
-printed output comes before it.
+printed output comes before it. The scheme is dropped from that text, because
+bashkit cuts error text at `//`.
 
 `shell` passes its text to bashkit raw, so quotes and parentheses survive. The
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every

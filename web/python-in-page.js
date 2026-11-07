@@ -116,7 +116,7 @@ export async function pythonBuiltin(argv) {
   captured = null;
   if (failure) {
     const summary = failure.message.trim().split('\n').pop();
-    throw new Error([output, summary].filter(Boolean).join('\n'));
+    throw new Error([output, summary].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
   }
   return output;
 }

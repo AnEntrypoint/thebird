@@ -253,6 +253,8 @@ if (fileExists(chrome)) {
     ['run', 'shell cat notes/out.txt'],
   ]);
   check('in-page python3 runs a one-line script through Pyodide', python.engine === 'ready' && /^42$/m.test(python.out), python.out.split('\n').slice(0, 2).join(' / ').slice(0, 140));
+  const linkError = await terminal([['run', 'shell python3 -c "raise ValueError(\'see https://example.org/docs\')"']]);
+  check('in-page python3 error text keeps a readable link instead of bashkit cutting it at //', !linkError.out.includes('<path>') && /ValueError: see example\.org\/docs$/m.test(linkError.out), linkError.out.split('\n').find((line) => line.includes('ValueError')) ?? 'no error line');
   check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const pythonReopened = await terminal([['run', 'shell cat notes/out.txt'], ['run', 'shell python3 -c "print(open(\'notes/out.txt\').read().strip())"']]);
