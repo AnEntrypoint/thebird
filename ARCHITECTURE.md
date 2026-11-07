@@ -133,6 +133,15 @@ full copy it replaced. Only the last line of a traceback is reported, and
 printed output comes before it. The scheme is dropped from that text, because
 bashkit cuts error text at `//`.
 
+`pip` is not available in-page, and no package beyond the Pyodide core is
+vendored. The probe checked CORS headers: the Pyodide lock lists 357 packages,
+including micropip, and the jsDelivr CDN serves them with
+`Access-Control-Allow-Origin: *`; PyPI's index, JSON API and wheel files
+(`files.pythonhosted.org`) send the same header, and answer the preflight.
+Pure-Python wheels could therefore be fetched by the page. Compiled wheels run
+only if Pyodide has built them. Nothing in the page fetches packages yet, and
+the in-page install path is not built or witnessed.
+
 `which`, `command -v` and `type` are shell functions defined at shell start
 (`web/shell-lookup.js`). They answer from bashkit's own `builtin command -v` and
 `builtin type`, except that the five in-page builtins report as builtins. A
