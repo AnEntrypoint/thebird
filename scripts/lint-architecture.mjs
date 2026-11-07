@@ -77,6 +77,8 @@ const sourceText = [...walk(repo('src')), ...walk(repo('web')).filter((path) => 
 const gmSrc = join(gmHome, 'src');
 const gmText = existsSync(gmSrc) ? walk(gmSrc).filter((path) => path.endsWith('.mjs')).map((path) => readFileSync(path, 'utf8')).join('\n') : null;
 
+const definedIn = (text, name) => new RegExp(`(\\bfunction\\s*\\*?\\s*${name}\\b|\\b(const|let|var|class)\\s+${name}\\b|\\b${name}\\s*\\([^)]*\\)\\s*\\{|['"]${name}['"]\\s*[:,)]|\\b${name}\\s*:)`).test(text);
+
 function genericStatic() {
   const tokens = [...new Set(docLines.flatMap((line) => [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1])))];
   for (const token of tokens.filter((t) => /^[A-Za-z][\w.-]*\/[\w./-]*$/.test(t))) {
@@ -88,9 +90,16 @@ function genericStatic() {
   for (const token of tokens) {
     const name = token.replace(/\(\)$/, '');
     if (!/^[a-z]\w*[A-Z]\w*$/.test(name) && !/^[a-z]+_[a-z_]+$/.test(name) && !/^[a-z]\w*\(\)$/.test(token)) continue;
-    const pattern = new RegExp(`\\b${name}\\b`);
-    const found = pattern.test(sourceText) || (gmText !== null && pattern.test(gmText));
-    record(`\`${token}\``, outcome(found ? true : gmText === null ? null : false, found ? `${name} is in the repo` : `${name} is not in the repo or gm`));
+    const at = docLines.findIndex((line) => line.includes(`\`${token}\``));
+    const phrase = `${docLines[at] ?? ''} ${docLines[at + 1] ?? ''}`.slice((docLines[at] ?? '').indexOf(token));
+    const scope = phrase.match(/ in `([^`]+)`/)?.[1];
+    if (scope) {
+      const defined = existsSync(repo(scope)) && definedIn(read(scope), name);
+      record(`\`${token}\``, outcome(defined, defined ? `${name} is defined or used in ${scope}` : `${name} has no definition or code use in ${scope}`));
+      continue;
+    }
+    const defined = definedIn(sourceText, name) || (gmText !== null && definedIn(gmText, name));
+    record(`\`${token}\``, outcome(defined ? true : gmText === null ? null : false, defined ? `${name} is defined or used in the repo or gm` : `${name} has no definition or code use in the repo or gm`));
   }
 }
 
