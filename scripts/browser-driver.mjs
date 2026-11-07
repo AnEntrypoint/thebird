@@ -44,23 +44,40 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
 
     let nextId = 1;
     const waiting = new Map();
+    const logs = [];
+    const send = (method, params = {}, sessionId) => new Promise((ok, fail) => {
+      const id = nextId++;
+      waiting.set(id, { ok, fail });
+      socket.send(JSON.stringify({ id, method, params, sessionId }));
+    });
+    const onEvent = ({ method, params = {}, sessionId: from }) => {
+      if (method === 'Target.attachedToTarget') {
+        if (['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {
+          send('Runtime.enable', {}, params.sessionId).catch(() => {});
+          send('Log.enable', {}, params.sessionId).catch(() => {});
+        }
+        return;
+      }
+      const origin = from ? 'worker' : 'page';
+      if (method === 'Runtime.consoleAPICalled') logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
+      else if (method === 'Runtime.exceptionThrown') logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
+      else if (method === 'Log.entryAdded') logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
+    };
     socket.onmessage = ({ data }) => {
       const message = JSON.parse(data);
+      if (message.id === undefined) return onEvent(message);
       const pending = waiting.get(message.id);
       if (!pending) return;
       waiting.delete(message.id);
       if (message.error) pending.fail(new Error(message.error.message));
       else pending.ok(message.result);
     };
-    const send = (method, params = {}, sessionId) => new Promise((ok, fail) => {
-      const id = nextId++;
-      waiting.set(id, { ok, fail });
-      socket.send(JSON.stringify({ id, method, params, sessionId }));
-    });
-
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Page.enable', {}, sessionId);
+    await send('Runtime.enable', {}, sessionId);
+    await send('Log.enable', {}, sessionId);
+    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 
     const evaluate = async (expression) => {
@@ -89,7 +106,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       const type = (text) => send('Input.insertText', { text }, sessionId);
       await interact({ evaluate, waitFor, press, type });
     }
-    const state = await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent, spans: [...document.querySelectorAll('#out span')].map((span) => ({ cls: span.className, text: span.textContent })) })");
+    const state = { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: document.getElementById('out').textContent, spans: [...document.querySelectorAll('#out span')].map((span) => ({ cls: span.className, text: span.textContent })) })")) };
     await send('Browser.close').catch(() => {});
     socket.close();
     await Promise.race([once(child, 'exit'), sleep(10000)]);

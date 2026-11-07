@@ -116,7 +116,7 @@ if (fileExists(chrome)) {
   const relayTerminal = await terminal([['engine', 'relay'], ['run', 'help'], ['run', 'shell echo browser-ok']]);
   check('browser terminal runs shell through the relay in headless Chromium', relayTerminal.engine === 'ready' && relayTerminal.out.includes('browser-ok'));
   const before = await terminal([['gm', 'raw'], ['run', 'ls .']]);
-  check('before: raw gm cannot load in the browser worker', before.engine === 'failed' && before.out.includes('gm-raw/tools.mjs'), before.out.split('\n')[0].slice(0, 140));
+  check('before: raw gm cannot load in the browser worker', before.engine === 'failed' && /Failed to fetch dynamically imported module: \S+\/gm-raw\/[\w.-]+\.mjs/.test(before.out), before.out.split('\n').filter(Boolean).join(' / ').slice(0, 200));
   const after = await terminal([['run', 'write notes/a.txt opfs-hello'], ['run', 'ls .']]);
   check('after: in-page gm writes and lists files over OPFS', after.engine === 'ready' && after.out.includes('wrote notes/a.txt') && after.out.includes('notes/'), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
   const reloaded = await terminal([['run', 'read notes/a.txt']]);
