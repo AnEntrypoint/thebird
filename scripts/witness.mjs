@@ -139,52 +139,60 @@ if (fileExists(chrome)) {
   const job = await terminal([['run', 'job start bg echo x']]);
   check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
   const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
+  process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
   const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=witness', '-c', 'user.email=witness@localhost', ...args], { cwd, encoding: 'utf8' }).trim();
   const remote = join(gitRoot, 'remote.git');
   const seed = join(gitRoot, 'seed');
   const clone = join(gitRoot, 'clone');
+  gitIn(gitRoot, 'init', '-q', '--bare', '-b', 'main', remote);
+  gitIn(gitRoot, 'init', '-q', '-b', 'main', seed);
+  gitIn(seed, 'remote', 'add', 'origin', remote);
+  writeFileSync(join(seed, 'README.md'), 'first\n');
+  gitIn(seed, 'add', '-A');
+  gitIn(seed, 'commit', '-q', '-m', 'first');
+  gitIn(seed, 'push', '-q', '-u', 'origin', 'main');
+  gitIn(seed, 'checkout', '-q', '-b', 'feature');
+  gitIn(seed, 'push', '-q', '-u', 'origin', 'feature');
+  gitIn(seed, 'checkout', '-q', 'main');
+  gitIn(gitRoot, 'clone', '-q', remote, clone);
+  writeFileSync(join(seed, 'README.md'), 'second\n');
+  gitIn(seed, 'commit', '-q', '-am', 'second');
+  gitIn(seed, 'push', '-q', 'origin', 'main');
+  const secondSha = gitIn(seed, 'rev-parse', 'HEAD');
+  const gitRelay = await startRelay({ workspace: clone });
   try {
-    gitIn(gitRoot, 'init', '-q', '--bare', '-b', 'main', remote);
-    gitIn(gitRoot, 'init', '-q', '-b', 'main', seed);
-    gitIn(seed, 'remote', 'add', 'origin', remote);
-    writeFileSync(join(seed, 'README.md'), 'first\n');
-    gitIn(seed, 'add', '-A');
-    gitIn(seed, 'commit', '-q', '-m', 'first');
-    gitIn(seed, 'push', '-q', '-u', 'origin', 'main');
-    gitIn(seed, 'checkout', '-q', '-b', 'feature');
-    gitIn(seed, 'push', '-q', '-u', 'origin', 'feature');
-    gitIn(seed, 'checkout', '-q', 'main');
-    gitIn(gitRoot, 'clone', '-q', remote, clone);
-    writeFileSync(join(seed, 'README.md'), 'second\n');
-    gitIn(seed, 'commit', '-q', '-am', 'second');
-    gitIn(seed, 'push', '-q', 'origin', 'main');
-    const secondSha = gitIn(seed, 'rev-parse', 'HEAD');
-    const gitRelay = await startRelay({ workspace: clone });
-    try {
-      const pairs = [
-        ['engine', 'relay'],
-        ['run', 'git branch'],
-        ['run', 'git fetch'],
-        ['run', 'shell git rev-parse origin/main'],
-        ['run', 'git pull'],
-        ['run', 'shell git log -1 --format=%s'],
-        ['run', 'git checkout feature'],
-        ['run', 'shell git branch --show-current'],
-        ['run', 'git checkout main'],
-        ['run', 'shell git branch --show-current'],
-      ];
-      const gitState = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams(pairs).toString() });
-      const lines = gitState.out.split('\n');
-      check('relay git branch lists the local and remote feature branch', gitState.engine === 'ready' && lines.some((line) => /^\s*\*?\s*feature$/.test(line)), lines.find((line) => /feature$/.test(line)) ?? 'no branch line');
-      check('relay git fetch updates origin/main to the seed commit', gitState.out.includes(secondSha), `expected ${secondSha}`);
-      check('relay git pull fast-forwards main to the new commit', lines.some((line) => line === 'second'), lines.find((line) => line.includes('second')) ?? 'no subject line');
-      check('relay git checkout switches to feature', lines.some((line) => line === 'feature'), 'no feature line');
-      check('relay git checkout switches back to main', lines.some((line) => line === 'main'), 'no main line');
-    } finally {
-      await gitRelay.close();
-    }
+    const pairs = [
+      ['engine', 'relay'],
+      ['run', 'git branch'],
+      ['run', 'git fetch'],
+      ['run', 'shell git rev-parse origin/main'],
+      ['run', 'git pull'],
+      ['run', 'shell git log -1 --format=%s'],
+      ['run', 'git checkout feature'],
+      ['run', 'shell git branch --show-current'],
+      ['run', 'git checkout main'],
+      ['run', 'shell git branch --show-current'],
+    ];
+    const gitState = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams(pairs).toString() });
+    const lines = gitState.out.split('\n');
+    check('relay git branch lists the local and remote feature branch', gitState.engine === 'ready' && lines.some((line) => /^\s*\*?\s*feature$/.test(line)), lines.find((line) => /feature$/.test(line)) ?? 'no branch line');
+    check('relay git fetch updates origin/main to the seed commit', gitState.out.includes(secondSha), `expected ${secondSha}`);
+    check('relay git pull fast-forwards main to the new commit', lines.some((line) => line === 'second'), lines.find((line) => line.includes('second')) ?? 'no subject line');
+    check('relay git checkout switches to feature', lines.some((line) => line === 'feature'), 'no feature line');
+    check('relay git checkout switches back to main', lines.some((line) => line === 'main'), 'no main line');
+    writeFileSync(join(clone, 'ok.mjs'), 'export const ok = 1;\n');
+    gitIn(clone, 'add', 'ok.mjs');
+    gitIn(clone, 'commit', '-q', '-m', 'add ok module');
+    const goodPush = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams([['engine', 'relay'], ['run', 'git push']]).toString() });
+    check('relay git push passes the gate and sends main to the remote', gitIn(remote, 'rev-parse', 'main') === gitIn(clone, 'rev-parse', 'HEAD'), goodPush.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+    writeFileSync(join(clone, 'bad.mjs'), 'export const = ;\n');
+    gitIn(clone, 'add', 'bad.mjs');
+    gitIn(clone, 'commit', '-q', '-m', 'add bad module');
+    const badHead = gitIn(clone, 'rev-parse', 'HEAD');
+    const badPush = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams([['engine', 'relay'], ['run', 'git push']]).toString() });
+    check('relay git push refuses broken syntax and leaves the remote unchanged', badPush.out.includes('commit gate failed before the push') && badPush.out.includes('syntax:') && gitIn(remote, 'rev-parse', 'main') !== badHead, badPush.out.split('\n').find((line) => line.includes('commit gate')) ?? 'no refusal line');
   } finally {
-    rmSync(gitRoot, { recursive: true, force: true });
+    await gitRelay.close();
   }
   rmSync(profile, { recursive: true, force: true });
 } else {

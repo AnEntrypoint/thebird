@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
@@ -29,6 +30,27 @@ async function locateGm(explicit) {
   throw new Error('gm tooling not found. Set GM_HOME to a gm checkout, install the gm package, or place ../gm next to this project. Searched: ' + tried.join(', '));
 }
 
+function outgoingPaths(root) {
+  const split = (text) => text.split('\0').filter(Boolean);
+  try {
+    return split(execFileSync('git', ['diff', '--name-only', '-z', 'origin/main...HEAD'], { cwd: root, encoding: 'utf8' }));
+  } catch {
+    return split(execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }));
+  }
+}
+
+async function pushThroughGate(home, workspace, tools, args) {
+  const { runGate } = await import(pathToFileURL(join(home, 'src/gate.mjs')).href);
+  const gate = await runGate(workspace, outgoingPaths(workspace));
+  if (!gate.ok) {
+    const failed = gate.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`);
+    throw new Error(`refused: the commit gate failed before the push: ${failed.join('; ')}`);
+  }
+  const result = await tools.run('git_push', args);
+  if (result && result.ok === false) throw new Error(result.error || result.refused || 'gm git_push failed');
+  return result;
+}
+
 export async function createGmClient(options = {}) {
   const home = await locateGm(options.gmHome);
   const workspace = resolve(options.workspace || process.cwd());
@@ -50,5 +72,7 @@ export async function createGmClient(options = {}) {
     noticeMs: options.noticeMs,
   });
 
-  return clientFrom(tools, { gmHome: home, workspace, runDir });
+  return clientFrom(tools, { gmHome: home, workspace, runDir }, {
+    git_push: (args) => pushThroughGate(home, workspace, tools, args),
+  });
 }
