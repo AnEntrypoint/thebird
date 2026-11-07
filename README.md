@@ -1,99 +1,69 @@
 # thebird
 
-A Node CLI and library that does the work the old thebird terminal used to do,
-with one important change: **gm is the execution engine for everything**.
+A bash terminal that runs in the browser. Commands run in bashkit, a WebAssembly bash, inside a Web Worker, over files kept in the browser's OPFS storage. In-page builtins provide `git`, `sqlite3`, `python3`, `pip`, `curl` and `wget`. The only Node code is a static server that serves the page.
 
-The gm-backed CLI and library live in `bin/` and `src/`. The legacy browser web
-OS tree was deleted in owner-approved commit `cc242f5`. The active surface is:
-
-- `bin/thebird.js` — the CLI entry point
-- `src/index.js` — the library API (`createThebird` / `createClient`)
-- `src/api.js` — the library method table over a gm client (no Node imports)
-- `src/gm.js` — locates gm and creates the Node tool engine (Node only)
-- `src/gm-client.js` — the gm client adapter over any tool engine (no Node imports)
-- `src/gm-remote.js` — a gm client that calls a relay over HTTP (no Node imports)
-- `src/relay.js` — the local relay: hosts gm, serves the browser terminal
-- `web/terminal.html`, `web/terminal.js` — the browser terminal page
-- `src/commands.js` — the CLI command registry
-- `src/runner.js` — tokenizes a command line and maps it to library calls (no Node imports)
-- `src/cli.js` — the REPL and one-shot runner
-
-No operation is implemented twice. `createGmClient()` imports gm's own
-`createTools()` verb engine; library methods, CLI commands, filesystem access,
-search, shell execution, git, jobs, logs, PRDs and fetches all dispatch to gm.
+The earlier gm-backed CLI and library were removed.
 
 ## Requirements
 
-- Node >= 22
-- A gm checkout. Resolution order: `--gm-home` / `GM_HOME`, an installed
-  `gm` package, `../gm`, then `./gm`. A gm checkout must contain
-  `src/tools.mjs` and `src/log.mjs`.
+- Node >= 22, for the static server.
+- Chromium, for the witness. Set `CHROME_BIN`; the default is `/usr/bin/chromium-browser`.
 
-## CLI
+After a fresh clone, generate the vendored runtimes (both need network):
 
 ```bash
-node bin/thebird.js help
-node bin/thebird.js --gm-home /path/to/gm ls .
-node bin/thebird.js --workspace /path/to/project read package.json 0 20
-node bin/thebird.js grep "createGmClient" src
-node bin/thebird.js search "dispatch through gm"
-node bin/thebird.js shell "node --version"
-node bin/thebird.js memory write house-rule "Keep the bird quiet near the lake"
-node bin/thebird.js memory search house-rule
-node bin/thebird.js gm list_dir '{"path":".","limit":10}'
-node bin/thebird.js -i
+node scripts/vendor-bashkit.mjs
+node scripts/vendor-pyodide.mjs
 ```
 
-Without arguments on a TTY the CLI opens its REPL. `help` lists every command.
-`gm <verb> <json>` is the escape hatch for any current or future gm verb.
-
-## Browser terminal
-
-Serve the repo with the relay, then open the printed URL:
+## Run
 
 ```bash
-node bin/thebird-relay.js --workspace /path/to/project
+npm start
+node bin/thebird-relay.js --port 8080 --host 127.0.0.1
 ```
 
-By default the page runs gm in a Web Worker, over files kept in the browser's
-OPFS storage, so no host process is needed for file, memory, search and PRD
-commands. The shell runs in-page, with in-page `git init`, `add`, `status`, `log`,
-`diff`, local `branch` and `checkout`. `git commit` runs an in-page gate that checks
-syntax, ASCII and the required docs. Git remotes, `push`, `pull` and job commands need
-the relay; there, `push` runs through gm's own commit gate. Add `?engine=relay` to send
-gm calls to the relay on this machine, which runs them as your user. The relay binds
-127.0.0.1, so do not expose its port. See `ARCHITECTURE.md` for the browser gaps.
+Open the URL the server prints. `--port` defaults to an OS-assigned port and `--host` to `127.0.0.1`. The server answers GET and HEAD only.
 
-## Library
+## Query parameters
 
-```js
-import { createThebird } from 'thebird';
+- `?run=<command>` runs each `run` value in order when the page loads. The body gets `data-done="true"` when they finish. Repeat the parameter for more commands.
+- `?ansi=color` keeps colour and style as spans. By default ANSI escapes are stripped, so output copies as plain text.
 
-const tb = await createThebird({ gmHome: '/path/to/gm', workspace: process.cwd() });
-const files = await tb.list({ path: '.', limit: 20 });
-const body = await tb.read({ path: 'package.json' });
-await tb.gm('search', { query: 'dispatch through gm', k: 5 });
-await tb.close();
-```
+## What works
 
-Every method returns gm's own verb result. Errors from gm become exceptions.
+- Bash syntax and common commands from bashkit: pipelines, variables, loops, functions, redirects, sed, awk, grep, find, jq, sha256sum and others.
+- `git init`, `status`, `log`, `diff`, `add`, `commit -m`, and local `branch` and `checkout`. `commit` runs the in-page gate.
+- `sqlite3 <database> <sql>`, with the database kept as a file in OPFS.
+- `python3 -c <code>` and `python3 <file>`, run by Pyodide.
+- `pip install <package>...` for pure-Python packages from PyPI.
+- `curl` and `wget`, for hosts that send CORS headers to the page.
+- `which`, `type` and `command -v` give the same answer for each name.
 
-## Old CLI surface
+## Limits
 
-The old terminal's callable tool names — `read`, `write`, `edit`, `grep`,
-`list`, `memory`, `chat`, `delegate`, `web_search`, `gm`, `sessions`,
-`cron`, `tools`, `skills`, `config`, `batch`, `projects`, `run` and `exec`
-— remain reachable. They are compatibility names over gm verbs, not a second
-runtime. Old browser-only behavior (LLM gateways, cron timers, virtual
-filesystem instances, GUI apps) is intentionally not carried over; use gm
-tooling directly for real filesystem, shell, git, job and knowledge operations.
+- No background jobs. A bare `&` is refused.
+- No `node` and no host binaries; they exit 127.
+- No git remotes. `push`, `fetch` and `pull` are refused.
+- pip takes plain names only. Version specifiers, URLs and packages in the Pyodide set are refused. Installed packages last for the page session.
+- Each command line has a 300 s limit. See `ARCHITECTURE.md`.
+
+## Keys
+
+- Up and Down: history.
+- Tab: command names on the first word, otherwise workspace paths.
+- Ctrl-C: cancels the running command and drops queued lines.
+- Ctrl-L clears the output. Ctrl-U clears the line. Ctrl-A and Ctrl-E move to the start and end of the line.
+
+History is kept in localStorage under `thebird.history`. It holds the submitted command lines only, capped at 500.
 
 ## Validation
 
-Run the witness, which exercises the real CLI paths and the Node-side runner and
-library checks:
-
 ```bash
 npm run check
+npm run lint:comments
+npm run lint:architecture
 npm run witness
 ```
+
+`npm run witness` drives headless Chromium through `scripts/browser-driver.mjs` and checks the in-page shell end to end.

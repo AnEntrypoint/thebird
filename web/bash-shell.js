@@ -8,7 +8,8 @@ import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill|tar)\b/;
-const EMULATION_NOTE = 'note: uname, whoami, hostname, id, ps, kill and tar are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
+const COMMAND_TIMEOUT_MS = 300000;
+const EMULATION_NOTE ='note: uname, whoami, hostname, id, ps, kill and tar are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
 
 export function hasBackgroundOperator(command) {
   let quote = null;
@@ -40,7 +41,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd).then(withNewline),
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd).then(withNewline),
   };
-  const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
+  const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
   await bash.execute(lookupPrologue(Object.keys(customBuiltins)));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
   let status = 0;

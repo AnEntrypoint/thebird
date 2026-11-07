@@ -1,5 +1,5 @@
-export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
-  const worker = new Worker(raw ? `${url}?gm=raw` : url, { type: 'module' });
+export function shellClient({ url = '/web/shell-worker.js' } = {}) {
+  const worker = new Worker(url, { type: 'module' });
   const pending = new Map();
   let nextId = 1;
   let markReady;
@@ -26,7 +26,7 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     if (data.ok) waiter.ok(data.result);
     else waiter.fail(new Error(data.error));
   };
-  worker.onerror = (event) => markFailed(new Error(event.message || 'gm worker failed to start'));
+  worker.onerror = (event) => markFailed(new Error(event.message || 'shell worker failed to start'));
 
   function request(message) {
     const id = nextId++;
@@ -36,29 +36,18 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     });
   }
 
-  function call(verb, args = {}) {
-    return request({ verb, args });
-  }
-
   return {
     ready,
-    call,
-    verb: call,
-    gmHome: raw ? '/gm-raw' : '/gm',
-    workspace: '/workspace',
-    runDir: '/workspace/.thebird/run',
-    tools: () => {
-      throw new Error('tools are not available through a worker client');
-    },
+    run: (command) => request({ run: command }),
+    complete: (prefix, { command = false } = {}) => request({ complete: prefix, command }),
+    cwd: () => request({ query: 'cwd' }),
     cancel() {
       worker.postMessage({ cancel: true });
     },
-    complete: (prefix, options = {}) => request({ complete: prefix, command: Boolean(options.command) }),
-    cwd: () => request({ query: 'cwd' }),
     onOutput(sink) {
       outputSink = sink;
     },
-    async close() {
+    close() {
       worker.terminate();
     },
   };

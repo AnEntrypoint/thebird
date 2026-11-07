@@ -119,7 +119,7 @@ async function createBranch(name) {
 async function checkout(args) {
   const create = args[0] === '-b';
   const name = create ? args[1] : args[0];
-  if (!name || args.length !== (create ? 2 : 1)) throw new Error('checkout takes one branch name, or -b <name>; paths and other flags need the relay (?engine=relay)');
+  if (!name || args.length !== (create ? 2 : 1)) throw new Error('checkout takes one branch name, or -b <name>; paths and other flags are not supported in the in-page shell');
   const lib = await isomorphic();
   if (create) await lib.branch({ fs, dir: DIR, ref: name });
   await lib.checkout({ fs, dir: DIR, ref: name });
@@ -137,26 +137,9 @@ async function commit(message) {
   const oid = await lib.commit({ fs, dir: DIR, message, author: AUTHOR });
   return [
     ...gate.checks.map((item) => `gate ${item.name}: ${item.detail}`),
-    `gate not run in-page: ${gate.notRun.join(', ')}`,
     `committed ${oid.slice(0, 7)}`,
   ].join('\n');
 }
-
-const reply = (output) => ({ ok: true, output });
-const failure = (error) => ({ ok: false, error });
-const verb = (task) => task().then(reply, (err) => failure(err.message));
-
-export const gitVerbs = {
-  git_status: () => verb(status),
-  git_log: (args) => (args.path === undefined ? verb(() => log(args.count)) : failure('path-limited log needs the relay (?engine=relay)')),
-  git_diff: (args) => (args.staged || args.paths ? failure('staged and path-limited diffs need the relay (?engine=relay)') : verb(diff)),
-  git_add: (args) => (args.paths?.length ? verb(() => add(args.paths)) : failure('git_add needs explicit paths in the browser shell')),
-  git_commit: (args) => {
-    if (args.paths?.length) return failure('in-page commit commits the whole index: stage with git_add and omit paths');
-    if (args.author !== undefined) return failure('in-page commits are authored lanmower; omit author');
-    return verb(() => commit(args.message));
-  },
-};
 
 export async function gitBuiltin(argv) {
   const [sub, ...rest] = argv;
@@ -170,12 +153,12 @@ export async function gitBuiltin(argv) {
     commit: () => commit(valueOf(rest, '-m')),
     branch: () => {
       if (rest.length === 0) return branches();
-      if (rest[0].startsWith('-') || rest.length > 1) throw new Error('branch flags and multiple names need the relay (?engine=relay)');
+      if (rest[0].startsWith('-') || rest.length > 1) throw new Error('branch flags and multiple names are not supported in the in-page shell');
       return createBranch(rest[0]);
     },
     checkout: () => checkout(rest),
   };
   const task = tasks[sub];
-  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add, commit, and local branch and checkout; push, fetch and pull need the relay`);
+  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add, commit, and local branch and checkout; push, fetch and pull are not supported in the in-page shell`);
   return task();
 }

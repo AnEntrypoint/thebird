@@ -2,8 +2,6 @@ node_modules/
 .thebird/
 *.log
 .DS_Store
-.gm/
-.playwriter/
 .agentplug-kv/
 .env
 config.bat

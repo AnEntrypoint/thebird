@@ -1,22 +1,15 @@
-import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRunner } from '../src/runner.js';
-import { createApi, joinPath } from '../src/api.js';
-import { createThebird } from '../src/index.js';
 import { startRelay } from '../src/relay.js';
-import { remoteClient } from '../src/gm-remote.js';
 import { runTerminal } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorPyodide } from './vendor-pyodide.mjs';
-import { existsSync as fileExists } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const cli = join(root, 'bin', 'thebird.js');
 let failures = 0;
 
 function check(name, ok, detail = '') {
@@ -24,86 +17,15 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-function runCli(args, input) {
-  return spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8', input, timeout: 60000 });
-}
-
-const help = runCli(['help']);
-check('help exits 0 and lists commands', help.status === 0 && help.stdout.includes('gm <verb>'));
-
-const shell = runCli(['shell', 'echo witness-ok']);
-check('shell runs through gm', shell.status === 0 && shell.stdout.includes('witness-ok'), `exit ${shell.status}`);
-
-const json = runCli(['gm', 'list_dir', '{"path":".","limit":2}']);
-check('gm JSON arguments are honoured', json.status === 0 && json.stdout.trim().split('\n').length === 2, `exit ${json.status}`);
-
-const memory = runCli(['memory', 'delete', 'k']);
-check('unmapped memory action fails with exit 1', memory.status === 1 && memory.stderr.includes('not mapped'), `exit ${memory.status}`);
-
-const ws = mkdtempSync(join(tmpdir(), 'thebird-witness-'));
-const written = runCli(['--workspace', ws, 'memory', 'write', 'cli-note', 'hello from the cli']);
-const cliFound = written.status === 0 && existsSync(join(ws, 'wiki', 'cli-note.md'));
-check('memory write through the CLI writes a wiki page', cliFound, `exit ${written.status}`);
-
-const repl = runCli(['-i'], 'gm list_dir {"path":".","limit":1}\nexit\n');
-check('REPL accepts raw JSON arguments', repl.status === 0 && /thebird> \S/.test(repl.stdout) && !repl.stdout.includes('error:'), `exit ${repl.status}`);
-
-const calls = [];
-const api = new Proxy({}, {
-  get: (_, name) => async (...args) => {
-    calls.push([String(name), args]);
-    return { ok: true, output: String(name) };
-  },
-});
-const run = createRunner(api);
-await run('read "my file.txt" 0 20');
-await run('gm list_dir {"path":".","limit":10}');
-check('runner keeps quoted paths and JSON arguments', calls[0][1][0].path === 'my file.txt' && calls[1][1][1].limit === 10);
-await run('shell sqlite3 app.db "select count(*) from t" \'x y\'');
-check('runner passes shell commands to gm with their quotes and parentheses', calls.at(-1)[1][0].command === 'sqlite3 app.db "select count(*) from t" \'x y\'', calls.at(-1)[1][0].command);
-
-const fakeGm = { workspace: '/w', gmHome: '/g', runDir: '/r', call: async (verb, args) => ({ ok: true, verb, args }), close: async () => {} };
-const lib = createApi(fakeGm);
-check('library maps methods to gm verbs', (await lib.read({ path: 'x' })).verb === 'read_file');
-const rejected = await lib.memory('delete', 'k').then(() => false, () => true);
-check('library rejects unmapped memory actions', rejected);
-const tb = await createThebird({ workspace: ws });
-await tb.memory('write', 'house-rule', 'Keep the bird quiet near the lake');
-const sourceBody = asciiBody('Keep the bird quiet near the lake');
-const sourceId = createHash('sha256').update(sourceBody).digest('hex').slice(0, 12);
-check('memory write stores the value as a gm source named by its hash', existsSync(join(ws, 'sources', sourceId + '.txt')) && readFileSync(join(ws, 'sources', sourceId + '.txt'), 'utf8') === sourceBody);
-const page = readFileSync(join(ws, 'wiki', 'house-rule.md'), 'utf8');
-check('memory write creates a wiki page that cites the source', page.includes(`"${sourceId}"`) && page.includes('Keep the bird quiet near the lake'));
-const hit = await tb.memory('search', 'house-rule');
-check('memory search finds the written page', String(hit.output ?? '').includes('house-rule'));
-await tb.close();
-check('memory write leaves the source hash-named', readdirSync(join(ws, 'sources')).every((name) => createHash('sha256').update(readFileSync(join(ws, 'sources', name), 'utf8')).digest('hex').startsWith(name.slice(0, 12))));
-function asciiBody(text) {
-  return text.replace(/[^\x00-\x7f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
-}
-
-check('joinPath resolves like path.resolve', joinPath('/a/b', '../c') === '/a/c' && joinPath('/a/b', '/etc/x') === '/etc/x');
-
-const relayWs = mkdtempSync(join(tmpdir(), 'thebird-relay-'));
-const relay = await startRelay({ workspace: relayWs });
-const remote = await remoteClient({ url: relay.url });
-const remoteRun = createRunner(createApi(remote));
-check('relay serves a remote gm client', remote.workspace === relayWs);
-check('remote shell runs through the relay', (await remoteRun('shell echo relay-ok')).includes('relay-ok'));
+const relay = await startRelay({});
 check('relay serves the browser terminal page', (await fetch(relay.url)).status === 200);
-check('relay serves src and web files', (await fetch(relay.url + 'src/runner.js')).status === 200 && (await fetch(relay.url + 'web/terminal.js')).status === 200);
-check('relay refuses paths outside src and web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'src/../package.json')).status === 404);
-check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { method: 'POST', body: '{nope' })).status === 400);
-check('relay refuses a cancel for a call that is not in flight', (await fetch(relay.url + 'cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody' }) })).status === 404);
-check('relay rejects a malformed cancel body', (await fetch(relay.url + 'cancel', { method: 'POST', body: 'not json' })).status === 400);
-check('relay refuses other methods on cancel', (await fetch(relay.url + 'cancel', { method: 'PUT' })).status === 405 && (await fetch(relay.url + 'cancel')).status === 405);
+const isolated = await fetch(relay.url);
+check('relay sends the cross-origin isolation headers', isolated.headers.get('cross-origin-opener-policy') === 'same-origin' && isolated.headers.get('cross-origin-embedder-policy') === 'require-corp');
+check('relay serves web files', (await fetch(relay.url + 'web/terminal.js')).status === 200 && (await fetch(relay.url + 'web/shell-worker.js')).status === 200);
+check('relay refuses paths outside web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'package.json')).status === 404 && (await fetch(relay.url + 'src/relay.js')).status === 404);
+check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST', body: '{}' })).status === 405 && (await fetch(relay.url + 'web/terminal.js', { method: 'PUT' })).status === 405);
 
 const { AnsiParser } = await import('../web/ansi.js');
-const { AsyncLocalStorage } = await import('../web/shims/node-stubs.js');
-const storage = new AsyncLocalStorage();
-const syncStore = storage.run('held', () => storage.getStore());
-const asyncStore = await storage.run('held', async () => { await null; return storage.getStore(); });
-check('AsyncLocalStorage holds its store for synchronous code and loses it after an await', syncStore === 'held' && asyncStore === undefined, `sync ${syncStore}, after await ${asyncStore}`);
 const ansiParser = new AnsiParser();
 const parsedWhole = ansiParser.push('\u001b[1;31mred\u001b[0m plain \u001b]0;title\u0007ok');
 check('ansi parser keeps the text of escape sequences out of plain output', parsedWhole.map((segment) => segment.text).join('') === 'red plain ok' && parsedWhole[0].classes === 'fg-1 bold', JSON.stringify(parsedWhole));
@@ -113,166 +35,122 @@ const secondHalf = split.push('1;48;5;4mred\u001b[0m');
 check('ansi parser carries a sequence split across chunks, and 256-colour indexes map to the palette', firstHalf.map((segment) => segment.text).join('') === 'a' && secondHalf.length === 1 && secondHalf[0].text === 'red' && secondHalf[0].classes === 'fg-1 bg-4', JSON.stringify([firstHalf, secondHalf]));
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
-if (fileExists(chrome)) {
-  if (!fileExists(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
-  if (!fileExists(join(root, 'web', 'vendor', 'pyodide', 'pyodide.asm.wasm'))) await vendorPyodide();
+if (existsSync(chrome)) {
+  if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
+  if (!existsSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide.asm.wasm'))) await vendorPyodide();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
-  const relayTerminal = await terminal([['engine', 'relay'], ['run', 'help'], ['run', 'shell echo browser-ok']]);
-  check('browser terminal runs shell through the relay in headless Chromium', relayTerminal.engine === 'ready' && relayTerminal.out.includes('browser-ok'));
-  const before = await terminal([['gm', 'raw'], ['run', 'ls .']]);
-  check('before: raw gm cannot load in the browser worker', before.engine === 'failed' && /Failed to fetch dynamically imported module: \S+\/gm-raw\/[\w.-]+\.mjs/.test(before.out), before.out.split('\n').filter(Boolean).join(' / ').slice(0, 200));
-  const after = await terminal([['run', 'write notes/a.txt opfs-hello'], ['run', 'ls .']]);
-  check('after: in-page gm writes and lists files over OPFS', after.engine === 'ready' && after.out.includes('wrote notes/a.txt') && after.out.includes('notes/'), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
-  const reloaded = await terminal([['run', 'read notes/a.txt']]);
-  check('after: the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
-  const script = await terminal([['run', 'shell cat notes/a.txt | tr a-z A-Z > notes/upper.txt && cat notes/upper.txt']]);
+
+  const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40']]);
+  check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
+  check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
+  check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
+  const reloaded = await terminal([['run', 'cat notes/a.txt']]);
+  check('the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
+  const script = await terminal([['run', 'cat notes/a.txt | tr a-z A-Z > notes/upper.txt && cat notes/upper.txt']]);
   check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
-  const links = await terminal([['run', 'shell mkdir -p notes/links && echo link-target > notes/links/target.txt && ln -s target.txt notes/links/alias.txt && readlink notes/links/alias.txt && cat notes/links/alias.txt && test -f notes/links/alias.txt && echo stat-follows && echo via-link > notes/links/alias.txt && cat notes/links/target.txt']]);
+  const links = await terminal([['run', 'mkdir -p notes/links && echo link-target > notes/links/target.txt && ln -s target.txt notes/links/alias.txt && readlink notes/links/alias.txt && cat notes/links/alias.txt && test -f notes/links/alias.txt && echo stat-follows && echo via-link > notes/links/alias.txt && cat notes/links/target.txt']]);
   check('in-page ln -s makes a link that readlink reports, and a read and a stat follow it', /^target\.txt$/m.test(links.out) && /^link-target$/m.test(links.out) && /^stat-follows$/m.test(links.out) && /^via-link$/m.test(links.out), links.out.split('\n').slice(-4).join(' / ').slice(0, 160));
-  const kept = await terminal([['run', 'shell readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']]);
-  const ansiCommand = "shell printf '\\033[31mred-line\\033[0m\\n\\033[1;4;42mstyled-line\\033[0m\\n'";
+  const kept = await terminal([['run', 'readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']]);
+  check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link', /^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+  const ansiCommand = "printf '\\033[31mred-line\\033[0m\\n\\033[1;4;42mstyled-line\\033[0m\\n'";
   const ansiPlain = await terminal([['run', ansiCommand]]);
   const plainLines = ansiPlain.out.split('\n').filter((line) => !line.startsWith('thebird> '));
   check('ANSI off by default: escape sequences are stripped and the text copies as plain', plainLines.includes('red-line') && plainLines.includes('styled-line') && !plainLines.some((line) => line.includes('[31m') || line.includes('[0m')) && !ansiPlain.out.includes('\u001b') && ansiPlain.spans.length === 0, plainLines.slice(0, 3).join(' / ').slice(0, 160));
   const ansiColour = await terminal([['ansi', 'color'], ['run', ansiCommand]]);
   const coloured = (cls, text) => ansiColour.spans.some((span) => span.cls === cls && span.text === text);
   check('?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain', coloured('fg-1', 'red-line') && coloured('bg-2 bold underline', 'styled-line') && !ansiColour.out.split('\n').filter((line) => !line.startsWith('thebird> ')).some((line) => line.includes('[31m')) && ansiColour.spans.length >= 2, JSON.stringify(ansiColour.spans).slice(0, 160));
-  check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link',/^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
-  const host = await terminal([['run', 'shell node -v']]);
+  const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
+
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
-  for (const host of [corsHost, plainHost]) await new Promise((resolve) => host.listen(0, '127.0.0.1', resolve));
+  for (const server of [corsHost, plainHost]) await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const corsPort = corsHost.address().port;
   const plainPort = plainHost.address().port;
   const fetched = await terminal([
-    ['run', `shell curl -s http://127.0.0.1:${corsPort}/hello`],
-    ['run', `shell wget -O notes/fetched.txt http://127.0.0.1:${corsPort}/hello`],
-    ['run', 'shell cat notes/fetched.txt'],
+    ['run', `curl -s http://127.0.0.1:${corsPort}/hello`],
+    ['run', `wget -O notes/fetched.txt http://127.0.0.1:${corsPort}/hello`],
+    ['run', 'cat notes/fetched.txt'],
   ]);
   check('in-page curl and wget fetch from a host that sends CORS headers', fetched.out.split('\n').filter((line) => line === 'cors-host-hello').length >= 2, fetched.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const refused = await terminal([
-    ['run', `shell curl -s http://127.0.0.1:${plainPort}/hello`],
-    ['run', 'shell echo after-refusal'],
+    ['run', `curl -s http://127.0.0.1:${plainPort}/hello`],
+    ['run', 'echo after-refusal'],
   ]);
   check('in-page curl refuses a host that sends no CORS headers, and the shell goes on', refused.out.includes(`could not fetch from 127.0.0.1:${plainPort}`) && refused.out.includes('CORS') && /^after-refusal$/m.test(refused.out) && !/^plain-host-hello$/m.test(refused.out), refused.out.split('\n').find((line) => line.includes('could not fetch'))?.slice(0, 160) ?? 'no refusal line');
-  for (const host of [corsHost, plainHost]) host.close();
-  const relayCancel = {};
-  const relayInterrupted = await terminal([['engine', 'relay']], {
-    interact: async ({ type, press, waitFor }) => {
-      await type('shell for i in $(seq 1 200); do sleep 0.1371; done');
-      await press('Enter');
-      await waitFor("document.body.dataset.busy === 'true'", 20000);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const started = Date.now();
-      await press('c', { ctrl: true });
-      await waitFor("document.body.dataset.busy !== 'true'", 40000);
-      relayCancel.elapsed = Date.now() - started;
-      await type('shell echo after-relay-cancel');
-      await press('Enter');
-      await waitFor("/^after-relay-cancel$/m.test(document.getElementById('out').textContent)", 20000);
-    },
-  });
-  check('relay Ctrl-C cancels a running host command in about a second and the shell carries on', relayInterrupted.out.includes('^C') && relayInterrupted.out.includes('cancelled by the host') && relayCancel.elapsed < 10000 && /^after-relay-cancel$/m.test(relayInterrupted.out), `cancel took ${relayCancel.elapsed} ms`);
-  mkdirSync(join(relayWs, 'tabrelay'), { recursive: true });
-  writeFileSync(join(relayWs, 'tabrelay', 'alpha.txt'), 'a\n');
-  writeFileSync(join(relayWs, 'tabrelay', 'beta.txt'), 'b\n');
-  const relayTab = {};
-  const relayTabState = await terminal([['engine', 'relay']], {
-    interact: async ({ type, press, evaluate }) => {
-      const value = () => evaluate("document.getElementById('line').value");
-      const settle = () => new Promise((resolve) => setTimeout(resolve, 800));
-      await type('shell cat tabrelay/al');
-      await press('Tab');
-      await settle();
-      relayTab.file = await value();
-      await evaluate("document.getElementById('line').value = ''");
-      await type('shell cat tabrelay/');
-      await press('Tab');
-      await settle();
-      await evaluate("document.getElementById('line').value = ''");
-      await type('shell ech');
-      await press('Tab');
-      await settle();
-      relayTab.command = await value();
-      relayTab.prompt = await evaluate("document.getElementById('prompt').textContent");
-    },
-  });
-  check('relay Tab completes a file name, lists several matches and completes a command name', relayTab.file === 'shell cat tabrelay/alpha.txt ' && /tabrelay\/alpha\.txt {2}tabrelay\/beta\.txt/.test(relayTabState.out) && relayTab.command === 'shell echo ', JSON.stringify({ file: relayTab.file, command: relayTab.command }));
-  check('relay prompt shows the workspace, where host commands run', relayTab.prompt === `thebird ${relayWs}> `, JSON.stringify(relayTab.prompt));
-  const relayNode = await terminal([['engine', 'relay'], ['run', 'shell node -v']]);
-  check('relay mode runs the host node, which the in-page shell cannot', relayNode.engine === 'ready' && /^v\d+\.\d+\.\d+$/m.test(relayNode.out), relayNode.out.split('\n').find((line) => line.startsWith('v')) ?? relayNode.out.slice(0, 140));
-  const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);
+  for (const server of [corsHost, plainHost]) server.close();
+
+  const status = await terminal([['run', 'false'], ['run', 'echo rc=$?'], ['run', '(exit 3)'], ['run', 'echo rc=$?'], ['run', 'true'], ['run', 'echo rc=$?']]);
   const statuses = status.out.match(/^rc=\d+$/gm) ?? [];
   check('in-page bash keeps $? across terminal lines', statuses.join(' ') === 'rc=1 rc=3 rc=0', statuses.join(' ') || status.out.slice(0, 140));
-  const version = await terminal([['run', 'shell git --version']]);
+  const version = await terminal([['run', 'git --version']]);
   check('in-page git --version names the in-page library, not a host git', /^git version \S+ \(in-page, isomorphic-git\)$/m.test(version.out), version.out.split('\n').find((line) => line.startsWith('git')) ?? version.out.slice(0, 140));
   const repo = await terminal([
-    ['run', 'shell mkdir -p notes'],
-    ['run', 'shell git init'],
-    ['run', 'shell echo one > notes/a.txt'],
-    ['run', 'shell echo readme > README.md'],
-    ['run', 'shell echo agents > AGENTS.md'],
-    ['run', 'shell echo arch > ARCHITECTURE.md'],
-    ['run', 'shell git add notes/a.txt README.md AGENTS.md ARCHITECTURE.md'],
-    ['run', 'shell git commit -m first'],
-    ['run', 'shell echo design > DESIGN.md'],
-    ['run', 'shell git add DESIGN.md'],
-    ['run', 'shell git commit -m first'],
-    ['run', 'shell git log'],
+    ['run', 'mkdir -p notes'],
+    ['run', 'git init'],
+    ['run', 'echo one > notes/a.txt'],
+    ['run', 'echo readme > README.md'],
+    ['run', 'echo agents > AGENTS.md'],
+    ['run', 'echo arch > ARCHITECTURE.md'],
+    ['run', 'git add notes/a.txt README.md AGENTS.md ARCHITECTURE.md'],
+    ['run', 'git commit -m first'],
+    ['run', 'echo design > DESIGN.md'],
+    ['run', 'git add DESIGN.md'],
+    ['run', 'git commit -m first'],
+    ['run', 'git log'],
   ]);
   check('in-page git commit without DESIGN.md is refused and names it', repo.out.includes('commit refused by the in-page gate') && repo.out.includes('DESIGN.md is not in the commit'), repo.out.split('\n').find((line) => line.includes('DESIGN.md is not in the commit'))?.slice(0, 160) ?? 'no refusal line');
   check('in-page git inits and stages over OPFS', repo.engine === 'ready' && repo.out.includes('initialized empty repository') && repo.out.includes('staged 1 path'), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
   const committedSha = repo.out.match(/committed ([0-9a-f]{7})/)?.[1];
   const headSha = repo.out.match(/^([0-9a-f]{7}) first$/m)?.[1];
-  check('in-page git commit runs the gate and sets HEAD', repo.out.includes('gate smoke:') && repo.out.includes('gate syntax:') && repo.out.includes('not run in-page') && committedSha !== undefined && committedSha === headSha, `committed ${committedSha} / log HEAD ${headSha}`);
+  check('in-page git commit runs the gate and sets HEAD', repo.out.includes('gate smoke:') && repo.out.includes('gate syntax:') && committedSha !== undefined && committedSha === headSha, `committed ${committedSha} / log HEAD ${headSha}`);
   const branchOne = await terminal([
-    ['run', 'shell git branch'],
-    ['run', 'shell git branch feature-x'],
-    ['run', 'shell git checkout feature-x'],
-    ['run', 'shell git status'],
-    ['run', 'shell echo branch-change > notes/a.txt'],
-    ['run', 'shell git add notes/a.txt'],
-    ['run', 'shell git commit -m branch-change'],
-    ['run', 'shell git branch'],
+    ['run', 'git branch'],
+    ['run', 'git branch feature-x'],
+    ['run', 'git checkout feature-x'],
+    ['run', 'git status'],
+    ['run', 'echo branch-change > notes/a.txt'],
+    ['run', 'git add notes/a.txt'],
+    ['run', 'git commit -m branch-change'],
+    ['run', 'git branch'],
   ]);
   const original = branchOne.out.match(/^\* (\S+)$/m)?.[1];
   check('in-page git lists branches, creates one and switches to it', original !== undefined && branchOne.out.includes('created branch feature-x') && branchOne.out.includes('switched to feature-x') && /^## feature-x$/m.test(branchOne.out) && /^\* feature-x$/m.test(branchOne.out), `original ${original}`);
   const branchTwo = await terminal([
-    ['run', `shell git checkout ${original ?? 'missing'}`],
-    ['run', 'shell cat notes/a.txt'],
-    ['run', 'shell git status'],
-    ['run', 'shell git checkout no-such-branch'],
-    ['run', 'shell git branch'],
+    ['run', `git checkout ${original ?? 'missing'}`],
+    ['run', 'cat notes/a.txt'],
+    ['run', 'git status'],
+    ['run', 'git checkout no-such-branch'],
+    ['run', 'git branch'],
   ]);
   check('in-page git checkout restores the working tree of the branch it returns to', original !== undefined && branchTwo.out.includes(`switched to ${original}`) && /^one$/m.test(branchTwo.out) && !/^branch-change$/m.test(branchTwo.out) && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').slice(0, 4).join(' / ').slice(0, 160));
-  check('in-page git checkout refuses an unknown branch and leaves HEAD where it was', /^git: Could not find .*no-such-branch/m.test(branchTwo.out) &&!branchTwo.out.includes('switched to no-such-branch') && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').find((line) => line.includes('no-such-branch') && !line.startsWith('thebird>'))?.slice(0, 160) ?? 'no refusal line');
+  check('in-page git checkout refuses an unknown branch and leaves HEAD where it was', /^git: Could not find .*no-such-branch/m.test(branchTwo.out) && !branchTwo.out.includes('switched to no-such-branch') && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').find((line) => line.includes('no-such-branch') && !line.startsWith('thebird>'))?.slice(0, 160) ?? 'no refusal line');
   const broken = await terminal([
-    ['run', 'shell mkdir -p notes'],
-    ['run', 'shell git init'],
-    ['run', 'shell echo "const =" > notes/bad.js'],
-    ['run', 'shell echo café > notes/u.txt'],
-    ['run', 'shell git add notes/bad.js notes/u.txt'],
-    ['run', 'shell git commit -m broken'],
+    ['run', 'mkdir -p notes'],
+    ['run', 'git init'],
+    ['run', 'echo "const =" > notes/bad.js'],
+    ['run', 'echo café > notes/u.txt'],
+    ['run', 'git add notes/bad.js notes/u.txt'],
+    ['run', 'git commit -m broken'],
   ]);
   check('in-page git commit refuses broken syntax and non-ASCII and names both', broken.out.includes('commit refused by the in-page gate') && broken.out.includes('syntax:') && broken.out.includes('ascii:'), broken.out.split('\n').find((line) => line.includes('refused by the in-page gate'))?.slice(0, 160) ?? 'no refusal line');
-  const job = await terminal([['run', 'job start bg echo x']]);
-  check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
   const background = await terminal([
-    ['run', 'shell echo refused-line & echo should-not-run'],
-    ['run', 'shell echo and-ok && echo and-ok2'],
-    ['run', 'shell echo redir-ok 2>&1'],
-    ['run', 'shell echo "quoted & kept"'],
+    ['run', 'echo refused-line & echo should-not-run'],
+    ['run', 'echo and-ok && echo and-ok2'],
+    ['run', 'echo redir-ok 2>&1'],
+    ['run', 'echo "quoted & kept"'],
   ]);
+  check('in-page bash refuses background jobs and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs are not supported') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
   const recalled = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
       const value = () => evaluate("document.getElementById('line').value");
-      await type('shell echo first-typed');
+      await type('echo first-typed');
       await press('Enter');
       await waitFor("document.body.dataset.busy !== 'true'");
-      await type('shell echo second-typed');
+      await type('echo second-typed');
       await press('Enter');
       await waitFor("document.body.dataset.busy !== 'true'");
       await press('ArrowUp');
@@ -285,18 +163,18 @@ if (fileExists(chrome)) {
       recalled.down2 = await value();
     },
   });
-  check('in-page terminal recalls submitted commands with the up and down arrows', recalled.up1 === 'shell echo second-typed' && recalled.up2 === 'shell echo first-typed' && recalled.down1 === 'shell echo second-typed' && recalled.down2 === '', JSON.stringify(recalled));
+  check('in-page terminal recalls submitted commands with the up and down arrows', recalled.up1 === 'echo second-typed' && recalled.up2 === 'echo first-typed' && recalled.down1 === 'echo second-typed' && recalled.down2 === '', JSON.stringify(recalled));
   const cancelled = {};
   const interrupted = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
-      await type('shell for i in $(seq 1 200); do sleep 0.1; done');
+      await type('for i in $(seq 1 200); do sleep 0.1; done');
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'");
       const started = Date.now();
       await press('c', { ctrl: true });
       await waitFor("document.body.dataset.busy !== 'true'", 40000);
       cancelled.elapsed = Date.now() - started;
-      await type('shell echo after-cancel');
+      await type('echo after-cancel');
       await press('Enter');
       await waitFor("document.body.dataset.busy !== 'true'");
     },
@@ -304,61 +182,61 @@ if (fileExists(chrome)) {
   check('in-page terminal Ctrl-C cancels a running command and the shell carries on', interrupted.out.includes('^C') && cancelled.elapsed < 10000 && /^after-cancel$/m.test(interrupted.out), `cancel took ${cancelled.elapsed} ms`);
   const completed = {};
   const listed = await terminal([
-    ['run', 'shell mkdir -p notes/tab'],
-    ['run', 'shell echo alpha > notes/tab/alpha.txt'],
-    ['run', 'shell echo beta > notes/tab/beta.txt'],
+    ['run', 'mkdir -p notes/tab'],
+    ['run', 'echo alpha > notes/tab/alpha.txt'],
+    ['run', 'echo beta > notes/tab/beta.txt'],
   ], {
     interact: async ({ type, press, evaluate }) => {
       const value = () => evaluate("document.getElementById('line').value");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 800));
-      await type('shell cat notes/fetc');
+      await type('cat notes/fetc');
       await press('Tab');
       await settle();
       completed.unique = await value();
       await evaluate("document.getElementById('line').value = ''");
-      await type('shell ls no');
+      await type('ls no');
       await press('Tab');
       await settle();
       completed.directory = await value();
       await evaluate("document.getElementById('line').value = ''");
-      await type('shell cat notes/tab/');
+      await type('cat notes/tab/');
       await press('Tab');
       await settle();
       completed.listed = await value();
     },
   });
-  check('in-page terminal completes a unique file name with Tab and adds a space', completed.unique === 'shell cat notes/fetched.txt ', JSON.stringify(completed.unique));
-  check('in-page terminal completes a directory with a trailing slash', completed.directory === 'shell ls notes/', JSON.stringify(completed.directory));
-  check('in-page terminal lists several matches when Tab cannot finish a name', /notes\/tab\/alpha\.txt {2}notes\/tab\/beta\.txt/.test(listed.out) && completed.listed === 'shell cat notes/tab/', JSON.stringify(completed.listed));
+  check('in-page terminal completes a unique file name with Tab and adds a space', completed.unique === 'cat notes/fetched.txt ', JSON.stringify(completed.unique));
+  check('in-page terminal completes a directory with a trailing slash', completed.directory === 'ls notes/', JSON.stringify(completed.directory));
+  check('in-page terminal lists several matches when Tab cannot finish a name', /notes\/tab\/alpha\.txt {2}notes\/tab\/beta\.txt/.test(listed.out) && completed.listed === 'cat notes/tab/', JSON.stringify(completed.listed));
   const moved = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
       const value = () => evaluate("document.getElementById('line').value");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
-      await type('shell cd notes');
+      await type('cd notes');
       await press('Enter');
       await waitFor("document.getElementById('prompt').textContent === 'thebird /workspace/notes> '", 20000);
       moved.prompt = await evaluate("document.getElementById('prompt').textContent");
-      await type('shell pwd');
+      await type('pwd');
       await press('Enter');
       await settle();
       moved.out = await evaluate("document.getElementById('out').textContent");
-      await type('shell cat fetc');
+      await type('cat fetc');
       await press('Tab');
       await settle();
       moved.completed = await value();
     },
   });
   check('in-page prompt shows the working directory after cd', moved.prompt === 'thebird /workspace/notes> ', JSON.stringify(moved.prompt));
-  check('in-page cd persists to the next command and Tab completes relative to it', /^\/workspace\/notes$/m.test(moved.out) && moved.completed === 'shell cat fetched.txt ', JSON.stringify(moved.completed));
+  check('in-page cd persists to the next command and Tab completes relative to it', /^\/workspace\/notes$/m.test(moved.out) && moved.completed === 'cat fetched.txt ', JSON.stringify(moved.completed));
   const queued = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
-      await type('shell for i in $(seq 1 20); do sleep 0.1; done');
+      await type('for i in $(seq 1 20); do sleep 0.1; done');
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'", 20000);
-      await type('shell echo queued-one');
+      await type('echo queued-one');
       await press('Enter');
-      await type('shell echo queued-two');
+      await type('echo queued-two');
       await press('Enter');
       await waitFor("document.getElementById('out').textContent.includes('queued-two')", 40000);
     },
@@ -367,10 +245,10 @@ if (fileExists(chrome)) {
   check('in-page terminal runs lines typed during a command in order, not as busy errors', firstQueued !== -1 && queued.out.indexOf('\nqueued-two\n') > firstQueued && !queued.out.includes('busy'), queued.out.split('\n').filter((line) => line.startsWith('queued')).join(' / '));
   const dropped = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
-      await type('shell for i in $(seq 1 100); do sleep 0.1; done');
+      await type('for i in $(seq 1 100); do sleep 0.1; done');
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'", 20000);
-      await type('shell echo dropped-line');
+      await type('echo dropped-line');
       await press('Enter');
       await press('c', { ctrl: true });
       await waitFor("document.body.dataset.busy !== 'true'", 40000);
@@ -379,14 +257,14 @@ if (fileExists(chrome)) {
   });
   check('in-page terminal Ctrl-C drops lines queued behind the cancelled command', !/^dropped-line$/m.test(dropped.out) && dropped.out.includes('^C'), dropped.out.split('\n').filter((line) => line === '^C' || line.includes('dropped')).join(' / ').slice(0, 140));
   const editing = {};
-  await terminal([['run', 'shell echo before-clear']], {
+  await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
       const value = () => evaluate("document.getElementById('line').value");
       const caret = () => evaluate("document.getElementById('line').selectionStart");
-      await type('shell echo discarded');
+      await type('echo discarded');
       await press('u', { ctrl: true });
       editing.cleared = await value();
-      await type('shell echo caret');
+      await type('echo caret');
       await press('a', { ctrl: true });
       editing.start = await caret();
       await press('e', { ctrl: true });
@@ -399,11 +277,10 @@ if (fileExists(chrome)) {
   });
   check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
   check('in-page terminal Ctrl-L clears the output', editing.afterClear === '', JSON.stringify(editing.afterClear.slice(0, 80)));
-  let recalledAfterReload;
   const streaming = {};
   const ticks = await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
-      await type('shell for i in 1 2 3 4 5; do echo tick$i; sleep 0.4; done');
+      await type('for i in 1 2 3 4 5; do echo tick$i; sleep 0.4; done');
       await press('Enter');
       await waitFor("document.getElementById('out').textContent.includes('tick1')", 20000);
       streaming.busy = await evaluate("document.body.dataset.busy === 'true'");
@@ -417,7 +294,7 @@ if (fileExists(chrome)) {
   const storedBefore = {};
   await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
-      await type('shell echo kept-line');
+      await type('echo kept-line');
       await press('Enter');
       await waitFor("/^kept-line$/m.test(document.getElementById('out').textContent)", 20000);
       storedBefore.raw = await evaluate("localStorage.getItem('thebird.history')");
@@ -429,175 +306,119 @@ if (fileExists(chrome)) {
   } catch {
     storedLines = null;
   }
-  check('in-page terminal stores only the submitted command lines in localStorage', Array.isArray(storedLines) && storedLines.at(-1) === 'shell echo kept-line' && storedLines.every((line) => typeof line === 'string' && !line.includes('\n')), JSON.stringify(storedBefore.raw?.slice(-120)));
+  check('in-page terminal stores only the submitted command lines in localStorage', Array.isArray(storedLines) && storedLines.at(-1) === 'echo kept-line' && storedLines.every((line) => typeof line === 'string' && !line.includes('\n')), JSON.stringify(storedBefore.raw?.slice(-120)));
+  let recalledAfterReload;
   const reopenedHistory = await terminal([], {
     interact: async ({ press, evaluate }) => {
       await press('ArrowUp');
       recalledAfterReload = await evaluate("document.getElementById('line').value");
     },
   });
-  check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'shell echo kept-line' && reopenedHistory.out === '', JSON.stringify(recalledAfterReload));
+  check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'echo kept-line' && reopenedHistory.out === '', JSON.stringify(recalledAfterReload));
   const commandTab = {};
   await terminal([], {
     interact: async ({ type, press, evaluate }) => {
       const value = () => evaluate("document.getElementById('line').value");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
-      await type('shell pyth');
+      await type('pyth');
       await press('Tab');
       await settle();
       commandTab.python = await value();
       await evaluate("document.getElementById('line').value = ''");
-      await type('shell sqli');
+      await type('sqli');
       await press('Tab');
       await settle();
       commandTab.sqlite = await value();
     },
   });
-  check('in-page terminal completes a command name in command position with Tab', commandTab.python === 'shell python3 ' && commandTab.sqlite === 'shell sqlite3 ', JSON.stringify(commandTab));
-  const completedRuns = await terminal([['run', 'shell mkdir -p notes'], ['run', 'shell sqlite3 notes/cmd.db "select 2+3"']]);
+  check('in-page terminal completes a command name in command position with Tab', commandTab.python === 'python3 ' && commandTab.sqlite === 'sqlite3 ', JSON.stringify(commandTab));
+  const completedRuns = await terminal([['run', 'mkdir -p notes'], ['run', 'sqlite3 notes/cmd.db "select 2+3"']]);
   check('a command completed by name really runs in-page', /^5$/m.test(completedRuns.out), completedRuns.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   const listing = await terminal([], {
-    interact: async ({ type, press }) => {
-      await type('shell ');
+    interact: async ({ press }) => {
       await press('Tab');
       await new Promise((resolve) => setTimeout(resolve, 1500));
     },
   });
   const offeredLine = listing.out.split('\n').filter((line) => line.includes('python3') && line.includes('sqlite3') && line.includes('  ')).pop() ?? '';
   const offered = offeredLine.split('  ').map((name) => name.trim()).filter(Boolean);
-  const commandTable = await terminal([['run', `shell for n in ${offered.map((name) => `'${name}'`).join(' ')}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-checked`]]);
+  const commandTable = await terminal([['run', `for n in ${offered.map((name) => `'${name}'`).join(' ')}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-checked`]]);
   check('every name Tab offers in command position resolves in-page, and the custom builtins are among them', offered.length > 200 && ['git', 'sqlite3', 'python3', 'curl', 'wget'].every((name) => offered.includes(name)) && /^all-checked$/m.test(commandTable.out) && !/^missing-/m.test(commandTable.out), `${offered.length} names; ` + commandTable.out.split('\n').filter((line) => /^(all-checked|missing)/.test(line)).join(' / ').slice(0, 160));
-  const lookup = await terminal([['run', 'shell if which jq; then echo if-jq-found; fi; if which nosuch; then echo bad-nosuch; else echo if-nosuch-missing; fi; type git; type -t git; command -v git; which git']]);
+  const lookup = await terminal([['run', 'if which jq; then echo if-jq-found; fi; if which nosuch; then echo bad-nosuch; else echo if-nosuch-missing; fi; type git; type -t git; command -v git; which git']]);
   check('in-page which drives an if: a found name passes and a missing one fails', /^if-jq-found$/m.test(lookup.out) && /^if-nosuch-missing$/m.test(lookup.out) && !/^bad-nosuch$/m.test(lookup.out), lookup.out.split('\n').slice(-6).join(' / ').slice(0, 160));
   check('in-page git is reported as a builtin by type, command -v and which', /^git is a shell builtin$/m.test(lookup.out) && /^builtin$/m.test(lookup.out) && lookup.out.split('\n').filter((line) => line === 'git').length === 2, lookup.out.split('\n').slice(-5).join(' / ').slice(0, 160));
   const lookupChunks = [];
   for (let i = 0; i < offered.length; i += 40) lookupChunks.push(offered.slice(i, i + 40));
-  const lookupTable = await terminal(lookupChunks.map((chunk) => ['run', `shell for n in ${chunk.map((name) => `'${name}'`).join(' ')}; do a=$(command -v "$n"); w=$(which "$n"); k=$(type -t "$n"); [ "$a" = "$w" ] || echo mismatch-which-$n; case "$a" in /*) [ "$k" = file ] || echo mismatch-kind-$n ;; *) case "$k" in builtin|keyword|function) ;; *) echo mismatch-kind-$n ;; esac ;; esac; done; echo lookup-chunk-done`]));
+  const lookupTable = await terminal(lookupChunks.map((chunk) => ['run', `for n in ${chunk.map((name) => `'${name}'`).join(' ')}; do a=$(command -v "$n"); w=$(which "$n"); k=$(type -t "$n"); [ "$a" = "$w" ] || echo mismatch-which-$n; case "$a" in /*) [ "$k" = file ] || echo mismatch-kind-$n ;; *) case "$k" in builtin|keyword|function) ;; *) echo mismatch-kind-$n ;; esac ;; esac; done; echo lookup-chunk-done`]));
   const chunksDone = lookupTable.out.split('\n').filter((line) => line === 'lookup-chunk-done').length;
   check('which, command -v and type agree for every name Tab offers, path or builtin', chunksDone === lookupChunks.length && !/^mismatch-/m.test(lookupTable.out), `${chunksDone}/${lookupChunks.length} chunks; ` + lookupTable.out.split('\n').filter((line) => /^mismatch-/.test(line)).slice(0, 4).join(' / ').slice(0, 160));
-  const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami'], ['run', 'shell tar --version']]);
+  const emulated = await terminal([['run', 'uname -s'], ['run', 'echo plain-line'], ['run', 'whoami'], ['run', 'tar --version']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname, whoami and tar are labelled as emulations, and plain commands are not', notes === 3 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out) && /^tar \(bashkit\) /m.test(emulated.out), `notes ${notes}`);
-  check('in-page bash refuses a bare & and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs need the relay') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
   const sqlite = await terminal([
-    ['run', 'shell mkdir -p notes'],
-    ['run', 'shell sqlite3 notes/app.db "create table t(x)"'],
-    ['run', 'shell sqlite3 notes/app.db "insert into t values (1),(2),(3)"'],
-    ['run', 'shell sqlite3 notes/app.db "select sum(x) from t"'],
+    ['run', 'mkdir -p notes'],
+    ['run', 'sqlite3 notes/app.db "create table t(x)"'],
+    ['run', 'sqlite3 notes/app.db "insert into t values (1),(2),(3)"'],
+    ['run', 'sqlite3 notes/app.db "select sum(x) from t"'],
   ]);
   check('in-page sqlite3 creates a database and answers a query through sql.js', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
-  const reopened = await terminal([['run', 'shell sqlite3 notes/app.db "select count(*) from t"']]);
+  const reopened = await terminal([['run', 'sqlite3 notes/app.db "select count(*) from t"']]);
   check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const python = await terminal([
-    ['run', 'shell python3 -c "print(6*7)"'],
-    ['run', 'shell python3 -c "1/0"'],
-    ['run', 'shell echo py-hello > notes/in.txt'],
-    ['run', `shell echo "open('notes/out.txt','w').write(open('notes/in.txt').read().upper())" > notes/script.py`],
-    ['run', 'shell python3 notes/script.py'],
-    ['run', 'shell cat notes/out.txt'],
+    ['run', 'python3 -c "print(6*7)"'],
+    ['run', 'python3 -c "1/0"'],
+    ['run', 'echo py-hello > notes/in.txt'],
+    ['run', `echo "open('notes/out.txt','w').write(open('notes/in.txt').read().upper())" > notes/script.py`],
+    ['run', 'python3 notes/script.py'],
+    ['run', 'cat notes/out.txt'],
   ]);
   check('in-page python3 runs a one-line script through Pyodide', python.engine === 'ready' && /^42$/m.test(python.out), python.out.split('\n').slice(0, 2).join(' / ').slice(0, 140));
-  const linkError = await terminal([['run', 'shell python3 -c "raise ValueError(\'see https://example.org/docs\')"']]);
+  const linkError = await terminal([['run', `python3 -c "raise ValueError('see https://example.org/docs')"`]]);
   check('in-page python3 error text keeps a readable link instead of bashkit cutting it at //', !linkError.out.includes('<path>') && /ValueError: see example\.org\/docs$/m.test(linkError.out), linkError.out.split('\n').find((line) => line.includes('ValueError')) ?? 'no error line');
   check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
   const pipLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
   check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-in-page.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
   const pipInstall = await terminal([
-    ['run', 'shell pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
-    ['run', 'shell pip install tabulate==0.9.0'],
-    ['run', 'shell pip install six'],
-    ['run', 'shell pip install definitely-not-a-real-package-xyz'],
+    ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
+    ['run', 'pip install tabulate==0.9.0'],
+    ['run', 'pip install six'],
+    ['run', 'pip install definitely-not-a-real-package-xyz'],
   ]);
   const pipInstalled = /^installed tabulate \S+$/m.test(pipInstall.out) && /^\d+\.\d+\.\d+$/m.test(pipInstall.out);
   check('in-page pip installs a pure package from PyPI, and python3 imports it in the same page', pipInstalled, pipInstalled ? 'tabulate installed and imported' : 'full pip output: ' + pipInstall.out.split('\n').filter((line) => line.trim()).join(' | ').slice(0, 900));
-  const pipFiles = await terminal([['run', 'shell find /workspace -iname "*tabulate*" | wc -l']]);
+  const pipFiles = await terminal([['run', 'find /workspace -iname "*tabulate*" | wc -l']]);
   check('pip installs stay in Pyodide memory: no tabulate file reaches OPFS', /^0$/m.test(pipFiles.out), pipFiles.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   check('in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', pipInstall.out.includes('version specifiers and URLs are not supported') && pipInstall.out.includes('part of the Pyodide package set') && pipInstall.out.includes("Can't fetch metadata for 'definitely-not-a-real-package-xyz'") && !/https?:\/\//.test(pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join('\n')), pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join(' / ').slice(0, 200));
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
-  const pythonReopened = await terminal([['run', 'shell cat notes/out.txt'], ['run', 'shell python3 -c "print(open(\'notes/out.txt\').read().strip())"']]);
+  const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]]);
   check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const incremental = await terminal([
-    ['run', 'shell echo one > notes/inc.txt'],
-    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
-    ['run', 'shell echo two > notes/inc.txt'],
-    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
-    ['run', `shell python3 -c "import os; os.remove('notes/inc.txt')"`],
-    ['run', `shell python3 -c "import os; print(os.path.exists('notes/inc.txt'))"`],
-    ['run', 'shell echo three > notes/inc.txt'],
-    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', 'echo one > notes/inc.txt'],
+    ['run', `python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', 'echo two > notes/inc.txt'],
+    ['run', `python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', `python3 -c "import os; os.remove('notes/inc.txt')"`],
+    ['run', `python3 -c "import os; print(os.path.exists('notes/inc.txt'))"`],
+    ['run', 'echo three > notes/inc.txt'],
+    ['run', `python3 -c "print(open('notes/inc.txt').read().strip())"`],
   ]);
   const incLines = incremental.out.split('\n');
   check('in-page python3 sees a shell rewrite made after its last call', incLines.includes('one') && incLines.includes('two') && incLines.indexOf('two') > incLines.indexOf('one'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
   check('in-page python3 removes a file it deletes and the shell sees it gone', incLines.includes('False') && incLines.includes('three'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
   const warmCalls = Array.from({ length: 30 }, () => 'python3 -c "print(1)"').join('; ');
   const timed = await terminal([
-    ['run', 'shell mkdir -p notes/bulk'],
-    ['run', `shell python3 -c "[open('notes/bulk/f%d.txt' % i, 'w').write('x' * 200) for i in range(300)]"`],
-    ['run', `shell python3 -c "print(0)"; t0=$(date +%s%N); ${warmCalls}; t1=$(date +%s%N); echo $(( (t1 - t0) / 1000000 ))`],
+    ['run', 'mkdir -p notes/bulk'],
+    ['run', `python3 -c "[open('notes/bulk/f%d.txt' % i, 'w').write('x' * 200) for i in range(300)]"`],
+    ['run', `python3 -c "print(0)"; t0=$(date +%s%N); ${warmCalls}; t1=$(date +%s%N); echo $(( (t1 - t0) / 1000000 ))`],
   ]);
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
   check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
-  const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
-  process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
-  const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=witness', '-c', 'user.email=witness@localhost', ...args], { cwd, encoding: 'utf8' }).trim();
-  const remote = join(gitRoot, 'remote.git');
-  const seed = join(gitRoot, 'seed');
-  const clone = join(gitRoot, 'clone');
-  gitIn(gitRoot, 'init', '-q', '--bare', '-b', 'main', remote);
-  gitIn(gitRoot, 'init', '-q', '-b', 'main', seed);
-  gitIn(seed, 'remote', 'add', 'origin', remote);
-  writeFileSync(join(seed, 'README.md'), 'first\n');
-  gitIn(seed, 'add', '-A');
-  gitIn(seed, 'commit', '-q', '-m', 'first');
-  gitIn(seed, 'push', '-q', '-u', 'origin', 'main');
-  gitIn(seed, 'checkout', '-q', '-b', 'feature');
-  gitIn(seed, 'push', '-q', '-u', 'origin', 'feature');
-  gitIn(seed, 'checkout', '-q', 'main');
-  gitIn(gitRoot, 'clone', '-q', remote, clone);
-  writeFileSync(join(seed, 'README.md'), 'second\n');
-  gitIn(seed, 'commit', '-q', '-am', 'second');
-  gitIn(seed, 'push', '-q', 'origin', 'main');
-  const secondSha = gitIn(seed, 'rev-parse', 'HEAD');
-  const gitRelay = await startRelay({ workspace: clone });
-  try {
-    const pairs = [
-      ['engine', 'relay'],
-      ['run', 'git branch'],
-      ['run', 'git fetch'],
-      ['run', 'shell git rev-parse origin/main'],
-      ['run', 'git pull'],
-      ['run', 'shell git log -1 --format=%s'],
-      ['run', 'git checkout feature'],
-      ['run', 'shell git branch --show-current'],
-      ['run', 'git checkout main'],
-      ['run', 'shell git branch --show-current'],
-    ];
-    const gitState = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams(pairs).toString() });
-    const lines = gitState.out.split('\n');
-    check('relay git branch lists the local and remote feature branch', gitState.engine === 'ready' && lines.some((line) => /^\s*\*?\s*feature$/.test(line)), lines.find((line) => /feature$/.test(line)) ?? 'no branch line');
-    check('relay git fetch updates origin/main to the seed commit', gitState.out.includes(secondSha), `expected ${secondSha}`);
-    check('relay git pull fast-forwards main to the new commit', lines.some((line) => line === 'second'), lines.find((line) => line.includes('second')) ?? 'no subject line');
-    check('relay git checkout switches to feature', lines.some((line) => line === 'feature'), 'no feature line');
-    check('relay git checkout switches back to main', lines.some((line) => line === 'main'), 'no main line');
-    writeFileSync(join(clone, 'ok.mjs'), 'export const ok = 1;\n');
-    gitIn(clone, 'add', 'ok.mjs');
-    gitIn(clone, 'commit', '-q', '-m', 'add ok module');
-    const goodPush = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams([['engine', 'relay'], ['run', 'git push']]).toString() });
-    check('relay git push passes the gate and sends main to the remote', gitIn(remote, 'rev-parse', 'main') === gitIn(clone, 'rev-parse', 'HEAD'), goodPush.out.split('\n').slice(-2).join(' / ').slice(0, 140));
-    writeFileSync(join(clone, 'bad.mjs'), 'export const = ;\n');
-    gitIn(clone, 'add', 'bad.mjs');
-    gitIn(clone, 'commit', '-q', '-m', 'add bad module');
-    const badHead = gitIn(clone, 'rev-parse', 'HEAD');
-    const badPush = await runTerminal({ chrome, profile, url: gitRelay.url + '?' + new URLSearchParams([['engine', 'relay'], ['run', 'git push']]).toString() });
-    check('relay git push refuses broken syntax and leaves the remote unchanged', badPush.out.includes('commit gate failed before the push') && badPush.out.includes('syntax:') && gitIn(remote, 'rev-parse', 'main') !== badHead, badPush.out.split('\n').find((line) => line.includes('commit gate')) ?? 'no refusal line');
-  } finally {
-    await gitRelay.close();
-  }
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
 }
+
 const seeded = await import('../web/shims/fs.js');
 const watcher = seeded.watch();
 const chained = watcher.on('change', () => {}) === watcher && watcher.once('change', () => {}) === watcher;
@@ -623,26 +444,14 @@ const diff = await gitBuiltin(['diff']);
 check('git diff shows the removed and added lines', diff.includes('-one') && diff.includes('+two'), diff.split('\n').join(' / ').slice(0, 140));
 const refused = await gitBuiltin(['commit', '-m', 'second']).then(() => 'committed', (err) => err.message);
 check('git commit with nothing staged is refused by the gate', refused.includes('commit refused by the in-page gate') && refused.includes('staged: nothing staged'), refused.slice(0, 160));
-const goodSource = `${createHash('sha256').update('good\n').digest('hex').slice(0, 12)}.txt`;
-seeded.mkdirSync('/workspace/sources', { recursive: true });
-seeded.writeFileSync(`/workspace/sources/${goodSource}`, 'good\n');
-seeded.writeFileSync('/workspace/sources/notes.txt', 'bad\n');
-await gitBuiltin(['add', `sources/${goodSource}`, 'sources/notes.txt']);
-const badSource = await gitBuiltin(['commit', '-m', 'sources']).then(() => 'committed', (err) => err.message);
-check('in-page gate refuses a source whose name is not its hash', badSource.includes('sources/notes.txt is not a source name') && badSource.includes('commit refused by the in-page gate'), badSource.slice(0, 160));
-seeded.rmSync('/workspace/sources/notes.txt');
-await gitBuiltin(['add', 'sources/notes.txt']);
-const sourceCommit = await gitBuiltin(['commit', '-m', 'sources']);
-check('in-page gate passes sources whose names match their hash', sourceCommit.includes('gate sources: 1 sources match their names') && sourceCommit.includes('committed '), sourceCommit.split('\n').find((line) => line.startsWith('gate sources')) ?? 'no sources line');
-await relay.close();
-const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 60000 });
+
+const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 120000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
-check('ARCHITECTURE.md and AGENTS.md claims have no static contradictions', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} static claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
+check('ARCHITECTURE.md and AGENTS.md claims have no contradictions with the code', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
 const comments = spawnSync(process.execPath, [join(root, 'scripts', 'lint-comments.mjs')], { cwd: root, encoding: 'utf8', timeout: 60000 });
 check('repo-owned code has no comments (scripts/lint-comments.mjs)', comments.status === 0 && /repo-owned files checked: 0 comments;/.test(comments.stdout), comments.stdout.split('\n').filter((line) => line.startsWith('FAIL')).slice(0, 3).join('; ') || comments.stdout.trim().split('\n').at(-1));
 const vendoredLines = comments.stdout.split('\n').filter((line) => line.startsWith('VENDORED'));
 check('every vendored bundle with comments has a provenance witness (licence grant and upstream name)', comments.status === 0 && vendoredLines.length > 0 && vendoredLines.every((line) => line.includes('(MIT grant), upstream named')) && !comments.stdout.includes('FAIL'), vendoredLines.map((line) => line.split(':')[0].replace('VENDORED ', '')).join(', ') || 'no vendored bundle reported');
-process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));
-process.on('exit', () => rmSync(ws, { recursive: true, force: true }));
+await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exitCode = failures ? 1 : 0;

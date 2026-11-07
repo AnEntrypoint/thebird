@@ -1,35 +1,32 @@
 # Design
 
-thebird is a thin mapping layer over gm. Every operation dispatches through
-gm's verb engine. thebird adds no filesystem, shell, git, search, job, log,
-wiki, row or fetch behaviour of its own.
+thebird is a bash terminal that runs in the browser. The page does the work, and Node only serves the files.
+
+## Decisions
+
+- Browser-only execution. Commands run in a Web Worker (`web/shell-worker.js`) over the OPFS tree. No host process runs commands.
+- bashkit is the shell (`web/bash-shell.js`), a WebAssembly bash that gives bash semantics without a host.
+- In-page builtins cover what bashkit lacks: git over isomorphic-git, sqlite3 over sql.js, python3 and pip over Pyodide, curl and wget over fetch.
+- The page has no call path to the host. The static server answers GET and HEAD only and binds 127.0.0.1 by default.
+- No Node runtime in the page. txiki.js was evaluated and rejected, because it is a native runtime with no browser or WebAssembly build. Node stays only as the static server.
+- No external execution engine. The earlier CLI, library, REPL, verb passthrough and relay POST endpoints are gone, so the page runs every command itself.
+- No library API and no CLI. The package exports nothing; the product is the page.
+- Browser code uses the modules in `web/shims/` in place of `node:` imports.
+- Third-party bundles are committed with their licence files. Generated runtimes (bashkit, Pyodide) are gitignored and pinned by SHA-256.
 
 ## Layers
 
-- `src/commands.js` and `src/runner.js` hold the command names and the argument
-  parser. Both are browser-safe.
-- `src/api.js` holds the library methods as a table of gm verb mappings. It is
-  browser-safe.
-- `src/gm.js` is the Node-only locator for gm and its `createTools()` engine.
-- `src/gm-client.js` is the client that Node, the relay and the browser worker
-  share. It maps `job_start` to `run_shell` in the background.
-- `src/relay.js` is a Node HTTP server on 127.0.0.1. It serves the browser
-  terminal and forwards JSON calls to gm.
+1. Page: `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`. Renders output and the prompt, keeps history, handles keys and Tab.
+2. Worker: `web/shell-worker.js`. Hydrates OPFS, creates `/workspace`, answers run, complete, cwd and cancel messages, and flushes OPFS after each message.
+3. Shell: `web/bash-shell.js` over bashkit, with the lookup prologue from `web/shell-lookup.js`.
+4. Builtins: `web/git-in-page.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, and the commit gate `web/commit-gate.js`.
+5. Storage and shims: `web/shims/`, with the OPFS-backed filesystem in `web/shims/fs.js`.
+6. Static server: `src/relay.js`, started by `bin/thebird-relay.js`.
 
-## Browser
-
-- The default page runs gm in `web/gm-worker.js` over the OPFS tree. The
-  `web/shims/` modules replace the `node:` modules that gm imports.
-- The in-page shell is bashkit, in `web/bash-shell.js`. It has a `git` builtin
-  backed by isomorphic-git, in `web/git-in-page.js`.
-- `web/commit-gate.js` is the in-page commit gate. It is not gm's gate. It
-  checks syntax, ASCII, the required docs and a scratch round trip, and it
-  reports the gm checks it does not run.
-- Measurements and known gaps are in `ARCHITECTURE.md`.
+Details, limits and measurements are in `ARCHITECTURE.md`.
 
 ## Rules
 
-- Mappings stay thin, so a new gm verb needs no thebird change.
-- Browser-facing code imports nothing from Node.
-- The relay answers only JSON POSTs from 127.0.0.1, and it runs commands as the
-  user who started it.
+- Browser code imports nothing from Node.
+- Repo-owned code has no comments.
+- A `node:` import in in-page code needs a shim in `web/shims/` first.

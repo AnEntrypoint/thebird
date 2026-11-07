@@ -1,7 +1,7 @@
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
 
-const CORS_NOTE = 'the in-page shell reaches only hosts that send CORS headers to this page; use ?engine=relay for other hosts';
+const CORS_NOTE = 'the in-page shell reaches only hosts that send CORS headers to this page';
 
 function parse(name, argv) {
   const opts = { fail: false, output: undefined, url: undefined };
@@ -13,7 +13,7 @@ function parse(name, argv) {
     } else if (name === 'curl' && arg === '-o') opts.output = argv[++i];
     else if (name === 'wget' && arg === '-O') opts.output = argv[++i];
     else if (/^-[sSfLq]+$/.test(arg)) opts.fail ||= arg.includes('f');
-    else throw new Error(`${arg}: flag not supported in the in-page shell (use ?engine=relay)`);
+    else throw new Error(`${arg}: flag not supported in the in-page shell`);
   }
   if (!opts.url) throw new Error(`usage: ${name === 'curl' ? 'curl [-sf] [-o file]' : 'wget [-q] [-O file]'} <http(s) URL>`);
   if (opts.output === undefined && name === 'wget') opts.output = posix.basename(new URL(opts.url).pathname) || 'index.html';

@@ -1,7 +1,4 @@
-import { createRunner } from '/src/runner.js';
-import { createApi } from '/src/api.js';
-import { remoteClient } from '/src/gm-remote.js';
-import { workerClient } from '/web/gm-worker-client.js';
+import { shellClient } from '/web/shell-client.js';
 import { AnsiParser } from '/web/ansi.js';
 
 const out = document.getElementById('out');
@@ -22,16 +19,11 @@ const append = (text) => {
 const endLine = () => { if (!out.textContent.endsWith('\n')) append('\n'); };
 const write = (text) => { endLine(); append(text + '\n'); };
 
-async function engine() {
-  if (params.get('engine') === 'relay') return remoteClient({ url: location.origin + '/' });
-  return workerClient({ raw: params.get('gm') === 'raw' });
-}
-
-const client = await engine();
-if (client.onOutput) client.onOutput(append);
+const client = shellClient();
+client.onOutput(append);
 const prompt = document.getElementById('prompt');
 const showPrompt = async () => {
-  if (client.cwd) prompt.textContent = `thebird ${await client.cwd()}> `;
+  prompt.textContent = `thebird ${await client.cwd()}> `;
 };
 try {
   await client.ready;
@@ -41,8 +33,6 @@ try {
   document.body.dataset.engine = 'failed';
   write('engine error: ' + err.message);
 }
-
-const run = createRunner(createApi(client));
 
 const HISTORY_KEY = 'thebird.history';
 const HISTORY_LIMIT = 500;
@@ -71,8 +61,8 @@ async function execute(command) {
   busy = true;
   document.body.dataset.busy = 'true';
   try {
-    const result = await run(command);
-    if (result && result.exit !== true && result !== '') write(String(result));
+    const result = await client.run(command);
+    if (result.output) write(result.output.replace(/\n$/, ''));
   } catch (err) {
     write('error: ' + err.message);
   } finally {
@@ -110,7 +100,7 @@ line.addEventListener('keydown', async (event) => {
     event.preventDefault();
     position = Math.min(typed.length, Math.max(0, position + (event.key === 'ArrowUp' ? -1 : 1)));
     line.value = typed[position] ?? '';
-  } else if (event.ctrlKey && event.key === 'c' && busy && client.cancel) {
+  } else if (event.ctrlKey && event.key === 'c' && busy) {
     event.preventDefault();
     generation++;
     client.cancel();
@@ -127,11 +117,11 @@ line.addEventListener('keydown', async (event) => {
   } else if (event.ctrlKey && event.key === 'l') {
     event.preventDefault();
     out.textContent = '';
-  } else if (event.key === 'Tab' && client.complete) {
+  } else if (event.key === 'Tab') {
     event.preventDefault();
     const token = /\S*$/.exec(line.value)[0];
     const before = line.value.slice(0, line.value.length - token.length);
-    const matches = await client.complete(token, { command: /^shell\s+$/.test(before) });
+    const matches = await client.complete(token, { command: before.trim() === '' });
     if (matches.length === 1) {
       line.value = line.value.slice(0, line.value.length - token.length) + matches[0] + (matches[0].endsWith('/') ? '' : ' ');
     } else if (matches.length > 1) {

@@ -2,12 +2,8 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createGmClient } from './gm.js';
-import { rewriteSpecifiers } from './shim-map.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const srcRoot = here;
-const webRoot = resolve(here, '..', 'web');
+const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -17,21 +13,6 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
 };
 
-function sendJson(res, status, value) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(value));
-}
-
-function readBody(req) {
-  return new Promise((ok, fail) => {
-    let text = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk) => { text += chunk; });
-    req.on('end', () => ok(text));
-    req.on('error', fail);
-  });
-}
-
 function within(root, rel) {
   const target = resolve(root, rel);
   return target.startsWith(root + sep) ? target : null;
@@ -40,12 +21,15 @@ function within(root, rel) {
 function staticFile(pathname) {
   if (pathname === '/') return join(webRoot, 'terminal.html');
   if (pathname.startsWith('/web/')) return within(webRoot, pathname.slice('/web/'.length));
-  if (pathname.startsWith('/src/')) return within(srcRoot, pathname.slice('/src/'.length));
   return null;
 }
 
-async function serveStatic(pathname, res) {
-  const file = staticFile(pathname);
+async function serve(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { allow: 'GET, HEAD' });
+    return res.end('method not allowed');
+  }
+  const file = staticFile(new URL(req.url, 'http://relay').pathname);
   if (!file) {
     res.writeHead(404);
     return res.end('not found');
@@ -53,83 +37,20 @@ async function serveStatic(pathname, res) {
   try {
     const bytes = await readFile(file);
     res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-    res.end(bytes);
+    res.end(req.method === 'HEAD' ? undefined : bytes);
   } catch {
     res.writeHead(404);
     res.end('not found');
   }
 }
 
-async function serveGm(pathname, res, gmHome) {
-  const raw = pathname.startsWith('/gm-raw/');
-  const file = within(resolve(gmHome, 'src'), pathname.slice(raw ? '/gm-raw/'.length : '/gm/'.length));
-  if (!file || !['.mjs', '.js'].includes(extname(file))) {
-    res.writeHead(404);
-    return res.end('not found');
-  }
-  try {
-    const source = await readFile(file, 'utf8');
-    res.writeHead(200, { 'content-type': TYPES['.js'] });
-    res.end(raw ? source : rewriteSpecifiers(source));
-  } catch {
-    res.writeHead(404);
-    res.end('not found');
-  }
-}
-
-async function handle(req, res, gm, calls) {
-  const url = new URL(req.url, 'http://relay');
-  if (req.method === 'GET' && (url.pathname.startsWith('/gm/') || url.pathname.startsWith('/gm-raw/'))) {
-    return serveGm(url.pathname, res, gm.gmHome);
-  }
-  if (req.method === 'GET' && url.pathname === '/meta') {
-    return sendJson(res, 200, { gmHome: gm.gmHome, workspace: gm.workspace, runDir: gm.runDir });
-  }
-  if (req.method === 'POST' && url.pathname === '/call') {
-    let request;
-    try {
-      request = JSON.parse(await readBody(req));
-    } catch {
-      return sendJson(res, 400, { ok: false, error: 'request body must be JSON' });
-    }
-    if (typeof request.verb !== 'string') return sendJson(res, 400, { ok: false, error: 'verb must be a string' });
-    const controller = new AbortController();
-    const id = typeof request.id === 'string' ? request.id : undefined;
-    if (id !== undefined) calls.set(id, controller);
-    try {
-      const result = await gm.call(request.verb, request.args ?? {}, { signal: controller.signal });
-      return sendJson(res, 200, { ok: true, result });
-    } catch (err) {
-      return sendJson(res, 200, { ok: false, error: err.message });
-    } finally {
-      if (id !== undefined) calls.delete(id);
-    }
-  }
-  if (req.method === 'POST' && url.pathname === '/cancel') {
-    let request;
-    try {
-      request = JSON.parse(await readBody(req));
-    } catch {
-      return sendJson(res, 400, { ok: false, error: 'request body must be JSON' });
-    }
-    const controller = typeof request.id === 'string' ? calls.get(request.id) : undefined;
-    if (!controller) return sendJson(res, 404, { ok: false, error: 'no call in flight with that id' });
-    controller.abort();
-    return sendJson(res, 200, { ok: true });
-  }
-  if (url.pathname === '/cancel') return sendJson(res, 405, { ok: false, error: 'method not allowed' });
-  if (req.method === 'GET') return serveStatic(url.pathname, res);
-  return sendJson(res, 405, { ok: false, error: 'method not allowed' });
-}
-
-export async function startRelay({ host = '127.0.0.1', port = 0, workspace, gmHome } = {}) {
-  const gm = await createGmClient({ workspace, gmHome });
-  const calls = new Map();
+export async function startRelay({ host = '127.0.0.1', port = 0 } = {}) {
   const server = createServer((req, res) => {
     res.setHeader('cross-origin-opener-policy', 'same-origin');
     res.setHeader('cross-origin-embedder-policy', 'require-corp');
-    handle(req, res, gm, calls).catch((err) => {
-      if (!res.headersSent) sendJson(res, 500, { ok: false, error: err.message });
+    serve(req, res).catch((err) => {
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(err.message);
     });
   });
   await new Promise((ok, fail) => {
@@ -139,9 +60,6 @@ export async function startRelay({ host = '127.0.0.1', port = 0, workspace, gmHo
   const { port: bound } = server.address();
   return {
     url: `http://${host}:${bound}/`,
-    async close() {
-      await new Promise((ok) => server.close(ok));
-      await gm.close();
-    },
+    close: () => new Promise((ok) => server.close(ok)),
   };
 }

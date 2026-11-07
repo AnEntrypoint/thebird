@@ -1,25 +1,20 @@
 {
   "name": "thebird",
   "version": "0.2.0",
-  "description": "A Node CLI and library whose operations dispatch through gm tooling",
+  "description": "A bash terminal that runs in the browser: bashkit with in-page git, sqlite3, python3 and curl",
   "type": "module",
   "license": "MIT",
-  "main": "./src/index.js",
-  "exports": {
-    ".": "./src/index.js",
-    "./cli": "./src/cli.js"
-  },
   "bin": {
-    "thebird": "./bin/thebird.js"
+    "thebird-relay": "./bin/thebird-relay.js"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "check": "node --check bin/thebird.js && node --check bin/thebird-relay.js && node --check src/*.js && node --check scripts/*.mjs && node --check web/*.js && node --check web/shims/*.js",
+    "check": "node --check bin/thebird-relay.js && node --check src/*.js && node --check scripts/*.mjs && node --check web/*.js && node --check web/shims/*.js",
     "lint:architecture": "node scripts/lint-architecture.mjs",
     "lint:comments": "node scripts/lint-comments.mjs",
-    "start": "node bin/thebird.js",
+    "start": "node bin/thebird-relay.js",
     "witness": "node scripts/witness.mjs"
   },
   "repository": "https://github.com/AnEntrypoint/thebird.git"

@@ -1,206 +1,122 @@
 # Architecture
 
-```
-bin/thebird.js -> src/cli.js -> src/runner.js -> src/commands.js
-                       |
-                       v
-                  src/index.js (library) -> src/api.js
-                       |
-                       v
-              src/gm.js -> gm createTools() -> gm verbs
+## Flow
 
-browser: web/terminal.js -> src/runner.js -> src/api.js -> src/gm-remote.js
-            -> HTTP -> src/relay.js -> src/gm.js -> gm verbs
+```
+web/terminal.js -> web/shell-client.js -> postMessage -> web/shell-worker.js
+  -> web/bash-shell.js -> bashkit (web/vendor/bashkit/)
+       -> custom builtins (git, sqlite3, python3, pip, curl, wget)
+       -> web/shims/bashkit-host.js -> web/shims/fs.js (OPFS)
 ```
 
-The gm-backed CLI and library are present in `bin/` and `src/`. There is one
-boundary: thebird owns argument parsing, command aliases and the REPL; gm owns
-every real operation on the CLI and relay path. The browser overrides named in
-the next section are the exception. The legacy browser runtime, vendored kits, service
-workers, LLM gateways and per-instance virtual filesystems were deleted in
-owner-approved commit `cc242f5`; none of them was on this CLI's execution path.
+The worker posts each streamed output chunk as `{ output }`, and each reply as `{ id, ok, result }` or `{ id, ok: false, error }`. The page appends streamed chunks as they arrive. The final result carries only notes and cancel text, so output is not printed twice.
 
-## Browser runtime
+Lines typed while a command runs wait in a queue and run in order. Ctrl-C while busy drops the queue, posts a cancel, and bashkit's `cancel()` takes effect between commands and sleeps, not inside one blocking step.
 
-The default browser terminal runs gm in a Web Worker (`web/gm-worker.js`).
-Its `node:` imports are rewritten to browser shims in `web/shims/` (see
-`src/shim-map.js`), and its files live in OPFS (`web/shims/fs.js`: a sync
-in-memory tree, hydrated from OPFS at start and flushed before each reply).
-`?engine=relay` uses the host relay instead. `?gm=raw` loads gm without
-rewriting, which is how the witness shows the "before" failure.
+The prompt shows the working directory, read back with `pwd` after each run. Each run starts with `(exit N);` for the previous status, because bashkit resets `$?` on every `execute()`.
 
-In the browser, `web/gm-worker.js` runs gm's tools but overrides `run_shell` and the
-git verbs (`git_status`, `git_log`, `git_diff`, `git_add`, `git_commit`) with bashkit
-and isomorphic-git, so those operations do not go through gm there. `git_push` on the
-relay is gm's tool wrapped by gm's gate.
+## Component map
 
-Measured in headless Chromium (`npm run witness`):
+| File | Role |
+| --- | --- |
+| `bin/thebird-relay.js` | Node entry point; reads `--port` and `--host`, starts the server. |
+| `src/relay.js` | Node static server on 127.0.0.1 (see Relay). |
+| `web/terminal.html` | Page markup and the colour classes used by `?ansi=color`. |
+| `web/terminal.js` | Page logic: output, prompt, run queue, history, keys, Tab, `?run` and `?ansi`. |
+| `web/shell-client.js` | Page-side client for the worker: `run`, `complete`, `cwd`, `cancel`, `onOutput`, `ready`. |
+| `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
+| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the six custom builtins and `COMMAND_TIMEOUT_MS`. |
+| `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
+| `web/git-in-page.js` | `git` builtin over isomorphic-git. |
+| `web/commit-gate.js` | In-page gate run by `git commit`. |
+| `web/sqlite-in-page.js` | `sqlite3` builtin over sql.js. |
+| `web/python-in-page.js` | `python3` and `pip` builtins over Pyodide. |
+| `web/curl-in-page.js` | `curl` and `wget` builtins over fetch. |
+| `web/ansi.js` | ANSI parser: strips escapes, or classes them for `?ansi=color`. |
+| `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
+| `web/shims/fs-promises.js` | Promise wrappers over `fs.js`. |
+| `web/shims/path.js` | `posix` path functions. |
+| `web/shims/buffer.js` | `Buffer` over `Uint8Array`. |
+| `web/shims/crypto.js` | `createHash` (sha1, sha256), `randomBytes`, `randomUUID`. |
+| `web/shims/bashkit-host.js` | bashkit's host filesystem, over `fs.js`. |
+| `web/vendor/acorn.mjs` | Vendored parser used by the commit gate. |
+| `web/vendor/isomorphic-git.mjs` | Vendored git library. |
+| `web/vendor/sqljs/` | Vendored sql.js. |
+| `web/vendor/bashkit/`, `web/vendor/pyodide/` | Generated, gitignored runtimes. |
+| `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs` | Generate the runtimes, checking SHA-256. |
+| `scripts/browser-driver.mjs` | Drives headless Chromium for the witness. |
+| `scripts/lint-comments.mjs`, `scripts/lint-architecture.mjs`, `scripts/witness.mjs` | Lints and the browser witness (see Checks). |
 
-| Command | In-page result |
-| `write`, `read`, `ls`, `stat`, `grep`, `search` | works; the file survives a browser restart |
-| `memory write`, `memory search`, `prd add`, `prd list`, `log`, `config` | works |
-| `shell` (bash builtins and pipelines, see below) | runs in-page through bashkit |
-| `git init`, `add`, `status`, `log`, `diff` (shell, and gm `git_status`, `git_log`, `git_diff`, `git_add`) | works in-page through isomorphic-git over the OPFS tree |
-| `git commit` (shell and gm `git_commit`) | runs the in-page gate (acorn syntax, ASCII, docs paths, scratch round trip), then commits as lanmower; refuses with the failing check names |
-| `git push/fetch/pull`, `job start` | need the relay (`?engine=relay`) |
-| `git branch`, `git checkout` (local branches) | in-page through isomorphic-git |
-| `fetch` | fails for hosts without CORS headers (COEP `require-corp`) |
+## Command timeout
 
-Child-process call sites in gm (from `import ... from 'node:child_process'`):
+`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 300000 (300 s). It is passed as `timeoutMs` to bashkit's `Bash` constructor, and bashkit applies it to each `execute()` call, one command line.
 
-| gm module | Calls | Verbs | In-page replacement |
-| `exec.mjs` | 4 `spawn` | `run_shell`, `job_*`, and every git verb through `runCommand` | blocked; bash-in-wasm covers builtins only |
-| `tools.mjs` | 1 `spawnSync` | `run_shell` path | blocked |
-| `git.mjs` | via `exec.mjs` | `git_*`, `ci_status` | partial: isomorphic-git answers `git_status`, `git_log`, `git_diff`, `git_add` |
-| `search.mjs` | 1 `execFileAsync` (git file listing) | `search`, `wiki_search` | partial: list files from OPFS |
-| `code-ast.mjs` | 1 `execFileAsync` (git file listing) + acorn | `callers`, `impact` | partial: vendored acorn and an emulated git file listing |
-| `review.mjs` | 1 `spawnSync` | `review_*` | blocked |
-| `gate.mjs` | 1 `spawnSync` and 1 `execFileSync` | gate checks | blocked |
-| `body-worker.mjs` | 1 `spawnSync` (`node --check`) | `run_code` | partial: Web Worker runs code, syntax check needs host |
-| `mcp-client.mjs` | 1 `spawn` | MCP servers | blocked |
-| `bench.mjs` | 1 `spawnSync` | bench | blocked |
+bashkit's default is 30 s, which was too short. In one of seven recorded witness runs a cold `pip install` of tabulate failed with `execution timeout (30s)`. With 300 s, a cold tabulate install completes in about 19-28 s in the in-page shell, and `sleep 40` completes.
 
-Known gaps in the browser shims:
+The expiry was seen once in a manual run (six 55 s sleeps in a loop; the sixth was cut at 300 s with `execution timeout (300s)`). The witness does not run that long loop, so the expiry is not a witness check.
 
-- Symlinks are link nodes in the OPFS shim (`web/shims/fs.js`). Reads, writes,
-  `stat`, `readdir`, `open` and `realpath` follow them, up to 40 levels; `lstat`,
-  `readlink`, `unlink`, `rm` and `rename` act on the link itself. Link targets
-  are stored as typed, and relative ones resolve from the link's directory. The
-  table is kept in `/.thebird/links.json`, written with the rest of the tree.
-  The browser witness checks `ln -s`, `readlink`, a read and a write through
-  the link, `ls -l`, `rm` on the link, and a browser restart.
-- `fs.watch` is a no-op, and there are no file modes or locks.
-- Writes are write-behind, so each tool call is durable once it returns.
-- The gm worker holds the whole tree in memory, and each reply waits for the flush to OPFS.
-- `AsyncLocalStorage` only holds context for synchronous code.
-- In-page git has local branches and checkout (`branch`, `checkout`,
-  `checkout -b`, through isomorphic-git), but no remotes, stash or path
-  checkout. `diff` compares the working tree with HEAD and prints no hunk headers.
-- The in-page commit gate (`web/commit-gate.js`) is not gm's gate. It runs the
-  syntax check with vendored acorn, the ASCII check, the docs path check for
-  README, AGENTS, ARCHITECTURE and DESIGN, and a scratch round trip whose blob
-  hash must match git's. A missing README, AGENTS, ARCHITECTURE or DESIGN in
-  the commit fails the docs check and is named. It does not run gm's sources, wiki, skills, connect,
-  workers, prompt or KEEP checks, or gm's agent smoke run. The relay's
-  `git_commit` still runs the full Node gate, unchanged.
-- The relay must send `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp`, because gm's `pending.mjs`
-  uses `SharedArrayBuffer`. A static host needs the same headers.
+## In-page builtins
 
-## In-page bash
+| Builtin | Backing | Scope and limits |
+| --- | --- | --- |
+| `git` | isomorphic-git 1.44.11 (`web/vendor/isomorphic-git.mjs`) | `init`, `status` (porcelain v1 after a `## <branch>` line), `log [-n N]`, `diff` (working tree against HEAD, no hunk headers), `add`, `commit -m`, local `branch`, `checkout` and `checkout -b`. `--version` reports the library version. No remotes, `push`, `fetch`, `pull`, stash or path checkout. `.thebird/` is excluded from the index. |
+| `sqlite3` | sql.js (`web/vendor/sqljs/`) | `sqlite3 <database> <sql>`. The database is a file on OPFS, read at the start of each call and written back at the end. |
+| `python3` | Pyodide 314.0.7 (`web/vendor/pyodide/`) | `-c <code>` or `<file>`. Pyodide loads on the first call. `/workspace` is mirrored into Pyodide's memory filesystem: before a call only files whose revision (`revisionOf` in `web/shims/fs.js`) changed are uploaded; after it every Pyodide file is compared with the mirror, and changed, new and deleted files are written back. Errors show the output and summary with URLs removed. |
+| `pip` | micropip 0.11.1 from the jsDelivr CDN, pinned to `v314.0.7` | `pip install <name>...`. Plain names only; version specifiers and URLs are refused. Names in the vendored lock (`pyodide-lock.json`) are refused, because the vendored index has no wheels for them. Pure wheels come from PyPI. Installed packages live in Pyodide's memory for the page session and are not written to OPFS. |
+| `curl`, `wget` | fetch | Flags `-s`, `-S`, `-f`, `-L`, `-q`, alone or combined. `curl -o file` and `wget -O file`. Other flags are refused. Only hosts that send CORS headers to the page are reachable. |
 
-`shell` runs in-page through `@everruns/bashkit-wasm` 0.20.3 (MIT, a Rust
-bash interpreter compiled to wasm, single-threaded). The package is fetched
-and checked by `scripts/vendor-bashkit.mjs`, which verifies the wasm SHA-256
-against the package's `build-info.json`. The output lands in
-`web/vendor/bashkit/`, which is gitignored and is fetched on first witness run.
-Its host filesystem is `web/shims/bashkit-host.js`, which wraps the same OPFS
-tree that gm uses, so a write from bash is visible to gm and the reverse holds.
+The page's shell functions `which`, `command -v` and `type` (`web/shell-lookup.js`) answer from bashkit's own `builtin command -v` and `builtin type`, except that each in-page builtin reports as a builtin, and `which` prints the name for it. Shell functions are visible to `type` and `compgen -c`; `type -a` is not handled.
 
-Probed coverage (in-page, 0.20.3): bash syntax (variables, arithmetic, loops,
-functions, command substitution, redirects, pipes, `&&`), and these
-commands: echo, printf, test, seq, sed, awk, grep, sort, uniq, wc, head, tail,
-cut, tr, find, xargs, tee, ls, cp, mv, rm, mkdir, touch, cat, basename,
-dirname, date, env, export, type, jq, base64, md5sum, sha256sum, gzip and
-gunzip, sleep. `ps`, `uname`, `hostname` and `tar` are emulated and report
-sandbox values, not the host's. When a command names `uname`, `whoami`,
-`hostname`, `id`, `ps`, `kill` or `tar`, the in-page shell appends a note saying so.
-`tar --version` reports `tar (bashkit) 0.1`, bashkit's own build, which the witness checks.
+`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations that report sandbox values. A command that names one of them gets a note saying so.
 
-Not covered: node and any host binary (exit 127). `sqlite3` and `python3` run
-in-page, as described below.
+Background jobs are refused by `hasBackgroundOperator` in `web/bash-shell.js`, and the worker answers that a background job is not supported in the in-page shell. `node` and host binaries exit 127.
 
-`sqlite3 <database> <sql>` is a custom builtin (`web/sqlite-in-page.js`) over
-sql.js (MIT, `web/vendor/sqljs/`, licence `web/vendor/SQLJS-LICENSE`).
-The database is a file on the OPFS tree. It is read at the start of each call
-and written back at the end, so it survives a browser restart. Output is
-sqlite's list mode, with `|` between columns. 
-Relay-only items, ranked by what can run in the browser:
+## Commit gate
 
-| Item | In-page option | Status |
-| `sqlite3` | sql.js, MIT, about 670 KB of wasm | done, witnessed in headless Chromium |
-| `python3` | Pyodide 314.0.7, MPL-2.0, about 14 MB unpacked | done, witnessed in headless Chromium |
-| `node` | none verified: WebContainers is proprietary, and a JS subset is not Node | stays relay-only |
+`git commit -m` runs `web/commit-gate.js` before committing. Each check is named in the refusal:
 
-`python3 -c <code>` and `python3 <file>` are a custom builtin
-(`web/python-in-page.js`) over Pyodide 314.0.7 (MPL-2.0, notice in
-`web/vendor/PYODIDE-NOTICE.md`). The runtime is fetched by
-`scripts/vendor-pyodide.mjs`, checks each file's pinned SHA-256, and is
-gitignored. Pyodide loads on the first call. The `/workspace` tree is mirrored
-into Pyodide's memory filesystem. Before each call, only files whose shim
-revision changed are uploaded; the shim's per-file revision counter comes from
-`mark()` in `web/shims/fs.js`. After the call, every Pyodide file is read and
-compared with the mirror, and changed, new and deleted files are written back
-to OPFS. The read-back reads every Pyodide file after each call, so it does not rely on timestamps: a timestamp check could
-miss a same-size write within one millisecond. Measured in headless Chromium,
-over 300 files, a warm call takes under 5 ms with this sync. Only the last line of a traceback is reported, and
-printed output comes before it. The scheme is dropped from that text, because
-bashkit cuts error text at `//`.
+- `index`: no staged copy differs from the working tree.
+- `staged`: something is staged.
+- `syntax`: each committed `.js`, `.mjs` or `.cjs` parses with the vendored acorn, as a module (`.cjs` as a script).
+- `ascii`: each committed text file is ASCII. Binary files are skipped when a NUL byte appears in the first 8000 bytes.
+- `docs`: `README.md`, `AGENTS.md`, `ARCHITECTURE.md` and `DESIGN.md` are in the commit, and each backticked repo path in them exists in the commit.
+- `smoke`: a file round trip, and a git blob hash of a fixed payload that matches git's. A changed payload hashes differently. The scratch directory `.thebird/gate-smoke` is removed afterwards.
 
-`pip install <package>...` runs in-page (`pipBuiltin` in `web/python-in-page.js`).
-It loads micropip 0.11.1 from the jsDelivr CDN as a wheel, pinned to the same
-Pyodide version (`v314.0.7`) as the vendored core, and micropip fetches pure
-Python wheels from PyPI (JSON API and `files.pythonhosted.org`, both send
-`Access-Control-Allow-Origin: *`). Nothing is vendored. Only plain names are
-accepted: version specifiers and URLs are refused. Names in the vendored
-Pyodide lock (`pyodide-lock.json`, 357 entries) are refused with a clear
-message, because micropip would try to load them from the vendored index,
-which has no wheels. Installed packages live in Pyodide's memory for the page
-session, and are not written to OPFS. The witness checks that micropip's
-wheel name matches the lock, that a pure package installs and imports in the
-same page, and that refusals are readable and carry no URL.
+The gate does not judge meaning or behaviour, does not check doc claims beyond path existence, and does not check CommonJS-only constructs in `.js` files. It lists these in `NOT_COVERED`. The commit is made as the author set in `web/git-in-page.js`.
 
-`which`, `command -v` and `type` are shell functions defined at shell start
-(`web/shell-lookup.js`). They answer from bashkit's own `builtin command -v` and
-`builtin type`, except that the five in-page builtins report as builtins. A
-witnessed loop checks that the three agree for every name Tab offers.
-`shell` passes its text to bashkit raw, so quotes and parentheses survive. bashkit resets `$?` on every
-`execute()`, so each in-page run starts with `(exit N);` for the previous run's
-status, and `$?` carries across terminal lines.
-Shell output streams while a command runs. bashkit calls `onOutput` with stdout and
-stderr chunks, the worker posts each one to the page, and the page appends it. The
-final result carries only the notes and any cancel text, so nothing prints twice.
-Output is plain text by default: `web/ansi.js` strips every escape sequence, including
-across streamed chunks, so the page's text copies cleanly. `?ansi=color` renders
-SGR colour and style (the 16 palette colours, bold, underline) as classed spans in
-`web/terminal.html`; the copied text is the same either way.
-Ctrl-L clears the output, Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the
-caret to the start and end of the line; each is handled in the page, not by the browser.
-Lines typed while a command runs wait in a queue and run in order. Ctrl-C cancels
-the running command and drops the queued lines.
-The prompt shows the shell's working directory. The shell reads it back with
-`pwd` after each run, and Tab completes relative to it. Relay mode shows the workspace in the prompt, because each host command starts in the workspace and `cd` does not carry over.
-The terminal keeps history for the up and down arrows, in localStorage, and
-stores only the submitted command lines (see AGENTS.md). Tab completes the first word after `shell` against the command names the shell
-resolves (`compgen -c`, kept only where `command -v` succeeds), so a listed name runs.
-Otherwise Tab completes the last word against the workspace tree, which the worker lists from the OPFS shim. A
-unique match completes with a space or a slash, and several matches complete the
-common prefix or list the candidates. Relay mode completes the same way: `src/gm-remote.js` answers command names with `compgen -c` through `run_shell`, and file names with `list_dir`, both over `/call`, so the relay surface is unchanged. Ctrl-C while a command runs
-cancels it through bashkit's `cancel()`, which takes effect between commands and
-sleeps, not inside one blocking step. Relay mode cancels the same way through `POST /cancel`, which aborts the in-flight
-`/call` with that id; the relay's gm call receives an AbortSignal, which gm's run_shell stops by
-killing the command's process group. `/cancel` answers 404 for an unknown id, 400 for a
-non-JSON body and 405 for other methods, and it adds no CORS headers.
-`curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send
-CORS headers to this page. A host without them is refused with a pointer to the
-relay. The flags `-s`, `-S`, `-f`, `-L` and `-q` work for both, alone or combined (`-SL`); curl also takes `-o file` and wget `-O file`. Any other flag is refused with a pointer to the relay.
-Background jobs
-(`job start`, and a bare `&` in shell text, refused by `hasBackgroundOperator`
-in `web/bash-shell.js`) need the relay. `head` after an early-closing pipe needs the
-async `execute()` path, which the shell uses.
+## OPFS shim
 
-`git` is a bashkit custom builtin (`customBuiltins` in `web/bash-shell.js`)
-backed by isomorphic-git 1.44.11 (MIT). The bundle is `web/vendor/isomorphic-git.mjs`,
-built with esbuild, and its licence is `web/vendor/ISOMORPHIC-GIT-LICENSE`.
-`--version` reports the in-page library version, not a host git.
-`init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree, and
-`status` prints porcelain v1 lines after a `## <branch>` header. `commit -m` runs the in-page gate
-(`web/commit-gate.js`) and commits as lanmower; a failing gate refuses the
-commit and names each failed check. The worker answers the gm verbs
-`git_status`, `git_log`, `git_diff`, `git_add` and `git_commit` with the same
-functions (`web/git-in-page.js`); `git_commit` refuses `paths` and `author`
-arguments. `.thebird/` is excluded from the index. The browser witness commits
-in-page and checks that the log HEAD matches the commit it printed, then
-checks that broken syntax and non-ASCII are refused. A Node-side witness check
-commits through the same builtin, then checks status, log and diff.
+`web/shims/fs.js` is a synchronous in-memory tree. `hydrate()` loads it from OPFS at start, and `flushFs()` writes dirty files back after each worker message. Writes are write-behind, so each reply waits for the flush.
 
+Symlinks are link entries. Reads, writes, `stat`, `readdir`, `open` and `realpath` follow them up to 40 levels. `lstat`, `readlink`, `unlink`, `rm` and `rename` act on the link itself. The link table is `/.thebird/links.json`.
+
+`fs.watch` is a no-op, and there are no file modes or locks. `fs-promises.js` wraps the same calls in promises.
+
+## Relay
+
+`src/relay.js` is a static server. It binds `127.0.0.1` by default, and `--port` and `--host` change that. It answers GET and HEAD only; other methods get 405 with `Allow: GET, HEAD`. `/` serves `web/terminal.html`, `/web/*` serves files under `web/` (paths that leave `web/` are refused), and anything else is 404.
+
+Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so the page is cross-origin isolated. A static host serving the page needs the same two headers.
+
+## Vendored and generated files
+
+- Committed bundles: `web/vendor/acorn.mjs` (licence `web/vendor/ACORN-LICENSE`), `web/vendor/isomorphic-git.mjs` (`web/vendor/ISOMORPHIC-GIT-LICENSE`) and `web/vendor/sqljs/` (`web/vendor/SQLJS-LICENSE`). They keep their upstream comments and are not edited. Each licence file carries the MIT grant.
+- Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). `web/vendor/pyodide/` from `scripts/vendor-pyodide.mjs` (Pyodide 314.0.7; each file's SHA-256 is pinned in the script). Its licence notice is `web/vendor/PYODIDE-NOTICE.md`.
+- Both generators need network. The witness runs the bashkit script when its files are missing.
+- pip fetches micropip at run time from the CDN. Nothing is vendored beyond the Pyodide core. Wheels are not added to `web/vendor/` without owner approval.
+
+## Checks
+
+- `npm run check` runs `node --check` on the server, the scripts and the web files.
+- `npm run lint:comments` (`scripts/lint-comments.mjs`) lists each comment in repo-owned tracked files with its file and line, and exits non-zero when there are any. Vendored bundles with comments are reported as VENDORED when their licence and upstream are recorded. A tracked file of an unknown type fails.
+- `npm run lint:architecture` (`scripts/lint-architecture.mjs`) checks the claims in `ARCHITECTURE.md` and `AGENTS.md` against the code and records the `cc242f5` check. Its live checks need `web/vendor/bashkit/` and `web/vendor/pyodide/` present, because the lint does not generate them.
+- `npm run witness` (`scripts/witness.mjs`) drives headless Chromium through `scripts/browser-driver.mjs`, using `CHROME_BIN`, and checks the in-page shell end to end.
+
+## Fresh-tree notes
+
+- A tree from `git archive` has no `.git`. The lints call git, so they cannot run there.
+- The `cc242f5` record (the owner commit) reports PASS when the object resolves to a commit. It reports UNVERIFIED (no history) only when the object does not resolve and the tree has one commit. It FAILs when the object does not resolve on a tree with more history.
+
+## Decision: txiki.js rejected
+
+txiki.js was evaluated as an in-page runtime and rejected. It is a native runtime (QuickJS-ng and libuv) with no browser or WebAssembly build, so it cannot run the in-page code. Node stays only as the static server.
