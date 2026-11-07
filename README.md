@@ -3,8 +3,10 @@
 A Node CLI and library that does the work the old thebird terminal used to do,
 with one important change: **gm is the execution engine for everything**.
 
-The browser web OS, its vendored kits, apps, service workers, landing site,
-refresh scripts and witness probes are gone. What remains is:
+The gm-backed CLI and library live in `bin/` and `src/`. The legacy browser web
+OS files — vendored kits, apps, service workers, landing site, refresh scripts
+and witness probes — remain in the tree pending an owner-held deletion
+decision. The active surface is:
 
 - `bin/thebird.js` — the CLI entry point
 - `src/index.js` — the library API (`createThebird` / `createClient`)
