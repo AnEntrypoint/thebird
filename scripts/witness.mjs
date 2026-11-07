@@ -537,17 +537,37 @@ const lookupTag = (action, version) => {
   }
   return { unavailable: reason };
 };
-const remote = recordedPins(agents).map((row) => ({ ...row, ...lookupTag(row.action, row.version) }));
-const moved = remote.filter((row) => row.resolved && row.resolved !== row.sha);
-const missingTags = remote.filter((row) => row.missing);
-const unavailable = remote.filter((row) => row.unavailable);
-if (moved.length || missingTags.length) {
-  check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', false, `drift: ${[...moved.map((row) => `${row.action}@${row.version} is ${row.resolved.slice(0, 7)}, pinned ${row.sha.slice(0, 7)}`), ...missingTags.map((row) => `${row.action}@${row.version} ${row.missing}`)].join('; ')}`);
-} else if (unavailable.length) {
-  console.log(`UNVERIFIED every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh): network-unavailable — ${unavailable[0].unavailable}`);
-} else {
-  check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', true, remote.map((row) => `${row.action}@${row.version}=${row.resolved.slice(0, 7)}`).join(' '));
-}
+const driftVerdict = (workflowText, agentsText, lookup) => {
+  const local = pinMismatches(workflowText, agentsText);
+  if (local.length) return { status: 'FAIL', detail: `local mismatch: ${local.join('; ')}` };
+  const remote = recordedPins(agentsText).map((row) => ({ ...row, ...lookup(row.action, row.version) }));
+  const moved = remote.filter((row) => row.resolved && row.resolved !== row.sha);
+  const missingTags = remote.filter((row) => row.missing);
+  if (moved.length || missingTags.length) return { status: 'FAIL', detail: `drift: ${[...moved.map((row) => `${row.action}@${row.version} is ${row.resolved.slice(0, 7)}, pinned ${row.sha.slice(0, 7)}`), ...missingTags.map((row) => `${row.action}@${row.version} ${row.missing}`)].join('; ')}` };
+  const unavailable = remote.filter((row) => row.unavailable);
+  if (unavailable.length) return { status: 'UNVERIFIED', detail: `network-unavailable — ${unavailable[0].unavailable}` };
+  return { status: 'PASS', detail: remote.map((row) => `${row.action}@${row.version}=${row.resolved.slice(0, 7)}`).join(' ') };
+};
+const offlineLookup = (action, version) => {
+  const saved = process.env.PATH;
+  process.env.PATH = '/nonexistent';
+  try {
+    return lookupTag(action, version);
+  } finally {
+    process.env.PATH = saved;
+  }
+};
+const verdict = driftVerdict(workflow, agents, lookupTag);
+if (verdict.status === 'FAIL') check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', false, verdict.detail);
+else if (verdict.status === 'UNVERIFIED') console.log(`UNVERIFIED every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh): ${verdict.detail}`);
+else check('every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)', true, verdict.detail);
+const offlineProbe = offlineLookup(firstRow.action, firstRow.version);
+const maskedDrift = driftVerdict(workflow, desyncedMapping, offlineLookup);
+check('network-unavailable cannot mask drift: with gh unavailable and a desynced mapping SHA, the verdict is FAIL', Boolean(offlineProbe.unavailable) && maskedDrift.status === 'FAIL', `gh=${offlineProbe.unavailable ?? 'available'} verdict=${maskedDrift.status} ${maskedDrift.detail}`);
+const offlineMatch = driftVerdict(workflow, agents, offlineLookup);
+check('gh unavailable with every pin matching gives UNVERIFIED and no FAIL', Boolean(offlineProbe.unavailable) && offlineMatch.status === 'UNVERIFIED', `verdict=${offlineMatch.status} ${offlineMatch.detail}`);
+check('negative control: a tag that resolves to another SHA is a FAIL when gh is available', driftVerdict(workflow, agents, () => ({ resolved: flipped(firstRow.sha) })).status === 'FAIL', 'a moved tag is reported as drift');
+check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
