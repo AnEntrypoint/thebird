@@ -1,5 +1,5 @@
-import { shellClient } from '/web/shell-client.js';
-import { AnsiParser } from '/web/ansi.js';
+import { shellClient } from './shell-client.js';
+import { AnsiParser } from './ansi.js';
 
 const out = document.getElementById('out');
 const line = document.getElementById('line');

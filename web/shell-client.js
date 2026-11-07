@@ -1,4 +1,4 @@
-export function shellClient({ url = '/web/shell-worker.js' } = {}) {
+export function shellClient({ url = new URL('./shell-worker.js', import.meta.url).href } = {}) {
   const worker = new Worker(url, { type: 'module' });
   const pending = new Map();
   let nextId = 1;

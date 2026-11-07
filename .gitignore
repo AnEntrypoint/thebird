@@ -8,3 +8,4 @@ config.bat
 runs/
 web/vendor/bashkit/
 web/vendor/pyodide/
+_site/

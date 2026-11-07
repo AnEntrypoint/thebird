@@ -1,4 +1,4 @@
-import { Bash, initBashkit } from '/web/vendor/bashkit/index.js';
+import { Bash, initBashkit } from './vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
 import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-page.js';

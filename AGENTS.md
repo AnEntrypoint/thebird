@@ -7,7 +7,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
 - Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/` and `web/vendor/pyodide/`.
-- Scripts: `scripts/browser-driver.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/witness.mjs`.
+- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/witness.mjs`.
 
 ## Browser and Node split
 
@@ -42,6 +42,11 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Cancel
 
 - Ctrl-C does not end a builtin that is waiting on a network response, such as `curl`: the page stays busy while the response is pending.
+
+## Hosting
+
+- `.github/workflows/pages.yml` builds `_site/` with `scripts/build-pages.mjs` on each push to `main` and deploys it to GitHub Pages. The page needs no cross-origin isolation headers, and the witness runs the built site without them.
+- Do not add a root-absolute path such as `/web/...` to browser code. The Pages site sits under `/thebird/`, so every URL in `web/` is relative to the file that holds it.
 
 ## Commit gate
 

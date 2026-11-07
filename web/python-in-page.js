@@ -2,7 +2,7 @@ import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
 
 const WORKSPACE = '/workspace';
-const PYODIDE_DIR = '/web/vendor/pyodide/';
+const PYODIDE_DIR = new URL('./vendor/pyodide/', import.meta.url).href;
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
 
 let runtime;

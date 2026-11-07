@@ -219,6 +219,8 @@ function agentsStatic() {
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
   cites('Ctrl-C does not end a builtin', ['in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy']);
+  cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers']);
+  record('Do not add a root-absolute path such as `/web/...`', outcome(!walk(repo('web')).filter((file) => /\.(m?js|html)$/.test(file) && !file.includes('/vendor/')).some((file) => /['"`]\/web\//.test(readFileSync(file, 'utf8'))), 'no browser file outside web/vendor uses a root-absolute /web/ path'));
   record('Use Conventional Commits', (() => {
     const subjects = execFileSync('git', ['log', '-n', '20', '--format=%s'], { cwd: root, encoding: 'utf8' }).trim().split('\n');
     const matching = subjects.filter((subject) => /^(feat|fix|docs|test|chore|refactor|perf|build|ci|style|revert)(\([^)]+\))?!?: /.test(subject)).length;

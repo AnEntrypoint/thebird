@@ -12,6 +12,7 @@ const vendored = tracked.filter(isVendored);
 const CODE = /\.(m?js|cjs)$/;
 const HTML = /\.html$/;
 const MARKDOWN = /\.md$/;
+const YAML = /\.ya?ml$/;
 const NO_COMMENT_SYNTAX = /\.(json|wasm)$|LICENSE|NOTICE/;
 const MIT_GRANT = 'Permission is hereby granted, free of charge';
 const PROVENANCE = {
@@ -63,11 +64,11 @@ function commentsOf(file) {
   if (CODE.test(file)) return codeComments(text);
   if (HTML.test(file)) return htmlComments(text);
   if (MARKDOWN.test(file)) return markdownComments(text);
-  if (file === '.gitignore') return text.split('\n').flatMap((line, index) => (line.startsWith('#') ? [{ start: index, value: line, line: index + 1 }] : []));
+  if (file === '.gitignore' || YAML.test(file)) return text.split('\n').flatMap((line, index) => (/^\s*#/.test(line) ? [{ start: index, value: line, line: index + 1 }] : []));
   return [];
 }
 
-const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || file === '.gitignore' || NO_COMMENT_SYNTAX.test(file);
+const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || YAML.test(file) || file === '.gitignore' || NO_COMMENT_SYNTAX.test(file);
 
 function provenanceProblem(file) {
   const entry = PROVENANCE[file];

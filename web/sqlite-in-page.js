@@ -2,7 +2,7 @@ import * as fsp from './shims/fs-promises.js';
 import { posix } from './shims/path.js';
 
 const DIR = '/workspace';
-const SQLJS_DIR = '/web/vendor/sqljs';
+const SQLJS_DIR = new URL('./vendor/sqljs', import.meta.url).href;
 
 let sqlJs;
 const loadSqlJs = () => {
