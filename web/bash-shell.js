@@ -6,6 +6,26 @@ import { pythonBuiltin } from './python-in-page.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 
+export function hasBackgroundOperator(command) {
+  let quote = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (c === '\\' && quote === '"') i++;
+      continue;
+    }
+    if (c === '\\') i++;
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === '&') {
+      if (command[i + 1] === '&') i++;
+      else if (['>', '<', '|', ';'].includes(command[i - 1]) || command[i + 1] === '>') continue;
+      else return true;
+    }
+  }
+  return false;
+}
+
 export async function createShell({ cwd = '/workspace' } = {}) {
   await initBashkit();
   const customBuiltins = {

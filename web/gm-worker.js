@@ -1,6 +1,6 @@
 import { Buffer } from './shims/buffer.js';
 import { flushFs, hydrate, mkdirSync } from './shims/fs.js';
-import { createShell } from './bash-shell.js';
+import { createShell, hasBackgroundOperator } from './bash-shell.js';
 import { gitVerbs } from './git-in-page.js';
 
 const WORKSPACE = '/workspace';
@@ -33,7 +33,7 @@ try {
   let shell;
   const overrides = {
     run_shell: async (args) => {
-      if (args.background) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
+      if (args.background || hasBackgroundOperator(args.command)) return { ok: false, error: 'background jobs need the relay (?engine=relay); the in-page shell runs foreground commands only' };
       shell ??= await createShell({ cwd: WORKSPACE });
       return shell.run(args.command);
     },

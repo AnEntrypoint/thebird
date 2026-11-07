@@ -128,7 +128,8 @@ runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
 `curl` and `wget` report "network access not configured". Background jobs
-(`job start`) need the relay. `head` after an early-closing pipe needs the
+(`job start`, and a bare `&` in shell text, refused by `hasBackgroundOperator`
+in `web/bash-shell.js`) need the relay. `head` after an early-closing pipe needs the
 async `execute()` path, which the shell uses.
 
 `git` is a bashkit custom builtin (`customBuiltins` in `web/bash-shell.js`)

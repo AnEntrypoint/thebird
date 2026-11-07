@@ -147,6 +147,13 @@ if (fileExists(chrome)) {
   check('in-page git commit refuses broken syntax and non-ASCII and names both', broken.out.includes('commit refused by the in-page gate') && broken.out.includes('syntax:') && broken.out.includes('ascii:'), broken.out.split('\n').find((line) => line.includes('refused by the in-page gate'))?.slice(0, 160) ?? 'no refusal line');
   const job = await terminal([['run', 'job start bg echo x']]);
   check('in-page bash refuses background jobs with a pointer to the relay', job.out.includes('background jobs need the relay'));
+  const background = await terminal([
+    ['run', 'shell echo refused-line & echo should-not-run'],
+    ['run', 'shell echo and-ok && echo and-ok2'],
+    ['run', 'shell echo redir-ok 2>&1'],
+    ['run', 'shell echo "quoted & kept"'],
+  ]);
+  check('in-page bash refuses a bare & and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs need the relay') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
   const sqlite = await terminal([
     ['run', 'shell mkdir -p notes'],
     ['run', 'shell sqlite3 notes/app.db "create table t(x)"'],
