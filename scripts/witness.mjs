@@ -506,6 +506,18 @@ const deployScopes = scopesIn(jobBlocks.deploy ?? '', 6);
 const sortedScopes = (scopes) => JSON.stringify(Object.entries(scopes).sort());
 const usesRefs = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 check('every action in pages.yml is pinned to a full 40-hex commit SHA', usesRefs.length > 0 && usesRefs.every((ref) => /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(ref)), usesRefs.join(' '));
+const pinned = [...workflow.matchAll(/uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40})/g)].map((m) => ({ action: m[1], sha: m[2] }));
+const recorded = [...readFileSync(join(root, 'AGENTS.md'), 'utf8').matchAll(/(actions\/[\w.-]+) `([0-9a-f]{40})` \((v\d+)\)/g)].map((m) => ({ action: m[1], sha: m[2], version: m[3] }));
+const resolveTag = (action, version) => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const out = spawnSync('gh', ['api', `repos/${action}/git/ref/tags/${version}`, '-q', '.object.sha'], { encoding: 'utf8', timeout: 30000 });
+    if (out.status === 0) return out.stdout.trim();
+  }
+  return null;
+};
+const tagged = recorded.map((row) => ({ ...row, resolved: resolveTag(row.action, row.version) }));
+const drift = tagged.filter((row) => row.resolved !== row.sha || !pinned.some((p) => p.action === row.action && p.sha === row.sha));
+check('every pages.yml action SHA is the commit its AGENTS.md tag resolves to on GitHub', pinned.length > 0 && recorded.length === pinned.length && drift.length === 0, drift.length ? `drift: ${JSON.stringify(drift)}` : tagged.map((row) => `${row.action}@${row.version}=${row.resolved?.slice(0, 7)}`).join(' '));
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 await relay.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
