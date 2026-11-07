@@ -131,6 +131,8 @@ bashkit cuts error text at `//`.
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
+Lines typed while a command runs wait in a queue and run in order. Ctrl-C cancels
+the running command and drops the queued lines.
 The prompt shows the shell's working directory. The shell reads it back with
 `pwd` after each run, and Tab completes relative to it. Relay mode shows the plain prompt.
 The terminal keeps history for the up and down arrows. Tab completes the last

@@ -32,6 +32,8 @@ const run = createRunner(createApi(client));
 const typed = [];
 let position = 0;
 let busy = false;
+let queue = Promise.resolve();
+let generation = 0;
 
 async function execute(command) {
   write('thebird> ' + command);
@@ -60,7 +62,8 @@ document.getElementById('form').addEventListener('submit', async (event) => {
   line.value = '';
   if (command.trim() && typed.at(-1) !== command) typed.push(command);
   position = typed.length;
-  await execute(command);
+  const current = generation;
+  queue = queue.then(() => (current === generation ? execute(command) : undefined)).catch((err) => write('error: ' + err.message));
 });
 
 const commonPrefix = (words) => words.reduce((prefix, word) => {
@@ -76,6 +79,7 @@ line.addEventListener('keydown', async (event) => {
     line.value = typed[position] ?? '';
   } else if (event.ctrlKey && event.key === 'c' && busy && client.cancel) {
     event.preventDefault();
+    generation++;
     client.cancel();
     write('^C');
   } else if (event.key === 'Tab' && client.complete) {
