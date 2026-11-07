@@ -11,7 +11,7 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   `web/shims/bashkit-host.js`, `web/vendor/acorn.mjs`, `web/git-in-page.js`,
   `web/vendor/isomorphic-git.mjs`, `web/commit-gate.js`, `web/sqlite-in-page.js`,
   `web/vendor/sqljs/sql-wasm-browser.js`, `web/python-in-page.js`,
-  `web/curl-in-page.js`.
+  `web/curl-in-page.js`, `web/shell-lookup.js`.
 - Browser-safe: `src/api.js`, `src/commands.js`, `src/runner.js`,
   `src/gm-client.js`, `src/gm-remote.js`, `web/terminal.js`. They import
   nothing from Node and run in a browser. Node-only: `src/gm.js`,
@@ -40,7 +40,7 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   answer. Keep it that way.
 - gm is the only execution engine. Do not reimplement filesystem, search,
   shell, git, job, log, wiki, row or fetch behavior locally.
-- In-page `which`, `type` and `command -v` answer from bashkit's fixed host-path table, so `which git` prints `/usr/bin/git` for the in-page git subset, and a script that branches on `if which jq` sees bashkit's answer, not the in-page commands; a replacement table is not built yet.
+- In-page `which`, `type` and `command -v` are one answer. `web/shell-lookup.js` defines shell functions for `which`, `command` and `type` at shell start, over bashkit's own `builtin command -v` and `builtin type`, so each name resolves the same way in all three. The five in-page builtins (`git`, `sqlite3`, `python3`, `curl`, `wget`) report as builtins, not as `/usr/bin` paths. `which` prints the name for a builtin, as `command -v` does, and `type -t` says `builtin`. Shell functions are visible to `type` and `compgen -c`, so the prologue's three names appear as functions; `type -a` is not handled.
 - `node` is relay-only. No in-page runtime is verified: WebContainers is proprietary, and a JS subset is not Node, so the in-page shell answers `node` with exit 127 and says that compilers and build tools are not available in the sandbox; `?engine=relay` runs the host's `node`.
 - `createGmClient()` resolves `--gm-home` / `GM_HOME` / an installed `gm`
   package / `../gm` / `./gm`, then imports gm's `createTools()` verb engine.

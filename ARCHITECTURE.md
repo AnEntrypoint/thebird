@@ -127,6 +127,10 @@ full copy it replaced. Only the last line of a traceback is reported, and
 printed output comes before it. The scheme is dropped from that text, because
 bashkit cuts error text at `//`.
 
+`which`, `command -v` and `type` are shell functions defined at shell start
+(`web/shell-lookup.js`). They answer from bashkit's own `builtin command -v` and
+`builtin type`, except that the five in-page builtins report as builtins. A
+witnessed loop checks that the three agree for every name Tab offers.
 `shell` passes its text to bashkit raw, so quotes and parentheses survive. The
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's

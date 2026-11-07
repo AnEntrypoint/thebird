@@ -4,6 +4,7 @@ import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-page.js';
 import { pythonBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
+import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill)\b/;
@@ -39,6 +40,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
+  await bash.execute(lookupPrologue(Object.keys(customBuiltins)));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
   let status = 0;
   let running = false;
