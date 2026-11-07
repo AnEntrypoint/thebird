@@ -42,6 +42,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   let status = 0;
   let running = false;
   let cancelled = false;
+  let current = cwd;
   return {
     async run(command) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
@@ -58,6 +59,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
         bash.clearCancel();
       }
       status = result.exitCode;
+      current = (await bash.execute('pwd')).stdout.trim() || current;
       const note = EMULATED.test(command) ? withNewline(EMULATION_NOTE) : '';
       return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr + note };
     },
@@ -65,6 +67,9 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       if (!running) return;
       cancelled = true;
       bash.cancel();
+    },
+    cwd() {
+      return current;
     },
   };
 }

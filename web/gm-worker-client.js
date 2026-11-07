@@ -49,6 +49,7 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
       worker.postMessage({ cancel: true });
     },
     complete: (prefix) => request({ complete: prefix }),
+    cwd: () => request({ query: 'cwd' }),
     async close() {
       worker.terminate();
     },

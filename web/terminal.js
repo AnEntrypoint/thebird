@@ -14,9 +14,14 @@ async function engine() {
 }
 
 const client = await engine();
+const prompt = document.getElementById('prompt');
+const showPrompt = async () => {
+  if (client.cwd) prompt.textContent = `thebird ${await client.cwd()}> `;
+};
 try {
   await client.ready;
   document.body.dataset.engine = 'ready';
+  await showPrompt();
 } catch (err) {
   document.body.dataset.engine = 'failed';
   write('engine error: ' + err.message);
@@ -40,6 +45,7 @@ async function execute(command) {
   } finally {
     busy = false;
     delete document.body.dataset.busy;
+    await showPrompt();
   }
 }
 

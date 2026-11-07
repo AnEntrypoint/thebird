@@ -19,13 +19,13 @@ globalThis.process = {
   emitWarning() {},
 };
 
-function completions(prefix) {
+function completions(prefix, cwd) {
   const slash = prefix.lastIndexOf('/');
   const dirPart = slash === -1 ? '' : prefix.slice(0, slash + 1);
   const base = prefix.slice(slash + 1);
   let entries;
   try {
-    entries = readdirSync(posix.resolve(WORKSPACE, dirPart || '.'), { withFileTypes: true });
+    entries = readdirSync(posix.resolve(cwd, dirPart || '.'), { withFileTypes: true });
   } catch {
     return [];
   }
@@ -63,7 +63,11 @@ try {
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
     if (data.complete !== undefined) {
-      postMessage({ id: data.id, ok: true, result: completions(data.complete) });
+      postMessage({ id: data.id, ok: true, result: completions(data.complete, shell?.cwd() ?? WORKSPACE) });
+      return;
+    }
+    if (data.query === 'cwd') {
+      postMessage({ id: data.id, ok: true, result: shell?.cwd() ?? WORKSPACE });
       return;
     }
     if (data.cancel) {

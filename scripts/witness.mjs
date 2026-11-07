@@ -259,6 +259,27 @@ if (fileExists(chrome)) {
   check('in-page terminal completes a unique file name with Tab and adds a space', completed.unique === 'shell cat notes/fetched.txt ', JSON.stringify(completed.unique));
   check('in-page terminal completes a directory with a trailing slash', completed.directory === 'shell ls notes/', JSON.stringify(completed.directory));
   check('in-page terminal lists several matches when Tab cannot finish a name', /notes\/tab\/alpha\.txt {2}notes\/tab\/beta\.txt/.test(listed.out) && completed.listed === 'shell cat notes/tab/', JSON.stringify(completed.listed));
+  const moved = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+      await type('shell cd notes');
+      await press('Enter');
+      await waitFor("document.getElementById('prompt').textContent === 'thebird /workspace/notes> '", 20000);
+      moved.prompt = await evaluate("document.getElementById('prompt').textContent");
+      await type('shell pwd');
+      await press('Enter');
+      await settle();
+      moved.out = await evaluate("document.getElementById('out').textContent");
+      await type('shell cat fetc');
+      await press('Tab');
+      await settle();
+      moved.completed = await value();
+    },
+  });
+  check('in-page prompt shows the working directory after cd', moved.prompt === 'thebird /workspace/notes> ', JSON.stringify(moved.prompt));
+  check('in-page cd persists to the next command and Tab completes relative to it', /^\/workspace\/notes$/m.test(moved.out) && moved.completed === 'shell cat fetched.txt ', JSON.stringify(moved.completed));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);
