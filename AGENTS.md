@@ -22,7 +22,7 @@ A Node CLI and library whose every operation dispatches through gm tooling.
 - The browser terminal shows plain text by default: ANSI escape sequences are stripped
   (`web/ansi.js`), so output copies cleanly. `?ansi=color` renders colour and style as
   spans; the page text is the same in both modes.
-- `web/shims/*.js` are browser-only and import only each other. They replace
+- `web/shims/*.js` are browser-only and import only each other, except that `node-stubs.js` imports the vendored `web/vendor/acorn.mjs`. They replace
   the `node:` modules gm uses: fs (OPFS-backed, sync), fs/promises, path,
   crypto (sha1 and sha256), and stubs for child_process, os, util and friends.
   Add a shim here before adding a `node:` import to gm-facing code.
