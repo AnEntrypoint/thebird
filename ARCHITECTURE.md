@@ -1,7 +1,7 @@
 # Architecture
 
 ```
-bin/thebird.js -> src/cli.js -> src/commands.js
+bin/thebird.js -> src/cli.js -> src/runner.js -> src/commands.js
                        |
                        v
                   src/index.js (library)

@@ -12,6 +12,7 @@ decision. The active surface is:
 - `src/index.js` — the library API (`createThebird` / `createClient`)
 - `src/gm.js` — the gm tool-engine adapter
 - `src/commands.js` — the CLI command registry
+- `src/runner.js` — tokenizes a command line and maps it to library calls (no Node imports)
 - `src/cli.js` — the REPL and one-shot runner
 
 No operation is implemented twice. `createGmClient()` imports gm's own
