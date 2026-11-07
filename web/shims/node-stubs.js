@@ -1,3 +1,7 @@
+import * as acorn from '../vendor/acorn.mjs';
+import { readdirSync } from './fs.js';
+import { Buffer } from './buffer.js';
+
 const NO_CHILD = 'child processes are not available in the browser; run this through the relay (?engine=relay) or a host shell';
 
 function unavailable(syscall) {
@@ -67,10 +71,36 @@ export function exec(command, options, callback) {
 
 export function execFile(file, args, options, callback) {
   const done = [args, options, callback].find((arg) => typeof arg === 'function');
+  const cwd = typeof options === 'object' ? options?.cwd : undefined;
+  if (file === 'git' && Array.isArray(args) && args[0] === 'ls-files') {
+    const stdout = listFiles(cwd ?? '/');
+    queueMicrotask(() => done?.(null, stdout, ''));
+    return spawn(file);
+  }
   const err = unavailable('execFile ' + file);
   queueMicrotask(() => done?.(err, '', ''));
   return spawn(file);
 }
+
+const SKIPPED = new Set(['.git', '.thebird', 'node_modules']);
+
+function listFiles(root) {
+  const found = [];
+  const walk = (dir, prefix) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (SKIPPED.has(entry.name)) continue;
+      const rel = prefix ? prefix + '/' + entry.name : entry.name;
+      if (entry.isDirectory()) walk(dir.replace(/\/$/, '') + '/' + entry.name, rel);
+      else found.push(rel);
+    }
+  };
+  walk(root, '');
+  return found.sort().join('\0') + '\0';
+}
+
+execFile.custom = (file, args, options) => new Promise((ok, fail) => {
+  execFile(file, args, options, (err, stdout, stderr) => (err ? fail(err) : ok({ stdout, stderr })));
+});
 
 export function spawnSync(file) {
   return { status: null, signal: null, stdout: '', stderr: '', error: unavailable('spawnSync ' + file) };
@@ -85,6 +115,7 @@ export function execSync(command) {
 }
 
 export function promisify(fn) {
+  if (fn.custom) return fn.custom;
   return (...args) => new Promise((ok, fail) => {
     fn(...args, (err, ...values) => (err ? fail(err) : ok(values.length > 1 ? values : values[0])));
   });
@@ -96,6 +127,7 @@ export const platform = () => 'linux';
 
 export function createRequire() {
   return (id) => {
+    if (id === 'acorn') return acorn;
     throw new Error(`require('${id}') is not available in the browser`);
   };
 }
@@ -120,6 +152,3 @@ export class AsyncLocalStorage {
 
 export const performance = globalThis.performance;
 
-export function parse() {
-  throw new Error('acorn is not bundled for the browser; AST tools need the relay');
-}

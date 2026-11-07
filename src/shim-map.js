@@ -3,6 +3,7 @@ const SHIMS = {
   'node:fs/promises': '/web/shims/fs-promises.js',
   'node:path': '/web/shims/path.js',
   'node:crypto': '/web/shims/crypto.js',
+  acorn: '/web/vendor/acorn.mjs',
 };
 const STUBS = '/web/shims/node-stubs.js';
 

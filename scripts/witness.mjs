@@ -104,6 +104,8 @@ if (fileExists(chrome)) {
   check('after: the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
   const shell = await terminal([['run', 'shell echo in-page']]);
   check('in-page shell reports ENOSYS instead of crashing', shell.out.includes('ENOSYS'), shell.out.split('\n')[1]?.slice(0, 120));
+  const callers = await terminal([['run', 'gm write_file {"path":"notes/app.js","content":"function foo(){return 1}\\nfunction bar(){return foo()}\\n"}'], ['run', 'gm callers {"name":"foo"}']]);
+  check('after: callers runs in-page with vendored acorn and an OPFS file listing', callers.engine === 'ready' && callers.out.includes('notes/app.js:2 [direct]'), callers.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
