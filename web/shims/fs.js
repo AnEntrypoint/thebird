@@ -2,8 +2,11 @@ import { Buffer } from './buffer.js';
 import { posix } from './path.js';
 
 const MOUNT = 'thebird-workspace';
+const LINKS_FILE = '/.thebird/links.json';
+const MAX_LINKS = 40;
 const files = new Map();
 const dirs = new Set(['/']);
+const links = new Map();
 const meta = new Map();
 const dirty = new Map();
 const revisions = new Map();
@@ -24,6 +27,21 @@ function norm(path) {
   return posix.resolve('/', String(path));
 }
 
+function resolvePath(path, followLast = true, depth = 0) {
+  const parts = norm(path).split('/').filter(Boolean);
+  let current = '/';
+  for (let i = 0; i < parts.length; i++) {
+    const next = posix.join(current, parts[i]);
+    const target = links.get(next);
+    if (target !== undefined && (followLast || i < parts.length - 1)) {
+      if (depth >= MAX_LINKS) throw fail('ELOOP', 'open', norm(path), 'too many levels of symbolic links');
+      return resolvePath(posix.join(posix.resolve(current, target), ...parts.slice(i + 1)), followLast, depth + 1);
+    }
+    current = next;
+  }
+  return current;
+}
+
 function mark(path, op) {
   dirty.set(path, op);
   revisions.set(path, ++revision);
@@ -39,8 +57,31 @@ function markTree(path, op) {
 }
 
 function ensureParent(path, syscall) {
-  const parent = posix.dirname(path);
+  const parent = resolvePath(posix.dirname(path));
   if (!dirs.has(parent)) throw fail('ENOENT', syscall, path, 'no such file or directory');
+}
+
+function saveLinks() {
+  if (!dirs.has('/.thebird')) {
+    dirs.add('/.thebird');
+    mark('/.thebird', 'write');
+  }
+  files.set(LINKS_FILE, Buffer.from(JSON.stringify([...links])));
+  meta.set(LINKS_FILE, { mtimeMs: Date.now() });
+  mark(LINKS_FILE, 'write');
+}
+
+function removeLinks(path) {
+  const prefix = path + '/';
+  let removed = false;
+  for (const link of [...links.keys()]) {
+    if (link === path || link.startsWith(prefix)) {
+      links.delete(link);
+      meta.delete(link);
+      removed = true;
+    }
+  }
+  if (removed) saveLinks();
 }
 
 function bytesFrom(data, encoding) {
@@ -87,14 +128,38 @@ function statOf(path) {
   return null;
 }
 
+function linkStat(path) {
+  const info = meta.get(path) ?? { mtimeMs: 0 };
+  return {
+    size: links.get(path).length,
+    mode: 0o120777,
+    ino: 0,
+    dev: 0,
+    uid: 0,
+    gid: 0,
+    mtimeMs: info.mtimeMs,
+    ctimeMs: info.mtimeMs,
+    mtime: new Date(info.mtimeMs),
+    ctime: new Date(info.mtimeMs),
+    isFile: () => false,
+    isDirectory: () => false,
+    isSymbolicLink: () => true,
+  };
+}
+
 function childrenOf(path) {
   const prefix = path === '/' ? '/' : path + '/';
   const names = new Map();
   for (const file of files.keys()) if (file.startsWith(prefix)) names.set(file.slice(prefix.length).split('/')[0], 'file');
   for (const dir of dirs) if (dir !== path && dir.startsWith(prefix)) names.set(dir.slice(prefix.length).split('/')[0], 'dir');
+  for (const link of links.keys()) if (link.startsWith(prefix)) {
+    const rest = link.slice(prefix.length);
+    if (rest && !rest.includes('/')) names.set(rest, 'link');
+  }
   for (const [name, kind] of [...names]) {
     const full = prefix + name;
-    if (files.has(full)) names.set(name, 'file');
+    if (links.has(full)) names.set(name, 'link');
+    else if (files.has(full)) names.set(name, 'file');
     else if (dirs.has(full)) names.set(name, 'dir');
     else names.set(name, kind);
   }
@@ -102,12 +167,12 @@ function childrenOf(path) {
 }
 
 export function existsSync(path) {
-  const target = norm(path);
+  const target = resolvePath(path);
   return files.has(target) || dirs.has(target);
 }
 
 export function readFileSync(path, options) {
-  const target = norm(path);
+  const target = resolvePath(path);
   const encoding = typeof options === 'string' ? options : options?.encoding;
   if (dirs.has(target)) throw fail('EISDIR', 'read', target, 'illegal operation on a directory');
   if (!files.has(target)) throw fail('ENOENT', 'open', target, 'no such file or directory');
@@ -116,7 +181,7 @@ export function readFileSync(path, options) {
 }
 
 export function writeFileSync(path, data, options) {
-  const target = norm(path);
+  const target = resolvePath(path);
   const flag = typeof options === 'object' ? options?.flag ?? 'w' : 'w';
   const encoding = typeof options === 'string' ? options : options?.encoding;
   if (dirs.has(target)) throw fail('EISDIR', 'open', target, 'illegal operation on a directory');
@@ -128,7 +193,7 @@ export function writeFileSync(path, data, options) {
 }
 
 export function appendFileSync(path, data, options) {
-  const target = norm(path);
+  const target = resolvePath(path);
   const encoding = typeof options === 'string' ? options : options?.encoding;
   const previous = files.get(target) ?? Buffer.alloc(0);
   const next = Buffer.concat([previous, bytesFrom(data, encoding)]);
@@ -139,7 +204,7 @@ export function appendFileSync(path, data, options) {
 }
 
 export function mkdirSync(path, options) {
-  const target = norm(path);
+  const target = options?.recursive ? resolvePath(path) : resolvePath(path, false);
   if (options?.recursive) {
     let first;
     const parts = target.split('/').filter(Boolean);
@@ -155,7 +220,7 @@ export function mkdirSync(path, options) {
     }
     return first;
   }
-  if (dirs.has(target) || files.has(target)) throw fail('EEXIST', 'mkdir', target, 'file already exists');
+  if (dirs.has(target) || files.has(target) || links.has(target)) throw fail('EEXIST', 'mkdir', target, 'file already exists');
   ensureParent(target, 'mkdir');
   dirs.add(target);
   mark(target, 'write');
@@ -163,18 +228,18 @@ export function mkdirSync(path, options) {
 }
 
 export function readdirSync(path, options) {
-  const target = norm(path);
+  const target = resolvePath(path);
   if (files.has(target)) throw fail('ENOTDIR', 'scandir', target, 'not a directory');
   if (!dirs.has(target)) throw fail('ENOENT', 'scandir', target, 'no such file or directory');
   const entries = childrenOf(target);
   if (options?.withFileTypes) {
-    return entries.map(([name, kind]) => ({ name, isFile: () => kind === 'file', isDirectory: () => kind === 'dir', isSymbolicLink: () => false }));
+    return entries.map(([name, kind]) => ({ name, isFile: () => kind === 'file', isDirectory: () => kind === 'dir', isSymbolicLink: () => kind === 'link' }));
   }
   return entries.map(([name]) => name);
 }
 
 export function statSync(path, options) {
-  const info = statOf(norm(path));
+  const info = statOf(resolvePath(path));
   if (!info) {
     if (options?.throwIfNoEntry === false) return undefined;
     throw fail('ENOENT', 'stat', norm(path), 'no such file or directory');
@@ -183,17 +248,42 @@ export function statSync(path, options) {
 }
 
 export function lstatSync(path, options) {
-  return statSync(path, options);
+  const target = resolvePath(path, false);
+  if (links.has(target)) return linkStat(target);
+  return statSync(target, options);
+}
+
+export function readlinkSync(path) {
+  const target = resolvePath(path, false);
+  if (links.has(target)) return links.get(target);
+  if (!existsSync(target)) throw fail('ENOENT', 'readlink', target, 'no such file or directory');
+  throw fail('EINVAL', 'readlink', target, 'invalid argument');
+}
+
+export function symlinkSync(target, path) {
+  const link = resolvePath(path, false);
+  if (files.has(link) || dirs.has(link) || links.has(link)) throw fail('EEXIST', 'symlink', link, 'file already exists');
+  ensureParent(link, 'symlink');
+  links.set(link, String(target));
+  meta.set(link, { mtimeMs: Date.now() });
+  saveLinks();
 }
 
 export function realpathSync(path) {
-  const target = norm(path);
+  const target = resolvePath(path);
   if (!existsSync(target)) throw fail('ENOENT', 'realpath', target, 'no such file or directory');
   return target;
 }
 
 export function rmSync(path, options) {
-  const target = norm(path);
+  const node = resolvePath(path, false);
+  if (links.has(node)) {
+    links.delete(node);
+    meta.delete(node);
+    saveLinks();
+    return;
+  }
+  const target = node;
   if (!existsSync(target)) {
     if (options?.force) return;
     throw fail('ENOENT', 'rm', target, 'no such file or directory');
@@ -213,10 +303,17 @@ export function rmSync(path, options) {
     meta.delete(file);
   }
   for (const dir of [...dirs]) if (dir === target || dir.startsWith(prefix)) dirs.delete(dir);
+  removeLinks(target);
 }
 
 export function unlinkSync(path) {
-  const target = norm(path);
+  const target = resolvePath(path, false);
+  if (links.has(target)) {
+    links.delete(target);
+    meta.delete(target);
+    saveLinks();
+    return;
+  }
   if (!files.has(target)) throw fail('ENOENT', 'unlink', target, 'no such file or directory');
   files.delete(target);
   meta.delete(target);
@@ -224,10 +321,21 @@ export function unlinkSync(path) {
 }
 
 export function renameSync(from, to) {
-  const source = norm(from);
-  const target = norm(to);
+  const source = resolvePath(from, false);
+  const target = resolvePath(to, false);
+  if (links.has(source)) {
+    ensureParent(target, 'rename');
+    const value = links.get(source);
+    links.delete(source);
+    meta.delete(source);
+    links.set(target, value);
+    meta.set(target, { mtimeMs: Date.now() });
+    saveLinks();
+    return;
+  }
   if (!existsSync(source)) throw fail('ENOENT', 'rename', source, 'no such file or directory');
   ensureParent(target, 'rename');
+  links.delete(target);
   if (files.has(source)) {
     files.set(target, files.get(source));
     meta.set(target, { mtimeMs: Date.now() });
@@ -250,6 +358,14 @@ export function renameSync(from, to) {
     dirs.delete(dir);
     dirs.add(target + dir.slice(source.length));
   }
+  let relinked = false;
+  for (const link of [...links.keys()]) if (link.startsWith(prefix)) {
+    const value = links.get(link);
+    links.delete(link);
+    links.set(target + link.slice(source.length), value);
+    relinked = true;
+  }
+  if (relinked) saveLinks();
   dirs.add(target);
   markTree(source, 'delete');
   for (const file of files.keys()) if (file === target || file.startsWith(target + '/')) mark(file, 'write');
@@ -257,7 +373,7 @@ export function renameSync(from, to) {
 }
 
 export function openSync(path, flags = 'r') {
-  const target = norm(path);
+  const target = resolvePath(path);
   if (flags.startsWith('r') && !files.has(target)) throw fail('ENOENT', 'open', target, 'no such file or directory');
   if (!files.has(target)) {
     ensureParent(target, 'open');
@@ -352,6 +468,7 @@ export async function hydrate() {
   files.clear();
   dirs.clear();
   dirs.add('/');
+  links.clear();
   meta.clear();
   dirty.clear();
   async function walk(handle, prefix) {
@@ -368,6 +485,13 @@ export async function hydrate() {
     }
   }
   await walk(root, '');
+  const stored = files.get(LINKS_FILE);
+  if (stored) {
+    for (const [link, target] of JSON.parse(Buffer.from(stored).toString('utf8'))) {
+      links.set(link, target);
+      meta.set(link, meta.get(LINKS_FILE) ?? { mtimeMs: 0 });
+    }
+  }
 }
 
 export async function flushFs() {

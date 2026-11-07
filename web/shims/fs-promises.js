@@ -14,16 +14,8 @@ export const rm = wrap(sync.rmSync);
 export const unlink = wrap(sync.unlinkSync);
 export const realpath = wrap(sync.realpathSync);
 export const rmdir = wrap(sync.rmdirSync);
-export const readlink = async (path) => {
-  const err = new Error(`EINVAL: symbolic links are not supported in the browser filesystem, readlink '${path}'`);
-  err.code = 'EINVAL';
-  throw err;
-};
-export const symlink = async (target, path) => {
-  const err = new Error(`ENOSYS: symbolic links are not supported in the browser filesystem, symlink '${path}'`);
-  err.code = 'ENOSYS';
-  throw err;
-};
+export const readlink = wrap(sync.readlinkSync);
+export const symlink = wrap(sync.symlinkSync);
 export const mkdtemp = wrap(sync.mkdtempSync);
 export const access = async (path) => {
   if (!sync.existsSync(path)) {

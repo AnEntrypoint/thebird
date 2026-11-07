@@ -56,7 +56,13 @@ Child-process call sites in gm (from `import ... from 'node:child_process'`):
 
 Known gaps in the browser shims:
 
-- No symlinks: `lstat` is `stat`, and `realpath` is path normalization.
+- Symlinks are link nodes in the OPFS shim (`web/shims/fs.js`). Reads, writes,
+  `stat`, `readdir`, `open` and `realpath` follow them, up to 40 levels; `lstat`,
+  `readlink`, `unlink`, `rm` and `rename` act on the link itself. Link targets
+  are stored as typed, and relative ones resolve from the link's directory. The
+  table is kept in `/.thebird/links.json`, written with the rest of the tree.
+  The browser witness checks `ln -s`, `readlink`, a read and a write through
+  the link, `ls -l`, `rm` on the link, and a browser restart.
 - `fs.watch` is a no-op, and there are no file modes or locks.
 - Writes are write-behind, so each tool call is durable once it returns.
 - One worker, one writer, and the whole tree is held in memory.

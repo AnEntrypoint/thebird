@@ -23,14 +23,21 @@ export function createHost() {
       fs.rmSync(path, { recursive: Boolean(recursive) });
     },
     stat(path) {
-      const info = fs.statSync(path);
-      return { type: info.isDirectory() ? 'dir' : 'file', size: info.size, mtimeMs: info.mtimeMs };
+      const info = fs.lstatSync(path);
+      const type = info.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'dir' : 'file';
+      return { type, size: info.size, mtimeMs: info.mtimeMs };
     },
     readDir(path) {
-      return fs.readdirSync(path, { withFileTypes: true }).map((entry) => ({ name: entry.name, type: entry.isDirectory() ? 'dir' : 'file' }));
+      return fs.readdirSync(path, { withFileTypes: true }).map((entry) => ({ name: entry.name, type: entry.isSymbolicLink() ? 'symlink' : entry.isDirectory() ? 'dir' : 'file' }));
     },
     exists(path) {
       return fs.existsSync(path);
+    },
+    symlink(target, path) {
+      fs.symlinkSync(target, path);
+    },
+    readLink(path) {
+      return fs.readlinkSync(path);
     },
   };
 }
