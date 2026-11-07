@@ -64,6 +64,8 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   Node-side runner and library checks. There is no test suite.
 - Repo-owned code has no comments: `npm run lint:comments` lists each one with file and line,
   and the witness fails on any. Shebang lines in `bin/` are syntax, not comments.
-  `web/vendor/` holds third-party bundles that keep their own comments and licence notices;
-  they are reported as vendored and are not edited.
+  The third-party bundles in `web/vendor/` with comments (acorn, isomorphic-git, sql.js) keep
+  their upstream comments and are reported as VENDORED, not edited. Each has a licence file
+  with the MIT grant. `lint:comments` fails a vendored file with comments that has no
+  provenance entry, and any tracked file whose type it does not know.
 - Use Conventional Commits.

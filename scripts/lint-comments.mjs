@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '../web/vendor/acorn.mjs';
@@ -12,7 +12,13 @@ const vendored = tracked.filter(isVendored);
 const CODE = /\.(m?js|cjs)$/;
 const HTML = /\.html$/;
 const MARKDOWN = /\.md$/;
-const TEXT_WITHOUT_COMMENTS = /\.(json|wasm|gitignore)$|LICENSE|NOTICE/;
+const NO_COMMENT_SYNTAX = /\.(json|wasm)$|LICENSE|NOTICE/;
+const MIT_GRANT = 'Permission is hereby granted, free of charge';
+const PROVENANCE = {
+  'web/vendor/acorn.mjs': { licence: 'web/vendor/ACORN-LICENSE', upstream: 'acorn' },
+  'web/vendor/isomorphic-git.mjs': { licence: 'web/vendor/ISOMORPHIC-GIT-LICENSE', upstream: 'isomorphic-git' },
+  'web/vendor/sqljs/sql-wasm-browser.js': { licence: 'web/vendor/SQLJS-LICENSE', upstream: 'sql.js' },
+};
 
 const lineOf = (text, offset) => text.slice(0, offset).split('\n').length;
 
@@ -61,28 +67,41 @@ function commentsOf(file) {
   return [];
 }
 
-const unchecked = owned.filter((file) => !CODE.test(file) && !HTML.test(file) && !MARKDOWN.test(file) && !TEXT_WITHOUT_COMMENTS.test(file));
-const failures = [];
-const perVendored = [];
-for (const file of owned) {
-  const text = readFileSync(join(root, file), 'utf8');
-  for (const comment of commentsOf(file)) {
-    const line = comment.line ?? lineOf(text, comment.start);
-    failures.push({ file, line, value: comment.value });
-  }
-}
-for (const file of vendored) {
-  if (!CODE.test(file) && !HTML.test(file)) continue;
-  const count = commentsOf(file).length;
-  if (count) perVendored.push({ file, count });
+const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || file === '.gitignore' || NO_COMMENT_SYNTAX.test(file);
+
+function provenanceProblem(file) {
+  const entry = PROVENANCE[file];
+  if (!entry) return 'no provenance entry';
+  if (!existsSync(join(root, entry.licence))) return `licence ${entry.licence} is missing`;
+  if (!readFileSync(join(root, entry.licence), 'utf8').includes(MIT_GRANT)) return `licence ${entry.licence} has no MIT grant`;
+  if (!readFileSync(join(root, file), 'utf8').toLowerCase().includes(entry.upstream)) return `upstream name ${entry.upstream} does not appear in the file`;
+  return null;
 }
 
-for (const { file, line, value } of failures) {
-  console.log(`FAIL ${file}:${line}  ${JSON.stringify(value.slice(0, 100))}`);
+const findings = [];
+const vendoredReport = [];
+let repoComments = 0;
+for (const file of tracked) {
+  if (!classified(file)) {
+    findings.push(`FAIL ${file}  no comment rule for this file type`);
+    continue;
+  }
+  const comments = commentsOf(file);
+  if (!comments.length) continue;
+  if (isVendored(file)) {
+    const problem = provenanceProblem(file);
+    vendoredReport.push(file);
+    findings.push(problem ? `FAIL ${file}  ${problem}` : `VENDORED ${file}: ${comments.length} comments kept; licence ${PROVENANCE[file].licence} (MIT grant), upstream named (third-party, not edited)`);
+    continue;
+  }
+  const text = readFileSync(join(root, file), 'utf8');
+  for (const comment of comments) {
+    repoComments += 1;
+    findings.push(`FAIL ${file}:${comment.line ?? lineOf(text, comment.start)}  ${JSON.stringify(comment.value.slice(0, 100))}`);
+  }
 }
-for (const { file, count } of perVendored) {
-  console.log(`VENDORED ${file}: ${count} comments (third-party bundle, not edited)`);
-}
-for (const file of unchecked) console.log(`UNCHECKED ${file}: no comment rule for this file type`);
-console.log(`\n${owned.length} repo-owned files checked: ${failures.length} comments`);
-if (failures.length) process.exitCode = 1;
+
+for (const finding of findings) console.log(finding);
+const failed = findings.some((finding) => finding.startsWith('FAIL'));
+console.log(`\n${owned.length} repo-owned files checked: ${repoComments} comments; ${tracked.length} tracked files, ${vendoredReport.length} vendored files with comments`);
+if (failed) process.exitCode = 1;
