@@ -131,6 +131,8 @@ bashkit cuts error text at `//`.
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
+Ctrl-L clears the output, Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the
+caret to the start and end of the line; each is handled in the page, not by the browser.
 Lines typed while a command runs wait in a queue and run in order. Ctrl-C cancels
 the running command and drops the queued lines.
 The prompt shows the shell's working directory. The shell reads it back with

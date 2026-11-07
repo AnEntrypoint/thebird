@@ -307,6 +307,27 @@ if (fileExists(chrome)) {
     },
   });
   check('in-page terminal Ctrl-C drops lines queued behind the cancelled command', !/^dropped-line$/m.test(dropped.out) && dropped.out.includes('^C'), dropped.out.split('\n').filter((line) => line === '^C' || line.includes('dropped')).join(' / ').slice(0, 140));
+  const editing = {};
+  await terminal([['run', 'shell echo before-clear']], {
+    interact: async ({ type, press, evaluate }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      const caret = () => evaluate("document.getElementById('line').selectionStart");
+      await type('shell echo discarded');
+      await press('u', { ctrl: true });
+      editing.cleared = await value();
+      await type('shell echo caret');
+      await press('a', { ctrl: true });
+      editing.start = await caret();
+      await press('e', { ctrl: true });
+      editing.end = await caret();
+      editing.endLength = (await value()).length;
+      await evaluate("document.getElementById('line').value = ''");
+      await press('l', { ctrl: true });
+      editing.afterClear = await evaluate("document.getElementById('out').textContent");
+    },
+  });
+  check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
+  check('in-page terminal Ctrl-L clears the output', editing.afterClear === '', JSON.stringify(editing.afterClear.slice(0, 80)));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);

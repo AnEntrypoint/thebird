@@ -82,6 +82,18 @@ line.addEventListener('keydown', async (event) => {
     generation++;
     client.cancel();
     write('^C');
+  } else if (event.ctrlKey && event.key === 'u') {
+    event.preventDefault();
+    line.value = '';
+  } else if (event.ctrlKey && event.key === 'a') {
+    event.preventDefault();
+    line.setSelectionRange(0, 0);
+  } else if (event.ctrlKey && event.key === 'e') {
+    event.preventDefault();
+    line.setSelectionRange(line.value.length, line.value.length);
+  } else if (event.ctrlKey && event.key === 'l') {
+    event.preventDefault();
+    out.textContent = '';
   } else if (event.key === 'Tab' && client.complete) {
     event.preventDefault();
     const token = /\S*$/.exec(line.value)[0];

@@ -10,6 +10,10 @@ const KEYS = {
   ArrowDown: { code: 'ArrowDown', keyCode: 40 },
   Tab: { code: 'Tab', keyCode: 9 },
   c: { code: 'KeyC', keyCode: 67 },
+  a: { code: 'KeyA', keyCode: 65 },
+  e: { code: 'KeyE', keyCode: 69 },
+  l: { code: 'KeyL', keyCode: 76 },
+  u: { code: 'KeyU', keyCode: 85 },
 };
 
 export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact }) {
