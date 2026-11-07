@@ -1,5 +1,5 @@
 import readline from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
+import { stdin as input, stdout as output, stderr as errorOutput } from 'node:process';
 import { resolve } from 'node:path';
 import { createThebird } from './index.js';
 import { helpText } from './commands.js';
@@ -11,7 +11,7 @@ function quoteArg(arg) {
   return /^[^\s"'\\]+$/.test(arg) ? arg : '"' + arg.replace(/[\\"]/g, '\\$&') + '"';
 }
 
-export async function runCli({ argv = process.argv.slice(2), interactive = false, stdin = input, stdout = output } = {}) {
+export async function runCli({ argv = process.argv.slice(2), interactive = false, stdin = input, stdout = output, stderr = errorOutput } = {}) {
   const options = {};
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -33,8 +33,13 @@ export async function runCli({ argv = process.argv.slice(2), interactive = false
       stdout.write('thebird — gm-backed CLI\n\n' + helpText() + '\n');
     } else if (rest.length > 0) {
       const line = rest.map(quoteArg).join(' ');
-      const result = await run(line);
-      if (result && result.exit !== true) stdout.write(String(result) + '\n');
+      try {
+        const result = await run(line);
+        if (result && result.exit !== true) stdout.write(String(result) + '\n');
+      } catch (err) {
+        code = 1;
+        stderr.write('error: ' + err.message + '\n');
+      }
     }
     if (interactive || rest.length === 0) {
       const rl = readline.createInterface({ input: stdin, output, terminal: Boolean(stdin.isTTY) });

@@ -57,7 +57,13 @@ export async function createThebird(options) {
   };
   for (const [name, verb] of Object.entries(methods)) api[name] = (args = {}) => gm.call(verb, args);
 
-  api.memory = (action, key, value) => gm.call('wiki_search', { query: String(key ?? ''), k: 5 });
+  const memoryReads = new Set(['search', 'get', 'read', 'lookup', 'find']);
+  api.memory = (action, key) => {
+    if (action !== undefined && !memoryReads.has(action)) {
+      throw new Error('memory ' + action + ' is not mapped; write wiki pages with `gm wiki_write <json>` (needs sources and claims)');
+    }
+    return gm.call('wiki_search', { query: String(key ?? ''), k: 5 });
+  };
   api.chat = (prompt) => gm.call('search', { query: String(prompt ?? ''), k: 5 });
   api.delegate = api.chat;
   api.webSearch = (query) => {
