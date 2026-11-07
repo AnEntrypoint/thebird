@@ -37,9 +37,10 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   files are missing. It needs network and checks the wasm SHA-256.
 - A tree from `git archive` has no `.git`, and the lints call git. The architecture lint's live
   checks need `web/vendor/bashkit/` and `web/vendor/pyodide/` present, because the lint does
-  not generate them. On a tree with one commit, the `cc242f5` record is UNVERIFIED (no
-  history), not FAIL; every tree with more than one commit checks it, so that is the only
-  expected difference from the shared checkout.
+  not generate them. The `cc242f5` record passes wherever that object is a commit. It is
+  UNVERIFIED (no history) only when the object does not resolve and the tree has one commit;
+  when the object does not resolve on a tree with more history, it FAILs. The fresh-tree
+  difference from the shared checkout is that one record.
 - The default browser terminal runs gm in `web/gm-worker.js` over OPFS. It
   does not need the relay, except for loading the static files. `?engine=relay`
   sends gm calls to the relay on the host instead.

@@ -84,6 +84,13 @@ const commitCount = () => {
     return 0;
   }
 };
+const objectType = (name) => {
+  try {
+    return execFileSync('git', ['cat-file', '-t', name], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
+};
 const overrideNames = () => ({
   inPage: [
     ...[...read('web/gm-worker.js').matchAll(/^\s+(\w+): async \(args\)/gm)].map((match) => match[1]),
@@ -174,13 +181,10 @@ function genericStatic() {
 
 function architectureStatic() {
   record('owner-approved commit `cc242f5`', (() => {
+    const type = objectType('cc242f5');
+    if (type !== null) return outcome(type === 'commit', `cc242f5 is a ${type}`);
     if (commitCount() <= 1) return outcome(null, 'cc242f5 cannot be verified: this tree has one commit and no history to check it against (UNVERIFIED, no history)');
-    try {
-      const type = execFileSync('git', ['cat-file', '-t', 'cc242f5'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      return outcome(type === 'commit', `cc242f5 is a ${type}`);
-    } catch {
-      return outcome(false, 'cc242f5 is not in the repository');
-    }
+    return outcome(false, 'cc242f5 is not in the repository');
   })());
 
   for (const line of docLines) {
