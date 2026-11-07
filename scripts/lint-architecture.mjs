@@ -77,6 +77,13 @@ const bulletOf = (needle) => {
   while (end < docLines.length && docLines[end].startsWith('  ')) end++;
   return docLines.slice(start, end).join(' ');
 };
+const commitCount = () => {
+  try {
+    return Number(execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
+  } catch {
+    return 0;
+  }
+};
 const overrideNames = () => ({
   inPage: [
     ...[...read('web/gm-worker.js').matchAll(/^\s+(\w+): async \(args\)/gm)].map((match) => match[1]),
@@ -167,8 +174,9 @@ function genericStatic() {
 
 function architectureStatic() {
   record('owner-approved commit `cc242f5`', (() => {
+    if (commitCount() <= 1) return outcome(null, 'cc242f5 cannot be verified: this tree has one commit and no history to check it against (UNVERIFIED, no history)');
     try {
-      const type = execFileSync('git', ['cat-file', '-t', 'cc242f5'], { cwd: root, encoding: 'utf8' }).trim();
+      const type = execFileSync('git', ['cat-file', '-t', 'cc242f5'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       return outcome(type === 'commit', `cc242f5 is a ${type}`);
     } catch {
       return outcome(false, 'cc242f5 is not in the repository');
@@ -347,6 +355,10 @@ function agentsStatic() {
   })());
   cites('- Repo-owned code has no comments', ['repo-owned code has no comments']);
   cites('The third-party bundles in `web/vendor/` with comments', ['every vendored bundle with comments has a provenance witness']);
+  record('A tree from `git archive` has no `.git`', all(
+    outcome(fileHas('scripts/witness.mjs', 'await vendorBashkit()') && fileHas('scripts/witness.mjs', 'await vendorPyodide()'), 'witness.mjs generates both vendor directories when they are missing'),
+    outcome(fileHas('scripts/lint-architecture.mjs', 'commitCount() <= 1') && fileHas('scripts/lint-architecture.mjs', 'UNVERIFIED, no history'), 'the cc242f5 record takes the no-history branch only for a one-commit tree'),
+  ));
   record('Use Conventional Commits', (() => {
     const subjects = execFileSync('git', ['log', '-n', '20', '--format=%s'], { cwd: root, encoding: 'utf8' }).trim().split('\n');
     const matching = subjects.filter((subject) => /^(feat|fix|docs|test|chore|refactor|perf|build|ci|style|revert)(\([^)]+\))?!?: /.test(subject)).length;
