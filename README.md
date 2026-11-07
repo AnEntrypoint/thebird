@@ -49,14 +49,18 @@ Without arguments on a TTY the CLI opens its REPL. `help` lists every command.
 
 ## Browser terminal
 
+Serve the repo with the relay, then open the printed URL:
+
 ```bash
 node bin/thebird-relay.js --workspace /path/to/project
 ```
 
-Open the printed URL. The page runs the same command set as the CLI in the
-browser, and its gm calls go to the relay on this machine. Add `?run=help` to
-the URL to run commands on load. The relay binds 127.0.0.1 and runs commands
-as your user, so do not expose its port.
+By default the page runs gm in a Web Worker, over files kept in the browser's
+OPFS storage, so no host process is needed for file, memory, search and PRD
+commands. Shell, git and job commands report `ENOSYS` in the browser. Add
+`?engine=relay` to send gm calls to the relay on this machine, which runs them
+as your user. The relay binds 127.0.0.1, so do not expose its port. See
+`ARCHITECTURE.md` for the browser gaps.
 
 ## Library
 

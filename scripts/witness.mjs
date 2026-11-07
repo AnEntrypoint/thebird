@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,7 @@ import { createApi, joinPath } from '../src/api.js';
 import { createThebird } from '../src/index.js';
 import { startRelay } from '../src/relay.js';
 import { remoteClient } from '../src/gm-remote.js';
+import { runTerminal } from './browser-driver.mjs';
 import { existsSync as fileExists } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -91,12 +92,21 @@ check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { 
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (fileExists(chrome)) {
-  const page = relay.url + '?' + new URLSearchParams([['run', 'help'], ['run', 'shell echo browser-ok']]).toString();
-  const dom = await new Promise((ok) => execFile(chrome, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=8000', '--dump-dom', page], { timeout: 90000, maxBuffer: 1 << 24 }, (err, stdout) => ok(err ? '' : stdout)));
-  check('browser terminal finishes its commands in headless Chromium', /data-done="true"/.test(dom));
-  check('browser terminal shows the shell output through the relay', /browser-ok/.test(dom));
+  const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
+  const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
+  const relayTerminal = await terminal([['engine', 'relay'], ['run', 'help'], ['run', 'shell echo browser-ok']]);
+  check('browser terminal runs shell through the relay in headless Chromium', relayTerminal.engine === 'ready' && relayTerminal.out.includes('browser-ok'));
+  const before = await terminal([['gm', 'raw'], ['run', 'ls .']]);
+  check('before: raw gm cannot load in the browser worker', before.engine === 'failed' && before.out.includes('gm-raw/tools.mjs'), before.out.split('\n')[0].slice(0, 140));
+  const after = await terminal([['run', 'write notes/a.txt opfs-hello'], ['run', 'ls .']]);
+  check('after: in-page gm writes and lists files over OPFS', after.engine === 'ready' && after.out.includes('wrote notes/a.txt') && after.out.includes('notes/'), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
+  const reloaded = await terminal([['run', 'read notes/a.txt']]);
+  check('after: the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
+  const shell = await terminal([['run', 'shell echo in-page']]);
+  check('in-page shell reports ENOSYS instead of crashing', shell.out.includes('ENOSYS'), shell.out.split('\n')[1]?.slice(0, 120));
+  rmSync(profile, { recursive: true, force: true });
 } else {
-  console.log('SKIP browser terminal check — no Chromium at ' + chrome + ' (set CHROME_BIN)');
+  console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
 }
 await relay.close();
 process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));

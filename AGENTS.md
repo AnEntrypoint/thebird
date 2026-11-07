@@ -5,12 +5,21 @@ A Node CLI and library whose every operation dispatches through gm tooling.
 - Runtime surface: `bin/thebird.js`, `bin/thebird-relay.js`, `src/index.js`,
   `src/api.js`, `src/gm.js`, `src/gm-client.js`, `src/gm-remote.js`,
   `src/relay.js`, `src/commands.js`, `src/runner.js`, `src/cli.js`,
-  `web/terminal.html`, `web/terminal.js`.
+  `web/terminal.html`, `web/terminal.js`, `web/gm-worker.js`,
+  `web/gm-worker-client.js`, `web/shims/*.js`, `src/shim-map.js`,
+  `scripts/browser-driver.mjs`.
 - Browser-safe: `src/api.js`, `src/commands.js`, `src/runner.js`,
   `src/gm-client.js`, `src/gm-remote.js`, `web/terminal.js`. They import
   nothing from Node and run in a browser. Node-only: `src/gm.js`,
   `src/relay.js`, `src/index.js`, `src/cli.js`, `bin/`.
-- The browser terminal runs in a page served by the relay. Its gm calls go
+- `web/shims/*.js` are browser-only and import only each other. They replace
+  the `node:` modules gm uses: fs (OPFS-backed, sync), fs/promises, path,
+  crypto (sha1 and sha256), and stubs for child_process, os, util and friends.
+  Add a shim here before adding a `node:` import to gm-facing code.
+- The default browser terminal runs gm in `web/gm-worker.js` over OPFS. It
+  does not need the relay, except for loading the static files. `?engine=relay`
+  sends gm calls to the relay on the host instead.
+- The browser terminal (relay mode) runs in a page served by the relay. Its gm calls go
   to the relay over same-origin HTTP (`GET /meta`, `POST /call`), so shell,
   git, jobs and filesystem run on the host. The relay binds 127.0.0.1 by
   default, runs commands as the user, and answers only JSON POSTs, which a

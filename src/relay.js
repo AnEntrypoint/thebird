@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGmClient } from './gm.js';
+import { rewriteSpecifiers } from './shim-map.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = here;
@@ -57,8 +58,28 @@ async function serveStatic(pathname, res) {
   }
 }
 
+async function serveGm(pathname, res, gmHome) {
+  const raw = pathname.startsWith('/gm-raw/');
+  const file = within(resolve(gmHome, 'src'), pathname.slice(raw ? '/gm-raw/'.length : '/gm/'.length));
+  if (!file || !['.mjs', '.js'].includes(extname(file))) {
+    res.writeHead(404);
+    return res.end('not found');
+  }
+  try {
+    const source = await readFile(file, 'utf8');
+    res.writeHead(200, { 'content-type': TYPES['.js'] });
+    res.end(raw ? source : rewriteSpecifiers(source));
+  } catch {
+    res.writeHead(404);
+    res.end('not found');
+  }
+}
+
 async function handle(req, res, gm) {
   const url = new URL(req.url, 'http://relay');
+  if (req.method === 'GET' && (url.pathname.startsWith('/gm/') || url.pathname.startsWith('/gm-raw/'))) {
+    return serveGm(url.pathname, res, gm.gmHome);
+  }
   if (req.method === 'GET' && url.pathname === '/meta') {
     return sendJson(res, 200, { gmHome: gm.gmHome, workspace: gm.workspace, runDir: gm.runDir });
   }
@@ -84,6 +105,8 @@ async function handle(req, res, gm) {
 export async function startRelay({ host = '127.0.0.1', port = 0, workspace, gmHome } = {}) {
   const gm = await createGmClient({ workspace, gmHome });
   const server = createServer((req, res) => {
+    res.setHeader('cross-origin-opener-policy', 'same-origin');
+    res.setHeader('cross-origin-embedder-policy', 'require-corp');
     handle(req, res, gm).catch((err) => {
       if (!res.headersSent) sendJson(res, 500, { ok: false, error: err.message });
     });
