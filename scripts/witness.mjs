@@ -164,6 +164,28 @@ if (fileExists(chrome)) {
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const pythonReopened = await terminal([['run', 'shell cat notes/out.txt'], ['run', 'shell python3 -c "print(open(\'notes/out.txt\').read().strip())"']]);
   check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const incremental = await terminal([
+    ['run', 'shell echo one > notes/inc.txt'],
+    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', 'shell echo two > notes/inc.txt'],
+    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', `shell python3 -c "import os; os.remove('notes/inc.txt')"`],
+    ['run', `shell python3 -c "import os; print(os.path.exists('notes/inc.txt'))"`],
+    ['run', 'shell echo three > notes/inc.txt'],
+    ['run', `shell python3 -c "print(open('notes/inc.txt').read().strip())"`],
+  ]);
+  const incLines = incremental.out.split('\n');
+  check('in-page python3 sees a shell rewrite made after its last call', incLines.includes('one') && incLines.includes('two') && incLines.indexOf('two') > incLines.indexOf('one'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
+  check('in-page python3 removes a file it deletes and the shell sees it gone', incLines.includes('False') && incLines.includes('three'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
+  const warmCalls = Array.from({ length: 30 }, () => 'python3 -c "print(1)"').join('; ');
+  const timed = await terminal([
+    ['run', 'shell mkdir -p notes/bulk'],
+    ['run', `shell python3 -c "[open('notes/bulk/f%d.txt' % i, 'w').write('x' * 200) for i in range(300)]"`],
+    ['run', `shell python3 -c "print(0)"; t0=$(date +%s%N); ${warmCalls}; t1=$(date +%s%N); echo $(( (t1 - t0) / 1000000 ))`],
+  ]);
+  const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
+  check('python3 warm calls are timed in-page over 300 files', Number.isFinite(totalMs) && totalMs > 0, `${totalMs} ms for 30 calls`);
+  console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
   const gitRoot = mkdtempSync(join(tmpdir(), 'thebird-git-'));
   process.on('exit', () => rmSync(gitRoot, { recursive: true, force: true }));
   const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=witness', '-c', 'user.email=witness@localhost', ...args], { cwd, encoding: 'utf8' }).trim();

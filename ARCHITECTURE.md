@@ -112,10 +112,16 @@ Relay-only items, ranked by what can run in the browser:
 (`web/python-in-page.js`) over Pyodide 314.0.7 (MPL-2.0, notice in
 `web/vendor/PYODIDE-NOTICE.md`). The runtime is fetched by
 `scripts/vendor-pyodide.mjs`, checks each file's pinned SHA-256, and is
-gitignored. Pyodide loads on the first call. Each call copies the `/workspace`
-tree into Pyodide's memory filesystem, runs the code, and syncs changed, new and
-deleted files back to OPFS, so every call costs one full copy of the tree. Only
-the last line of a traceback is reported, and printed output comes before it.
+gitignored. Pyodide loads on the first call. The `/workspace` tree is mirrored
+into Pyodide's memory filesystem. Before each call, only files whose shim
+revision changed are uploaded; the shim's per-file revision counter comes from
+`mark()` in `web/shims/fs.js`. After the call, every Pyodide file is read and
+compared with the mirror, and changed, new and deleted files are written back
+to OPFS. The read-back is O(n) by design: detecting changes by timestamp could
+miss a same-size write within one millisecond. Measured in headless Chromium,
+over 300 files, a warm call takes 0.9 ms with this sync and 1.3 ms with the
+full copy it replaced. Only the last line of a traceback is reported, and
+printed output comes before it.
 
 `shell` passes its text to bashkit raw, so quotes and parentheses survive. The
 runner used to strip quotes from `shell` lines.

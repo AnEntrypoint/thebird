@@ -6,6 +6,8 @@ const files = new Map();
 const dirs = new Set(['/']);
 const meta = new Map();
 const dirty = new Map();
+const revisions = new Map();
+let revision = 0;
 const fds = new Map();
 let nextFd = 3;
 let root = null;
@@ -24,6 +26,11 @@ function norm(path) {
 
 function mark(path, op) {
   dirty.set(path, op);
+  revisions.set(path, ++revision);
+}
+
+export function revisionOf(path) {
+  return revisions.get(norm(path)) ?? 0;
 }
 
 function markTree(path, op) {

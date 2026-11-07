@@ -7,6 +7,8 @@ const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
 
 let runtime;
 let captured = null;
+const known = new Map();
+const knownRevision = new Map();
 
 const pythonRuntime = () => {
   runtime ??= (async () => {
@@ -22,12 +24,12 @@ const pythonRuntime = () => {
 
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
 
-function shimTree(dir = WORKSPACE, out = new Map()) {
+function shimPaths(dir = WORKSPACE, out = new Set()) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const path = `${dir}/${entry.name}`;
     if (SKIPPED.test(path)) continue;
-    if (entry.isDirectory()) shimTree(path, out);
-    else if (entry.isFile()) out.set(path, fs.readFileSync(path));
+    if (entry.isDirectory()) shimPaths(path, out);
+    else if (entry.isFile()) out.add(path);
   }
   return out;
 }
@@ -46,21 +48,42 @@ function pyodideTree(py, dir = WORKSPACE, out = new Map()) {
 
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
 
-function copyIn(py, files) {
-  py.FS.mkdirTree(WORKSPACE);
-  for (const [path, bytes] of files) {
-    py.FS.mkdirTree(parentOf(path));
-    py.FS.writeFile(path, bytes);
+function syncIn(py) {
+  const paths = shimPaths();
+  for (const path of paths) {
+    const revision = fs.revisionOf(path);
+    if (knownRevision.get(path) === revision) continue;
+    const bytes = fs.readFileSync(path);
+    if (!known.has(path) || !sameBytes(known.get(path), bytes)) {
+      py.FS.mkdirTree(parentOf(path));
+      py.FS.writeFile(path, bytes);
+    }
+    known.set(path, bytes);
+    knownRevision.set(path, revision);
+  }
+  for (const path of [...known.keys()]) {
+    if (paths.has(path)) continue;
+    py.FS.unlink(path);
+    known.delete(path);
+    knownRevision.delete(path);
   }
 }
 
-function copyBack(before, after) {
+function syncOut(py) {
+  const after = pyodideTree(py);
   for (const [path, bytes] of after) {
-    if (before.has(path) && sameBytes(before.get(path), bytes)) continue;
+    if (known.has(path) && sameBytes(known.get(path), bytes)) continue;
     fs.mkdirSync(parentOf(path), { recursive: true });
     fs.writeFileSync(path, bytes);
+    known.set(path, bytes);
+    knownRevision.set(path, fs.revisionOf(path));
   }
-  for (const path of before.keys()) if (!after.has(path)) fs.rmSync(path, { force: true });
+  for (const path of [...known.keys()]) {
+    if (after.has(path)) continue;
+    fs.rmSync(path, { force: true });
+    known.delete(path);
+    knownRevision.delete(path);
+  }
 }
 
 export async function pythonBuiltin(argv) {
@@ -78,8 +101,8 @@ export async function pythonBuiltin(argv) {
     throw new Error('python3 -c <code> or python3 <file>');
   }
   const py = await pythonRuntime();
-  const before = shimTree();
-  copyIn(py, before);
+  py.FS.mkdirTree(WORKSPACE);
+  syncIn(py);
   py.FS.chdir(WORKSPACE);
   captured = [];
   let failure = null;
@@ -88,7 +111,7 @@ export async function pythonBuiltin(argv) {
   } catch (err) {
     failure = err;
   }
-  copyBack(before, pyodideTree(py));
+  syncOut(py);
   const output = captured.join('\n');
   captured = null;
   if (failure) {
