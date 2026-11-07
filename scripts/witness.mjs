@@ -112,6 +112,9 @@ if (fileExists(chrome)) {
   check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   const host = await terminal([['run', 'shell node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
+  const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);
+  const statuses = status.out.match(/^rc=\d+$/gm) ?? [];
+  check('in-page bash keeps $? across terminal lines', statuses.join(' ') === 'rc=1 rc=3 rc=0', statuses.join(' ') || status.out.slice(0, 140));
   const repo = await terminal([
     ['run', 'shell mkdir -p notes'],
     ['run', 'shell git init'],

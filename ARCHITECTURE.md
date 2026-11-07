@@ -124,7 +124,9 @@ full copy it replaced. Only the last line of a traceback is reported, and
 printed output comes before it.
 
 `shell` passes its text to bashkit raw, so quotes and parentheses survive. The
-runner used to strip quotes from `shell` lines.
+runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
+`execute()`, so each in-page run starts with `(exit N);` for the previous run's
+status, and `$?` carries across terminal lines.
 `curl` and `wget` report "network access not configured". Background jobs
 (`job start`) need the relay. `head` after an early-closing pipe needs the
 async `execute()` path, which the shell uses.

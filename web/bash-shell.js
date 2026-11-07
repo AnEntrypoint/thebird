@@ -14,9 +14,12 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     python3: (ctx) => pythonBuiltin(ctx.argv).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
+  let status = 0;
   return {
     async run(command) {
-      const result = await bash.execute(command);
+      const restore = status === 0 ? '' : `(exit ${status}); `;
+      const result = await bash.execute(restore + command);
+      status = result.exitCode;
       return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr };
     },
   };
