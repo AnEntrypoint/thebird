@@ -8,6 +8,9 @@ bin/thebird.js -> src/cli.js -> src/runner.js -> src/commands.js
                        |
                        v
               src/gm.js -> gm createTools() -> gm verbs
+
+browser: web/terminal.js -> src/runner.js -> src/api.js -> src/gm-remote.js
+            -> HTTP -> src/relay.js -> src/gm.js -> gm verbs
 ```
 
 The gm-backed CLI and library are present in `bin/` and `src/`. There is one

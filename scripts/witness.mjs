@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { createRunner } from '../src/runner.js';
 import { createApi, joinPath } from '../src/api.js';
 import { createThebird } from '../src/index.js';
+import { startRelay } from '../src/relay.js';
+import { remoteClient } from '../src/gm-remote.js';
+import { existsSync as fileExists } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(root, 'bin', 'thebird.js');
@@ -75,6 +78,28 @@ function asciiBody(text) {
 
 check('joinPath resolves like path.resolve', joinPath('/a/b', '../c') === '/a/c' && joinPath('/a/b', '/etc/x') === '/etc/x');
 
+const relayWs = mkdtempSync(join(tmpdir(), 'thebird-relay-'));
+const relay = await startRelay({ workspace: relayWs });
+const remote = await remoteClient({ url: relay.url });
+const remoteRun = createRunner(createApi(remote));
+check('relay serves a remote gm client', remote.workspace === relayWs);
+check('remote shell runs through the relay', (await remoteRun('shell echo relay-ok')).includes('relay-ok'));
+check('relay serves the browser terminal page', (await fetch(relay.url)).status === 200);
+check('relay serves src and web files', (await fetch(relay.url + 'src/runner.js')).status === 200 && (await fetch(relay.url + 'web/terminal.js')).status === 200);
+check('relay refuses paths outside src and web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'src/../package.json')).status === 404);
+check('relay rejects malformed call bodies', (await fetch(relay.url + 'call', { method: 'POST', body: '{nope' })).status === 400);
+
+const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
+if (fileExists(chrome)) {
+  const page = relay.url + '?' + new URLSearchParams([['run', 'help'], ['run', 'shell echo browser-ok']]).toString();
+  const dom = await new Promise((ok) => execFile(chrome, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=8000', '--dump-dom', page], { timeout: 90000, maxBuffer: 1 << 24 }, (err, stdout) => ok(err ? '' : stdout)));
+  check('browser terminal finishes its commands in headless Chromium', /data-done="true"/.test(dom));
+  check('browser terminal shows the shell output through the relay', /browser-ok/.test(dom));
+} else {
+  console.log('SKIP browser terminal check — no Chromium at ' + chrome + ' (set CHROME_BIN)');
+}
+await relay.close();
+process.on('exit', () => rmSync(relayWs, { recursive: true, force: true }));
 process.on('exit', () => rmSync(ws, { recursive: true, force: true }));
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exitCode = failures ? 1 : 0;

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { clientFrom } from './gm-client.js';
 
 const require = createRequire(import.meta.url);
 
@@ -49,24 +50,5 @@ export async function createGmClient(options = {}) {
     noticeMs: options.noticeMs,
   });
 
-  async function call(name, args = {}) {
-    if (name === 'job_start') return call('run_shell', { ...args, background: true });
-    const result = await tools.run(name, args);
-    if (result && result.ok === false) {
-      throw new Error(result.error || result.refused || ('gm ' + name + ' failed'));
-    }
-    return result;
-  }
-
-  return {
-    gmHome: home,
-    workspace,
-    runDir,
-    call,
-    verb: call,
-    tools: () => tools,
-    async close() {
-      await tools.close('thebird-done');
-    },
-  };
+  return clientFrom(tools, { gmHome: home, workspace, runDir });
 }

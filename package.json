@@ -16,7 +16,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "node --check bin/thebird.js && node --check src/*.js",
+    "check": "node --check bin/thebird.js && node --check bin/thebird-relay.js && node --check src/*.js && node --check scripts/witness.mjs && node --check web/terminal.js",
     "start": "node bin/thebird.js",
     "witness": "node scripts/witness.mjs"
   },

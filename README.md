@@ -9,7 +9,11 @@ OS tree was deleted in owner-approved commit `cc242f5`. The active surface is:
 - `bin/thebird.js` — the CLI entry point
 - `src/index.js` — the library API (`createThebird` / `createClient`)
 - `src/api.js` — the library method table over a gm client (no Node imports)
-- `src/gm.js` — the gm tool-engine adapter
+- `src/gm.js` — locates gm and creates the Node tool engine (Node only)
+- `src/gm-client.js` — the gm client adapter over any tool engine (no Node imports)
+- `src/gm-remote.js` — a gm client that calls a relay over HTTP (no Node imports)
+- `src/relay.js` — the local relay: hosts gm, serves the browser terminal
+- `web/terminal.html`, `web/terminal.js` — the browser terminal page
 - `src/commands.js` — the CLI command registry
 - `src/runner.js` — tokenizes a command line and maps it to library calls (no Node imports)
 - `src/cli.js` — the REPL and one-shot runner
@@ -42,6 +46,17 @@ node bin/thebird.js -i
 
 Without arguments on a TTY the CLI opens its REPL. `help` lists every command.
 `gm <verb> <json>` is the escape hatch for any current or future gm verb.
+
+## Browser terminal
+
+```bash
+node bin/thebird-relay.js --workspace /path/to/project
+```
+
+Open the printed URL. The page runs the same command set as the CLI in the
+browser, and its gm calls go to the relay on this machine. Add `?run=help` to
+the URL to run commands on load. The relay binds 127.0.0.1 and runs commands
+as your user, so do not expose its port.
 
 ## Library
 
