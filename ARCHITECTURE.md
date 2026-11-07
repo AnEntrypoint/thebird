@@ -181,7 +181,7 @@ killing the command's process group. `/cancel` answers 404 for an unknown id, 40
 non-JSON body and 405 for other methods, and it adds no CORS headers.
 `curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send
 CORS headers to this page. A host without them is refused with a pointer to the
-relay, and flags beyond `-sf`, `-o` (curl) and `-q`, `-O` (wget) need the relay.
+relay. The flags `-s`, `-S`, `-f`, `-L` and `-q` work for both, alone or combined (`-SL`); curl also takes `-o file` and wget `-O file`. Any other flag is refused with a pointer to the relay.
 Background jobs
 (`job start`, and a bare `&` in shell text, refused by `hasBackgroundOperator`
 in `web/bash-shell.js`) need the relay. `head` after an early-closing pipe needs the
@@ -192,7 +192,7 @@ backed by isomorphic-git 1.44.11 (MIT). The bundle is `web/vendor/isomorphic-git
 built with esbuild, and its licence is `web/vendor/ISOMORPHIC-GIT-LICENSE`.
 `--version` reports the in-page library version, not a host git.
 `init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree, and
-`status` prints porcelain v1 lines. `commit -m` runs the in-page gate
+`status` prints porcelain v1 lines after a `## <branch>` header. `commit -m` runs the in-page gate
 (`web/commit-gate.js`) and commits as lanmower; a failing gate refuses the
 commit and names each failed check. The worker answers the gm verbs
 `git_status`, `git_log`, `git_diff`, `git_add` and `git_commit` with the same

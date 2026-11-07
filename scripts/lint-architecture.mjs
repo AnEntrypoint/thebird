@@ -1,0 +1,445 @@
+import { execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { startRelay } from '../src/relay.js';
+import { runTerminal } from './browser-driver.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const staticOnly = process.argv.includes('--static');
+const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
+const gmHome = process.env.GM_HOME ?? join(root, '..', 'gm');
+const docLines = readFileSync(join(root, 'ARCHITECTURE.md'), 'utf8').split('\n');
+const witness = readFileSync(join(root, 'scripts', 'witness.mjs'), 'utf8');
+const results = [];
+const covered = new Set();
+const COMMANDS = 'echo printf test seq sed awk grep sort uniq wc head tail cut tr find xargs tee ls cp mv rm mkdir touch cat basename dirname date env export type jq base64 md5sum sha256sum gzip gunzip sleep';
+const GM_CALLS = ['spawn', 'spawnSync', 'execFileAsync', 'execFileSync'];
+
+const outcome = (ok, detail) => ({ ok, detail });
+const all = (...items) => {
+  const ok = items.some((item) => item.ok === false) ? false : items.every((item) => item.ok === true) ? true : null;
+  return outcome(ok, items.map((item) => item.detail).join('; '));
+};
+const partial = (item, note) => outcome(item.ok === true ? null : item.ok, `${item.detail}; ${note}`);
+
+const record = (needle, result) => {
+  const index = docLines.findIndex((line) => line.includes(needle));
+  if (index === -1) {
+    results.push({ line: 0, text: needle, ok: false, detail: 'anchor not found in ARCHITECTURE.md; update the lint' });
+    return;
+  }
+  covered.add(index + 1);
+  results.push({ line: index + 1, text: docLines[index].trim(), ok: result.ok, detail: result.detail });
+};
+
+const repo = (path) => join(root, path);
+const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]));
+const filesUnder = (path) => {
+  const full = repo(path);
+  if (!existsSync(full)) return [];
+  return statSync(full).isDirectory() ? walk(full) : [full];
+};
+const fileHas = (path, needle) => existsSync(repo(path)) && readFileSync(repo(path), 'utf8').includes(needle);
+const versionIn = (path, needle) => {
+  const files = filesUnder(path).filter((file) => /\.(m?js|json|js|md)$/.test(file));
+  if (files.length === 0) return outcome(null, `${path} is not present in this checkout`);
+  const found = files.some((file) => readFileSync(file, 'utf8').includes(needle));
+  return outcome(found ? true : null, found ? `${needle} is recorded under ${path}` : `${needle} is not recorded in the text files under ${path}, so it is unverified`);
+};
+const isIgnored = (path) => {
+  try {
+    execFileSync('git', ['check-ignore', '-q', path], { cwd: root, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+};
+const cites = (needle, labels) => record(needle, all(...labels.map((label) => (witness.includes(label)
+  ? outcome(true, `witness: ${label}`)
+  : outcome(false, `missing from scripts/witness.mjs: ${label}`)))));
+
+const tokens = [...new Set(docLines.flatMap((line) => [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1])))];
+
+const sourceText = [...walk(repo('src')), ...walk(repo('web')).filter((path) => !path.includes('/vendor/')), ...walk(repo('scripts')), ...walk(repo('bin'))]
+  .filter((path) => /\.(m?js|html|js)$/.test(path))
+  .map((path) => readFileSync(path, 'utf8'))
+  .join('\n');
+const gmSrc = join(gmHome, 'src');
+const gmText = existsSync(gmSrc) ? walk(gmSrc).filter((path) => path.endsWith('.mjs')).map((path) => readFileSync(path, 'utf8')).join('\n') : null;
+
+function staticChecks() {
+  for (const token of tokens.filter((t) => /^[A-Za-z][\w.-]*\/[\w./-]*$/.test(t))) {
+    const present = existsSync(repo(token));
+    const ignored = !present && isIgnored(token);
+    record(`\`${token}\``, present ? outcome(true, `${token} exists`) : ignored ? outcome(null, `${token} is gitignored and not present in this checkout`) : outcome(false, `${token} is missing`));
+  }
+
+  for (const token of tokens) {
+    const name = token.replace(/\(\)$/, '');
+    if (!/^[a-z]\w*[A-Z]\w*$/.test(name) && !/^[a-z]+_[a-z_]+$/.test(name) && !/^[a-z]\w*\(\)$/.test(token)) continue;
+    const pattern = new RegExp(`\\b${name}\\b`);
+    const found = pattern.test(sourceText) || (gmText !== null && pattern.test(gmText));
+    record(`\`${token}\``, outcome(found ? true : gmText === null ? null : false, found ? `${name} is in the repo` : `${name} is not in the repo or gm`));
+  }
+
+  record('owner-approved commit `cc242f5`', (() => {
+    try {
+      const type = execFileSync('git', ['cat-file', '-t', 'cc242f5'], { cwd: root, encoding: 'utf8' }).trim();
+      return outcome(type === 'commit', `cc242f5 is a ${type}`);
+    } catch {
+      return outcome(false, 'cc242f5 is not in the repository');
+    }
+  })());
+
+  for (const line of docLines) {
+    const row = line.match(/^\| `([\w.-]+\.mjs)` \| ([^|]+) \|/);
+    if (!row) continue;
+    const [, file, cell] = row;
+    const expected = Object.fromEntries(GM_CALLS.map((name) => [name, 0]));
+    for (const [, count, name] of cell.matchAll(/(\d+) `(\w+)`/g)) expected[name] = Number(count);
+    const path = join(gmSrc, file);
+    const needle = `| \`${file}\` |`;
+    if (!existsSync(path)) {
+      record(needle, outcome(null, `${file} is not under ${gmSrc}, so the call count is unverified`));
+      continue;
+    }
+    const source = readFileSync(path, 'utf8');
+    const actual = Object.fromEntries(GM_CALLS.map((name) => [name, (source.match(new RegExp(`\\b${name}\\(`, 'g')) ?? []).length]));
+    const mismatch = GM_CALLS.filter((name) => actual[name] !== expected[name]);
+    const documented = GM_CALLS.filter((name) => expected[name]).map((name) => `${expected[name]} ${name}`).join(', ') || 'no direct child_process call';
+    record(needle, outcome(mismatch.length === 0, mismatch.length
+      ? `${file}: doc says ${documented}; source has ${GM_CALLS.filter((name) => actual[name]).map((name) => `${actual[name]} ${name}`).join(', ') || 'none'}`
+      : `${file}: ${documented} as documented`));
+  }
+
+  record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
+  record('which verifies the wasm SHA-256', outcome(fileHas('scripts/vendor-bashkit.mjs', 'build-info.json') && fileHas('scripts/vendor-bashkit.mjs', 'sha256'), 'vendor-bashkit.mjs reads build-info.json and checks sha256'));
+  record('backed by isomorphic-git 1.44.11', versionIn('web/vendor/isomorphic-git.mjs', '1.44.11'));
+  record('sql.js 1.15.2 (MIT', versionIn('web/vendor/sqljs', '1.15.2'));
+  record('bashkit ships its own `sqlite3`', outcome(null, 'bashkit\'s own sqlite3 failure is not reproduced here'));
+  record('about 670 KB of wasm', (() => {
+    const wasm = filesUnder('web/vendor/sqljs').filter((file) => file.endsWith('.wasm'));
+    if (wasm.length === 0) return outcome(null, 'no sql.js wasm is vendored in this checkout');
+    const kib = Math.round(wasm.reduce((sum, file) => sum + statSync(file).size, 0) / 1024);
+    return outcome(kib >= 600 && kib <= 740, `sql.js wasm is ${kib} KiB`);
+  })());
+  record('| `python3` | Pyodide 314.0.7', (() => {
+    const bytes = filesUnder('web/vendor/pyodide').reduce((sum, file) => sum + statSync(file).size, 0);
+    const megabytes = (bytes / 1e6).toFixed(1);
+    const size = outcome(bytes >= 11.2e6 && bytes <= 16.8e6, `vendored Pyodide is ${megabytes} MB unpacked`);
+    return all(versionIn('web/vendor/pyodide', '314.0.7'), size);
+  })());
+  record('`pyodide-lock.json`, 357 entries', (() => {
+    const lock = repo('web/vendor/pyodide/pyodide-lock.json');
+    if (!existsSync(lock)) return outcome(null, 'pyodide-lock.json is not vendored in this checkout');
+    const count = Object.keys(JSON.parse(readFileSync(lock, 'utf8')).packages).length;
+    return outcome(count === 357, `pyodide-lock.json has ${count} entries`);
+  })());
+  record('checks each file\'s pinned SHA-256', outcome(fileHas('scripts/vendor-pyodide.mjs', 'sha256'), 'vendor-pyodide.mjs checks SHA-256'));
+  record('It loads micropip 0.11.1 from the jsDelivr CDN', outcome(
+    fileHas('web/python-in-page.js', '0.11.1') && fileHas('web/python-in-page.js', 'v314.0.7') && fileHas('web/python-in-page.js', 'jsdelivr'),
+    'python-in-page.js names micropip 0.11.1, the v314.0.7 Pyodide pin and jsDelivr',
+  ));
+  record('`which`, `command -v` and `type` are shell functions', outcome(
+    fileHas('web/shell-lookup.js', 'builtin command -v') && fileHas('web/shell-lookup.js', 'builtin type'),
+    'shell-lookup.js defines the functions over builtin command -v and builtin type',
+  ));
+  record('`git` is a bashkit custom builtin', outcome(fileHas('web/bash-shell.js', 'git: (ctx)') && fileHas('web/bash-shell.js', 'customBuiltins'), 'bash-shell.js registers git in customBuiltins'));
+  record('`git_commit` refuses `paths` and `author`', outcome(null, 'the argument refusal is not probed'));
+  record('because gm\'s `pending.mjs`', (() => {
+    const path = join(gmSrc, 'pending.mjs');
+    if (!existsSync(path)) return outcome(null, 'gm pending.mjs is not present');
+    return outcome(readFileSync(path, 'utf8').includes('SharedArrayBuffer'), 'gm pending.mjs uses SharedArrayBuffer');
+  })());
+  record('hydrated from OPFS at start', outcome(fileHas('web/shims/fs.js', 'hydrate'), 'fs.js hydrates the tree from OPFS'));
+  record('table is kept in `/.thebird/links.json`', outcome(fileHas('web/shims/fs.js', 'links.json'), 'fs.js stores the link table in links.json'));
+
+  record('Measured in headless Chromium', outcome(null, 'the 0.9 ms and 1.3 ms figures are timed by a witness check, but the witness does not assert the numbers'));
+  record('`fs.watch` is a no-op', outcome(null, 'no witness check or probe covers fs.watch'));
+  record('One worker, one writer', outcome(null, 'no witness check or probe covers the single-writer design'));
+  record('`AsyncLocalStorage` only holds', outcome(null, 'no witness check or probe covers AsyncLocalStorage'));
+  record('The read-back is O(n) by design', outcome(null, 'the design is not measured by a check'));
+  record('Installed packages live in Pyodide', outcome(null, 'no check covers that packages are not written to OPFS'));
+  record('bashkit cuts error text at', outcome(null, 'bashkit cutting error text at // is not reproduced separately'));
+  record('runner used to strip quotes',outcome(null, 'a historical note; no check covers the old behaviour'));
+  record('It does not run gm\'s sources', outcome(null, 'the gate\'s omissions are not probed; the gate\'s checks are witnessed'));
+
+  cites('`?gm=raw` loads gm without', ['before: raw gm cannot load in the browser worker']);
+  cites('the file survives a browser restart', ['after: the OPFS file survives a browser restart']);
+  cites('Writes are write-behind', ['after: the OPFS file survives a browser restart']);
+  cites('`git commit` (shell and gm `git_commit`)', ['in-page git commit runs the gate and sets HEAD', 'in-page git commit refuses broken syntax and non-ASCII and names both']);
+  cites('In-page git has local branches and checkout', ['in-page git lists branches, creates one and switches to it', 'in-page git checkout refuses an unknown branch and leaves HEAD where it was']);
+  cites('`git branch`, `git checkout` (local branches)', ['in-page git lists branches, creates one and switches to it', 'in-page git checkout restores the working tree of the branch it returns to']);
+  cites('A missing README, AGENTS, ARCHITECTURE or DESIGN', ['in-page git commit without DESIGN.md is refused and names it']);
+  cites('- Symlinks are link nodes', ['in-page ln -s makes a link that readlink reports, and a read and a stat follow it', 'in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link']);
+  cites('`ps`, `uname`, `hostname` and `tar` are emulated', ['in-page uname, whoami and tar are labelled as emulations, and plain commands are not']);
+  cites('`sqlite3 <database> <sql>` is a custom builtin', ['in-page sqlite3 creates a database and answers a query through sql.js', 'in-page sqlite3 database survives a browser restart']);
+  cites('Pyodide loads on the first call', ['in-page python3 runs a one-line script through Pyodide']);
+  cites('The `/workspace` tree is mirrored', ['in-page python3 reads and writes files on the OPFS tree', 'in-page python3 sees a shell rewrite made after its last call', 'in-page python3 removes a file it deletes and the shell sees it gone']);
+  cites('Only the last line of a traceback is reported', ['in-page python3 reports a traceback as an error', 'in-page python3 error text keeps a readable link instead of bashkit cutting it at //']);
+  cites('`pip install <package>...` runs in-page', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page']);
+  cites('It loads micropip 0.11.1 from the jsDelivr CDN', ['the micropip wheel the page loads is the one pinned in the Pyodide lock']);
+  cites('Only plain names are',['in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL']);
+  cites('`which`, `command -v` and `type` are shell functions', ['which, command -v and type agree for every name Tab offers, path or builtin']);
+  cites('witnessed loop checks that the three agree',['which, command -v and type agree for every name Tab offers, path or builtin', 'in-page git is reported as a builtin by type, command -v and which']);
+  cites('bashkit resets `$?`', ['in-page bash keeps $? across terminal lines']);
+  cites('Shell output streams while a command runs.', ['in-page terminal shows shell output while the command is still running', 'in-page terminal prints each streamed line once, in order']);
+  cites('Output is plain text by default', ['ANSI off by default: escape sequences are stripped and the text copies as plain', 'ansi parser keeps the text of escape sequences out of plain output']);
+  cites('`?ansi=color` renders', ['?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain']);
+  cites('Ctrl-L clears the output', ['in-page terminal Ctrl-L clears the output', 'in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends']);
+  cites('Lines typed while a command runs wait in a queue', ['in-page terminal runs lines typed during a command in order, not as busy errors', 'in-page terminal Ctrl-C drops lines queued behind the cancelled command']);
+  cites('The prompt shows the shell\'s working directory', ['in-page prompt shows the working directory after cd', 'in-page cd persists to the next command and Tab completes relative to it']);
+  cites('Relay mode shows the workspace in the prompt', ['relay prompt shows the workspace, where host commands run']);
+  cites('The terminal keeps history for the up and down arrows', ['in-page terminal recalls submitted commands with the up and down arrows', 'in-page terminal recalls a submitted command after the page reloads']);
+  cites('Tab completes the first word after `shell`', ['in-page terminal completes a command name in command position with Tab', 'a command completed by name really runs in-page', 'every name Tab offers in command position resolves in-page, and the custom builtins are among them']);
+  cites('Otherwise Tab completes the last word', ['in-page terminal completes a unique file name with Tab and adds a space', 'in-page terminal completes a directory with a trailing slash', 'in-page terminal lists several matches when Tab cannot finish a name']);
+  cites('Relay mode completes the same way', ['relay Tab completes a file name, lists several matches and completes a command name']);
+  cites('cancels it through bashkit\'s `cancel()`', ['in-page terminal Ctrl-C cancels a running command and the shell carries on']);
+  cites('Relay mode cancels the same way through `POST /cancel`', ['relay Ctrl-C cancels a running host command in about a second and the shell carries on']);
+  cites('`--version` reports the in-page library version', ['in-page git --version names the in-page library, not a host git']);
+  cites('`init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree', ['in-page git inits and stages over OPFS']);
+  cites('`commit -m` runs the in-page gate', ['in-page git commit runs the gate and sets HEAD']);
+  cites('a failing gate refuses the',['in-page git commit refuses broken syntax and non-ASCII and names both']);
+  cites('browser witness commits',['in-page git commit runs the gate and sets HEAD']);
+  cites('A Node-side witness check',['Node-side in-page commit passes the gate and commits as lanmower', 'git status marks the modified file after a commit', 'git log lists the seeded commit', 'git diff shows the removed and added lines']);
+  cites('`curl` and `wget` (`web/curl-in-page.js`) run over fetch', ['in-page curl and wget fetch from a host that sends CORS headers', 'in-page curl refuses a host that sends no CORS headers, and the shell goes on']);
+  cites('Background jobs', ['in-page bash refuses background jobs with a pointer to the relay', 'in-page bash refuses a bare & and keeps &&, redirects and quoted ampersands']);
+  cites('| `node` | none verified', ['relay mode runs the host node, which the in-page shell cannot']);
+}
+
+function probe(blocks, id, pass, detail) {
+  const text = blocks[id];
+  if (text === null || text === undefined) return outcome(false, `${id} did not run`);
+  return outcome(pass(text), `${detail} (${id}: ${JSON.stringify(text).slice(0, 120)})`);
+}
+
+const blocksOf = (out, probes) => Object.fromEntries(probes.map(([id]) => {
+  const match = out.match(new RegExp(`^@@BEGIN-${id}\\n([\\s\\S]*?)^@@END-${id}$`, 'm'));
+  return [id, match ? match[1].split('\n').filter((line) => !line.startsWith('thebird> ')).join('\n').trimEnd() : null];
+}));
+
+const pairsFor = (probes, extra = []) => [
+  ...extra,
+  ...probes.flatMap(([id, command]) => [['run', `shell echo @@BEGIN-${id}`], ['run', command], ['run', `shell echo @@END-${id}`]]),
+];
+
+const relayFacts = async (url) => {
+  const get = async (path, init) => {
+    const response = await fetch(new URL(path, url), init);
+    await response.text();
+    return response;
+  };
+  const json = { 'content-type': 'application/json' };
+  const meta = await get('meta');
+  const page = await get('');
+  const cancel = [
+    await get('cancel', { method: 'POST', headers: json, body: JSON.stringify({ id: 'nobody' }) }),
+    await get('cancel', { method: 'POST', headers: json, body: 'not json' }),
+    await get('cancel', { method: 'PUT' }),
+    await get('cancel'),
+  ];
+  const preflight = await get('call', { method: 'OPTIONS' });
+  const corsKeys = [...cancel, preflight].flatMap((response) => [...response.headers.keys()]).filter((key) => key.startsWith('access-control-'));
+  return {
+    metaCoop: meta.headers.get('cross-origin-opener-policy'),
+    pageCoop: page.headers.get('cross-origin-opener-policy'),
+    pageCoep: page.headers.get('cross-origin-embedder-policy'),
+    codes: cancel.map((response) => response.status),
+    corsKeys,
+  };
+};
+
+function liveRecords(page, remote, facts) {
+  const P = (id, pass, detail) => probe(page, id, pass, detail);
+  const R = (id, pass, detail) => probe(remote, id, pass, detail);
+  const refused = (text) => /relay/i.test(text);
+  const notRefused = (text) => !/need the relay/i.test(text);
+  const noError = (text) => text.length > 0 && !/error|usage|unknown/i.test(text);
+
+  record('`write`, `read`, `ls`, `stat`, `grep`, `search`', all(
+    P('write', (t) => t.includes('wrote lint/a.txt'), 'write wrote the file'),
+    P('read', (t) => t.includes('lint-probe-text'), 'read returns the text'),
+    P('ls', (t) => t.includes('a.txt'), 'ls lists the file'),
+    P('stat', (t) => /"type":"file"/.test(t) && /"size":15/.test(t), 'stat reports a file of the written size'),
+    P('grep', (t) => t.includes('a.txt'), 'grep finds the text'),
+    P('search', (t) => !/error/i.test(t), 'search runs'),
+  ));
+  record('`memory write`, `memory search`, `prd add`, `prd list`, `log`, `config`', partial(all(
+    P('memory', noError, 'memory write runs'),
+    P('memory-search', noError, 'memory search runs'),
+    P('prd', noError, 'prd list runs'),
+    P('log-tool', noError, 'log runs'),
+    P('config', noError, 'config runs'),
+  ), 'prd add is not probed'));
+  record('`shell` (bash builtins and pipelines, see below)', all(
+    P('pipe', (t) => t === 'b', 'a pipeline runs in-page'),
+    P('commands', (t) => t.includes('all-resolved') && !t.includes('missing-'), 'every listed command resolves'),
+  ));
+  record('`git init`, `add`, `status`, `log`, `diff`', all(
+    P('status', (t) => /^ M a\.txt$/m.test(t), 'status prints porcelain v1'),
+    P('log', (t) => /\bone\b/.test(t), 'log shows the seeded commit'),
+    P('diff', (t) => t.includes('more') && !/^@@/m.test(t), 'diff prints no hunk header'),
+  ));
+  record('`git push/fetch/pull`, `job start` | need the relay', all(
+    P('push', refused, 'git push is refused with a relay pointer'),
+    P('jobstart', refused, 'job start is refused with a relay pointer'),
+    R('relay-push', notRefused, 'the relay runs git push'),
+    R('relay-job', notRefused, 'the relay runs job start'),
+  ));
+  record('`git branch`, `git checkout` (local branches)', P('branch', (t) => t.includes('lint-b'), 'git branch lists the new branch'));
+  record('| `fetch` | fails for hosts without CORS headers', all(
+    P('fetch-nocors', (t) => !t.includes('plain-host-hello'), 'fetch to a host without CORS fails'),
+    P('fetch-cors', (t) => t.includes('cors-host-hello'), 'the positive control, a host with CORS, succeeds'),
+  ));
+  record('In-page git has local branches and checkout', all(
+    P('remote', (t) => t.includes('the in-page shell supports init'), 'git remote is refused with the supported list'),
+    P('stash', (t) => t.includes('the in-page shell supports init'), 'git stash is refused with the supported list'),
+  ));
+  record('`diff` compares the working tree with HEAD', P('diff', (t) => t.includes('more') && !/^@@/m.test(t), 'diff has no hunk header'));
+  record('`status` prints porcelain v1 lines', P('status', (t) => /^ M a\.txt$/m.test(t), 'status porcelain line'));
+  record('`.thebird/` is excluded from the index', P('status', (t) => !t.includes('.thebird'), '.thebird is not listed'));
+  record('`init`, `add`, `status`, `log [-n N]` and `diff` run over the OPFS tree', all(
+    P('status', (t) => /^ M a\.txt$/m.test(t), 'status runs'),
+    P('log', (t) => /\bone\b/.test(t), 'log runs'),
+  ));
+  record('`shell` passes its text to bashkit raw', P('quotes', (t) => t === '(x)|y z', 'quotes and parentheses survive'));
+  record('`head` after an early-closing pipe', P('head', (t) => t === '1', 'head closes the pipe'));
+  record('`sqlite3 <database> <sql>` is a custom builtin', P('sqlite', (t) => t.includes('1|two'), 'sqlite3 prints list mode'));
+  record('sqlite\'s list mode',P('sqlite', (t) => t.includes('1|two'), 'sqlite3 list mode uses |'));
+  record('sql.js 1.15.2 (MIT', outcome(null, 'sql.js 1.15.2 is unverified; the wasm size is checked statically'));
+  record('| `node` | none verified', P('node', (t) => /rc=127/.test(t) && /not available in the sandbox/.test(t), 'node exits 127 with the sandbox message'));
+  record('Not covered: node and any host binary (exit 127)', P('node', (t) => /rc=127/.test(t), 'node exits 127'));
+  record('`ps`, `uname`, `hostname` and `tar` are emulated', P('tar', (t) => t.includes('tar (bashkit) 0.1'), 'tar reports bashkit'));
+  record('`tar --version` reports `tar (bashkit) 0.1`', P('tar', (t) => t.includes('tar (bashkit) 0.1'), 'tar --version reports bashkit'));
+  record('Probed coverage (Node, 0.20.3)', partial(P('commands', (t) => t.includes('all-resolved') && !t.includes('missing-'), 'the listed commands resolve in-page'), 'the Node probe is not repeated here'));
+  record('`python3 -c <code>` and `python3 <file>`', all(
+    P('python-c', (t) => /^42$/m.test(t), 'python3 -c runs'),
+    P('python-file', (t) => /^42$/m.test(t), 'python3 <file> runs'),
+  ));
+  record('`shell` runs in-page through', P('pipe', (t) => t === 'b', 'in-page bash runs a pipeline'));
+  record('`curl` and `wget` (`web/curl-in-page.js`) run over fetch', all(
+    P('curl-cors', (t) => t.includes('cors-host-hello'), 'curl succeeds on a CORS host'),
+    P('curl-nocors', refused, 'curl refuses a host without CORS with a relay pointer'),
+  ));
+  record('The flags `-s`, `-S`, `-f`, `-L` and `-q` work for both', all(
+    P('curl-v', (t) => t.includes('flag not supported') && t.includes('relay'), 'an unlisted flag is refused with a relay pointer'),
+    P('curl-SL', (t) => !t.includes('flag not supported'), 'combined -SL is accepted'),
+  ));
+  record('Background jobs', all(
+    P('jobstart', refused, 'job start is refused'),
+    P('amp', refused, 'a bare & is refused'),
+  ));
+
+  record('The relay must send `Cross-Origin-Opener-Policy', outcome(
+    facts.metaCoop === 'same-origin' && facts.pageCoop === 'same-origin' && facts.pageCoep === 'require-corp',
+    `meta COOP ${facts.metaCoop}, page COOP ${facts.pageCoop}, page COEP ${facts.pageCoep}`,
+  ));
+  record('`/cancel` answers 404 for an unknown id', outcome(
+    JSON.stringify(facts.codes) === '[404,400,405,405]',
+    `POST unknown 404, bad JSON 400, PUT 405, GET 405: got ${facts.codes.join(', ')}`,
+  ));
+  record('it adds no CORS headers', outcome(facts.corsKeys.length === 0, facts.corsKeys.length ? `access-control headers: ${facts.corsKeys.join(', ')}` : 'no access-control headers on /cancel or the /call preflight'));
+}
+
+async function liveChecks() {
+  const workspace = mkdtempSync(join(tmpdir(), 'lint-workspace-'));
+  const profiles = [];
+  const relay = await startRelay({ workspace });
+  const corsHost = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
+    res.end('cors-host-hello\n');
+  });
+  const plainHost = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('plain-host-hello\n');
+  });
+  await Promise.all([corsHost, plainHost].map((server) => new Promise((ok) => server.listen(0, '127.0.0.1', ok))));
+  const corsPort = corsHost.address().port;
+  const plainPort = plainHost.address().port;
+  const session = async (pairs) => {
+    const profile = mkdtempSync(join(tmpdir(), 'lint-profile-'));
+    profiles.push(profile);
+    return runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: 900000 });
+  };
+  try {
+    const probes = [
+      ['init', 'shell git init'],
+      ['seed', 'shell echo doc-README > README.md && echo doc-AGENTS > AGENTS.md && echo doc-ARCHITECTURE > ARCHITECTURE.md && echo doc-DESIGN > DESIGN.md && echo one > a.txt && git add README.md AGENTS.md ARCHITECTURE.md DESIGN.md a.txt && git commit -m one'],
+      ['modify', 'shell echo more >> a.txt'],
+      ['pipe', String.raw`shell printf "a\nb\n" | sort -r | head -1`],
+      ['quotes', String.raw`shell printf "%s|%s\n" "(x)" 'y z'`],
+      ['status', 'shell mkdir -p .thebird && echo x > .thebird/run.log && git status --porcelain'],
+      ['diff', 'shell git diff'],
+      ['log', 'shell git log -n 1'],
+      ['branch', 'shell git branch lint-b && git branch'],
+      ['remote', 'shell git remote'],
+      ['stash', 'shell git stash'],
+      ['push', 'shell git push'],
+      ['jobstart', 'job start sleep 1'],
+      ['amp', 'shell sleep 0 & echo x'],
+      ['curl-v', 'shell curl -v http://127.0.0.1:9/'],
+      ['curl-SL', 'shell curl -SL http://127.0.0.1:9/'],
+      ['curl-cors', `shell curl -s http://127.0.0.1:${corsPort}/hello`],
+      ['curl-nocors', `shell curl http://127.0.0.1:${plainPort}/hello`],
+      ['fetch-cors', `fetch http://127.0.0.1:${corsPort}/hello`],
+      ['fetch-nocors', `fetch http://127.0.0.1:${plainPort}/hello`],
+      ['node', 'shell node -v; echo rc=$?'],
+      ['commands', `shell for n in ${COMMANDS}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-resolved`],
+      ['write', 'write lint/a.txt lint-probe-text'],
+      ['read', 'read lint/a.txt'],
+      ['ls', 'ls lint'],
+      ['stat', 'stat lint/a.txt'],
+      ['grep', 'grep lint-probe-text lint'],
+      ['search', 'search lint-probe-text'],
+      ['memory', 'memory write lint-key lint-value'],
+      ['memory-search', 'memory search lint-value'],
+      ['prd', 'prd list'],
+      ['log-tool', 'log'],
+      ['config', 'config'],
+      ['sqlite', `shell sqlite3 lint.db "create table t(a,b); insert into t values (1,'two'); select a,b from t"`],
+      ['python-c', 'shell python3 -c "print(40+2)"'],
+      ['python-file', 'shell echo "print(40+2)" > lint.py && python3 lint.py'],
+      ['tar', 'shell tar --version'],
+      ['head', 'shell seq 1 100000 | head -1'],
+    ];
+    const remoteProbes = [
+      ['relay-push', 'git push'],
+      ['relay-job', 'job start sleep 0'],
+      ['relay-curl', 'shell curl -v http://127.0.0.1:9/'],
+    ];
+    const pageState = await session(pairsFor(probes));
+    const relayState = await session(pairsFor(remoteProbes, [['engine', 'relay']]));
+    const facts = await relayFacts(relay.url);
+    liveRecords(blocksOf(pageState.out, probes), blocksOf(relayState.out, remoteProbes), facts);
+  } finally {
+    await relay.close();
+    corsHost.close();
+    plainHost.close();
+    for (const dir of [workspace, ...profiles]) rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+staticChecks();
+if (!staticOnly) {
+  try {
+    await liveChecks();
+  } catch (error) {
+    results.push({ line: 0, text: 'live checks', ok: false, detail: `live checks did not run: ${error.message}` });
+  }
+}
+
+results.sort((a, b) => a.line - b.line);
+const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : 'UNVERIFIED');
+for (const result of results) {
+  console.log(`${label(result.ok).padEnd(10)} ARCHITECTURE.md:${result.line}  ${result.text.slice(0, 100)}\n           ${result.detail}`);
+}
+const prose = docLines
+  .map((line, index) => ({ line: line.trim(), number: index + 1 }))
+  .filter(({ line, number }) => line && !/^(\||```|#)/.test(line) && !covered.has(number))
+  .map(({ number }) => number);
+const count = (ok) => results.filter((result) => result.ok === ok).length;
+console.log(`\n${results.length} claims: ${count(true)} pass, ${count(false)} fail, ${count(null)} unverified; prose lines without a claim: ${prose.join(', ') || 'none'}`);
+if (count(false)) process.exitCode = 1;
