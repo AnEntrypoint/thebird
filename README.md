@@ -1,45 +1,75 @@
 # thebird
 
-Browser-native web OS — multi-instance, agentic, serverless. Per-instance Service Worker isolation, OPFS-backed filesystem (IndexedDB fallback), in-browser POSIX shell, freddie-host with vector search and code insight.
+A Node CLI and library that does the work the old thebird terminal used to do,
+with one important change: **gm is the execution engine for everything**.
 
-## Live
+The browser web OS, its vendored kits, apps, service workers, landing site,
+refresh scripts and witness probes are gone. What remains is:
 
-**[anentrypoint.github.io/thebird](https://anentrypoint.github.io/thebird/)** — landing + project chrome (built from `site/` via [flatspace](https://www.npmjs.com/package/flatspace)).
+- `bin/thebird.js` — the CLI entry point
+- `src/index.js` — the library API (`createThebird` / `createClient`)
+- `src/gm.js` — the gm tool-engine adapter
+- `src/commands.js` — the CLI command registry
+- `src/cli.js` — the REPL and one-shot runner
 
-The full web-OS lives in `docs/` and runs against any static server — no install, no build:
+No operation is implemented twice. `createGmClient()` imports gm's own
+`createTools()` verb engine; library methods, CLI commands, filesystem access,
+search, shell execution, git, jobs, logs, PRDs and fetches all dispatch to gm.
+
+## Requirements
+
+- Node >= 22
+- A gm checkout. Resolution order: `--gm-home` / `GM_HOME`, an installed
+  `gm` package, `../gm`, then `./gm`. A gm checkout must contain
+  `src/tools.mjs` and `src/log.mjs`.
+
+## CLI
 
 ```bash
-bunx serve docs        # or: npx serve docs / python -m http.server -d docs
+node bin/thebird.js help
+node bin/thebird.js --gm-home /path/to/gm ls .
+node bin/thebird.js --workspace /path/to/project read package.json 0 20
+node bin/thebird.js grep "createGmClient" src
+node bin/thebird.js search "dispatch through gm"
+node bin/thebird.js shell "node --version"
+node bin/thebird.js gm list_dir '{"path":".","limit":10}'
+node bin/thebird.js -i
 ```
 
-Then open `http://localhost:3000/os.html`.
+Without arguments on a TTY the CLI opens its REPL. `help` lists every command.
+`gm <verb> <json>` is the escape hatch for any current or future gm verb.
 
-For the full setup walkthrough (LLM gateway, provider keys, routing modes),
-the complete tool list the in-page agent can call, and known limitations,
-see **[`docs/SETUP.md`](docs/SETUP.md)**.
+## Library
 
-## Multi-instance isolation
+```js
+import { createThebird } from 'thebird';
 
-Two thebird instances in the same browser tab never share state. Isolation is enforced at the Service Worker thread boundary: each instance gets its own SW at scope `./sw-iN/`. 16 static SW files (`docs/sw-iN/index.js`) are committed for GH Pages (no custom headers required); dynamic `docs/sw-instance.js?inst=iN` is the fallback past instance 16. Regenerate the static files after editing the source SW: `npm run gen-sws`.
+const tb = await createThebird({ gmHome: '/path/to/gm', workspace: process.cwd() });
+const files = await tb.list({ path: '.', limit: 20 });
+const body = await tb.read({ path: 'package.json' });
+await tb.gm('search', { query: 'dispatch through gm', k: 5 });
+await tb.close();
+```
 
-## Manual validation
+Every method returns gm's own verb result. Errors from gm become exceptions.
 
-There is no `validate.html` harness — it was removed because its headless CI run flaked on the 61MB `plugkit.wasm` cold-load (false failures that threw maintenance off). Validation is **manual**: boot the OS locally and run the `scripts/witness-*.mjs` puppeteer probes, each of which asserts one surface (boot, apps, chat round-trip, gm vector recall, WM persistence, edge cases, UI interactions, …). See **`docs/MANUAL-VALIDATION.md`** for the full workflow and per-script assertions.
+## Old CLI surface
 
-After editing `sw-instance.js`, re-run `node scripts/gen-static-sws.mjs` and commit the regenerated `docs/sw-iN/index.js` so the static per-instance SWs stay in sync.
+The old terminal's callable tool names — `read`, `write`, `edit`, `grep`,
+`list`, `memory`, `chat`, `delegate`, `web_search`, `gm`, `sessions`,
+`cron`, `tools`, `skills`, `config`, `batch`, `projects`, `run` and `exec`
+— remain reachable. They are compatibility names over gm verbs, not a second
+runtime. Old browser-only behavior (LLM gateways, cron timers, virtual
+filesystem instances, GUI apps) is intentionally not carried over; use gm
+tooling directly for real filesystem, shell, git, job and knowledge operations.
 
-## Chrome contract
+## Validation
 
-The menubar and taskbar sit at `--os-bar-h: 34px` to match the rendered window titlebar, and `.wm-root` spans the full viewport so the bars paint OVER a maximized window's chrome (z-index 9200 > 9000). The backtick / tilde key (`` ` ``) hides both bars system-wide — toggle again to restore. The setting persists per-instance.
+This project keeps no test suite. Verify the real paths by running the CLI:
 
-## State restore
-
-Reload restores every instance and every window: ids, geometry, z-order, focus, maximized/minimized flags, active instance, and bars-hidden state. The snapshot is mirrored to every per-instance Service Worker so partial wipes don't lose the desktop. See `memory/tilde-bars-and-restore.md` for the full contract.
-
-## Developer docs
-
-`AGENTS.md` is the primary developer doc — load-bearing contracts (dynamic stack, GUI boundary rule, per-instance isolation, brand tokens, sqlite-shim quirks) and a memo index live there. Read it before touching anything in `docs/`.
-
-## License
-
-MIT
+```bash
+npm run check
+node bin/thebird.js help
+node bin/thebird.js ls .
+node bin/thebird.js gm list_dir '{"path":".","limit":5}'
+```
