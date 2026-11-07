@@ -77,6 +77,19 @@ const bulletOf = (needle) => {
   while (end < docLines.length && docLines[end].startsWith('  ')) end++;
   return docLines.slice(start, end).join(' ');
 };
+const overrideNames = () => ({
+  inPage: [
+    ...[...read('web/gm-worker.js').matchAll(/^\s+(\w+): async \(args\)/gm)].map((match) => match[1]),
+    ...[...read('web/git-in-page.js').split('export const gitVerbs = {')[1].split('\n};')[0].matchAll(/^\s+(git_\w+):/gm)].map((match) => match[1]),
+  ],
+  relay: [...read('src/gm.js').matchAll(/^\s+(git_push): \(/gm)].map((match) => match[1]),
+});
+const paragraphAt = (needle) => {
+  const start = docLines.findIndex((line) => line.includes(needle));
+  let end = start + 1;
+  while (end < docLines.length && docLines[end].trim() !== '' && !docLines[end].startsWith('#')) end++;
+  return docLines.slice(start, end).join(' ');
+};
 const SAMPLE_LINES = {
   help: 'help', tools: 'tools', skills: 'skills', read: 'read a.txt', write: 'write a.txt hi', edit: 'edit a.txt x y',
   stat: 'stat a.txt', ls: 'ls', list: 'list', grep: 'grep pat', search: 'search q', shell: 'shell echo hi', exec: 'exec echo hi',
@@ -183,6 +196,15 @@ function architectureStatic() {
       : `${file}: ${documented} as documented`));
   }
 
+  record('every real operation on the CLI and relay path', (() => {
+    const { inPage, relay } = overrideNames();
+    const paragraph = paragraphAt('In the browser, `web/gm-worker.js` runs');
+    const unnamed = [...inPage, ...relay].filter((name) => !paragraph.includes(`\`${name}\``));
+    return outcome(unnamed.length === 0, unnamed.length
+      ? `not named in the browser paragraph: ${unnamed.join(', ')}`
+      : `the browser paragraph names every in-page override (${inPage.join(', ')}) and the relay wrapper (${relay.join(', ')})`);
+  })());
+  record('In the browser, `web/gm-worker.js` runs', outcome(fileHas('web/gm-worker.js', '/tools.mjs') && fileHas('web/git-in-page.js', 'export const gitVerbs'), 'gm-worker.js loads gm tools.mjs, and git-in-page.js exports the git overrides'));
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
   record('which verifies the wasm SHA-256', outcome(fileHas('scripts/vendor-bashkit.mjs', 'build-info.json') && fileHas('scripts/vendor-bashkit.mjs', 'sha256'), 'vendor-bashkit.mjs reads build-info.json and checks sha256'));
   record('backed by isomorphic-git 1.44.11', versionIn('web/vendor/isomorphic-git.mjs', '1.44.11'));
@@ -330,10 +352,7 @@ function agentsStatic() {
   })());
   record('gm is the only execution engine', (() => {
     const named = bulletOf('gm is the only execution engine');
-    const workerOverrides = [...read('web/gm-worker.js').matchAll(/^\s+(\w+): async \(args\)/gm)].map((match) => match[1]);
-    const gitVerbs = [...read('web/git-in-page.js').split('export const gitVerbs = {')[1].split('\n};')[0].matchAll(/^\s+(git_\w+):/gm)].map((match) => match[1]);
-    const relayOverrides = [...read('src/gm.js').matchAll(/^\s+(git_push): \(/gm)].map((match) => match[1]);
-    const inPage = [...workerOverrides, ...gitVerbs];
+    const { inPage, relay: relayOverrides } = overrideNames();
     const unnamed = inPage.filter((name) => !named.includes(`\`${name}\``));
     const relayNamed = relayOverrides.every((name) => named.includes(`\`${name}\``));
     const bothCreateTools = fileHas('src/gm.js', 'createTools({') && fileHas('web/gm-worker.js', 'tools.mjs');

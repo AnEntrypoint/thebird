@@ -15,7 +15,8 @@ browser: web/terminal.js -> src/runner.js -> src/api.js -> src/gm-remote.js
 
 The gm-backed CLI and library are present in `bin/` and `src/`. There is one
 boundary: thebird owns argument parsing, command aliases and the REPL; gm owns
-every real operation. The legacy browser runtime, vendored kits, service
+every real operation on the CLI and relay path. The browser overrides named in
+the next section are the exception. The legacy browser runtime, vendored kits, service
 workers, LLM gateways and per-instance virtual filesystems were deleted in
 owner-approved commit `cc242f5`; none of them was on this CLI's execution path.
 
@@ -27,6 +28,11 @@ Its `node:` imports are rewritten to browser shims in `web/shims/` (see
 in-memory tree, hydrated from OPFS at start and flushed before each reply).
 `?engine=relay` uses the host relay instead. `?gm=raw` loads gm without
 rewriting, which is how the witness shows the "before" failure.
+
+In the browser, `web/gm-worker.js` runs gm's tools but overrides `run_shell` and the
+git verbs (`git_status`, `git_log`, `git_diff`, `git_add`, `git_commit`) with bashkit
+and isomorphic-git, so those operations do not go through gm there. `git_push` on the
+relay is gm's tool wrapped by gm's gate.
 
 Measured in headless Chromium (`npm run witness`):
 
