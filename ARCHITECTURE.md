@@ -130,7 +130,10 @@ printed output comes before it.
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
-`curl` and `wget` report "network access not configured". Background jobs
+`curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send
+CORS headers to this page. A host without them is refused with a pointer to the
+relay, and flags beyond `-sf`, `-o` (curl) and `-q`, `-O` (wget) need the relay.
+Background jobs
 (`job start`, and a bare `&` in shell text, refused by `hasBackgroundOperator`
 in `web/bash-shell.js`) need the relay. `head` after an early-closing pipe needs the
 async `execute()` path, which the shell uses.

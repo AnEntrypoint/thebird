@@ -10,7 +10,8 @@ A Node CLI and library whose every operation dispatches through gm tooling.
   `scripts/browser-driver.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `web/bash-shell.js`,
   `web/shims/bashkit-host.js`, `web/vendor/acorn.mjs`, `web/git-in-page.js`,
   `web/vendor/isomorphic-git.mjs`, `web/commit-gate.js`, `web/sqlite-in-page.js`,
-  `web/vendor/sqljs/sql-wasm-browser.js`, `web/python-in-page.js`.
+  `web/vendor/sqljs/sql-wasm-browser.js`, `web/python-in-page.js`,
+  `web/curl-in-page.js`.
 - Browser-safe: `src/api.js`, `src/commands.js`, `src/runner.js`,
   `src/gm-client.js`, `src/gm-remote.js`, `web/terminal.js`. They import
   nothing from Node and run in a browser. Node-only: `src/gm.js`,

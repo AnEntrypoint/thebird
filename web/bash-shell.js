@@ -3,6 +3,7 @@ import { createHost } from './shims/bashkit-host.js';
 import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-page.js';
 import { pythonBuiltin } from './python-in-page.js';
+import { curlBuiltin } from './curl-in-page.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill)\b/;
@@ -34,6 +35,8 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
     sqlite3: (ctx) => sqliteBuiltin(ctx.argv).then(withNewline),
     python3: (ctx) => pythonBuiltin(ctx.argv).then(withNewline),
+    curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd).then(withNewline),
+    wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins });
   let status = 0;

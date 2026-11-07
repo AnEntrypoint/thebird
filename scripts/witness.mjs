@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -112,6 +113,23 @@ if (fileExists(chrome)) {
   check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   const host = await terminal([['run', 'shell node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
+  const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
+  const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
+  for (const host of [corsHost, plainHost]) await new Promise((resolve) => host.listen(0, '127.0.0.1', resolve));
+  const corsPort = corsHost.address().port;
+  const plainPort = plainHost.address().port;
+  const fetched = await terminal([
+    ['run', `shell curl -s http://127.0.0.1:${corsPort}/hello`],
+    ['run', `shell wget -O notes/fetched.txt http://127.0.0.1:${corsPort}/hello`],
+    ['run', 'shell cat notes/fetched.txt'],
+  ]);
+  check('in-page curl and wget fetch from a host that sends CORS headers', fetched.out.split('\n').filter((line) => line === 'cors-host-hello').length >= 2, fetched.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const refused = await terminal([
+    ['run', `shell curl -s http://127.0.0.1:${plainPort}/hello`],
+    ['run', 'shell echo after-refusal'],
+  ]);
+  check('in-page curl refuses a host that sends no CORS headers, and the shell goes on', refused.out.includes(`could not fetch from 127.0.0.1:${plainPort}`) && refused.out.includes('CORS') && /^after-refusal$/m.test(refused.out) && !/^plain-host-hello$/m.test(refused.out), refused.out.split('\n').find((line) => line.includes('could not fetch'))?.slice(0, 160) ?? 'no refusal line');
+  for (const host of [corsHost, plainHost]) host.close();
   const relayNode = await terminal([['engine', 'relay'], ['run', 'shell node -v']]);
   check('relay mode runs the host node, which the in-page shell cannot', relayNode.engine === 'ready' && /^v\d+\.\d+\.\d+$/m.test(relayNode.out), relayNode.out.split('\n').find((line) => line.startsWith('v')) ?? relayNode.out.slice(0, 140));
   const status = await terminal([['run', 'shell false'], ['run', 'shell echo rc=$?'], ['run', 'shell (exit 3)'], ['run', 'shell echo rc=$?'], ['run', 'shell true'], ['run', 'shell echo rc=$?']]);
