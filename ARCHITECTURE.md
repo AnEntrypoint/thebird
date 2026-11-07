@@ -131,7 +131,10 @@ bashkit cuts error text at `//`.
 runner used to strip quotes from `shell` lines. bashkit resets `$?` on every
 `execute()`, so each in-page run starts with `(exit N);` for the previous run's
 status, and `$?` carries across terminal lines.
-The terminal keeps history for the up and down arrows. Ctrl-C while a command runs
+The terminal keeps history for the up and down arrows. Tab completes the last
+word against the workspace tree, which the worker lists from the OPFS shim. A
+unique match completes with a space or a slash, and several matches complete the
+common prefix or list the candidates. Relay mode has no completion either. Ctrl-C while a command runs
 cancels it through bashkit's `cancel()`, which takes effect between commands and
 sleeps, not inside one blocking step. Relay mode has no cancel, so Ctrl-C does nothing there.
 `curl` and `wget` (`web/curl-in-page.js`) run over fetch, for hosts that send

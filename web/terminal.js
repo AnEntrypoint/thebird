@@ -57,7 +57,13 @@ document.getElementById('form').addEventListener('submit', async (event) => {
   await execute(command);
 });
 
-line.addEventListener('keydown', (event) => {
+const commonPrefix = (words) => words.reduce((prefix, word) => {
+  let end = 0;
+  while (end < prefix.length && prefix[end] === word[end]) end++;
+  return prefix.slice(0, end);
+});
+
+line.addEventListener('keydown', async (event) => {
   if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
     event.preventDefault();
     position = Math.min(typed.length, Math.max(0, position + (event.key === 'ArrowUp' ? -1 : 1)));
@@ -66,5 +72,16 @@ line.addEventListener('keydown', (event) => {
     event.preventDefault();
     client.cancel();
     write('^C');
+  } else if (event.key === 'Tab' && client.complete) {
+    event.preventDefault();
+    const token = /\S*$/.exec(line.value)[0];
+    const matches = await client.complete(token);
+    if (matches.length === 1) {
+      line.value = line.value.slice(0, line.value.length - token.length) + matches[0] + (matches[0].endsWith('/') ? '' : ' ');
+    } else if (matches.length > 1) {
+      const shared = commonPrefix(matches);
+      if (shared.length > token.length) line.value = line.value.slice(0, line.value.length - token.length) + shared;
+      else write(matches.join('  '));
+    }
   }
 });

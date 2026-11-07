@@ -231,6 +231,34 @@ if (fileExists(chrome)) {
     },
   });
   check('in-page terminal Ctrl-C cancels a running command and the shell carries on', interrupted.out.includes('^C') && cancelled.elapsed < 10000 && /^after-cancel$/m.test(interrupted.out), `cancel took ${cancelled.elapsed} ms`);
+  const completed = {};
+  const listed = await terminal([
+    ['run', 'shell mkdir -p notes/tab'],
+    ['run', 'shell echo alpha > notes/tab/alpha.txt'],
+    ['run', 'shell echo beta > notes/tab/beta.txt'],
+  ], {
+    interact: async ({ type, press, evaluate }) => {
+      const value = () => evaluate("document.getElementById('line').value");
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 800));
+      await type('shell cat notes/fetc');
+      await press('Tab');
+      await settle();
+      completed.unique = await value();
+      await evaluate("document.getElementById('line').value = ''");
+      await type('shell ls no');
+      await press('Tab');
+      await settle();
+      completed.directory = await value();
+      await evaluate("document.getElementById('line').value = ''");
+      await type('shell cat notes/tab/');
+      await press('Tab');
+      await settle();
+      completed.listed = await value();
+    },
+  });
+  check('in-page terminal completes a unique file name with Tab and adds a space', completed.unique === 'shell cat notes/fetched.txt ', JSON.stringify(completed.unique));
+  check('in-page terminal completes a directory with a trailing slash', completed.directory === 'shell ls notes/', JSON.stringify(completed.directory));
+  check('in-page terminal lists several matches when Tab cannot finish a name', /notes\/tab\/alpha\.txt {2}notes\/tab\/beta\.txt/.test(listed.out) && completed.listed === 'shell cat notes/tab/', JSON.stringify(completed.listed));
   const emulated = await terminal([['run', 'shell uname -s'], ['run', 'shell echo plain-line'], ['run', 'shell whoami']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname and whoami are labelled as emulations, and plain commands are not', notes === 2 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out), `notes ${notes}`);

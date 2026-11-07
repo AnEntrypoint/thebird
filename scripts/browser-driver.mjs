@@ -8,6 +8,7 @@ const KEYS = {
   Enter: { code: 'Enter', keyCode: 13, text: '\r' },
   ArrowUp: { code: 'ArrowUp', keyCode: 38 },
   ArrowDown: { code: 'ArrowDown', keyCode: 40 },
+  Tab: { code: 'Tab', keyCode: 9 },
   c: { code: 'KeyC', keyCode: 67 },
 };
 

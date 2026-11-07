@@ -1,5 +1,6 @@
 import { Buffer } from './shims/buffer.js';
-import { flushFs, hydrate, mkdirSync } from './shims/fs.js';
+import { flushFs, hydrate, mkdirSync, readdirSync } from './shims/fs.js';
+import { posix } from './shims/path.js';
 import { createShell, hasBackgroundOperator } from './bash-shell.js';
 import { gitVerbs } from './git-in-page.js';
 
@@ -17,6 +18,22 @@ globalThis.process = {
   on() {},
   emitWarning() {},
 };
+
+function completions(prefix) {
+  const slash = prefix.lastIndexOf('/');
+  const dirPart = slash === -1 ? '' : prefix.slice(0, slash + 1);
+  const base = prefix.slice(slash + 1);
+  let entries;
+  try {
+    entries = readdirSync(posix.resolve(WORKSPACE, dirPart || '.'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.name.startsWith(base) && (!entry.name.startsWith('.') || base.startsWith('.')))
+    .map((entry) => dirPart + entry.name + (entry.isDirectory() ? '/' : ''))
+    .sort();
+}
 
 const gmPrefix = new URL(self.location.href).searchParams.get('gm') === 'raw' ? '/gm-raw' : '/gm';
 const runDir = `${WORKSPACE}/.thebird/run`;
@@ -45,6 +62,10 @@ try {
   await flushFs();
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
+    if (data.complete !== undefined) {
+      postMessage({ id: data.id, ok: true, result: completions(data.complete) });
+      return;
+    }
     if (data.cancel) {
       cancelRequested = true;
       shell?.cancel();

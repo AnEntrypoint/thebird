@@ -23,12 +23,16 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
   };
   worker.onerror = (event) => markFailed(new Error(event.message || 'gm worker failed to start'));
 
-  function call(verb, args = {}) {
+  function request(message) {
     const id = nextId++;
     return new Promise((ok, fail) => {
       pending.set(id, { ok, fail });
-      worker.postMessage({ id, verb, args });
+      worker.postMessage({ id, ...message });
     });
+  }
+
+  function call(verb, args = {}) {
+    return request({ verb, args });
   }
 
   return {
@@ -44,6 +48,7 @@ export function workerClient({ url = '/web/gm-worker.js', raw = false } = {}) {
     cancel() {
       worker.postMessage({ cancel: true });
     },
+    complete: (prefix) => request({ complete: prefix }),
     async close() {
       worker.terminate();
     },
