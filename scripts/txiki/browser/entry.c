@@ -97,6 +97,12 @@ static int pump(TJSRuntime *qrt) {
     return tjs_browser_timers_pending(loop) ? TJS_BROWSER_WAITING : 0;
 }
 
+static int first_set(int first, int second, int third) {
+    if (first) return first;
+    if (second) return second;
+    return third;
+}
+
 static int check_module(JSContext *ctx) {
     if (!has_module) {
         return 0;
@@ -158,7 +164,7 @@ int tjs_browser_eval(const char *code) {
 
     int pumped = pump(runtime);
     int checked = check_module(ctx);
-    return status || pumped || checked;
+    return first_set(status, pumped, checked);
 }
 
 int tjs_browser_resume(const char *text, int32_t len) {
@@ -177,7 +183,7 @@ int tjs_browser_resume(const char *text, int32_t len) {
 
     int pumped = pump(runtime);
     int checked = check_module(ctx);
-    return status || pumped || checked;
+    return first_set(status, pumped, checked);
 }
 
 void tjs_browser_cancel(void) {
@@ -191,5 +197,5 @@ int tjs_browser_tick(void) {
     JSContext *ctx = TJS_GetJSContext(runtime);
     int pumped = pump(runtime);
     int checked = check_module(ctx);
-    return pumped || checked;
+    return first_set(pumped, checked, 0);
 }
