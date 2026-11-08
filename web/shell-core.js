@@ -1,5 +1,6 @@
 import { runSed } from './shell-sed.js';
 import { runTar } from './shell-tar.js';
+import { runJq } from './shell-jq.js';
 
 export const COMMAND_TIMEOUT_MS = 300000;
 
@@ -800,6 +801,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     },
     sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
     tar: ({ argv, stdin }) => runTar(argv, toolContext(stdin)),
+    jq: ({ argv, stdin }) => runJq(argv, toolContext(stdin)),
   };
 
   const signalNumber = (spec) => {

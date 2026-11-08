@@ -304,6 +304,31 @@ group('tar: create, list, extract and errors', async () => {
   check('tar: an archive written to stdout lists from stdin', piped.stdout === 'a.txt\n', JSON.stringify(piped.stdout));
 });
 
+group('jq: filters, output and errors', async () => {
+  const sh = await shell({
+    '/workspace/a.json': '{"name":"x","n":2,"items":[1,2,3],"people":[{"name":"ann","age":30},{"name":"bob","age":20}]}',
+    '/workspace/mixed.json': '{"a":1} 5 {"a":2}',
+  });
+  const raw = await run(sh, "jq -r '.name' a.json");
+  check('jq: -r prints a string field without quotes', raw.stdout === 'x\n' && raw.exitCode === 0, JSON.stringify(raw));
+  const indexed = await run(sh, "jq -c '.items[-1], [.items[]]' a.json");
+  check('jq: negative index and iterate inside an array with -c', indexed.stdout === '3\n[1,2,3]\n', JSON.stringify(indexed.stdout));
+  const piped = await run(sh, "jq -c '.people[] | .name' a.json");
+  check('jq: a pipe applies the right side to every output of the left', piped.stdout === '"ann"\n"bob"\n', JSON.stringify(piped.stdout));
+  const selected = await run(sh, "jq -c '.people[] | select(.age > 25) | .name' a.json");
+  check('jq: select with a comparison keeps only matching inputs', selected.stdout === '"ann"\n', JSON.stringify(selected.stdout));
+  const pretty = await run(sh, "jq '{name, count: (.items | length), tags: [.items[0]], none: []}' a.json");
+  check('jq: an object is pretty-printed with two-space indentation', pretty.stdout === '{\n  "name": "x",\n  "count": 3,\n  "tags": [\n    1\n  ],\n  "none": []\n}\n', JSON.stringify(pretty.stdout));
+  const built = await run(sh, "printf '' | jq -nc '[1,2] + [3] | {total: add, n: length}'");
+  check('jq: -n runs once on null and builds an object from add and length', built.stdout === '{"total":6,"n":3}\n' && built.exitCode === 0, JSON.stringify(built));
+  const failed = await run(sh, "jq '.a' mixed.json");
+  check('jq: a runtime error reports the input and exits 5 after the other inputs', failed.exitCode === 5 && failed.stdout === '1\n2\n' && failed.stderr === 'jq: error (at mixed.json:2): Cannot index number with "a"\n', JSON.stringify(failed));
+  const missing = await run(sh, "jq -c '.n' missing.json a.json");
+  check('jq: a missing file is reported, the rest is processed, and the exit is 2', missing.exitCode === 2 && missing.stdout === '2\n' && missing.stderr === 'jq: error: Could not open missing.json: No such file or directory\n', JSON.stringify(missing));
+  const syntax = await run(sh, "jq '.a[' a.json");
+  check('jq: a syntax error in the filter exits 3', syntax.exitCode === 3 && syntax.stderr === 'jq: error: syntax error, unexpected end of file\njq: 1 compile error\n', JSON.stringify(syntax));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
