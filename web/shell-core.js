@@ -461,6 +461,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
     sleep: ({ argv }) => sleepFor(Number(argv[0] ?? 0) * 1000),
+    cd: ({ argv }) => {
+      const target = resolvePath(argv[0] ?? '/workspace');
+      if (!host.exists(target)) return { code: 1, out: '', err: `cd: ${argv[0]}: No such file or directory\n` };
+      state.cwd = target;
+      return ok('');
+    },
+    pwd: () => ok(state.cwd + '\n'),
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
