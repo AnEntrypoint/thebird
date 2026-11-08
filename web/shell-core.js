@@ -12,6 +12,12 @@ class ShellExit {
   }
 }
 
+class ReturnSignal {
+  constructor(code) {
+    this.code = code;
+  }
+}
+
 function syntaxError(message) {
   return new Error(`syntax error: ${message}`);
 }
@@ -163,6 +169,8 @@ export function tokenize(src) {
   return tokens;
 }
 
+const isWord = (token, text) => token?.parts?.length === 1 && token.parts[0].k === 'lit' && token.parts[0].s === text;
+
 const isAssignment = (parts) => parts[0]?.k === 'lit' && ASSIGNMENT.test(parts[0].s);
 
 function parseAssignment(parts) {
@@ -202,19 +210,37 @@ function parse(tokens) {
     return { type: 'simple', assigns, words, redirects };
   };
 
+  const parseTrailingRedirects = () => {
+    const redirects = [];
+    while (REDIRECTS.has(tokens[pos]?.op)) redirects.push(parseRedirect());
+    return redirects;
+  };
+
   const parseCommand = () => {
     const token = tokens[pos];
     if (!token) throw syntaxError('unexpected end of input');
     if (token.op === '(') {
       pos++;
-      const list = parseSequence();
+      const list = parseSequence(false);
       if (tokens[pos]?.op !== ')') throw syntaxError("expected ')'");
       pos++;
-      const redirects = [];
-      while (REDIRECTS.has(tokens[pos]?.op)) redirects.push(parseRedirect());
-      return { type: 'subshell', list, redirects };
+      return { type: 'subshell', list, redirects: parseTrailingRedirects() };
+    }
+    if (isWord(token, '{')) {
+      pos++;
+      const list = parseSequence(true);
+      if (!isWord(tokens[pos], '}')) throw syntaxError("expected '}'");
+      pos++;
+      return { type: 'group', list, redirects: parseTrailingRedirects() };
     }
     if (token.op !== undefined) throw syntaxError(`unexpected '${token.op}'`);
+    if (token.parts.length === 1 && token.parts[0].k === 'lit' && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
+      pos += 3;
+      while (tokens[pos]?.op === ';') pos++;
+      const body = parseCommand();
+      if (body.type !== 'group' && body.type !== 'subshell') throw syntaxError('a function body must be a group or a subshell');
+      return { type: 'funcdef', name: token.parts[0].s, body };
+    }
     return parseSimple();
   };
 
@@ -227,10 +253,12 @@ function parse(tokens) {
     return { cmds };
   };
 
-  const parseSequence = () => {
+  const atCloser = (closeBrace) => tokens[pos].op === ')' || (closeBrace && isWord(tokens[pos], '}'));
+
+  const parseSequence = (closeBrace) => {
     const items = [];
     let op = null;
-    while (pos < tokens.length && tokens[pos].op !== ')') {
+    while (pos < tokens.length && !atCloser(closeBrace)) {
       if (tokens[pos].op === ';') {
         pos++;
         continue;
@@ -249,7 +277,7 @@ function parse(tokens) {
     return { items };
   };
 
-  const list = parseSequence();
+  const list = parseSequence(false);
   if (pos < tokens.length) throw syntaxError(`unexpected '${tokens[pos].op}'`);
   return list;
 }
@@ -365,6 +393,9 @@ export function evaluateArithmetic(src, lookup) {
 export function createShell({ host, cwd = '/workspace' } = {}) {
   const state = { cwd, status: 0 };
   const vars = new Map();
+  const functions = new Map();
+  const frames = [];
+  let positional = [];
 
   const resolvePath = (name) => normalize(name.startsWith('/') ? name : state.cwd + '/' + name);
 
@@ -379,9 +410,21 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     export: ({ argv }) => {
       for (const arg of argv) {
         const eq = arg.indexOf('=');
-        if (eq > 0) vars.set(arg.slice(0, eq), arg.slice(eq + 1));
+        if (eq > 0) setVariable(arg.slice(0, eq), arg.slice(eq + 1));
       }
       return ok('');
+    },
+    local: ({ argv }) => {
+      const frame = frames.at(-1);
+      for (const arg of argv) {
+        const eq = arg.indexOf('=');
+        const name = eq < 0 ? arg : arg.slice(0, eq);
+        frame?.set(name, eq < 0 ? '' : arg.slice(eq + 1));
+      }
+      return ok('');
+    },
+    return: ({ argv }) => {
+      throw new ReturnSignal(Number(argv[0] ?? state.status));
     },
     cat({ argv, stdin }) {
       if (!argv.length) return ok(stdin ?? '');
@@ -416,8 +459,22 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
 
   const variableValue = (name) => {
     if (name === '?') return String(state.status);
-    if (/^[0-9#@*$!]$/.test(name)) throw new Error(`$${name} is not supported yet`);
+    if (/^[1-9]$/.test(name)) return positional[Number(name) - 1];
+    if (name === '#') return String(positional.length);
+    if (name === '@' || name === '*') return positional.join(' ');
+    if (name === '0') return 'thebird';
+    if (name === '$') return '1';
+    if (name === '!') return '';
+    for (let i = frames.length - 1; i >= 0; i--) {
+      if (frames[i].has(name)) return frames[i].get(name);
+    }
     return vars.get(name);
+  };
+
+  const setVariable = (name, value) => {
+    const frame = frames.at(-1);
+    if (frame?.has(name)) frame.set(name, value);
+    else vars.set(name, value);
   };
 
   async function expandChars(parts, inDouble, sink) {
@@ -522,17 +579,17 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
     if (!argv.length) {
-      for (const [name, value] of assigned) vars.set(name, value);
+      for (const [name, value] of assigned) setVariable(name, value);
       return ok('');
     }
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
-    for (const [name, value] of assigned) vars.set(name, value);
+    for (const [name, value] of assigned) setVariable(name, value);
     try {
       return await runCommand(node, argv, stdin, sink);
     } finally {
       for (const [name, value] of saved) {
         if (value === undefined) vars.delete(name);
-        else vars.set(name, value);
+        else setVariable(name, value);
       }
     }
   }
@@ -549,8 +606,10 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
       }
     }
     const name = argv[0];
-    if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
-    const result = await commands[name]({ argv: argv.slice(1), stdin: input });
+    let result;
+    if (functions.has(name)) result = await callFunction(functions.get(name), argv.slice(1), input);
+    else if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
+    else result = await commands[name]({ argv: argv.slice(1), stdin: input });
     let { out, err } = result;
     for (const redirect of node.redirects) {
       if (redirect.op === '2>&1') {
@@ -589,12 +648,45 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return { code, out: inner.out, err: inner.err };
   }
 
+  async function runGroup(node, stdin) {
+    const inner = { out: '', err: '' };
+    const code = await runSequence(node.list, stdin, inner);
+    return { code, out: inner.out, err: inner.err };
+  }
+
+  async function callFunction(body, args, stdin) {
+    const savedPositional = positional;
+    positional = args;
+    frames.push(new Map());
+    let result;
+    try {
+      result = body.type === 'subshell' ? await runSubshell(body, stdin, { out: '', err: '' }) : await runGroup(body, stdin);
+    } catch (err) {
+      if (!(err instanceof ReturnSignal)) throw err;
+      result = { code: err.code, out: '', err: '' };
+    } finally {
+      frames.pop();
+      positional = savedPositional;
+    }
+    return result;
+  }
+
+  async function runStage(cmd, stdin, sink) {
+    if (cmd.type === 'funcdef') {
+      functions.set(cmd.name, cmd.body);
+      return ok('');
+    }
+    if (cmd.type === 'subshell') return runSubshell(cmd, stdin, sink);
+    if (cmd.type === 'group') return runGroup(cmd, stdin);
+    return runSimple(cmd, stdin, sink);
+  }
+
   async function runPipeline(pipe, stdin, sink) {
     let input = stdin;
     let code = 0;
     for (let i = 0; i < pipe.cmds.length; i++) {
       const cmd = pipe.cmds[i];
-      const result = cmd.type === 'subshell' ? await runSubshell(cmd, input, sink) : await runSimple(cmd, input, sink);
+      const result = await runStage(cmd, input, sink);
       code = result.code;
       sink.err += result.err;
       if (i === pipe.cmds.length - 1) sink.out += result.out;
