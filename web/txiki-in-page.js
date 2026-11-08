@@ -213,6 +213,37 @@ async function load() {
         return -1;
       }
     },
+    tjs_fs_lstat(ptr, len, out) {
+      const info = fs.lstatSync(absolute(textAt(ptr, len)), { throwIfNoEntry: false });
+      if (!info) return -1;
+      const link = info.isSymbolicLink();
+      const dir = !link && info.isDirectory();
+      const slots = new Float64Array(memory.buffer, out, 4);
+      slots[0] = link ? 3 : dir ? 2 : 1;
+      slots[1] = info.size;
+      slots[2] = info.mtimeMs;
+      slots[3] = link ? 0o120777 : dir ? 0o40755 : 0o100644;
+      return 0;
+    },
+    tjs_fs_symlink(tptr, tlen, pptr, plen) {
+      try {
+        fs.symlinkSync(textAt(tptr, tlen), absolute(textAt(pptr, plen)));
+        return 0;
+      } catch {
+        return -1;
+      }
+    },
+    tjs_fs_readlink(ptr, len, out, cap) {
+      let target;
+      try {
+        target = fs.readlinkSync(absolute(textAt(ptr, len)));
+      } catch {
+        return -1;
+      }
+      const bytes = encoder.encode(target);
+      if (bytes.length <= cap) bytesAt(out, bytes.length).set(bytes);
+      return bytes.length;
+    },
     tjs_fs_resolve(ptr, len, out, cap) {
       const bytes = encoder.encode(absolute(textAt(ptr, len)));
       if (bytes.length >= cap) return -1;

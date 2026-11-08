@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,37 +18,65 @@ const MISSING = 'web/shell-core.js is not present: the txiki shell has not been 
 function memoryHost(files = {}) {
   const store = new Map(Object.entries(files));
   const dirs = new Set(['/', '/workspace']);
+  const links = new Map();
   const children = (path) => {
     const prefix = path === '/' ? '/' : path + '/';
     const names = new Set();
-    for (const key of [...store.keys(), ...dirs]) {
+    for (const key of [...store.keys(), ...dirs, ...links.keys()]) {
       if (key !== path && key.startsWith(prefix)) names.add(key.slice(prefix.length).split('/')[0]);
     }
     return [...names];
   };
+  const follow = (path, depth = 0) => {
+    if (!links.has(path)) return path;
+    if (depth > 8) return null;
+    return follow(resolve(dirname(path), links.get(path)), depth + 1);
+  };
+  const statOf = (real) => {
+    if (real === null) return null;
+    if (dirs.has(real) || children(real).length > 0) return { dir: true, size: 0 };
+    if (store.has(real)) return { dir: false, size: store.get(real).length };
+    return null;
+  };
   return {
     read(path) {
-      if (!store.has(path)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' });
-      return store.get(path);
+      const real = follow(path);
+      if (real === null || !store.has(real)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' });
+      return store.get(real);
     },
     write(path, text) {
-      store.set(path, text);
+      store.set(follow(path) ?? path, text);
     },
     exists(path) {
-      return store.has(path) || dirs.has(path) || children(path).length > 0;
+      return statOf(follow(path)) !== null;
     },
     stat(path) {
-      if (dirs.has(path) || children(path).length > 0) return { dir: true, size: 0 };
-      if (store.has(path)) return { dir: false, size: store.get(path).length };
-      return null;
+      return statOf(follow(path));
+    },
+    lstat(path) {
+      if (links.has(path)) return { dir: false, link: true, size: links.get(path).length };
+      return statOf(path);
+    },
+    readlink(path) {
+      return links.get(path);
+    },
+    symlink(target, path) {
+      if (links.has(path) || store.has(path) || dirs.has(path)) return false;
+      links.set(path, target);
+      return true;
     },
     list(path) {
-      return children(path);
+      const real = follow(path);
+      return real === null ? [] : children(real);
     },
     mkdir(path) {
       dirs.add(path);
     },
     remove(path, recursive) {
+      if (links.has(path)) {
+        links.delete(path);
+        return;
+      }
       const prefix = path + '/';
       for (const key of [...store.keys()]) if (key === path || (recursive && key.startsWith(prefix))) store.delete(key);
       for (const dir of [...dirs]) if (dir === path || (recursive && dir.startsWith(prefix))) dirs.delete(dir);
@@ -235,6 +263,31 @@ group('coreutils: grep, hostname and id', async () => {
   check('coreutils: hostname and id print the in-page identity', identity.stdout === 'thebird\nuid=1000(user) gid=1000(user) groups=1000(user)\n', JSON.stringify(identity.stdout));
   const found = await run(sh, 'command -v grep hostname id');
   check('lookups: grep, hostname and id resolve as core commands', found.stdout === '/bin/grep\n/bin/hostname\n/bin/id\n', JSON.stringify(found.stdout));
+});
+
+group('links: ln -s, readlink, test -L, ls -l arrows, rm of a link, and links across a restart', async () => {
+  const host = memoryHost({ '/workspace/notes/target.txt': 'hello\n', '/workspace/notes/dir/inner.txt': 'x\n' });
+  const first = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+  const made = await run(first, 'cd notes && ln -s target.txt link.txt && echo made');
+  check('links: ln -s creates a link and exits 0', made.exitCode === 0 && made.stdout === 'made\n', JSON.stringify(made));
+  const read = await run(first, 'readlink link.txt');
+  check('links: readlink prints the target as stored', read.stdout === 'target.txt\n', JSON.stringify(read.stdout));
+  const followed = await run(first, 'cat link.txt');
+  check('links: cat follows a link to its target', followed.stdout === 'hello\n', JSON.stringify(followed.stdout));
+  const testL = await run(first, 'test -L link.txt && echo yes; test -L target.txt || echo no');
+  check('links: test -L is true for a link and false for its target', testL.stdout === 'yes\nno\n', JSON.stringify(testL.stdout));
+  await run(first, 'ln -s dir dirlink');
+  const long = await run(first, 'ls -l');
+  check('links: ls -l shows each link with an arrow to its target', long.stdout === 'd 0 dir\nl 3 dirlink -> dir\nl 10 link.txt -> target.txt\n- 6 target.txt\n', JSON.stringify(long.stdout));
+  const removed = await run(first, 'rm link.txt && ls && cat target.txt');
+  check('links: rm removes the link and leaves its target in place', removed.stdout === 'dir\ndirlink\ntarget.txt\nhello\n' && removed.exitCode === 0, JSON.stringify(removed.stdout));
+  const second = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+  const restarted = await run(second, 'cd notes && readlink dirlink && test -L dirlink && echo still-link');
+  check('links: a link survives a new shell over the same store', restarted.stdout === 'dir\nstill-link\n', JSON.stringify(restarted.stdout));
+  await run(second, 'cd notes && rm dirlink');
+  const third = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+  const gone = await run(third, 'cd notes && test -L dirlink || echo gone && ls dir');
+  check('links: rm of a link is still in effect after a restart, and the directory it pointed at is untouched', gone.stdout === 'gone\ninner.txt\n', JSON.stringify(gone.stdout));
 });
 
 group('process: & starts a job, $! names its PID, ps lists it, kill signals it and wait reports the status', async () => {

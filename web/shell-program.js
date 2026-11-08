@@ -20,11 +20,23 @@ const host = {
     return info == null ? null : { dir: info.kind === 2, size: info.size };
   },
   list: (path) => __thebirdFs.readdir(path) ?? [],
+  lstat(path) {
+    const info = __thebirdFs.lstat(path);
+    return info == null ? null : { dir: info.kind === 2, link: info.kind === 3, size: info.size };
+  },
+  readlink(path) {
+    const target = __thebirdFs.readlink(path);
+    if (target === undefined) throw Object.assign(new Error(`EINVAL: invalid argument, readlink '${path}'`), { code: 'EINVAL' });
+    return target;
+  },
+  symlink(target, path) {
+    if (!__thebirdFs.symlink(target, path)) throw Object.assign(new Error(`EEXIST: file already exists, '${path}'`), { code: 'EEXIST' });
+  },
   mkdir(path) {
     if (!__thebirdFs.mkdir(path)) throw Object.assign(new Error(`EEXIST: file already exists, '${path}'`), { code: 'EEXIST' });
   },
   remove(path, recursive) {
-    const info = __thebirdFs.stat(path);
+    const info = __thebirdFs.lstat(path);
     if (info == null) return;
     if (info.kind !== 2) {
       __thebirdFs.unlink(path);

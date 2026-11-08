@@ -1,4 +1,5 @@
 import { runTjs } from './txiki-in-page.js';
+import { flushFs } from './shims/fs.js';
 
 const MODULES = ['shell-sed.js', 'shell-tar.js', 'shell-jq.js', 'shell-awk.js', 'shell-core.js', 'shell-program.js'];
 const MARKER = '\u0001';
@@ -25,6 +26,7 @@ const programText = () => {
 export async function runShellInTxiki(script, { cwd = '/workspace', saved = null, timeoutMs, signal } = {}) {
   const args = JSON.stringify({ script, cwd, saved, timeoutMs, builtins: BUILTINS });
   const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd, { signal });
+  await flushFs();
   const at = output.lastIndexOf(MARKER);
   if (status !== 0 || at < 0) throw new Error([output.trimEnd(), `shell engine exited with status ${status}`].filter(Boolean).join('\n'));
   const { stdout, stderr, exitCode, saved: next } = JSON.parse(output.slice(at + 1));

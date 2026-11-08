@@ -573,7 +573,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       let code = 0;
       for (const name of argv.filter((arg) => !arg.startsWith('-'))) {
         const path = resolvePath(name);
-        const info = host.stat(path);
+        const info = host.lstat(path);
         if (!info) {
           if (!force) {
             err += `rm: cannot remove '${name}': No such file or directory\n`;
@@ -592,8 +592,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const all = flags.includes('a');
       const targets = argv.filter((arg) => !arg.startsWith('-'));
       const describe = (path, name) => {
-        const info = host.stat(path);
-        return `${info?.dir ? 'd' : '-'} ${info?.size ?? 0} ${name}\n`;
+        const link = host.lstat(path);
+        if (link?.link) return `l ${link.size} ${name} -> ${host.readlink(path)}\n`;
+        return `${link?.dir ? 'd' : '-'} ${link?.size ?? 0} ${name}\n`;
       };
       let out = '';
       let err = '';
@@ -601,10 +602,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const name of targets.length ? targets : ['.']) {
         const path = resolvePath(name);
         const info = host.stat(path);
-        if (!info) {
+        if (!info && !host.lstat(path)) {
           err += `ls: cannot access '${name}': No such file or directory\n`;
           code = 2;
-        } else if (!info.dir) out += long ? describe(path, name) : name + '\n';
+        } else if (!info?.dir) out += long ? describe(path, name) : name + '\n';
         else {
           for (const entry of host.list(path).sort()) {
             if (!all && entry.startsWith('.')) continue;
@@ -613,6 +614,31 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       }
       return { code, out, err };
+    },
+    ln: ({ argv }) => {
+      const flags = argv.filter((arg) => arg.startsWith('-')).join('');
+      const operands = argv.filter((arg) => !arg.startsWith('-'));
+      if (!flags.includes('s')) return { code: 1, out: '', err: 'ln: only symbolic links are supported; use ln -s\n' };
+      if (operands.length < 1 || operands.length > 2) return { code: 1, out: '', err: 'ln: usage: ln -s TARGET [LINK_NAME]\n' };
+      const [target, given] = operands;
+      const base = target.split('/').filter(Boolean).pop() ?? target;
+      const name = given ?? base;
+      let dest = resolvePath(name);
+      if (host.stat(dest)?.dir) dest = `${dest === '/' ? '' : dest}/${base}`;
+      if (host.lstat(dest)) {
+        if (!flags.includes('f')) return { code: 1, out: '', err: `ln: failed to create symbolic link '${name}': File exists\n` };
+        host.remove(dest, false);
+      }
+      host.symlink(target, dest);
+      return ok('');
+    },
+    readlink: ({ argv }) => {
+      const operands = argv.filter((arg) => !arg.startsWith('-'));
+      if (operands.length !== 1) return { code: 1, out: '', err: 'readlink: usage: readlink NAME\n' };
+      const path = resolvePath(operands[0]);
+      const info = host.lstat(path);
+      if (!info?.link) return { code: 1, out: '', err: '' };
+      return ok(host.readlink(path) + '\n');
     },
     find: ({ argv }) => {
       let i = 0;
@@ -893,6 +919,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         const info = host.stat(resolvePath(value));
         return Boolean(info) && (op === '-d') === info.dir;
       }
+      if (op === '-L' || op === '-h') return Boolean(host.lstat(resolvePath(value))?.link);
       throw new Error(`test: ${op}: unary operator not supported`);
     }
     if (args.length === 3) {
