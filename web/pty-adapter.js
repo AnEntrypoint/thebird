@@ -15,6 +15,8 @@ const CONTROL_KEYS = {
 const CLEAR_SCREEN = '\x1b[H\x1b[2J';
 const up = (rows) => (rows > 0 ? `\x1b[${rows}A` : '');
 const isSpace = (char) => /\s/.test(char);
+const PASTE_BREAKS = /\r\n|\r|\n|\t/g;
+const isPrintable = (char) => char >= ' ' && char !== '\x7f';
 const WIDE_RANGES = [[0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6], [0x1f300, 0x1f64f], [0x1f680, 0x1f6ff], [0x1f900, 0x1f9ff], [0x1fa70, 0x1faff], [0x20000, 0x3fffd]];
 const ZERO_WIDTH_RANGES = [[0x0300, 0x036f], [0x200b, 0x200f], [0xfe00, 0xfe0f], [0x20d0, 0x20ff]];
 const inRanges = (code, ranges) => ranges.some(([from, to]) => code >= from && code <= to);
@@ -295,8 +297,15 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
       render();
       submit();
     },
+    paste(text) {
+      const codes = Array.from(text.replace(PASTE_BREAKS, ' ')).filter(isPrintable);
+      if (codes.length === 0) return;
+      chars.splice(cursor, 0, ...codes);
+      cursor += codes.length;
+      render();
+    },
     whenIdle: () => idle,
-    state: () => ({ line: chars.join(''), cursor, prompt: promptText }),
+    state: () => ({ line: chars.join(''), cursor, prompt: promptText, queued: pending.length }),
     resize(next) {
       cols = next;
       client.resize(cols, term.rows);

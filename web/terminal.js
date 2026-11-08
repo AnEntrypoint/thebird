@@ -56,6 +56,11 @@ term.onData((data) => pty.onData(data));
 term.onResize(({ cols }) => pty.resize(cols));
 const terminalBox = document.getElementById('terminal');
 new ResizeObserver(() => fit.fit()).observe(terminalBox);
+terminalBox.addEventListener('paste', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  pty.paste(event.clipboardData?.getData('text/plain') ?? '');
+}, { capture: true });
 const touchScroll = { y: null, lines: 0 };
 terminalBox.addEventListener('touchstart', (event) => {
   touchScroll.y = event.touches[0].clientY;

@@ -185,6 +185,17 @@ if (existsSync(chrome)) {
     },
   });
   check('wide characters take two cells in the shell output, and the input cursor moves by the cell width of typed CJK and emoji', JSON.stringify(wide.cells) === '[2,2,2,1]' && wide.cursorAfterCjk === wide.promptLength + 4 && wide.cursorAfterEmoji === wide.promptLength + 6, JSON.stringify(wide));
+  const pasted = {};
+  await terminal([], {
+    interact: async ({ evaluate, press }) => {
+      await evaluate(`(() => { const data = new DataTransfer(); data.setData('text/plain', ${JSON.stringify('one\ntwo\nthree')}); document.querySelector('.xterm-helper-textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })); })()`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      pasted.state = await evaluate('globalThis.thebird.pty.state()');
+      pasted.output = await evaluate("globalThis.thebird.text().split('\\n').filter((line) => line.trim() !== '' && !line.startsWith('thebird ') && line !== 'loading the shell')");
+      await press('u', { ctrl: true });
+    },
+  });
+  check('a multi-line paste goes into the input line with each newline as a space, queues nothing and runs nothing', pasted.state?.line === 'one two three' && pasted.state.queued === 0 && pasted.output?.length === 0, JSON.stringify({ line: pasted.state?.line, queued: pasted.state?.queued, output: pasted.output }));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 
