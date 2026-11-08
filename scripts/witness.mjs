@@ -36,7 +36,7 @@ if (existsSync(chrome)) {
   const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40']]);
   check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
   check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
-  const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
+const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
@@ -197,8 +197,35 @@ if (existsSync(chrome)) {
   check('a multi-line paste goes into the input line with each newline as a space, queues nothing and runs nothing', pasted.state?.line === 'one two three' && pasted.state.queued === 0 && pasted.output?.length === 0, JSON.stringify({ line: pasted.state?.line, queued: pasted.state?.queued, output: pasted.output }));
   const host = await terminal([['run', 'ruby -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
-  const nodeRun = await terminal([['run', `echo 'console.log("txiki-runtime", tjs.version)' > node-marker.js`], ['run', 'node node-marker.js'], ['run', 'node -v'], ['run', 'which node']]);
-  check('node runs a script through the txiki engine, and node -v and which node name txiki', /^txiki-runtime \S+$/m.test(nodeRun.out) && /^\d+\.\d+\.\d+$/m.test(nodeRun.out) && nodeRun.out.split('\n').includes('node'), nodeRun.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+  const PROMPT = 'thebird /workspace> ';
+  const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
+  const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello'];
+  const nodeOutputs = [];
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const run = async (command) => {
+        const before = await evaluate(PROMPT_COUNT);
+        await type(command);
+        await press('Enter');
+        await waitFor(`${PROMPT_COUNT} > ${before}`, 120000);
+        const lines = (await evaluate('globalThis.thebird.text()')).split('\n');
+        const start = lines.lastIndexOf((PROMPT + command).trimEnd());
+        const end = lines.findIndex((line, index) => index > start && line.startsWith(PROMPT));
+        nodeOutputs.push({ command, output: lines.slice(start + 1, end).filter((line) => line.trim()).join('\n') });
+      };
+      await run(`echo 'console.log("txiki-runtime", tjs.version)' > node-marker.js`);
+      await run(`echo 'const fs = require("fs"); console.log("args", process.argv.slice(2).join(" ")); console.log("read", fs.readFileSync("node-check.js", "utf8").includes("readFileSync"));' > node-check.js`);
+      for (const command of NODE_COMMANDS) await run(command);
+    },
+  });
+  const nodeOutput = (command) => nodeOutputs.find((entry) => entry.command === command)?.output ?? null;
+  check('which node names node', nodeOutput('which node') === 'node', JSON.stringify(nodeOutput('which node')));
+  check('command -v node names node', nodeOutput('command -v node') === 'node', JSON.stringify(nodeOutput('command -v node')));
+  check('type node reports node as a shell builtin', nodeOutput('type node') === 'node is a shell builtin', JSON.stringify(nodeOutput('type node')));
+  check('node -v prints a version', /^v\d+\.\d+\.\d+$/.test(nodeOutput('node -v') ?? ''), JSON.stringify(nodeOutput('node -v')));
+  check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
+  check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
+  check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
