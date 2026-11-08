@@ -18,7 +18,7 @@ function installNodeGlobals(cwd, argv) {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       if (!__thebirdFs.writeFile(absolute(path), bytes.buffer)) throw Object.assign(new Error(`EIO: i/o error, open '${path}'`), { code: 'EIO' });
     },
-    existsSync: (path) => __thebirdFs.stat(absolute(path)) !== undefined,
+    existsSync: (path) => __thebirdFs.stat(absolute(path)) != null,
     readdirSync(path) {
       const names = __thebirdFs.readdir(absolute(path));
       if (names === undefined) throw enoent(path);
