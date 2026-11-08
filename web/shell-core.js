@@ -5,6 +5,7 @@ const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', '>>', '>', '<', '|', '(', ')
 const REDIRECTS = new Set(['>', '>>', '<', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which']);
 
 class ShellExit {
   constructor(code) {
@@ -216,19 +217,69 @@ function parse(tokens) {
     return redirects;
   };
 
+  const expectWord = (text) => {
+    if (!isWord(tokens[pos], text)) throw syntaxError(`expected '${text}'`);
+    pos++;
+  };
+
+  const parseIf = () => {
+    const branches = [];
+    let elseBody = null;
+    for (;;) {
+      const cond = parseSequence(['then']);
+      expectWord('then');
+      branches.push({ cond, body: parseSequence(['elif', 'else', 'fi']) });
+      if (isWord(tokens[pos], 'elif')) {
+        pos++;
+        continue;
+      }
+      if (isWord(tokens[pos], 'else')) {
+        pos++;
+        elseBody = parseSequence(['fi']);
+      }
+      expectWord('fi');
+      return { type: 'if', branches, elseBody, redirects: parseTrailingRedirects() };
+    }
+  };
+
+  const parseFor = () => {
+    const token = tokens[pos++];
+    if (!token?.parts || token.parts.length !== 1 || token.parts[0].k !== 'lit') throw syntaxError("expected a name after 'for'");
+    const name = token.parts[0].s;
+    let words = null;
+    if (isWord(tokens[pos], 'in')) {
+      pos++;
+      words = [];
+      while (tokens[pos]?.parts) words.push(tokens[pos++].parts);
+    }
+    while (tokens[pos]?.op === ';') pos++;
+    expectWord('do');
+    const body = parseSequence(['done']);
+    expectWord('done');
+    return { type: 'for', name, words, body, redirects: parseTrailingRedirects() };
+  };
+
   const parseCommand = () => {
     const token = tokens[pos];
     if (!token) throw syntaxError('unexpected end of input');
+    if (isWord(token, 'if')) {
+      pos++;
+      return parseIf();
+    }
+    if (isWord(token, 'for')) {
+      pos++;
+      return parseFor();
+    }
     if (token.op === '(') {
       pos++;
-      const list = parseSequence(false);
+      const list = parseSequence([]);
       if (tokens[pos]?.op !== ')') throw syntaxError("expected ')'");
       pos++;
       return { type: 'subshell', list, redirects: parseTrailingRedirects() };
     }
     if (isWord(token, '{')) {
       pos++;
-      const list = parseSequence(true);
+      const list = parseSequence(['}']);
       if (!isWord(tokens[pos], '}')) throw syntaxError("expected '}'");
       pos++;
       return { type: 'group', list, redirects: parseTrailingRedirects() };
@@ -253,12 +304,12 @@ function parse(tokens) {
     return { cmds };
   };
 
-  const atCloser = (closeBrace) => tokens[pos].op === ')' || (closeBrace && isWord(tokens[pos], '}'));
+  const atCloser = (stops) => tokens[pos].op === ')' || stops.some((word) => isWord(tokens[pos], word));
 
-  const parseSequence = (closeBrace) => {
+  const parseSequence = (stops) => {
     const items = [];
     let op = null;
-    while (pos < tokens.length && !atCloser(closeBrace)) {
+    while (pos < tokens.length && !atCloser(stops)) {
       if (tokens[pos].op === ';') {
         pos++;
         continue;
@@ -277,7 +328,7 @@ function parse(tokens) {
     return { items };
   };
 
-  const list = parseSequence(false);
+  const list = parseSequence([]);
   if (pos < tokens.length) throw syntaxError(`unexpected '${tokens[pos].op}'`);
   return list;
 }
@@ -390,10 +441,11 @@ export function evaluateArithmetic(src, lookup) {
   return value;
 }
 
-export function createShell({ host, cwd = '/workspace' } = {}) {
+export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
   const state = { cwd, status: 0 };
   const vars = new Map();
   const functions = new Map();
+  const inPage = new Set(builtins);
   const frames = [];
   let positional = [];
 
@@ -426,6 +478,14 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return: ({ argv }) => {
       throw new ReturnSignal(Number(argv[0] ?? state.status));
     },
+    test: ({ argv }) => ({ code: evaluateTest(argv) ? 0 : 1, out: '', err: '' }),
+    '[': ({ argv }) => {
+      if (argv.at(-1) !== ']') return { code: 2, out: '', err: "[: missing ']'\n" };
+      return { code: evaluateTest(argv.slice(0, -1)) ? 0 : 1, out: '', err: '' };
+    },
+    which: ({ argv }) => lookupNames(argv),
+    type: ({ argv }) => typeNames(argv),
+    command: ({ argv, stdin }) => (argv[0] === '-v' ? lookupNames(argv.slice(1)) : dispatch(argv, stdin)),
     cat({ argv, stdin }) {
       if (!argv.length) return ok(stdin ?? '');
       let out = '';
@@ -455,6 +515,66 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
       }
       return ok(out);
     },
+  };
+
+  const locate = (name) => {
+    if (functions.has(name)) return name;
+    if (inPage.has(name) || SHELL_BUILTINS.has(name)) return name;
+    if (Object.hasOwn(commands, name)) return `/bin/${name}`;
+    return null;
+  };
+
+  const lookupNames = (names) => {
+    let out = '';
+    let code = 0;
+    for (const name of names) {
+      const found = locate(name);
+      if (found === null) code = 1;
+      else out += found + '\n';
+    }
+    return { code, out, err: '' };
+  };
+
+  const typeNames = (argv) => {
+    const mode = argv[0] === '-t' ? argv.shift() : null;
+    let out = '';
+    let err = '';
+    let code = 0;
+    for (const name of argv) {
+      const found = locate(name);
+      if (found === null) {
+        code = 1;
+        if (!mode) err += `type: ${name}: not found\n`;
+      } else if (mode === '-t') {
+        const kind = functions.has(name) ? 'function' : SHELL_BUILTINS.has(name) || inPage.has(name) ? 'builtin' : 'file';
+        out += kind + '\n';
+      } else if (functions.has(name)) out += `${name} is a function\n`;
+      else if (SHELL_BUILTINS.has(name) || inPage.has(name)) out += `${name} is a shell builtin\n`;
+      else out += `${name} is ${found}\n`;
+    }
+    return { code, out, err };
+  };
+
+  const evaluateTest = (args) => {
+    if (args[0] === '!' && args.length > 1) return !evaluateTest(args.slice(1));
+    if (args.length === 0) return false;
+    if (args.length === 1) return args[0] !== '';
+    if (args.length === 2) {
+      const [op, value] = args;
+      if (op === '-n') return value !== '';
+      if (op === '-z') return value === '';
+      if (op === '-e' || op === '-f') return host.exists(resolvePath(value));
+      throw new Error(`test: ${op}: unary operator not supported`);
+    }
+    if (args.length === 3) {
+      const [a, op, b] = args;
+      if (op === '=' || op === '==') return a === b;
+      if (op === '!=') return a !== b;
+      const numeric = { '-eq': (x, y) => x === y, '-ne': (x, y) => x !== y, '-lt': (x, y) => x < y, '-gt': (x, y) => x > y, '-le': (x, y) => x <= y, '-ge': (x, y) => x >= y };
+      if (numeric[op]) return numeric[op](Number(a), Number(b));
+      throw new Error(`test: ${op}: binary operator not supported`);
+    }
+    throw new Error('test: too many arguments');
   };
 
   const variableValue = (name) => {
@@ -605,11 +725,7 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
         }
       }
     }
-    const name = argv[0];
-    let result;
-    if (functions.has(name)) result = await callFunction(functions.get(name), argv.slice(1), input);
-    else if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
-    else result = await commands[name]({ argv: argv.slice(1), stdin: input });
+    const result = await dispatch(argv, input);
     let { out, err } = result;
     for (const redirect of node.redirects) {
       if (redirect.op === '2>&1') {
@@ -654,6 +770,39 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return { code, out: inner.out, err: inner.err };
   }
 
+  async function dispatch(argv, stdin) {
+    const name = argv[0];
+    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin);
+    if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
+    return commands[name]({ argv: argv.slice(1), stdin });
+  }
+
+  async function runIf(node, stdin) {
+    const inner = { out: '', err: '' };
+    let code = 0;
+    let taken = false;
+    for (const { cond, body } of node.branches) {
+      if ((await runSequence(cond, stdin, inner)) === 0) {
+        code = await runSequence(body, stdin, inner);
+        taken = true;
+        break;
+      }
+    }
+    if (!taken && node.elseBody) code = await runSequence(node.elseBody, stdin, inner);
+    return { code, out: inner.out, err: inner.err };
+  }
+
+  async function runFor(node, stdin) {
+    const inner = { out: '', err: '' };
+    const values = node.words ? await expandWords(node.words, inner) : positional;
+    let code = 0;
+    for (const value of values) {
+      setVariable(node.name, value);
+      code = await runSequence(node.body, stdin, inner);
+    }
+    return { code, out: inner.out, err: inner.err };
+  }
+
   async function callFunction(body, args, stdin) {
     const savedPositional = positional;
     positional = args;
@@ -678,6 +827,8 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     }
     if (cmd.type === 'subshell') return runSubshell(cmd, stdin, sink);
     if (cmd.type === 'group') return runGroup(cmd, stdin);
+    if (cmd.type === 'if') return runIf(cmd, stdin);
+    if (cmd.type === 'for') return runFor(cmd, stdin);
     return runSimple(cmd, stdin, sink);
   }
 
