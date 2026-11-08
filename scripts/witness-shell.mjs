@@ -35,10 +35,10 @@ function memoryHost(files = {}) {
       store.set(path, text);
     },
     exists(path) {
-      return store.has(path) || dirs.has(path);
+      return store.has(path) || dirs.has(path) || children(path).length > 0;
     },
     stat(path) {
-      if (dirs.has(path)) return { dir: true, size: 0 };
+      if (dirs.has(path) || children(path).length > 0) return { dir: true, size: 0 };
       if (store.has(path)) return { dir: false, size: store.get(path).length };
       return null;
     },
