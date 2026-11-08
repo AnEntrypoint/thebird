@@ -161,7 +161,7 @@ function architectureStatic() {
   cites('Symlinks are link entries', ['in-page ln -s makes a link that readlink reports, and a read and a stat follow it', 'in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link']);
   cites('`fs.watch` is a no-op', ['fs.watch returns an inert handle: close is a no-op and on/once return the handle']);
   cites('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', ['in-page uname, whoami and tar are labelled as emulations, and plain commands are not']);
-  cites('| `sqlite3` | sql.js', ['in-page sqlite3 creates a database and answers a query through sql.js', 'in-page sqlite3 database survives a browser restart']);
+  cites('| `sqlite3` | tjs:sqlite', ['in-page sqlite3 creates a database and answers a query through tjs:sqlite', 'in-page tjs -e opens a tjs:sqlite database and sums it', 'in-page sqlite3 database survives a browser restart']);
   cites('| `python3` | Pyodide 314.0.7', ['in-page python3 runs a one-line script through Pyodide', 'in-page python3 sees a shell rewrite made after its last call', 'in-page python3 removes a file it deletes and the shell sees it gone']);
   cites('Errors show the output and summary with URLs removed', ['in-page python3 error text keeps a readable link instead of bashkit cutting it at //', 'in-page python3 reports a traceback as an error']);
   cites('| `pip` | micropip 0.11.1', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page', 'in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', 'the micropip wheel the page loads is the one pinned in the Pyodide lock']);
@@ -301,7 +301,7 @@ async function liveChecks() {
 
 function liveRecords(blocks) {
   const P = (id, pass, detail) => probe(blocks, id, pass, detail);
-  record('| `sqlite3` | sql.js', P('sqlite', (t) => t.includes('1|two'), 'sqlite3 prints list mode'));
+  record('| `sqlite3` | tjs:sqlite', P('sqlite', (t) => t.includes('1|two'), 'sqlite3 prints list mode'));
   record('| `python3` | Pyodide 314.0.7', P('python-c', (t) => /^42$/m.test(t), 'python3 -c runs'));
   record('`node` and host binaries exit 127', P('node', (t) => /rc=127/.test(t), 'node exits 127'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', P('tar', (t) => /tar \(bashkit\)/.test(t), 'tar reports bashkit'));

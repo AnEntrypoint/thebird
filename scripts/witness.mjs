@@ -513,7 +513,9 @@ if (existsSync(chrome)) {
     ['run', 'sqlite3 notes/app.db "insert into t values (1),(2),(3)"'],
     ['run', 'sqlite3 notes/app.db "select sum(x) from t"'],
   ]);
-  check('in-page sqlite3 creates a database and answers a query through sql.js', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  check('in-page sqlite3 creates a database and answers a query through tjs:sqlite', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  const tjsSum = await terminal([['run', `tjs -e "import { Database } from 'tjs:sqlite'; const db = new Database('notes/app.db'); console.log(db.prepare('select sum(x) as total from t').all()[0].total); db.close();"`]]);
+  check('in-page tjs -e opens a tjs:sqlite database and sums it', /^6$/m.test(tjsSum.out), tjsSum.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const reopened = await terminal([['run', 'sqlite3 notes/app.db "select count(*) from t"']]);
   check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const python = await terminal([

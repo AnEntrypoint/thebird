@@ -38,11 +38,11 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   let abort = new AbortController();
   const customBuiltins = {
     git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
-    sqlite3: (ctx) => sqliteBuiltin(ctx.argv).then(withNewline),
+    sqlite3: (ctx) => sqliteBuiltin(ctx.argv, ctx.cwd).then(withNewline),
     python3: (ctx) => pythonBuiltin(ctx.argv, abort.signal).then(withNewline),
     pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
     qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
-    tjs: (ctx) => tjsBuiltin(ctx.argv).then(withNewline),
+    tjs: (ctx) => tjsBuiltin(ctx.argv, ctx.cwd).then(withNewline),
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
   };

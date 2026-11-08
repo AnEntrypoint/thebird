@@ -6,13 +6,16 @@
 uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
 int tjs_browser_timers_pending(const uv_loop_t *loop);
 
-static int report_exception(JSContext *ctx) {
-    JSValue exception = JS_GetException(ctx);
-    const char *message = JS_ToCString(ctx, exception);
+static int report_value(JSContext *ctx, JSValue value) {
+    const char *message = JS_ToCString(ctx, value);
     fprintf(stderr, "Uncaught %s\n", message ? message : "exception");
     JS_FreeCString(ctx, message);
-    JS_FreeValue(ctx, exception);
+    JS_FreeValue(ctx, value);
     return 1;
+}
+
+static int report_exception(JSContext *ctx) {
+    return report_value(ctx, JS_GetException(ctx));
 }
 
 int tjs_browser_eval(const char *code) {
@@ -25,10 +28,13 @@ int tjs_browser_eval(const char *code) {
     uv_loop_t *loop = TJS_GetLoop(qrt);
     int status = 0;
 
-    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_GLOBAL);
+    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_MODULE);
     if (JS_IsException(result)) {
         status = report_exception(ctx);
     } else {
+        if (JS_PromiseState(ctx, result) == JS_PROMISE_REJECTED) {
+            status = report_value(ctx, JS_PromiseResult(ctx, result));
+        }
         JS_FreeValue(ctx, result);
     }
 

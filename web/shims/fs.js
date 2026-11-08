@@ -417,6 +417,32 @@ export function writeSync(fd, data, ...rest) {
   return bytes.byteLength;
 }
 
+export function writeAtSync(fd, data, position) {
+  const handle = fds.get(fd);
+  if (!handle) throw fail('EBADF', 'write', String(fd), 'bad file descriptor');
+  const bytes = bytesFrom(data);
+  const previous = files.get(handle.path) ?? Buffer.alloc(0);
+  const end = position + bytes.byteLength;
+  const next = end > previous.byteLength ? Buffer.alloc(end) : previous;
+  if (next !== previous) next.set(previous);
+  next.set(bytes, position);
+  files.set(handle.path, next);
+  meta.set(handle.path, { mtimeMs: Date.now() });
+  mark(handle.path, 'write');
+  return bytes.byteLength;
+}
+
+export function truncateSync(fd, size) {
+  const handle = fds.get(fd);
+  if (!handle) throw fail('EBADF', 'ftruncate', String(fd), 'bad file descriptor');
+  const previous = files.get(handle.path) ?? Buffer.alloc(0);
+  const next = Buffer.alloc(size);
+  next.set(previous.subarray(0, size));
+  files.set(handle.path, next);
+  meta.set(handle.path, { mtimeMs: Date.now() });
+  mark(handle.path, 'write');
+}
+
 export function rmdirSync(path) {
   rmSync(path);
 }

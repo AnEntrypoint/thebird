@@ -17,12 +17,22 @@ export const CORE_SOURCES = [
   'src/vm.c', 'src/timers.c', 'src/utils.c', 'src/modules.c', 'src/error.c', 'src/mem.c',
   'src/text-coding.c', 'src/tbuf.c', 'src/builtins.c', 'src/signals.c', 'src/mod_os.c',
   'src/mod_sys.c', 'src/mod_fs.c', 'src/mod_streams.c', 'src/worker.c', 'src/eval.c',
-  'src/cli.c', 'src/url.c', 'src/mod_engine.c', 'src/version.c',
+  'src/cli.c', 'src/url.c', 'src/mod_engine.c', 'src/version.c', 'src/mod_sqlite3.c',
+];
+export const SQLITE_SOURCE = 'deps/sqlite3/sqlite3.c';
+export const SQLITE_DEFINES = [
+  'SQLITE_OS_OTHER=1', 'SQLITE_THREADSAFE=0', 'SQLITE_OMIT_WAL', 'HAVE_USLEEP=1', 'HAVE_STDINT_H=1',
+  'SQLITE_DEFAULT_CACHE_SIZE=-16000', 'SQLITE_DEFAULT_FOREIGN_KEYS=1', 'SQLITE_DEFAULT_MEMSTATUS=0',
+  'SQLITE_DEFAULT_WAL_SYNCHRONOUS=1', 'SQLITE_DQS=0', 'SQLITE_ENABLE_FTS5', 'SQLITE_ENABLE_MATH_FUNCTIONS',
+  'SQLITE_ENABLE_RTREE', 'SQLITE_ENABLE_UPDATE_DELETE_LIMIT', 'SQLITE_LIKE_DOESNT_MATCH_BLOBS',
+  'SQLITE_OMIT_COMPLETE', 'SQLITE_OMIT_DECLTYPE', 'SQLITE_OMIT_DEPRECATED', 'SQLITE_OMIT_GET_TABLE',
+  'SQLITE_OMIT_PROGRESS_CALLBACK', 'SQLITE_OMIT_SHARED_CACHE', 'SQLITE_OMIT_TCL_VARIABLE',
+  'SQLITE_STRICT_SUBTYPE=1', 'SQLITE_TRACE_SIZE_LIMIT=32', 'SQLITE_USE_URI=0',
 ];
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
-export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c'];
-export const TXIKI_WASM_SHA256 = '65d9a6c63bf886c84402e8a9b4a22dfb29219e29866e96dabe245e194cb7f76a';
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c'];
+export const TXIKI_WASM_SHA256 = '07773992da3a99b939266ee203f5fc57659a221969cea8f403954fd4df67afba';
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', 'tjs_browser_eval'];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -112,7 +122,7 @@ const zigLibDir = (zig) => {
 const prefixMapsFor = (zig) => [`-ffile-prefix-map=${root}=thebird`, `-ffile-prefix-map=${work}=build`, `-ffile-prefix-map=${zigLibDir(zig)}=zig-lib`];
 
 function flagsFor({ tree, build }, zig) {
-  return ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', ...prefixMapsFor(zig), '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${join(tree, 'deps', 'quickjs')}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`];
+  return ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', ...prefixMapsFor(zig), '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-DTJS_HAVE_SQLITE', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${join(tree, 'deps', 'quickjs')}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`, `-I${join(tree, 'deps', 'sqlite3')}`];
 }
 
 function compile(zig, flags, tree, source, command, extra, objects, results) {
@@ -132,6 +142,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
   const objects = [];
   const results = [];
   compile(zig, flags, tree, 'deps/ada/ada.cpp', 'c++', ['-std=c++20', '-fno-exceptions', '-fno-rtti'], objects, results);
+  compile(zig, flags, tree, SQLITE_SOURCE, 'cc', SQLITE_DEFINES.map((define) => `-D${define}`), objects, results);
   for (const file of CORE_SOURCES) compile(zig, flags, tree, file, 'cc', [], objects, results);
   for (const file of CORE_BUNDLES) compile(zig, flags, tree, file, 'cc', [], objects, results);
   for (const file of QUICKJS_SOURCES) compile(zig, flags, tree, join('deps', 'quickjs', file), 'cc', [], objects, results);

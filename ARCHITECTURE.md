@@ -30,7 +30,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
 | `web/git-in-page.js` | `git` builtin over isomorphic-git. |
 | `web/commit-gate.js` | In-page gate run by `git commit`. |
-| `web/sqlite-in-page.js` | `sqlite3` builtin over sql.js. |
+| `web/sqlite-in-page.js` | `sqlite3` builtin: generates a `tjs:sqlite` module and runs it through `web/txiki-in-page.js`. |
 | `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins over fetch. |
@@ -42,7 +42,6 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/shims/bashkit-host.js` | bashkit's host filesystem, over `fs.js`. |
 | `web/vendor/acorn.mjs` | Vendored parser used by the commit gate. |
 | `web/vendor/isomorphic-git.mjs` | Vendored git library. |
-| `web/vendor/sqljs/` | Vendored sql.js. |
 | `web/vendor/bashkit/`, `web/vendor/pyodide/` | Generated, gitignored runtimes. |
 | `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs` | Generate the runtimes, checking SHA-256. |
 | `scripts/browser-driver.mjs` | Drives headless Chromium for the witness. |
@@ -61,7 +60,7 @@ The witness checks the expiry: six 55 s sleeps in a loop are cut at 300 s with `
 | Builtin | Backing | Scope and limits |
 | --- | --- | --- |
 | `git` | isomorphic-git 1.44.11 (`web/vendor/isomorphic-git.mjs`) | `init`, `status` (porcelain v1 after a `## <branch>` line), `log [-n N]`, `diff` (working tree against HEAD, no hunk headers), `add`, `commit -m`, local `branch`, `checkout` and `checkout -b`. `--version` reports the library version. No remotes, `push`, `fetch`, `pull`, stash or path checkout. `.thebird/` is excluded from the index. |
-| `sqlite3` | sql.js (`web/vendor/sqljs/`) | `sqlite3 <database> <sql>`. The database is a file on OPFS, read at the start of each call and written back at the end. |
+| `sqlite3` | tjs:sqlite (txiki.js, `web/txiki-in-page.js`) | `sqlite3 <database> <sql>`. The database is a file under the shell's cwd. Its pages are read and written through a sqlite VFS over the `fs.js` tree, which OPFS holds, so nothing reaches the host filesystem. Each statement is prepared and read with `all()`, and rows print with `|`. The VFS takes no locks, because each worker runs one connection, and it omits WAL. Temporary files go in `/.thebird/`. |
 | `python3` | Pyodide 314.0.7 (`web/vendor/pyodide/`) | `-c <code>` or `<file>`. Pyodide loads in `web/python-worker.js` on the first call. `/workspace` is mirrored into Pyodide's memory filesystem in that worker: before a call the shell sends the paths and the files whose revision (`revisionOf` in `web/shims/fs.js`) changed; after it the worker compares every Pyodide file with its mirror and returns the changed, new and deleted files, which the shell writes back. Errors show the output and summary with URLs removed. |
 | `pip` | micropip 0.11.1 from the jsDelivr CDN, pinned to `v314.0.7` | `pip install <name>...`. Plain names only; version specifiers and URLs are refused. Names in the vendored lock (`pyodide-lock.json`) are refused, because the vendored index has no wheels for them. Pure wheels come from PyPI. Installed packages live in the Python worker's memory and are not written to OPFS. A cancel terminates that worker, so they are gone until installed again. |
 | `curl`, `wget` | fetch | Flags `-s`, `-S`, `-f`, `-L`, `-q`, alone or combined. `curl -o file` and `wget -O file`. Other flags are refused. Only hosts that send CORS headers to the page are reachable. |
@@ -101,7 +100,7 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 
 ## Vendored and generated files
 
-- Committed bundles: `web/vendor/acorn.mjs` (licence `web/vendor/ACORN-LICENSE`), `web/vendor/isomorphic-git.mjs` (`web/vendor/ISOMORPHIC-GIT-LICENSE`) and `web/vendor/sqljs/` (`web/vendor/SQLJS-LICENSE`). They keep their upstream comments and are not edited. Each licence file carries the MIT grant.
+- Committed bundles: `web/vendor/acorn.mjs` (licence `web/vendor/ACORN-LICENSE`) and `web/vendor/isomorphic-git.mjs` (`web/vendor/ISOMORPHIC-GIT-LICENSE`). They keep their upstream comments and are not edited. Each licence file carries the MIT grant.
 - Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). `web/vendor/pyodide/` from `scripts/vendor-pyodide.mjs` (Pyodide 314.0.7; each file's SHA-256 is pinned in the script). Its licence notice is `web/vendor/PYODIDE-NOTICE.md`.
 - Both generators need network. The witness runs the bashkit script when its files are missing.
 - pip fetches micropip at run time from the CDN. Nothing is vendored beyond the Pyodide core. Wheels are not added to `web/vendor/` without owner approval.
@@ -122,8 +121,12 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 
 txiki.js is the primary goal, and the owner reversed the earlier rejection on 2026-11-08. `scripts/vendor-txiki.mjs` builds txiki.js v26.11.0 (QuickJS-ng and libuv 1.53) for wasm32-wasi with zig 0.17.1. Its libuv is replaced by `scripts/txiki/browser/uv-browser.c`: the loop, timers, handles, streams and tty are implemented there. Every other symbol the link needs is stubbed from `scripts/txiki/stubs.tsv`, one row per symbol with its reason. The same table records the modules excluded from the browser build (channel, dns, fswatch, hashing, httpclient, httpserver, miniz, posix_socket, process, tls, udp and ws), and libwebsockets, which is not vendored. Webcrypto is excluded too, but `scripts/txiki/browser/webcrypto-browser.c` defines `core.webcrypto` with functions that throw a TypeError, so the crypto polyfill loads. `uv_os_uname` and `uv_os_homedir` are implemented in the browser libuv with fixed values.
 
-The interim event loop is synchronous: `uv_run` spins until the next timer is due. `TJS_Run` is not used, because it runs the file-based `run-main` bootstrap, which reads `tjs.exePath`. `scripts/txiki/browser/entry.c` evaluates the code with `JS_Eval` and drains `uv_run` and pending jobs; it exports `tjs_browser_eval`, and `web/txiki-in-page.js` runs it as the `tjs -e "<code>"` builtin, with `qjs` kept alongside it.
+The interim event loop is synchronous: `uv_run` spins until the next timer is due. `TJS_Run` is not used, because it runs the file-based `run-main` bootstrap, which reads `tjs.exePath`. `scripts/txiki/browser/entry.c` evaluates the code as a module with `JS_Eval` and drains `uv_run` and pending jobs; it exports `tjs_browser_eval`, and `web/txiki-in-page.js` runs it as the `tjs -e "<code>"` builtin, with `qjs` kept alongside it.
 
 The gate counts as passing only when the wasm links with zero undefined symbols. Node stays only as the static server.
+
+sqlite is built into the same wasm. `scripts/vendor-txiki.mjs` compiles the sqlite3 amalgamation that the txiki.js source tree ships, with SQLITE_OS_OTHER=1, and txiki's mod_sqlite3 registers tjs:sqlite when the build passes -DTJS_HAVE_SQLITE (set in `flagsFor`). `scripts/txiki/browser/sqlite-vfs.c` supplies `sqlite3_os_init`, a VFS named `thebird` that calls the `tjs_fs_*` host imports, and `tjs_random` and `tjs_now_ms`. Those imports are implemented in `web/txiki-in-page.js` over `web/shims/fs.js`, and the file tree is the one the in-page shell uses for `/workspace`. The gate requires the exports `_initialize`, `malloc`, `free` and `tjs_browser_eval`, and fails on any undefined symbol.
+
+`tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects reports `Uncaught ...` and exits non-zero.
 
 The before-state of the gm removal is commit `6b060f7`. `git diff --name-status 6b060f7 0538b2c` lists the 29 paths of that change.

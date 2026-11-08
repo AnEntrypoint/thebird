@@ -35,7 +35,7 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 
 - Bash syntax and common commands from bashkit: pipelines, variables, loops, functions, redirects, sed, awk, grep, find, jq, sha256sum and others.
 - `git init`, `status`, `log`, `diff`, `add`, `commit -m`, and local `branch` and `checkout`. `commit` runs the in-page gate.
-- `sqlite3 <database> <sql>`, with the database kept as a file in OPFS.
+- `sqlite3 <database> <sql>`, with the database kept as a file in OPFS. It runs through txiki.js's `tjs:sqlite` module.
 - `python3 -c <code>` and `python3 <file>`, run by Pyodide.
 - `pip install <package>...` for pure-Python packages from PyPI.
 - `curl` and `wget`, for hosts that send CORS headers to the page.
