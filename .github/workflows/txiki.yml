@@ -38,3 +38,5 @@ jobs:
           ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
           TMPDIR: /tmp
         run: node scripts/vendor-txiki.mjs
+      - name: Object digests (diagnostic)
+        run: sha256sum /tmp/thebird-txiki/*.o | sort | sed 's#/tmp/thebird-txiki/##'
