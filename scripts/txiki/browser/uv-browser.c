@@ -111,15 +111,13 @@ static int run_timers(uv_loop_t *loop) {
 }
 
 static int run_idle_handles(struct uv__queue *head) {
-    int ran = 0;
     for (struct uv__queue *q = head->next; q != head;) {
         struct uv__queue *next = q->next;
         uv_idle_t *idle = (uv_idle_t *) ((char *) q - offsetof(uv_idle_t, queue));
         if (idle->idle_cb) idle->idle_cb(idle);
-        ran = 1;
         q = next;
     }
-    return ran;
+    return 0;
 }
 
 static int run_prepare_handles(struct uv__queue *head) {
@@ -196,7 +194,7 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
         progressed |= run_check_handles(&loop->check_handles);
         progressed |= run_closing(loop);
         if (mode == UV_RUN_NOWAIT || loop->stop_flag) break;
-        if (progressed) continue;
+        if (progressed || loop->pending_head) continue;
         if (!uv_loop_alive(loop)) break;
         if (mode == UV_RUN_ONCE) break;
         if (loop->timers) {
