@@ -54,7 +54,27 @@ globalThis.thebird = { term, pty, text: screenText };
 client.onOutput((text) => pty.writeOutput(text));
 term.onData((data) => pty.onData(data));
 term.onResize(({ cols }) => pty.resize(cols));
-new ResizeObserver(() => fit.fit()).observe(document.getElementById('terminal'));
+const terminalBox = document.getElementById('terminal');
+new ResizeObserver(() => fit.fit()).observe(terminalBox);
+const touchScroll = { y: null, lines: 0 };
+terminalBox.addEventListener('touchstart', (event) => {
+  touchScroll.y = event.touches[0].clientY;
+}, { passive: true });
+terminalBox.addEventListener('touchmove', (event) => {
+  if (touchScroll.y === null) return;
+  event.preventDefault();
+  const y = event.touches[0].clientY;
+  const lineHeight = terminalBox.clientHeight / term.rows;
+  touchScroll.lines += (touchScroll.y - y) / lineHeight;
+  const whole = Math.trunc(touchScroll.lines);
+  if (whole) term.scrollLines(whole);
+  touchScroll.lines -= whole;
+  touchScroll.y = y;
+}, { passive: false });
+terminalBox.addEventListener('touchend', () => {
+  touchScroll.y = null;
+  touchScroll.lines = 0;
+});
 
 pty.writeOutput('loading the shell\n');
 try {
