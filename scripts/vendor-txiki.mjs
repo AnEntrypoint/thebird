@@ -51,11 +51,11 @@ export async function stageTxiki() {
   rmSync(work, { recursive: true, force: true });
   const tree = join(work, 'txiki');
   mkdirSync(work, { recursive: true });
-  await fetchArchive(`https://api.github.com/repos/saghul/txiki.js/tarball/${TXIKI_VERSION}`, TXIKI_SHA256, join(work, 'txiki.tar.gz'));
+  await fetchArchive(`https://codeload.github.com/saghul/txiki.js/legacy.tar.gz/refs/tags/${TXIKI_VERSION}`, TXIKI_SHA256, join(work, 'txiki.tar.gz'));
   extract(join(work, 'txiki.tar.gz'), tree);
-  await fetchArchive(`https://api.github.com/repos/libuv/libuv/tarball/${LIBUV_COMMIT}`, LIBUV_SHA256, join(work, 'libuv.tar.gz'));
+  await fetchArchive(`https://codeload.github.com/libuv/libuv/legacy.tar.gz/${LIBUV_COMMIT}`, LIBUV_SHA256, join(work, 'libuv.tar.gz'));
   extract(join(work, 'libuv.tar.gz'), join(tree, 'deps', 'libuv'));
-  await fetchArchive(`https://api.github.com/repos/quickjs-ng/quickjs/tarball/${QUICKJS_NG_COMMIT}`, QUICKJS_NG_SHA256, join(work, 'quickjs.tar.gz'));
+  await fetchArchive(`https://codeload.github.com/quickjs-ng/quickjs/legacy.tar.gz/${QUICKJS_NG_COMMIT}`, QUICKJS_NG_SHA256, join(work, 'quickjs.tar.gz'));
   extract(join(work, 'quickjs.tar.gz'), join(tree, 'deps', 'quickjs'));
   const libuvInclude = join(tree, 'deps', 'libuv', 'include');
   const build = join(work, 'include');
