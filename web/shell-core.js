@@ -474,10 +474,39 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return fields;
   }
 
+  const isWildcard = (ch) => !ch.q && (ch.c === '*' || ch.c === '?');
+  const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  function globField(field) {
+    const slash = field.findLastIndex((ch) => ch.c === '/');
+    const dirChars = field.slice(0, slash + 1);
+    const baseChars = field.slice(slash + 1);
+    if (dirChars.some(isWildcard)) return [];
+    const dirText = dirChars.map((ch) => ch.c).join('');
+    const pattern = new RegExp('^' + baseChars.map((ch) => (isWildcard(ch) ? (ch.c === '*' ? '[^/]*' : '[^/]') : escapeRegExp(ch.c))).join('') + '$');
+    let names;
+    try {
+      names = host.list(resolvePath(dirText || '.'));
+    } catch {
+      return [];
+    }
+    const dotted = baseChars[0]?.c === '.';
+    return names
+      .filter((name) => pattern.test(name) && (dotted || !name.startsWith('.')))
+      .sort()
+      .map((name) => dirText + name);
+  }
+
   async function expandWord(parts, sink) {
     const fields = splitFields(await expandChars(parts, false, sink));
     if (!fields.length && parts.some((part) => part.k === 'sq' || part.k === 'dq')) return [''];
-    return fields.map((field) => field.map((ch) => ch.c).join(''));
+    const words = [];
+    for (const field of fields) {
+      const matches = field.some(isWildcard) ? globField(field) : [];
+      if (matches.length) words.push(...matches);
+      else words.push(field.map((ch) => ch.c).join(''));
+    }
+    return words;
   }
 
   async function expandWords(words, sink) {
