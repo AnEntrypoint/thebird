@@ -3,7 +3,6 @@
   "version": "0.2.0",
   "description": "A bash terminal that runs in the browser: bashkit with in-page git, sqlite3, python3 and curl",
   "type": "module",
-  "license": "MIT",
   "bin": {
     "thebird-relay": "./bin/thebird-relay.js"
   },
