@@ -50,7 +50,7 @@ globalThis.thebird = { term, pty, text: screenText };
 client.onOutput((text) => pty.writeOutput(text));
 term.onData((data) => pty.onData(data));
 term.onResize(({ cols }) => pty.resize(cols));
-addEventListener('resize', () => fit.fit());
+new ResizeObserver(() => fit.fit()).observe(document.getElementById('terminal'));
 
 pty.writeOutput('loading the shell\n');
 try {

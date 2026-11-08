@@ -130,6 +130,23 @@ if (existsSync(chrome)) {
     },
   });
   check('scrollback keeps history: wheel-style scrolling moves the viewport up, and Ctrl-L keeps the history and line 1', scroll.history > 0 && scroll.viewportUp < scroll.history && scroll.historyAfterClear > 0 && scroll.lineOneKept === true, JSON.stringify(scroll));
+  const resized = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const fits = () => evaluate("(() => { const box = document.getElementById('terminal').getBoundingClientRect(); const screen = document.querySelector('.xterm-screen').getBoundingClientRect(); return { right: screen.right <= box.right + 0.5, bottom: screen.bottom <= box.bottom + 0.5 }; })()");
+      resized.wide = await evaluate('globalThis.thebird.term.cols');
+      resized.wideFit = await fits();
+      await evaluate("document.getElementById('terminal').style.width = 'calc(50% - 8px)'");
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      resized.narrow = await evaluate('globalThis.thebird.term.cols');
+      resized.narrowFit = await fits();
+      await type('echo cols-$COLUMNS');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+      resized.shellCols = await evaluate("globalThis.thebird.text().split('\\n').find((line) => line.startsWith('cols-'))");
+    },
+  });
+  check('a container resize with no window resize changes the columns, the screen fits the box, and the shell sees the new COLUMNS', resized.narrow < resized.wide && resized.wideFit.right && resized.wideFit.bottom && resized.narrowFit.right && resized.narrowFit.bottom && resized.shellCols === 'cols-' + resized.narrow, JSON.stringify(resized));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 
