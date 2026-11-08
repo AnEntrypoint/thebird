@@ -25,6 +25,7 @@ const PROVENANCE = {
   'web/vendor/xterm/xterm.css': { licence: 'web/vendor/xterm/XTERM-LICENSE', upstream: 'xterm.js' },
   'web/vendor/xterm/addon-fit.mjs': { licence: 'web/vendor/xterm/FIT-LICENSE', upstream: 'xterm.js' },
   'web/vendor/xterm/addon-webgl.mjs': { licence: 'web/vendor/xterm/WEBGL-LICENSE', upstream: 'xterm.js' },
+  'web/vendor/xterm/addon-unicode11.mjs': { licence: 'web/vendor/xterm/UNICODE11-LICENSE', upstream: 'xterm.js' },
 };
 
 const lineOf = (text, offset) => text.slice(0, offset).split('\n').length;

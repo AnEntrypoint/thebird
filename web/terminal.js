@@ -1,6 +1,7 @@
 import { Terminal } from './vendor/xterm/xterm.mjs';
 import { FitAddon } from './vendor/xterm/addon-fit.mjs';
 import { WebglAddon } from './vendor/xterm/addon-webgl.mjs';
+import { Unicode11Addon } from './vendor/xterm/addon-unicode11.mjs';
 import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
 
@@ -11,6 +12,7 @@ const term = new Terminal({
   fontFamily: 'Menlo, Consolas, "DejaVu Sans Mono", monospace',
   fontSize: 14,
   scrollback: 10000,
+  allowProposedApi: true,
   theme: { background: '#000000', foreground: '#e5e5e5', cursor: '#e5e5e5' },
 });
 const screenText = () => {
@@ -26,6 +28,8 @@ const screenText = () => {
 };
 const fit = new FitAddon();
 term.loadAddon(fit);
+term.loadAddon(new Unicode11Addon());
+term.unicode.activeVersion = '11';
 term.open(document.getElementById('terminal'));
 fit.fit();
 try {

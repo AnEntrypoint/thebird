@@ -15,6 +15,14 @@ const CONTROL_KEYS = {
 const CLEAR_SCREEN = '\x1b[H\x1b[2J';
 const up = (rows) => (rows > 0 ? `\x1b[${rows}A` : '');
 const isSpace = (char) => /\s/.test(char);
+const WIDE_RANGES = [[0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6], [0x1f300, 0x1f64f], [0x1f680, 0x1f6ff], [0x1f900, 0x1f9ff], [0x1fa70, 0x1faff], [0x20000, 0x3fffd]];
+const ZERO_WIDTH_RANGES = [[0x0300, 0x036f], [0x200b, 0x200f], [0xfe00, 0xfe0f], [0x20d0, 0x20ff]];
+const inRanges = (code, ranges) => ranges.some(([from, to]) => code >= from && code <= to);
+const cellWidth = (char) => {
+  const code = char.codePointAt(0);
+  if (code < 0x20 || code === 0x7f || inRanges(code, ZERO_WIDTH_RANGES)) return 0;
+  return inRanges(code, WIDE_RANGES) ? 2 : 1;
+};
 const commonPrefix = (words) => words.reduce((prefix, word) => {
   let end = 0;
   while (end < prefix.length && prefix[end] === word[end]) end++;
@@ -46,7 +54,13 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
   let busy = false;
   let idle = Promise.resolve();
 
-  const headWidth = () => (showPrompt ? promptText.length : 0);
+  const advanceOver = (offset, codes) => codes.reduce((at, char) => {
+    const width = cellWidth(char);
+    return width === 2 && at % cols === cols - 1 ? at + 1 + width : at + width;
+  }, offset);
+  const headWidth = () => (showPrompt ? advanceOver(0, Array.from(promptText)) : 0);
+  const offsetOf = (count) => advanceOver(headWidth(), chars.slice(0, count));
+  const endOffset = () => offsetOf(chars.length);
   const inputActive = () => showPrompt || chars.length > 0;
   const cellAt = (index) => ({ row: Math.floor(index / cols), col: index % cols });
   const endCell = (index) => (index > 0 && index % cols === 0 ? { row: index / cols - 1, col: cols - 1 } : cellAt(index));
@@ -69,8 +83,8 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
     let out = inputDrawn ? clearInput() : atLineStart ? '' : '\r\n';
     const head = showPrompt ? promptText : '';
     out += '\x1b[J' + head + chars.join('');
-    const end = endCell(head.length + chars.length);
-    const target = cellAt(head.length + cursor);
+    const end = endCell(endOffset());
+    const target = cellAt(offsetOf(cursor));
     out += moveTo(end, target);
     drawnRow = target.row;
     inputDrawn = true;
@@ -131,8 +145,8 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
 
   function submit() {
     const command = chars.join('');
-    const here = cellAt(headWidth() + cursor);
-    const end = endCell(headWidth() + chars.length);
+    const here = cellAt(offsetOf(cursor));
+    const end = endCell(endOffset());
     term.write(moveTo(here, end) + '\r\n');
     inputDrawn = false;
     showPrompt = false;
