@@ -13,6 +13,7 @@ const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
 const SHELL_PID = 100;
 const SIGNALS = { HUP: 1, INT: 2, KILL: 9, TERM: 15 };
+const NULL_DEVICE = '/dev/null';
 
 class ShellExit {
   constructor(code) {
@@ -1110,12 +1111,17 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     }
   }
 
+  function writeRedirect(path, text) {
+    if (path !== NULL_DEVICE) host.write(path, text);
+  }
+
   async function runCommand(node, argv, stdin, sink) {
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op === '<') {
         try {
-          input = host.read(await wordPath(redirect.target, sink));
+          const path = await wordPath(redirect.target, sink);
+          input = path === NULL_DEVICE ? '' : host.read(path);
         } catch {
           return { code: 1, out: '', err: `${argv[0]}: no such file\n` };
         }
@@ -1130,12 +1136,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       } else if (redirect.op === '>' || redirect.op === '>>') {
         const path = await wordPath(redirect.target, sink);
         const prior = redirect.op === '>>' && host.exists(path) ? host.read(path) : '';
-        host.write(path, prior + out);
+        writeRedirect(path, prior + out);
         out = '';
       } else if (redirect.op === '2>' || redirect.op === '2>>') {
         const path = await wordPath(redirect.target, sink);
         const prior = redirect.op === '2>>' && host.exists(path) ? host.read(path) : '';
-        host.write(path, prior + err);
+        writeRedirect(path, prior + err);
         err = '';
       }
     }
