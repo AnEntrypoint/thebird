@@ -5,7 +5,9 @@ const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', '>>', '>', '<', '|', '(', ')
 const REDIRECTS = new Set(['>', '>>', '<', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
-const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which']);
+const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
+const SHELL_PID = 100;
+const SIGNALS = { HUP: 1, INT: 2, KILL: 9, TERM: 15 };
 
 class ShellExit {
   constructor(code) {
@@ -16,6 +18,12 @@ class ShellExit {
 class ReturnSignal {
   constructor(code) {
     this.code = code;
+  }
+}
+
+class Signalled {
+  constructor(signo) {
+    this.signo = signo;
   }
 }
 
@@ -318,10 +326,13 @@ function parse(tokens) {
         pos++;
         continue;
       }
-      items.push({ op, pipe: parsePipeline() });
+      items.push({ op, pipe: parsePipeline(), background: false });
       const next = tokens[pos];
-      if (next?.op === '&') throw new Error('background jobs are not supported in the in-page shell; run the command in the foreground');
-      if (next?.op === ';') {
+      if (next?.op === '&') {
+        pos++;
+        items.at(-1).background = true;
+        op = ';';
+      } else if (next?.op === ';') {
         pos++;
         op = ';';
       } else if (next?.op === '&&' || next?.op === '||') {
@@ -455,7 +466,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const vars = new Map(saved?.vars ?? []);
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
-  let runSignal = null;
+  const jobs = new Map();
+  let nextPid = saved?.nextPid ?? SHELL_PID + 1;
+  let lastPid = saved?.lastPid ?? null;
+  let runSink = null;
   const frames = [];
   let positional = [];
 
@@ -465,7 +479,61 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
-    sleep: ({ argv }) => sleepFor(Number(argv[0] ?? 0) * 1000),
+    sleep: ({ argv, signal }) => sleepFor(Number(argv[0] ?? 0) * 1000, signal),
+    ps: () => {
+      const header = { pid: 'PID', ppid: 'PPID', stat: 'STAT', command: 'COMMAND' };
+      const rows = [
+        { pid: String(SHELL_PID), ppid: '0', stat: 'S', command: 'thebird' },
+        ...[...jobs.values()].filter((job) => !job.done).map((job) => ({ pid: String(job.pid), ppid: String(SHELL_PID), stat: 'S', command: job.command })),
+      ];
+      const table = [header, ...rows];
+      const width = (key) => Math.max(...table.map((row) => row[key].length));
+      const [pidWidth, ppidWidth, statWidth] = [width('pid'), width('ppid'), width('stat')];
+      const line = (row) => `${row.pid.padStart(pidWidth)} ${row.ppid.padStart(ppidWidth)} ${row.stat.padEnd(statWidth)} ${row.command}\n`;
+      return ok(table.map(line).join(''));
+    },
+    kill: ({ argv }) => {
+      if (argv[0] === '-l') return ok(Object.keys(SIGNALS).join(' ') + '\n');
+      const targets = [...argv];
+      let signo = SIGNALS.TERM;
+      if (targets[0]?.startsWith('-')) {
+        const spec = targets.shift().slice(1);
+        signo = signalNumber(spec);
+        if (signo === null) return { code: 1, out: '', err: `kill: ${spec}: invalid signal specification\n` };
+      }
+      let err = '';
+      let code = 0;
+      for (const target of targets) {
+        const pid = Number(target);
+        if (!Number.isInteger(pid)) {
+          err += `kill: ${target}: arguments must be process or job IDs\n`;
+          code = 1;
+        } else if (pid === SHELL_PID) {
+          err += `kill: (${pid}) - Operation not permitted\n`;
+          code = 1;
+        } else if (!jobs.has(pid) || jobs.get(pid).done) {
+          err += `kill: (${pid}) - No such process\n`;
+          code = 1;
+        } else jobs.get(pid).control.abort(new Signalled(signo));
+      }
+      return { code, out: '', err };
+    },
+    wait: async ({ argv, signal }) => {
+      const targets = argv.length ? argv.map(Number) : [...jobs.keys()];
+      let code = 0;
+      let err = '';
+      for (const pid of targets) {
+        const job = jobs.get(pid);
+        if (!job) {
+          err += `wait: pid ${pid} is not a child of this shell\n`;
+          code = 127;
+          continue;
+        }
+        code = await awaitJob(job, signal);
+        jobs.delete(pid);
+      }
+      return { code, out: '', err };
+    },
     cd: ({ argv }) => {
       const target = resolvePath(argv[0] ?? '/workspace');
       if (!host.exists(target)) return { code: 1, out: '', err: `cd: ${argv[0]}: No such file or directory\n` };
@@ -697,7 +765,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     },
     which: ({ argv }) => lookupNames(argv),
     type: ({ argv }) => typeNames(argv),
-    command: ({ argv, stdin }) => (argv[0] === '-v' ? lookupNames(argv.slice(1)) : dispatch(argv, stdin)),
+    command: ({ argv, stdin, signal }) => (argv[0] === '-v' ? lookupNames(argv.slice(1)) : dispatch(argv, stdin, signal)),
     cat({ argv, stdin }) {
       if (!argv.length) return ok(stdin ?? '');
       let out = '';
@@ -729,9 +797,27 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     },
   };
 
-  const sleepFor = (ms) =>
+  const signalNumber = (spec) => {
+    if (/^\d+$/.test(spec)) return Number(spec);
+    return SIGNALS[spec.replace(/^SIG/i, '').toUpperCase()] ?? null;
+  };
+
+  const awaitJob = (job, signal) =>
     new Promise((resolve, reject) => {
-      const signal = runSignal;
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      const onAbort = () => reject(signal.reason);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      job.promise.then((code) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(code);
+      });
+    });
+
+  const sleepFor = (ms, signal) =>
+    new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(signal.reason);
         return;
@@ -818,7 +904,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (name === '@' || name === '*') return positional.join(' ');
     if (name === '0') return 'thebird';
     if (name === '$') return '1';
-    if (name === '!') return '';
+    if (name === '!') return lastPid === null ? '' : String(lastPid);
     for (let i = frames.length - 1; i >= 0; i--) {
       if (frames[i].has(name)) return frames[i].get(name);
     }
@@ -862,7 +948,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function commandText(src, sink) {
-    const sub = { out: '', err: '' };
+    const sub = { out: '', err: '', signal: sink.signal };
     try {
       await runSequence(parseScript(src), '', sub);
     } catch (err) {
@@ -928,6 +1014,46 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
 
   const wordPath = async (parts, sink) => resolvePath((await expandWord(parts, sink))[0] ?? '');
 
+  const describePart = (part) => {
+    if (part.k === 'lit' || part.k === 'sq') return part.s;
+    if (part.k === 'dq') return `"${part.parts.map(describePart).join('')}"`;
+    if (part.k === 'param') return `$${part.name}`;
+    if (part.k === 'cmd') return `$(${part.src})`;
+    if (part.k === 'arith') return `$((${part.src}))`;
+    return '';
+  };
+
+  const describePipe = (pipe) =>
+    pipe.cmds.map((cmd) => (cmd.type === 'simple' ? cmd.words.map((parts) => parts.map(describePart).join('')).join(' ') : cmd.type)).join(' | ');
+
+  const startJob = (pipe, stdin) => {
+    const pid = nextPid++;
+    const control = new AbortController();
+    const job = { pid, command: describePipe(pipe), control, done: false, code: 0, promise: null };
+    jobs.set(pid, job);
+    lastPid = pid;
+    job.promise = (async () => {
+      const sink = { out: '', err: '', signal: control.signal };
+      let code;
+      try {
+        code = await runPipeline(pipe, stdin, sink);
+      } catch (err) {
+        if (err instanceof Signalled) code = 128 + err.signo;
+        else if (err instanceof ShellExit) code = err.code;
+        else {
+          code = 2;
+          sink.err += `${err.message}\n`;
+        }
+      }
+      job.done = true;
+      job.code = code;
+      runSink.out += sink.out;
+      runSink.err += sink.err;
+      return code;
+    })();
+    return job;
+  };
+
   async function runSimple(node, stdin, sink) {
     const argv = await expandWords(node.words, sink);
     const assigned = [];
@@ -959,7 +1085,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       }
     }
-    const result = await dispatch(argv, input);
+    const result = await dispatch(argv, input, sink.signal);
     let { out, err } = result;
     for (const redirect of node.redirects) {
       if (redirect.op === '2>&1') {
@@ -983,7 +1109,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   async function runSubshell(node, stdin, sink) {
     const savedCwd = state.cwd;
     const savedVars = new Map(vars);
-    const inner = { out: '', err: '' };
+    const inner = { out: '', err: '', signal: sink.signal };
     let code;
     try {
       code = await runSequence(node.list, stdin, inner);
@@ -998,21 +1124,21 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function runGroup(node, stdin) {
-    const inner = { out: '', err: '' };
+  async function runGroup(node, stdin, sink) {
+    const inner = { out: '', err: '', signal: sink.signal };
     const code = await runSequence(node.list, stdin, inner);
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function dispatch(argv, stdin) {
+  async function dispatch(argv, stdin, signal) {
     const name = argv[0];
-    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin);
+    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal);
     if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
-    return commands[name]({ argv: argv.slice(1), stdin });
+    return commands[name]({ argv: argv.slice(1), stdin, signal });
   }
 
-  async function runIf(node, stdin) {
-    const inner = { out: '', err: '' };
+  async function runIf(node, stdin, sink) {
+    const inner = { out: '', err: '', signal: sink.signal };
     let code = 0;
     let taken = false;
     for (const { cond, body } of node.branches) {
@@ -1026,8 +1152,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function runFor(node, stdin) {
-    const inner = { out: '', err: '' };
+  async function runFor(node, stdin, sink) {
+    const inner = { out: '', err: '', signal: sink.signal };
     const values = node.words ? await expandWords(node.words, inner) : positional;
     let code = 0;
     for (const value of values) {
@@ -1037,13 +1163,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function callFunction(body, args, stdin) {
+  async function callFunction(body, args, stdin, signal) {
     const savedPositional = positional;
     positional = args;
     frames.push(new Map());
     let result;
     try {
-      result = body.type === 'subshell' ? await runSubshell(body, stdin, { out: '', err: '' }) : await runGroup(body, stdin);
+      result = body.type === 'subshell' ? await runSubshell(body, stdin, { out: '', err: '', signal }) : await runGroup(body, stdin, { out: '', err: '', signal });
     } catch (err) {
       if (!(err instanceof ReturnSignal)) throw err;
       result = { code: err.code, out: '', err: '' };
@@ -1060,9 +1186,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return ok('');
     }
     if (cmd.type === 'subshell') return runSubshell(cmd, stdin, sink);
-    if (cmd.type === 'group') return runGroup(cmd, stdin);
-    if (cmd.type === 'if') return runIf(cmd, stdin);
-    if (cmd.type === 'for') return runFor(cmd, stdin);
+    if (cmd.type === 'group') return runGroup(cmd, stdin, sink);
+    if (cmd.type === 'if') return runIf(cmd, stdin, sink);
+    if (cmd.type === 'for') return runFor(cmd, stdin, sink);
     return runSimple(cmd, stdin, sink);
   }
 
@@ -1082,25 +1208,38 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
 
   async function runSequence(list, stdin, sink) {
     let status = 0;
-    for (const { op, pipe } of list.items) {
-      if (runSignal?.aborted) throw runSignal.reason;
+    for (const { op, pipe, background } of list.items) {
+      if (sink.signal?.aborted) throw sink.signal.reason;
       if (op === '&&' && status !== 0) continue;
       if (op === '||' && status === 0) continue;
+      if (background) {
+        startJob(pipe, stdin);
+        status = 0;
+        state.status = 0;
+        continue;
+      }
       status = await runPipeline(pipe, stdin, sink);
       state.status = status;
     }
     return status;
   }
 
+  const stopJobs = async () => {
+    const running = [...jobs.values()].filter((job) => !job.done);
+    for (const job of running) job.control.abort(new Signalled(SIGNALS.HUP));
+    await Promise.all(running.map((job) => job.promise));
+    jobs.clear();
+  };
+
   return {
     async run(script, { signal, timeoutMs = COMMAND_TIMEOUT_MS } = {}) {
-      const sink = { out: '', err: '' };
       const control = new AbortController();
+      const sink = { out: '', err: '', signal: control.signal };
       const cancel = () => control.abort(new Cancelled());
       if (signal?.aborted) cancel();
       else signal?.addEventListener('abort', cancel, { once: true });
       const timer = setTimeout(() => control.abort(new TimedOut()), timeoutMs);
-      runSignal = control.signal;
+      runSink = sink;
       let code;
       try {
         code = await runSequence(parseScript(script), '', sink);
@@ -1119,12 +1258,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       } finally {
         clearTimeout(timer);
         signal?.removeEventListener('abort', cancel);
-        runSignal = null;
       }
+      await stopJobs();
+      runSink = null;
       state.status = code;
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], functions: [...functions] }),
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], functions: [...functions], nextPid, lastPid }),
   };
 }

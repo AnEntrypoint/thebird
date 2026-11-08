@@ -237,6 +237,33 @@ group('coreutils: grep, hostname and id', async () => {
   check('lookups: grep, hostname and id resolve as core commands', found.stdout === '/bin/grep\n/bin/hostname\n/bin/id\n', JSON.stringify(found.stdout));
 });
 
+group('process: & starts a job, $! names its PID, ps lists it, kill signals it and wait reports the status', async () => {
+  const sh = await shell({});
+  const started = await run(sh, 'sleep 30 & echo pid=$!; ps | grep "sleep 30"; kill $!; wait $!; echo rc=$?');
+  const lines = started.stdout.split('\n');
+  const pid = /^pid=(\d+)$/.exec(lines[0])?.[1] ?? '';
+  check('process: $! after & names a PID above the shell PID', pid !== '' && Number(pid) > 100, JSON.stringify(lines[0]));
+  const listed = lines.find((line) => line.includes('sleep 30')) ?? '';
+  check('process: ps lists the background job by its PID, parent 100 and command', listed.trim().split(/\s+/).join(' ') === `${pid} 100 S sleep 30`, JSON.stringify(listed));
+  check('process: kill -TERM stops the job and wait returns 128 + 15', lines.includes('rc=143'), JSON.stringify(started.stdout));
+  const plain = await run(sh, 'ps');
+  check('process: ps prints the header and the shell row when no job runs', plain.stdout === 'PID PPID STAT COMMAND\n100    0 S    thebird\n', JSON.stringify(plain.stdout));
+  const missing = await run(sh, 'kill 999; echo rc=$?');
+  check('process: kill of a PID that is not running exits 1 with no such process', missing.stdout === 'rc=1\n' && missing.stderr === 'kill: (999) - No such process\n', JSON.stringify(missing.stderr));
+  const idle = await run(sh, 'wait; echo rc=$?');
+  check('process: wait with no jobs exits 0', idle.stdout === 'rc=0\n', JSON.stringify(idle.stdout));
+  const joined = await run(sh, 'echo hi & wait; echo done');
+  check('process: a background job finishes before wait returns, and its output is kept', joined.stdout === 'hi\ndone\n', JSON.stringify(joined.stdout));
+  const failed = await run(sh, 'false & wait $!; echo rc=$?');
+  check('process: wait $! returns the status the job exited with', failed.stdout === 'rc=1\n', JSON.stringify(failed.stdout));
+  const status = await run(sh, 'false & echo rc=$?');
+  check('process: $? is 0 right after a background command starts', status.stdout === 'rc=0\n', JSON.stringify(status.stdout));
+  const signals = await run(sh, 'kill -l; kill -9 999; echo rc=$?');
+  check('process: kill -l lists the signal names', signals.stdout.startsWith('HUP INT KILL TERM\n'), JSON.stringify(signals.stdout));
+  const found = await run(sh, 'command -v ps kill; type -t wait');
+  check('process: ps and kill resolve as core commands and wait as a builtin', found.stdout === '/bin/ps\n/bin/kill\nbuiltin\n', JSON.stringify(found.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
