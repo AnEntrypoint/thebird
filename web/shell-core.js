@@ -343,6 +343,11 @@ export function parseScript(src) {
 
 const ok = (out) => ({ code: 0, out, err: '' });
 
+function globRegExp(pattern, caseInsensitive = false) {
+  const body = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  return new RegExp(`^${body}$`, caseInsensitive ? 'i' : '');
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -468,6 +473,152 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
       return ok('');
     },
     pwd: () => ok(state.cwd + '\n'),
+    mkdir: ({ argv }) => {
+      const recursive = argv[0] === '-p';
+      let err = '';
+      let code = 0;
+      for (const name of recursive ? argv.slice(1) : argv) {
+        const path = resolvePath(name);
+        if (recursive) {
+          let current = '';
+          for (const part of path.split('/').filter(Boolean)) {
+            current += '/' + part;
+            if (!host.exists(current)) host.mkdir(current);
+          }
+        } else if (host.exists(path)) {
+          err += `mkdir: cannot create directory '${name}': File exists\n`;
+          code = 1;
+        } else host.mkdir(path);
+      }
+      return { code, out: '', err };
+    },
+    rm: ({ argv }) => {
+      const flags = argv.filter((arg) => arg.startsWith('-')).join('');
+      const recursive = /[rR]/.test(flags);
+      const force = flags.includes('f');
+      let err = '';
+      let code = 0;
+      for (const name of argv.filter((arg) => !arg.startsWith('-'))) {
+        const path = resolvePath(name);
+        const info = host.stat(path);
+        if (!info) {
+          if (!force) {
+            err += `rm: cannot remove '${name}': No such file or directory\n`;
+            code = 1;
+          }
+        } else if (info.dir && !recursive) {
+          err += `rm: cannot remove '${name}': Is a directory\n`;
+          code = 1;
+        } else host.remove(path, recursive);
+      }
+      return { code, out: '', err };
+    },
+    ls: ({ argv }) => {
+      const flags = argv.filter((arg) => arg.startsWith('-')).join('');
+      const long = flags.includes('l');
+      const all = flags.includes('a');
+      const targets = argv.filter((arg) => !arg.startsWith('-'));
+      const describe = (path, name) => {
+        const info = host.stat(path);
+        return `${info?.dir ? 'd' : '-'} ${info?.size ?? 0} ${name}\n`;
+      };
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const name of targets.length ? targets : ['.']) {
+        const path = resolvePath(name);
+        const info = host.stat(path);
+        if (!info) {
+          err += `ls: cannot access '${name}': No such file or directory\n`;
+          code = 2;
+        } else if (!info.dir) out += long ? describe(path, name) : name + '\n';
+        else {
+          for (const entry of host.list(path).sort()) {
+            if (!all && entry.startsWith('.')) continue;
+            out += long ? describe(`${path === '/' ? '' : path}/${entry}`, entry) : entry + '\n';
+          }
+        }
+      }
+      return { code, out, err };
+    },
+    find: ({ argv }) => {
+      let i = 0;
+      const roots = [];
+      while (i < argv.length && !argv[i].startsWith('-')) roots.push(argv[i++]);
+      if (!roots.length) roots.push('.');
+      const predicates = [];
+      for (; i < argv.length; i += 2) {
+        const [flag, value] = [argv[i], argv[i + 1] ?? ''];
+        if (flag === '-name') predicates.push((name) => globRegExp(value).test(name));
+        else if (flag === '-iname') predicates.push((name) => globRegExp(value, true).test(name));
+        else if (flag === '-type') predicates.push((_name, info) => (value === 'd' ? info.dir : !info.dir));
+        else throw new Error(`find: unknown predicate '${flag}'`);
+      }
+      let out = '';
+      let err = '';
+      let code = 0;
+      const visit = (display, path) => {
+        const info = host.stat(path);
+        if (!info) return;
+        const base = display.slice(display.lastIndexOf('/') + 1) || display;
+        if (predicates.every((test) => test(base, info))) out += display + '\n';
+        if (info.dir) {
+          for (const entry of host.list(path).sort()) visit(`${display.replace(/\/$/, '')}/${entry}`, `${path === '/' ? '' : path}/${entry}`);
+        }
+      };
+      for (const root of roots) {
+        const path = resolvePath(root);
+        if (!host.stat(path)) {
+          err += `find: '${root}': No such file or directory\n`;
+          code = 1;
+        } else visit(root, path);
+      }
+      return { code, out, err };
+    },
+    wc: ({ argv, stdin = '' }) => {
+      const flags = argv.filter((arg) => arg.startsWith('-')).join('');
+      const files = argv.filter((arg) => !arg.startsWith('-'));
+      const selected = (counts) => {
+        const pick = [];
+        if (!flags || flags.includes('l')) pick.push(counts.lines);
+        if (!flags || flags.includes('w')) pick.push(counts.words);
+        if (!flags || flags.includes('c')) pick.push(counts.chars);
+        return pick.join(' ');
+      };
+      const counts = (text) => ({ lines: (text.match(/\n/g) ?? []).length, words: text.split(/\s+/).filter(Boolean).length, chars: text.length });
+      if (!files.length) return ok(selected(counts(stdin)) + '\n');
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const name of files) {
+        try {
+          out += `${selected(counts(host.read(resolvePath(name))))} ${name}\n`;
+        } catch {
+          err += `wc: ${name}: No such file or directory\n`;
+          code = 1;
+        }
+      }
+      return { code, out, err };
+    },
+    date: ({ argv }) => {
+      const now = new Date();
+      if (!argv[0]?.startsWith('+')) return ok(now.toUTCString() + '\n');
+      const pad = (value, width = 2) => String(value).padStart(width, '0');
+      const text = argv[0].slice(1).replace(/%([sNYmdHMS%])/g, (match, spec) => {
+        if (spec === 's') return String(Math.floor(now.getTime() / 1000));
+        if (spec === 'N') return pad(now.getTime() % 1000, 3) + '000000';
+        if (spec === 'Y') return String(now.getUTCFullYear());
+        if (spec === 'm') return pad(now.getUTCMonth() + 1);
+        if (spec === 'd') return pad(now.getUTCDate());
+        if (spec === 'H') return pad(now.getUTCHours());
+        if (spec === 'M') return pad(now.getUTCMinutes());
+        if (spec === 'S') return pad(now.getUTCSeconds());
+        return '%';
+      });
+      return ok(text + '\n');
+    },
+    uname: () => ok('Linux\n'),
+    whoami: () => ok('user\n'),
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
@@ -594,7 +745,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
       const [op, value] = args;
       if (op === '-n') return value !== '';
       if (op === '-z') return value === '';
-      if (op === '-e' || op === '-f') return host.exists(resolvePath(value));
+      if (op === '-e') return host.exists(resolvePath(value));
+      if (op === '-f' || op === '-d') {
+        const info = host.stat(resolvePath(value));
+        return Boolean(info) && (op === '-d') === info.dir;
+      }
       throw new Error(`test: ${op}: unary operator not supported`);
     }
     if (args.length === 3) {
