@@ -119,7 +119,32 @@ A loop with no `await` never returns to the page, so the cancel flag cannot be s
 
 Witness, to run in Phase B (`npm run witness`, the block after the txiki shell check): `runTjs('while (true) {}', ..., { timeoutMs: 1000 })` returns status 124 with no `Uncaught` line in under 5 s; `runTjs('setTimeout(() => {}, 60000);', ..., { timeoutMs: 1000 })` returns 124 in under 5 s; an abort at 500 ms on a waiting run returns 130 in under 5 s; `tjsBuiltin` and `qjsBuiltin` on `while (true) {}` throw `timeout: command timed out`. The four checks are in `scripts/witness.mjs`.
 
-Limit, recorded: Ctrl-C does not stop a loop that never yields. The shell runs the engine synchronously inside its worker, so the page's cancel message waits until the engine returns. See the Blocked section.
+Limit, superseded by 140e437: a Ctrl-C could not reach a loop that never yields, because the engine ran inside the shell worker. The cancel word (140e437) closes that on an isolated page; the Pages site has no isolation, so the restart path applies there. See the Ctrl-C section below and the Blocked section.
+
+## Phase A: Ctrl-C reaches a loop that never yields (140e437, not built)
+
+- `scripts/txiki/browser/entry.c`: the interrupt handler and the per-turn check read `tjs_cancel_requested` (a new host import) as well as the page's cancel. A loop with no await stops inside the job and the run returns 130.
+- `web/txiki-in-page.js`: `setCancelWord` and `clearCancel` manage a shared `Int32Array` over a `SharedArrayBuffer`. `tjs_cancel_requested` reads it.
+- `web/shell-client.js`: on an isolated page (`crossOriginIsolated`) the client creates the shared word and sets it on Ctrl-C at once. On any page it arms a 1.5 s grace after a cancel of a running command. If the run has not answered by then, the client terminates the worker, rejects the other pending calls, resolves the run with `cancelled` and status 130, and starts a new worker. The new worker runs `(exit 130)` so the next prompt's `$?` is 130. The directory and variables do not carry over.
+- `web/shell-worker.js`: takes the word from its `init` message and clears it before each run.
+
+Witness, to run in Phase B (`scripts/witness.mjs`, after the txiki shell check):
+
+- `node -e "while (true) {}"` in `loop-check`, Ctrl-C after 1.5 s: the output has `^C` and a `cancelled` line, `echo status=$?` prints `status=130`, and the cancel took under 10 s.
+- The same run on an isolated page: the `pwd` after the cancel is `/workspace/loop-check`. On a page that is not isolated the check expects `/workspace`, which is the restart. The check is conditional on `self.crossOriginIsolated`.
+- Phase B runs the first on the local relay (isolated) and the second on the built site (not isolated).
+
+## Phase A: engine instance pool (acc03f4, not built)
+
+`web/txiki-in-page.js` now takes an engine instance from a pool for each `runTjs` call and returns it at the end. Each instance keeps its own cwd, stdio buffers, bridge session and memory. The compiled module is shared. Before this, `cwd`, `session` and the stdio buffers were module-level, so a builtin that started a second engine run reset the outer run's directory and output. The pool removes that. The Phase B rebuild also needs `tjs_cancel_requested` and `tjs_browser_set_deadline` in the wasm.
+
+## Phase A: every builtin through the bridge (6eed9b4, not built)
+
+`web/builtins.js` (`BUILTIN_NAMES`, `runBuiltin`) is the one dispatch for the nine builtins. `web/bash-shell.js` builds its custom builtins from it. `web/shell-in-txiki.js` passes `runBuiltin` as the bridge's `builtin` option with the run's timeout. The txiki shell no longer refuses any builtin.
+
+## Phase A: licence (ab32804)
+
+`package.json` has no `license` field: thebird is unlicensed by owner decision. No LICENSE file was added for thebird's own code. The vendored notices stay (`web/vendor/brotli/`, `web/vendor/tte-js/` with its LICENSE and LICENSES folder, `web/vendor/xterm/`, `web/vendor/acorn.mjs` with `ACORN-LICENSE`, `web/vendor/isomorphic-git.mjs` with `ISOMORPHIC-GIT-LICENSE`). The Pyodide bundle licence stays deferred, as before.
 
 ## Phase A: host-call bridge for builtins on the txiki path (not built)
 
@@ -131,30 +156,26 @@ How each builtin is served:
 | --- | --- | --- | --- |
 | `python3` | Page: the Pyodide worker, bridged | Served through the bridge | The worker is separate from the engine. |
 | `pip` | Page: the Pyodide worker, bridged | Served through the bridge | As `python3`. |
-| `git` | Page: its own txiki run | Refused, exit 1 | A second `runTjs` calls `tjs_browser_end` on the one global runtime and frees the outer run. |
-| `sqlite3` | Page: its own txiki run | Refused, exit 1 | As `git`. |
-| `curl`, `wget` | Page: their own txiki run | Refused, exit 1 | As `git`. |
-| `qjs`, `tjs`, `node` | Page: their own txiki run | Refused, exit 1 | As `git`. |
+| `git` | Page: its own txiki run, on its own engine instance | Served through the bridge | Each run takes an instance from the pool (see the pool section), so a nested run does not free the outer one. |
+| `sqlite3` | Page: its own txiki run, on its own instance | Served through the bridge | As `git`. |
+| `curl`, `wget` | Page: their own txiki run, on its own instance | Served through the bridge | As `git`. |
+| `qjs`, `tjs`, `node` | Page: their own txiki run, on its own instance | Served through the bridge | As `git`. |
 
-On the bash page (`web/bash-shell.js`, bashkit) every builtin is served by the page, as before. The txiki shell is not the production path. `which`, `command -v` and `type` answer the same for all nine names in both paths.
-
-Refusal text: `NAME: not available in the txiki shell: it runs its own txiki engine, and the txiki shell cannot start a second engine run while this one is live`.
+The refusal was removed in 6eed9b4: `web/builtins.js` is now the one dispatch, and the txiki shell calls it for all nine names. The bash page calls the same dispatch. `which`, `command -v` and `type` answer the same for all nine names in both paths.
 
 Witness, to run in Phase B (through `runShellInTxiki`, with the rebuilt wasm):
 
 - `python3 -c "print(1+2)"`: stdout `3\n`, exit 0.
 - `python3 -c "import time; time.sleep(30)"` with an abort at 500 ms: rejects with `status 130`, in under 5 s.
 - `pip install six` (needs network to PyPI): exit 0.
-- `git status`, `sqlite3 x.db "select 1"`, `qjs -e "1"`, `tjs -e "1"`, `node -v`, `curl http://127.0.0.1:1/` and `wget -O /dev/null http://127.0.0.1:1/`: each gives exit 1 and a stderr line that contains `not available in the txiki shell`.
-
-The refusal has one owner decision open: a second wasm instance would let these builtins run inside the txiki shell. That needs the per-instance page state (session, handles, fs) to be separate, which is not built.
+- `runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done')`: stdout `git-ok\n4\n3\n42\ndone\n`, exit 0. This is the witness entry in `scripts/witness.mjs` (commit d5e3cf5).
+- `sqlite3 x.db "select 1"` inside the txiki shell: stdout `1\n`, exit 0. `curl http://127.0.0.1:1/` inside the txiki shell: a stderr line from the page, a non-zero exit, and the next command still runs.
 
 ## Blocked (not coded, named blocker)
 
 | Group | Blocker | What it needs |
 | --- | --- | --- |
-| `git`, `sqlite3`, `qjs`, `tjs`, `node`, `curl`, `wget` inside the txiki shell | Each runs its own engine run on the one global runtime, so a nested run would free the outer one. Refused for now (see the bridge section). | Owner decision: a second wasm instance with its own page state, or leave them refused on the txiki path. |
-| Ctrl-C while a synchronous loop runs (`node -e "while (true) {}"`) | The engine runs inside the shell worker, so the page cannot run the cancel message until the engine returns. The interrupt handler (5eafce5) stops such a loop at the timeout, not at Ctrl-C. Shared memory for a cross-thread flag needs `SharedArrayBuffer`, which needs cross-origin isolation, and the Pages site does not send those headers. | Owner decision: accept the timeout as the stop for a loop that never yields, or run the engine on a worker that a cancel can terminate (which drops its state, as Python's cancel does). |
+| Ctrl-C on the Pages site (not cross-origin isolated) while a loop never yields (`node -e "while (true) {}"`) | No shared cancel word exists without cross-origin isolation, so the engine cannot see the Ctrl-C. The client replaces the shell worker after 1.5 s (commit 140e437): the command reports `cancelled` with 130, but the shell's directory and variables are lost. | Owner decision: accept the restart on Pages, or serve the site with cross-origin isolation (a service worker that adds the headers), which the owner has not chosen. |
 
 ## Process model: a deliberate deviation
 
