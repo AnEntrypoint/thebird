@@ -60,5 +60,6 @@ export async function qjsBuiltin(argv) {
   if (argv.length !== 2 || argv[0] !== '-e') throw new Error('usage: qjs -e <code>');
   const { output, result } = await evaluate(argv[1]);
   if (result.startsWith('Uncaught ')) throw new Error([output.trimEnd(), result].filter(Boolean).join('\n'));
-  return output;
+  const value = result === 'undefined' ? '' : result;
+  return [output.trimEnd(), value].filter(Boolean).join('\n');
 }
