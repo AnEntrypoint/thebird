@@ -172,6 +172,43 @@ async function load() {
         return -1;
       }
     },
+    tjs_fs_stat(ptr, len, out) {
+      const info = fs.statSync(absolute(textAt(ptr, len)), { throwIfNoEntry: false });
+      if (!info) return -1;
+      const slots = new Float64Array(memory.buffer, out, 4);
+      slots[0] = info.isDirectory() ? 2 : 1;
+      slots[1] = info.size;
+      slots[2] = info.mtimeMs;
+      slots[3] = info.isDirectory() ? 0o40755 : 0o100644;
+      return 0;
+    },
+    tjs_fs_readdir(ptr, len, out, cap) {
+      let names;
+      try {
+        names = fs.readdirSync(absolute(textAt(ptr, len)));
+      } catch {
+        return -1;
+      }
+      const bytes = encoder.encode(names.map((name) => `${name}\0`).join(''));
+      if (bytes.length <= cap) bytesAt(out, bytes.length).set(bytes);
+      return bytes.length;
+    },
+    tjs_fs_mkdir(ptr, len) {
+      try {
+        fs.mkdirSync(absolute(textAt(ptr, len)));
+        return 0;
+      } catch {
+        return -1;
+      }
+    },
+    tjs_fs_rmdir(ptr, len) {
+      try {
+        fs.rmdirSync(absolute(textAt(ptr, len)));
+        return 0;
+      } catch {
+        return -1;
+      }
+    },
     tjs_fs_resolve(ptr, len, out, cap) {
       const bytes = encoder.encode(absolute(textAt(ptr, len)));
       if (bytes.length >= cap) return -1;

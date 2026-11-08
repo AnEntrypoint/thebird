@@ -31,8 +31,8 @@ export const SQLITE_DEFINES = [
 ];
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
-export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c'];
-export const TXIKI_WASM_SHA256 = 'f9202222289601d290d0b89b6381b027e07ca3f927b9a11ac626c20ed426502d';
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
+export const TXIKI_WASM_SHA256 = 'e0ffacd2f9e5738c42ad1476adc8a7e3bef8125f93cf4f9e413dd895462c5569';
 const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_end'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 

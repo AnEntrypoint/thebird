@@ -264,6 +264,8 @@ if (existsSync(chrome)) {
   ]);
   check('in-page git checkout restores the working tree of the branch it returns to', original !== undefined && branchTwo.out.includes(`switched to ${original}`) && /^one$/m.test(branchTwo.out) && !/^branch-change$/m.test(branchTwo.out) && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').slice(0, 4).join(' / ').slice(0, 160));
   check('in-page git checkout refuses an unknown branch and leaves HEAD where it was', /^git: Could not find .*no-such-branch/m.test(branchTwo.out) && !branchTwo.out.includes('switched to no-such-branch') && new RegExp(`^\\* ${original}$`, 'm').test(branchTwo.out), branchTwo.out.split('\n').find((line) => line.includes('no-such-branch') && !line.startsWith('thebird>'))?.slice(0, 160) ?? 'no refusal line');
+  const remote = await terminal([['run', 'git clone https://example.com/thebird.git']]);
+  check('in-page git clone is refused before any request is made', remote.out.includes('git clone: remote access is refused in the in-page shell before any request is made'), remote.out.split('\n').find((line) => line.startsWith('git')) ?? remote.out.slice(0, 140));
   const broken = await terminal([
     ['run', 'mkdir -p notes'],
     ['run', 'git init'],

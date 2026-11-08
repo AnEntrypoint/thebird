@@ -28,8 +28,9 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
 | `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the six custom builtins and `COMMAND_TIMEOUT_MS`. |
 | `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
-| `web/git-in-page.js` | `git` builtin over isomorphic-git. |
-| `web/commit-gate.js` | In-page gate run by `git commit`. |
+| `web/git-in-page.js` | `git` builtin: refuses remote verbs, then builds the git program from the texts below and runs it in the txiki engine with `runTjs`. |
+| `web/git-program.js` | Git program that runs inside the txiki engine: the fs adapter over `__thebirdFs`, and each git command. |
+| `web/commit-gate.js` | Gate run by `git commit` inside the txiki engine, loaded as text by `web/git-in-page.js`. |
 | `web/sqlite-in-page.js` | `sqlite3` builtin: generates a `tjs:sqlite` module and runs it through `web/txiki-in-page.js`. |
 | `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
@@ -41,7 +42,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/shims/crypto.js` | `createHash` (sha1, sha256), `randomBytes`, `randomUUID`. |
 | `web/shims/bashkit-host.js` | bashkit's host filesystem, over `fs.js`. |
 | `web/vendor/acorn.mjs` | Vendored parser used by the commit gate. |
-| `web/vendor/isomorphic-git.mjs` | Vendored git library. |
+| `web/vendor/isomorphic-git.mjs` | Vendored git library, read as text and run inside the txiki engine. |
 | `web/vendor/bashkit/`, `web/vendor/pyodide/` | Generated, gitignored runtimes. |
 | `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs` | Generate the runtimes, checking SHA-256. |
 | `scripts/browser-driver.mjs` | Drives headless Chromium for the witness. |
@@ -59,7 +60,7 @@ The witness checks the expiry: six 55 s sleeps in a loop are cut at 300 s with `
 
 | Builtin | Backing | Scope and limits |
 | --- | --- | --- |
-| `git` | isomorphic-git 1.44.11 (`web/vendor/isomorphic-git.mjs`) | `init`, `status` (porcelain v1 after a `## <branch>` line), `log [-n N]`, `diff` (working tree against HEAD, no hunk headers), `add`, `commit -m`, local `branch`, `checkout` and `checkout -b`. `--version` reports the library version. No remotes, `push`, `fetch`, `pull`, stash or path checkout. `.thebird/` is excluded from the index. |
+| `git` | isomorphic-git 1.44.11 (`web/vendor/isomorphic-git.mjs`), run in the txiki engine through `web/git-program.js` | `init`, `status` (porcelain v1 after a `## <branch>` line), `log [-n N]`, `diff` (working tree against HEAD, no hunk headers), `add`, `commit -m`, local `branch`, `checkout` and `checkout -b`. `--version` reports the library version. No remotes, `push`, `fetch`, `pull`, stash or path checkout. `.thebird/` is excluded from the index. |
 | `sqlite3` | tjs:sqlite (txiki.js, `web/txiki-in-page.js`) | `sqlite3 <database> <sql>`. The database is a file under the shell's cwd. Its pages are read and written through a sqlite VFS over the `fs.js` tree, which OPFS holds, so nothing reaches the host filesystem. Each statement is prepared and read with `all()`, and rows print with `|`. The VFS takes no locks, because each worker runs one connection, and it omits WAL. Temporary files go in `/.thebird/`. |
 | `python3` | Pyodide 314.0.7 (`web/vendor/pyodide/`) | `-c <code>` or `<file>`. Pyodide loads in `web/python-worker.js` on the first call. `/workspace` is mirrored into Pyodide's memory filesystem in that worker: before a call the shell sends the paths and the files whose revision (`revisionOf` in `web/shims/fs.js`) changed; after it the worker compares every Pyodide file with its mirror and returns the changed, new and deleted files, which the shell writes back. Errors show the output and summary with URLs removed. |
 | `pip` | micropip 0.11.1 from the jsDelivr CDN, pinned to `v314.0.7` | `pip install <name>...`. Plain names only; version specifiers and URLs are refused. Names in the vendored lock (`pyodide-lock.json`) are refused, because the vendored index has no wheels for them. Pure wheels come from PyPI. Installed packages live in the Python worker's memory and are not written to OPFS. A cancel terminates that worker, so they are gone until installed again. |
@@ -82,7 +83,7 @@ Background jobs are refused by `hasBackgroundOperator` in `web/bash-shell.js`, a
 - `docs`: `README.md`, `AGENTS.md`, `ARCHITECTURE.md` and `DESIGN.md` are in the commit, and each backticked repo path in them exists in the commit.
 - `smoke`: a file round trip, and a git blob hash of a fixed payload that matches git's. A changed payload hashes differently. The scratch directory `.thebird/gate-smoke` is removed afterwards.
 
-The gate does not judge meaning or behaviour, does not check doc claims beyond path existence, and does not check CommonJS-only constructs in `.js` files. It lists these in `NOT_COVERED`. The commit is made as the author set in `web/git-in-page.js`.
+The gate does not judge meaning or behaviour, does not check doc claims beyond path existence, and does not check CommonJS-only constructs in `.js` files. It lists these in `NOT_COVERED`. The commit is made as the author set in `web/git-program.js`.
 
 ## OPFS shim
 
@@ -124,6 +125,8 @@ txiki.js is the primary goal, and the owner reversed the earlier rejection on 20
 The event loop is synchronous: `uv_run` spins until the next timer is due. `TJS_Run` is not used, because it runs the file-based `run-main` bootstrap, which reads `tjs.exePath`. `scripts/txiki/browser/entry.c` evaluates the code as a module with `JS_Eval` and drains `uv_run` and pending jobs. When the drain finishes with network requests still open, the runtime stays alive and returns to the host. The host answers each request, then calls `tjs_browser_resume` with one event, and the drain runs again. `tjs_browser_end` frees the runtime. `web/txiki-in-page.js` runs this loop as the `tjs -e "<code>"` builtin, with `qjs` kept alongside it.
 
 txiki's own `fetch` is the one used in the page. Its polyfill, in the txiki.js source tree, sits on the native `HttpClient`, which `scripts/txiki/browser/http-client.js` implements in JavaScript and `scripts/txiki/browser/httpclient-browser.c` installs as `core.HttpClient`. That class sends `open` and `abort` messages through the `tjs_bridge_send` import. The host performs each request with the browser's `fetch` and returns the status, headers, body chunks and completion as events. The browser follows redirects itself, and cookies and the allow-insecure option have no effect in the page. A request body is sent in full when the stream ends. `curl` and `wget` generate a module that calls `fetch`, so their requests use this path. A cancel from Ctrl-C aborts the open requests and ends the runtime.
+
+git runs in the same engine. `web/git-in-page.js` refuses `clone`, `fetch`, `pull` and `push` before `runTjs` is called, so no request is made. For the other verbs it builds one code string: a `const native = globalThis.__thebirdFs` capture (`scripts/txiki/browser/fs-browser.c`, installed by `entry.c` on each runtime), then `web/git-program.js`, then isomorphic-git, acorn and the commit gate as function-wrapped text, then the call to `gitMain`. The engine's loader cannot import `tjs:internal/*` from a user module, so the sources travel in the string. The native fs object reads and writes through `tjs_fs_open`, `tjs_fs_read`, `tjs_fs_write`, `tjs_fs_truncate`, `tjs_fs_size`, `tjs_fs_delete`, and the added `tjs_fs_stat`, `tjs_fs_readdir`, `tjs_fs_mkdir` and `tjs_fs_rmdir`, which `web/txiki-in-page.js` implements over `web/shims/fs.js`. Errors reach isomorphic-git with `ENOENT`, `EEXIST` and the other codes it tests.
 
 The gate counts as passing only when the wasm links with zero undefined symbols. Node stays only as the static server.
 

@@ -1,164 +1,61 @@
-import { Buffer } from './shims/buffer.js';
-import * as fsp from './shims/fs-promises.js';
-import { runCommitGate } from './commit-gate.js';
+import { runTjs } from './txiki-in-page.js';
 
+const PROGRAM = new URL('./git-program.js', import.meta.url).href;
+const ISOMORPHIC = new URL('./vendor/isomorphic-git.mjs', import.meta.url).href;
+const ACORN = new URL('./vendor/acorn.mjs', import.meta.url).href;
+const GATE = new URL('./commit-gate.js', import.meta.url).href;
 const DIR = '/workspace';
-const fs = { promises: fsp };
-const MAX_DIFF_CELLS = 4000000;
-const AUTHOR = { name: 'lanmower', email: 'almagestfraternite@gmail.com' };
+const REMOTE_VERBS = new Set(['clone', 'fetch', 'pull', 'push']);
 
-let library;
-const isomorphic = async () => {
-  library ??= (await import('./vendor/isomorphic-git.mjs')).default;
-  return library;
+let sources = null;
+
+const textOf = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`git: ${url} did not load`);
+  return response.text();
 };
 
-const ignored = (path) => /^\.thebird(\/|$)/.test(path);
-const rows = async () => (await isomorphic()).statusMatrix({ fs, dir: DIR, filter: (path) => !ignored(path) });
-const valueOf = (args, flag) => {
-  const at = args.indexOf(flag);
-  return at === -1 ? undefined : args[at + 1];
+const loadSources = () => {
+  sources ??= Promise.all([PROGRAM, ISOMORPHIC, ACORN, GATE].map(textOf))
+    .then(([program, isomorphic, acorn, gate]) => ({ program, isomorphic, acorn, gate }), (err) => {
+      sources = null;
+      throw err;
+    });
+  return sources;
 };
 
-function shortStatus([path, head, workdir, stage]) {
-  if (head === 0 && stage === 0 && workdir === 2) return `?? ${path}`;
-  const x = head === stage ? ' ' : stage === 0 ? 'D' : head === 0 ? 'A' : 'M';
-  const y = workdir === stage ? ' ' : workdir === 0 ? 'D' : 'M';
-  if (x === ' ' && y === ' ') return null;
-  return `${x}${y} ${path}`;
-}
+const moduleBody = (text) => text.replace(/^import [^\n]*\n/gm, '').replace(/^export /gm, '');
 
-async function status() {
-  const lib = await isomorphic();
-  const branch = await lib.currentBranch({ fs, dir: DIR });
-  const lines = (await rows()).map(shortStatus).filter(Boolean);
-  return [`## ${branch ?? 'HEAD (no branch)'}`, ...lines].join('\n');
-}
+const namespaceFactory = (text) => {
+  const match = [...text.matchAll(/export\s*\{([^}]*)\}\s*;?/g)].at(-1);
+  if (!match) throw new Error('git: a vendored module has no export list');
+  const exported = match[1].split(',').map((item) => item.trim()).filter(Boolean).map((item) => {
+    const [local, alias] = item.split(/\s+as\s+/);
+    return `${alias ?? local}: ${local}`;
+  });
+  return `(function () {\n${text.slice(0, match.index)}\nreturn { ${exported.join(', ')} };\n})()`;
+};
 
-async function log(count = 20) {
-  let commits;
-  try {
-    commits = await (await isomorphic()).log({ fs, dir: DIR, depth: Math.max(1, Number(count) || 20) });
-  } catch (err) {
-    if (err.code === 'NotFoundError') throw new Error('no commits yet');
-    throw err;
-  }
-  return commits.map(({ oid, commit }) => `${oid.slice(0, 7)} ${commit.message.split('\n')[0]}`).join('\n');
-}
+const programFor = ({ program, isomorphic, acorn, gate }, argv) => [
+  'const native = globalThis.__thebirdFs;',
+  'delete globalThis.__thebirdFs;',
+  program,
+  'const fsp = makeFsp(native);',
+  `const isomorphic = ${namespaceFactory(isomorphic)}.default;`,
+  `const acornModule = ${namespaceFactory(acorn)};`,
+  `const gate = (function (parse, fsp) {\n${moduleBody(gate)}\nreturn { runCommitGate, NOT_COVERED };\n})(acornModule.parse, fsp);`,
+  `try {\n  console.log(await gitMain(${JSON.stringify(argv)}, ${JSON.stringify(DIR)}));\n} catch (err) {\n  throw new Error(String(err?.message ?? err));\n}`,
+].join('\n');
 
-function changedLines(before, after) {
-  const a = before.split('\n');
-  const b = after.split('\n');
-  if (a.length * b.length > MAX_DIFF_CELLS) return [...a.map((line) => '-' + line), ...b.map((line) => '+' + line)];
-  const table = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
-  for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--) {
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
-    }
-  }
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) { i++; j++; }
-    else if (table[i + 1][j] >= table[i][j + 1]) out.push('-' + a[i++]);
-    else out.push('+' + b[j++]);
-  }
-  while (i < a.length) out.push('-' + a[i++]);
-  while (j < b.length) out.push('+' + b[j++]);
-  return out;
-}
-
-async function diff() {
-  const lib = await isomorphic();
-  const headOid = await lib.resolveRef({ fs, dir: DIR, ref: 'HEAD' });
-  const sections = [];
-  for (const [path, head, workdir] of await rows()) {
-    if (head === 0 || workdir === head) continue;
-    const { blob } = await lib.readBlob({ fs, dir: DIR, oid: headOid, filepath: path });
-    const before = Buffer.from(blob).toString('utf8');
-    const after = workdir === 0 ? '' : await fsp.readFile(`${DIR}/${path}`, 'utf8');
-    const lines = changedLines(before, after);
-    if (lines.length === 0) continue;
-    sections.push([`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, ...lines].join('\n'));
-  }
-  return sections.join('\n');
-}
-
-async function add(paths) {
-  const lib = await isomorphic();
-  const all = paths.length === 0 || paths.includes('.');
-  let count = 0;
-  for (const [path, , workdir, stage] of await rows()) {
-    if (!all && !paths.includes(path)) continue;
-    if (workdir === 0 && stage === 0) continue;
-    if (workdir === 0) await lib.remove({ fs, dir: DIR, filepath: path });
-    else if (workdir !== stage) await lib.add({ fs, dir: DIR, filepath: path });
-    else continue;
-    count++;
-  }
-  return `staged ${count} path${count === 1 ? '' : 's'}`;
-}
-
-async function init() {
-  await (await isomorphic()).init({ fs, dir: DIR });
-  return `initialized empty repository in ${DIR}/.git/`;
-}
-
-async function branches() {
-  const lib = await isomorphic();
-  const current = await lib.currentBranch({ fs, dir: DIR });
-  return (await lib.listBranches({ fs, dir: DIR })).map((name) => `${name === current ? '*' : ' '} ${name}`).join('\n');
-}
-
-async function createBranch(name) {
-  await (await isomorphic()).branch({ fs, dir: DIR, ref: name });
-  return `created branch ${name}`;
-}
-
-async function checkout(args) {
-  const create = args[0] === '-b';
-  const name = create ? args[1] : args[0];
-  if (!name || args.length !== (create ? 2 : 1)) throw new Error('checkout takes one branch name, or -b <name>; paths and other flags are not supported in the in-page shell');
-  const lib = await isomorphic();
-  if (create) await lib.branch({ fs, dir: DIR, ref: name });
-  await lib.checkout({ fs, dir: DIR, ref: name });
-  return `switched to ${name}`;
-}
-
-async function commit(message) {
-  if (!message) throw new Error('commit needs -m <message>');
-  const lib = await isomorphic();
-  const gate = await runCommitGate({ lib, fs, dir: DIR, rows: await rows() });
-  if (!gate.ok) {
-    const failed = gate.checks.filter((item) => !item.ok).map((item) => `${item.name}: ${item.detail}`);
-    throw new Error(`commit refused by the in-page gate: ${failed.join('; ')}`);
-  }
-  const oid = await lib.commit({ fs, dir: DIR, message, author: AUTHOR });
-  return [
-    ...gate.checks.map((item) => `gate ${item.name}: ${item.detail}`),
-    `committed ${oid.slice(0, 7)}`,
-  ].join('\n');
-}
+const failureText = (output) => output.split('\n')
+  .map((line) => line.replace(/^Uncaught (Error: )?/, ''))
+  .join('\n')
+  .trim() || 'git failed';
 
 export async function gitBuiltin(argv) {
-  const [sub, ...rest] = argv;
-  const tasks = {
-    '--version': async () => `git version ${(await isomorphic()).version()} (in-page, isomorphic-git)`,
-    init: () => init(),
-    status: () => status(),
-    log: () => log(valueOf(rest, '-n')),
-    diff: () => diff(),
-    add: () => add(rest),
-    commit: () => commit(valueOf(rest, '-m')),
-    branch: () => {
-      if (rest.length === 0) return branches();
-      if (rest[0].startsWith('-') || rest.length > 1) throw new Error('branch flags and multiple names are not supported in the in-page shell');
-      return createBranch(rest[0]);
-    },
-    checkout: () => checkout(rest),
-  };
-  const task = tasks[sub];
-  if (!task) throw new Error(`git ${sub ?? ''}: the in-page shell supports init, status, log, diff, add, commit, and local branch and checkout; push, fetch and pull are not supported in the in-page shell`);
-  return task();
+  const [sub] = argv;
+  if (REMOTE_VERBS.has(sub)) throw new Error(`git ${sub}: remote access is refused in the in-page shell before any request is made`);
+  const { output, status } = await runTjs(programFor(await loadSources(), argv), DIR);
+  if (status !== 0) throw new Error(failureText(output));
+  return output.trimEnd();
 }
