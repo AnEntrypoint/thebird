@@ -168,7 +168,8 @@ function architectureStatic() {
   cites('The page\'s shell functions', ['which, command -v and type agree for every name Tab offers, path or builtin', 'in-page which drives an if: a found name passes and a missing one fails']);
   cites('each in-page builtin reports as a builtin', ['in-page git is reported as a builtin by type, command -v and which']);
   cites('Background jobs are refused', ['in-page bash refuses background jobs and keeps &&, redirects and quoted ampersands']);
-  cites('`node` and host binaries exit 127', ['in-page bash reports host tools it lacks as exit 127']);
+  cites('`node` is an alias for the txiki engine', ['node -v prints a version']);
+  cites('a host binary that is not in the page, such as `ruby`', ['in-page bash reports host tools it lacks as exit 127']);
   cites('Ctrl-C while busy drops the queue', ['in-page terminal Ctrl-C cancels a running command and the shell carries on']);
   cites('Every response carries', ['relay sends the cross-origin isolation headers']);
 
@@ -253,6 +254,7 @@ const PROBES = [
   ['head', 'seq 1 100000 | head -1'],
   ['sqlite', `sqlite3 lint.db "create table t(a,b); insert into t values (1,'two'); select a,b from t"`],
   ['node', 'node -v; echo rc=$?'],
+  ['host', 'ruby -v; echo rc=$?'],
   ['tar', 'tar --version'],
   ['commands', `for n in ${COMMANDS}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-resolved`],
   ['type-t', 'type -t git'],
@@ -291,7 +293,8 @@ function liveRecords(blocks) {
   const P = (id, pass, detail) => probe(blocks, id, pass, detail);
   record('| `sqlite3` | tjs:sqlite', P('sqlite', (t) => t.includes('1|two'), 'sqlite3 prints list mode'));
   record('| `python3` | Pyodide 314.0.7', P('python-c', (t) => /^42$/m.test(t), 'python3 -c runs'));
-  record('`node` and host binaries exit 127', P('node', (t) => /rc=127/.test(t), 'node exits 127'));
+  record('`node` is an alias for the txiki engine', P('node', (t) => /^v\d+\.\d+\.\d+\nrc=0$/m.test(t), 'node -v prints the txiki version'));
+  record('a host binary that is not in the page, such as `ruby`', P('host', (t) => /rc=127/.test(t), 'ruby exits 127'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', P('tar', (t) => /tar \(bashkit\)/.test(t), 'tar reports bashkit'));
   record('each in-page builtin reports as a builtin', P('type-t', (t) => t === 'builtin', '`type -t git` says builtin'));
   record('The page\'s shell functions', P('type-fn', (t) => /function/.test(t), '`type which` says it is a function'));

@@ -70,7 +70,7 @@ The page's shell functions `which`, `command -v` and `type` (`web/shell-lookup.j
 
 `ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations that report sandbox values. A command that names one of them gets a note saying so.
 
-Background jobs are refused by `hasBackgroundOperator` in `web/bash-shell.js`, and the worker answers that a background job is not supported in the in-page shell. `node` and host binaries exit 127.
+Background jobs are refused by `hasBackgroundOperator` in `web/bash-shell.js`, and the worker answers that a background job is not supported in the in-page shell. `node` is an alias for the txiki engine (see the txiki section), and a host binary that is not in the page, such as `ruby`, exits 127.
 
 ## Commit gate
 
