@@ -82,6 +82,38 @@ if (existsSync(chrome)) {
   });
   check('xterm renders SGR colour: red-line uses palette 1, styled-line is bold, underlined and on palette 2', styled.red?.palette === true && styled.red.fg === 1 && styled.styled?.bold === true && styled.styled.underline === true && styled.styled.bgPalette === true && styled.styled.bg === 2, JSON.stringify(styled));
   check('the terminal consumes the escape sequences, so the text carries none of them', /^red-line$/m.test(styled.text) && /^styled-line$/m.test(styled.text) && !styled.text.split('\n').filter((line) => !line.startsWith('thebird ')).some((line) => line.includes('[31m')), JSON.stringify(styled.text?.slice(0, 80)));
+  const vt = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const typed = async (command) => {
+        await type(command);
+        await press('Enter');
+        await waitFor("document.body.dataset.busy !== 'true'", 40000);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      };
+      const lines = () => evaluate("globalThis.thebird.text().split('\\n').filter((line) => !line.startsWith('thebird '))");
+      await typed("printf 'AAAA\\033[2DBB\\n'");
+      vt.moved = (await lines()).includes('AABB');
+      await typed("printf 'junk-row\\n\\033[2J\\033[Hclean-row\\n'");
+      const cleared = await evaluate("(() => { const buffer = globalThis.thebird.term.buffer.active; return buffer.getLine(buffer.viewportY).translateToString(true); })()");
+      vt.cleared = cleared === 'clean-row' && !(await lines()).includes('junk-row');
+      await typed("printf '\\033[?1049halt-row\\n'");
+      vt.alternate = await evaluate('globalThis.thebird.term.buffer.active.type');
+      await typed("printf '\\033[?1049l'");
+      vt.normal = await evaluate('globalThis.thebird.term.buffer.active.type');
+      vt.altGone = !(await lines()).includes('alt-row');
+      await typed("printf 'w%.0s' $(seq 1 200); echo");
+      vt.wrapped = await evaluate("(() => { const buffer = globalThis.thebird.term.buffer.active; let rows = 0; for (let row = 0; row < buffer.length; row++) if (buffer.getLine(row).isWrapped) rows++; return rows; })()");
+      vt.longLine = (await lines()).includes('w'.repeat(200));
+      await evaluate('globalThis.thebird.term.resize(60, 20)');
+      await typed('echo cols-$COLUMNS-lines-$LINES');
+      vt.size = (await lines()).find((line) => line.startsWith('cols-'));
+    },
+  });
+  check('xterm moves the cursor and clears the screen on the escape sequences', vt.moved === true && vt.cleared === true, JSON.stringify(vt));
+  check('xterm enters and leaves the alternate screen, and the normal screen does not keep its text', vt.alternate === 'alternate' && vt.normal === 'normal' && vt.altGone === true, JSON.stringify(vt));
+  check('a 200-character line wraps across rows and reads back as one line', vt.wrapped >= 2 && vt.longLine === true, JSON.stringify(vt));
+  check('a terminal resize reaches the shell as COLUMNS and LINES', vt.size === 'cols-60-lines-20', JSON.stringify(vt.size));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 
