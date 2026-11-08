@@ -17,5 +17,8 @@
     "witness": "node scripts/witness.mjs",
     "witness:shell": "node scripts/witness-shell.mjs"
   },
-  "repository": "https://github.com/AnEntrypoint/thebird.git"
+  "repository": "https://github.com/AnEntrypoint/thebird.git",
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
 }
