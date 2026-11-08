@@ -329,6 +329,33 @@ group('jq: filters, output and errors', async () => {
   check('jq: a syntax error in the filter exits 3', syntax.exitCode === 3 && syntax.stderr === 'jq: error: syntax error, unexpected end of file\njq: 1 compile error\n', JSON.stringify(syntax));
 });
 
+group('awk: fields, patterns, actions and errors', async () => {
+  const sh = await shell({
+    '/workspace/a.txt': 'one two\nthree four\n',
+    '/workspace/p.txt': 'root:x:0\nalice:x:1000\n',
+    '/workspace/n.txt': '3\n4\n5\n',
+    '/workspace/kv.txt': 'a 1\nb 22\n',
+  });
+  const byDefault = await run(sh, "awk '{print $2}' a.txt");
+  check('awk: prints a field split on whitespace', byDefault.stdout === 'two\nfour\n' && byDefault.exitCode === 0, JSON.stringify(byDefault));
+  const byColon = await run(sh, "awk -F: '{print $1, $3}' p.txt");
+  check('awk: -F splits on a literal separator and print joins with OFS', byColon.stdout === 'root 0\nalice 1000\n', JSON.stringify(byColon.stdout));
+  const byRegex = await run(sh, "awk '/^a/' p.txt");
+  check('awk: a regex pattern alone prints the matching records', byRegex.stdout === 'alice:x:1000\n', JSON.stringify(byRegex.stdout));
+  const byComparison = await run(sh, "awk -F: '$3 > 10 {print $1}' p.txt");
+  check('awk: a numeric comparison pattern selects records', byComparison.stdout === 'alice\n', JSON.stringify(byComparison.stdout));
+  const sum = await run(sh, "awk 'BEGIN { s = 0 } { s += $1 } END { print NR, s }' n.txt");
+  check('awk: BEGIN and END with a sum over a field and NR', sum.stdout === '3 12\n', JSON.stringify(sum.stdout));
+  const formatted = await run(sh, "awk '{printf \"%s=%d\\n\", $1, $2}' kv.txt");
+  check('awk: printf formats through the shell printf without adding ORS', formatted.stdout === 'a=1\nb=22\n', JSON.stringify(formatted.stdout));
+  const builtins = await run(sh, "awk '{print toupper($1), length($2), substr($2, 2, 3)}' a.txt");
+  check('awk: toupper, length and substr', builtins.stdout === 'ONE 3 wo\nTHREE 4 our\n', JSON.stringify(builtins.stdout));
+  const divided = await run(sh, "awk 'BEGIN { print 1/0 }'");
+  check('awk: division by zero exits 2 with a message', divided.exitCode === 2 && divided.stdout === '' && divided.stderr === 'awk: division by zero\n', JSON.stringify(divided));
+  const missing = await run(sh, "awk '{print $1}' nope.txt a.txt");
+  check('awk: a missing file is reported, the rest are read, and the exit is 2', missing.exitCode === 2 && missing.stdout === 'one\nthree\n' && missing.stderr === "awk: can't open file nope.txt\n", JSON.stringify(missing));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
