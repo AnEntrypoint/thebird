@@ -131,20 +131,56 @@ let bundledLock = null;
 const normalizeName = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
 
 async function bundledNames() {
-  bundledLock ??= fetch(`${PYODIDE_DIR}pyodide-lock.json`).then((response) => response.json()).then((lock) => new Set(Object.keys(lock.packages)));
+  bundledLock ??= fetch(`${PYODIDE_DIR}pyodide-lock.json`).then((response) => response.json()).then((lock) => new Set(Object.keys(lock.packages))).catch((err) => {
+    bundledLock = null;
+    throw err;
+  });
   return bundledLock;
 }
 
-export async function pipBuiltin(argv) {
+let installSignal = null;
+let fetchWrapped = false;
+
+function cancelFetchesDuring(signal) {
+  if (!fetchWrapped) {
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init = {}) => {
+      if (!installSignal) return original(input, init);
+      return original(input, { ...init, signal: init.signal ? AbortSignal.any([init.signal, installSignal]) : installSignal });
+    };
+    fetchWrapped = true;
+  }
+  installSignal = signal;
+  return () => {
+    installSignal = null;
+  };
+}
+
+export async function pipBuiltin(argv, signal) {
   const [verb, ...names] = argv;
   if (verb !== 'install' || names.length === 0) throw new Error('pip install <package>...');
   const bad = names.find((name) => !PACKAGE_NAME.test(name));
   if (bad) throw new Error(`pip install: ${bad} is not a package name (version specifiers and URLs are not supported)`);
+  const release = cancelFetchesDuring(signal);
+  try {
+    return await installPackages(names, signal);
+  } finally {
+    release();
+  }
+}
+
+async function installMicropip(py, signal) {
+  const response = await fetch(PYODIDE_CDN + MICROPIP_WHEEL, { signal });
+  if (!response.ok) throw new Error(`micropip wheel: HTTP ${response.status}`);
+  py.unpackArchive(await response.arrayBuffer(), 'wheel');
+}
+
+async function installPackages(names, signal) {
   const bundled = await bundledNames();
   const pinned = names.find((name) => bundled.has(normalizeName(name)));
   if (pinned) throw new Error(`pip install: ${pinned} is part of the Pyodide package set, which is not vendored, so it cannot be installed in-page`);
   const py = await pythonRuntime();
-  micropipLoaded ??= py.loadPackage(PYODIDE_CDN + MICROPIP_WHEEL).catch((err) => {
+  micropipLoaded ??= installMicropip(py, signal).catch((err) => {
     micropipLoaded = null;
     throw err;
   });

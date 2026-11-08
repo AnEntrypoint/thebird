@@ -42,7 +42,9 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Cancel
 
-- Ctrl-C ends a `curl` or `wget` waiting on a response. The fetch is aborted, the command exits 130 with `cancelled`, and the page leaves the busy state. `git`, `sqlite3`, `python3` and `pip` do not take the cancel signal: Ctrl-C does not end them while they wait on the network, and the page stays busy until they return.
+- Ctrl-C ends a `curl`, `wget` or `pip install` waiting on the network. The fetch is aborted, the command exits 130 with `cancelled`, and the page leaves the busy state. `pip install` aborts both the micropip wheel download and each PyPI request, and the next install works after a cancel.
+- `git` has no network await in the page: `clone`, `fetch`, `pull` and `push` are refused before any request is made, so there is nothing to abort.
+- `python3` has no network await, and its code runs synchronously in the worker. Ctrl-C is not delivered until the script returns: the page stays busy, and the script output still prints. Ending a busy script needs a shared-memory interrupt, which needs cross-origin isolation, and the Pages site does not have it.
 
 ## Hosting
 
