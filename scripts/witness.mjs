@@ -270,6 +270,45 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('a pending timer does not hold the engine past the timeout: status 124 well before the 60 s timer', loops.runs?.waiting?.status === 124 && loops.runs.waiting.elapsed < 5000, JSON.stringify(loops.runs?.waiting));
   check('an abort cancels a waiting engine run at the next tick and reports status 130', loops.runs?.aborted?.status === 130 && loops.runs.aborted.elapsed < 5000, JSON.stringify(loops.runs?.aborted));
   check('tjs and qjs report the timeout as a timeout error', loops.runs?.tjs?.error === 'timeout: command timed out' && loops.runs?.qjs?.error === 'timeout: command timed out', JSON.stringify({ tjs: loops.runs?.tjs?.error, qjs: loops.runs?.qjs?.error }));
+  const spinning = {};
+  const spun = await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await type('mkdir -p loop-check && cd loop-check');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'");
+      await type('node -e "while (true) {}"');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy === 'true'");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const started = Date.now();
+      await press('c', { ctrl: true });
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+      spinning.elapsed = Date.now() - started;
+      spinning.isolated = await evaluate('self.crossOriginIsolated');
+      await type('echo status=$?; pwd');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'");
+    },
+  });
+  check('Ctrl-C stops a node loop that never yields: the command reports cancelled, exits 130 and returns within 10 s', spun.out.includes('^C') && /^cancelled$/m.test(spun.out) && /^status=130$/m.test(spun.out) && spinning.elapsed < 10000, `cancel took ${spinning.elapsed} ms; ${spun.out.split('\n').slice(-4).join(' / ')}`);
+  check('after Ctrl-C on a cross-origin isolated page the shell keeps its directory; without isolation it restarts at /workspace', spinning.isolated ? /^\/workspace\/loop-check$/m.test(spun.out) : /^\/workspace$/m.test(spun.out), `isolated=${spinning.isolated}; ${spun.out.split('\n').slice(-2).join(' / ')}`);
+  const nestedRuns = {};
+  await terminal([], {
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
+        try {
+          const run = await shell.runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done', { cwd: '/workspace', timeoutMs: 240000 });
+          globalThis.__nestedRun = { stdout: run.stdout, exitCode: run.exitCode, stderr: run.stderr };
+        } catch (err) {
+          globalThis.__nestedRun = { error: String(err.message ?? err) };
+        }
+      })()`);
+      await waitFor('globalThis.__nestedRun !== undefined', 300000);
+      nestedRuns.run = JSON.parse(await evaluate('JSON.stringify(globalThis.__nestedRun)'));
+    },
+  });
+  check('the txiki shell serves git, node, qjs and python3 from inside itself: each nested builtin runs on its own engine instance and returns its output', nestedRuns.run?.stdout === 'git-ok\n4\n3\n42\ndone\n' && nestedRuns.run?.exitCode === 0, JSON.stringify(nestedRuns.run));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
