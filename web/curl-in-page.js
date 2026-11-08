@@ -51,6 +51,7 @@ export async function curlBuiltin(name, argv, cwd, signal) {
   if (opts.fail && !result.ok) throw new Error(`HTTP ${result.status} from ${host}`);
   const bytes = bytesFromBase64(result.body);
   if (opts.output === undefined) return new TextDecoder().decode(bytes);
+  if (opts.output === '/dev/null') return '';
   fs.writeFileSync(posix.resolve(cwd, opts.output), bytes);
   return '';
 }
