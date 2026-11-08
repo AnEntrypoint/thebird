@@ -5,9 +5,9 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Runtime surface
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
-- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/git-program.js`, `web/commit-gate.js`, `web/sqlite-in-txiki.js`, `web/sqlite-program.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/python-bundle.js`, `web/splash.js`, `web/curl-in-page.js`, `web/qjs-in-txiki.js`, `web/qjs-program.js`, `web/txiki-in-page.js`, `web/shims/*.js`.
+- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-core.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/git-program.js`, `web/commit-gate.js`, `web/sqlite-in-txiki.js`, `web/sqlite-program.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/python-bundle.js`, `web/splash.js`, `web/curl-in-page.js`, `web/qjs-in-txiki.js`, `web/qjs-program.js`, `web/txiki-in-page.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/brotli/`, `web/vendor/tte-js/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/txiki/`.
-- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`.
+- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`, `scripts/witness-shell.mjs` (Node-side groups for `web/shell-core.js`, run by `npm run witness:shell`).
 
 ## Browser and Node split
 
