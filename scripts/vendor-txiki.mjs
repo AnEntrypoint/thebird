@@ -21,8 +21,9 @@ export const CORE_SOURCES = [
 ];
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
-export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c'];
-export const TXIKI_WASM_SHA256 = 'e98ad67d06928779e0a583194d7ad7c0a1e46223a7dac8aa61efb9c6bc65b699';
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c'];
+export const TXIKI_WASM_SHA256 = '65d9a6c63bf886c84402e8a9b4a22dfb29219e29866e96dabe245e194cb7f76a';
+const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', 'tjs_browser_eval'];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const overlay = join(root, 'scripts', 'txiki', 'include');
@@ -141,7 +142,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
 
 export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
   const output = join(work, 'tjs.wasm');
-  const args = ['cc', '-target', 'wasm32-wasi', ...prefixMapsFor(zig), '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
+  const args = ['cc', '-target', 'wasm32-wasi', ...prefixMapsFor(zig), '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', '-Wl,--export=tjs_browser_eval', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
   let stderr = '';
   try {
     execFileSync(zig, args, { cwd: tree, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
@@ -149,7 +150,9 @@ export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
     stderr = String(err.stderr || '');
   }
   const undefinedSymbols = [...new Set([...stderr.matchAll(/undefined symbol: (\S+)/g)].map((match) => match[1]))].sort();
-  return { linked: existsSync(output) && undefinedSymbols.length === 0, undefinedSymbols };
+  const exports = existsSync(output) ? WebAssembly.Module.exports(new WebAssembly.Module(readFileSync(output))).map((entry) => entry.name) : [];
+  const missingExports = REQUIRED_EXPORTS.filter((name) => !exports.includes(name));
+  return { linked: existsSync(output) && undefinedSymbols.length === 0 && missingExports.length === 0, undefinedSymbols, missingExports };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -169,6 +172,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const uvSymbols = link.undefinedSymbols.filter((name) => name.startsWith('uv_'));
     console.log(`txiki link gate: ${link.undefinedSymbols.length} undefined symbols (${uvSymbols.length} uv_*), linked ${link.linked}`);
     for (const name of link.undefinedSymbols) console.log(`UNDEFINED ${name}`);
+    for (const name of link.missingExports) console.log(`MISSING EXPORT ${name}`);
     if (!link.linked) {
       process.exitCode = 1;
     } else {

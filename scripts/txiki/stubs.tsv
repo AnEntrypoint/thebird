@@ -25,7 +25,6 @@ tjs__mod_tls_cleanup	mod_tls: module excluded from the browser build
 tjs__mod_tls_init	mod_tls: module excluded from the browser build
 tjs__mod_udp_init	mod_udp: module excluded from the browser build
 tjs__mod_ws_init	mod_ws: module excluded from the browser build
-tjs__webcrypto_init	webcrypto: module excluded from the browser build
 uv_accept	tcp: no sockets in the browser
 uv_available_parallelism	os: no host process, network or CPU information in the browser
 uv_chdir	fs: no host working directory
@@ -82,10 +81,8 @@ uv_os_gethostname	os: no host process, network or CPU information in the browser
 uv_os_get_passwd	os: no host process, network or CPU information in the browser
 uv_os_getpid	os: no host process, network or CPU information in the browser
 uv_os_getppid	os: no host process, network or CPU information in the browser
-uv_os_homedir	os: no host process, network or CPU information in the browser
 uv_os_setenv	os: no host process, network or CPU information in the browser
 uv_os_tmpdir	os: no host process, network or CPU information in the browser
-uv_os_uname	os: no host process, network or CPU information in the browser
 uv_os_unsetenv	os: no host process, network or CPU information in the browser
 uv_pipe_bind2	pipe: no pipes or process handles in the browser
 uv_pipe_connect2	pipe: no pipes or process handles in the browser

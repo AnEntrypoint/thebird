@@ -529,3 +529,25 @@ int uv_signal_init(uv_loop_t *loop, uv_signal_t *signal) {
     signal->dispatched_signals = 0;
     return 0;
 }
+
+int uv_os_uname(uv_utsname_t *buffer) {
+    strcpy(buffer->sysname, "WASI");
+    strcpy(buffer->release, "");
+    strcpy(buffer->version, "");
+    strcpy(buffer->machine, "wasm32");
+    return 0;
+}
+
+int uv_os_homedir(char *buffer, size_t *size) {
+    if (*size < 2) {
+        *size = 2;
+        return UV_ENOBUFS;
+    }
+    strcpy(buffer, "/");
+    *size = 1;
+    return 0;
+}
+
+int tjs_browser_timers_pending(const uv_loop_t *loop) {
+    return loop->timers != NULL;
+}

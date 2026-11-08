@@ -1,12 +1,46 @@
-#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <uv.h>
 #include "tjs.h"
 
+uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
+int tjs_browser_timers_pending(const uv_loop_t *loop);
+
+static int report_exception(JSContext *ctx) {
+    JSValue exception = JS_GetException(ctx);
+    const char *message = JS_ToCString(ctx, exception);
+    fprintf(stderr, "Uncaught %s\n", message ? message : "exception");
+    JS_FreeCString(ctx, message);
+    JS_FreeValue(ctx, exception);
+    return 1;
+}
+
 int tjs_browser_eval(const char *code) {
-    char *argv[] = {"tjs", "-e", (char *) code, NULL};
-    TJS_Initialize(3, argv);
+    char *argv[] = {"tjs", NULL};
+    TJS_Initialize(1, argv);
     TJSRuntime *qrt = TJS_NewRuntime();
     if (!qrt) return 1;
-    int exit_code = TJS_Run(qrt);
+    JSContext *ctx = TJS_GetJSContext(qrt);
+    JSRuntime *rt = JS_GetRuntime(ctx);
+    uv_loop_t *loop = TJS_GetLoop(qrt);
+    int status = 0;
+
+    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+        status = report_exception(ctx);
+    } else {
+        JS_FreeValue(ctx, result);
+    }
+
+    do {
+        uv_run(loop, UV_RUN_DEFAULT);
+        JSContext *job_ctx;
+        int job;
+        while ((job = JS_ExecutePendingJob(rt, &job_ctx)) != 0) {
+            if (job < 0) status = report_exception(job_ctx);
+        }
+    } while (JS_IsJobPending(rt) || tjs_browser_timers_pending(loop));
+
     TJS_FreeRuntime(qrt);
-    return exit_code;
+    return status;
 }
