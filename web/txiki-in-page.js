@@ -349,6 +349,7 @@ function resumeWith(exports, event) {
 
 export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, builtin } = {}) {
   if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
+  await fs.hydrate();
   const slot = await acquire();
   const { exports } = slot;
   slot.cwd = dir;

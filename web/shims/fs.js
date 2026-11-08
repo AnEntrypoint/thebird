@@ -488,7 +488,14 @@ async function writeOne(path, op) {
   await writable.close();
 }
 
-export async function hydrate() {
+let hydration = null;
+
+export function hydrate() {
+  hydration ??= loadTree();
+  return hydration;
+}
+
+async function loadTree() {
   const opfs = await globalThis.navigator.storage.getDirectory();
   root = await opfs.getDirectoryHandle(MOUNT, { create: true });
   files.clear();
