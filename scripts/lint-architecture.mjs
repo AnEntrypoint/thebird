@@ -120,17 +120,15 @@ function architectureStatic() {
 
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
   record('isomorphic-git 1.44.11', versionIn('web/vendor/isomorphic-git.mjs', '1.44.11'));
-  record('Pyodide 314.0.7 (`web/vendor/pyodide/`)', (() => {
-    if (filesUnder('web/vendor/pyodide').length === 0) return outcome(null, 'web/vendor/pyodide is not present in this checkout');
-    const bytes = filesUnder('web/vendor/pyodide').reduce((sum, file) => sum + statSync(file).size, 0);
-    const size = outcome(bytes >= 11.2e6 && bytes <= 16.8e6, `vendored Pyodide is ${(bytes / 1e6).toFixed(1)} MB unpacked`);
-    return all(versionIn('web/vendor/pyodide', '314.0.7'), size);
-  })());
+  record('Pyodide 314.0.7 core, unpacked in the page from the stripped bundle', all(
+    outcome(fileHas('web/python-bundle.js', 'pyodide-minimal.br') && fileHas('web/python-bundle.js', "'pyodide-minimal/1'"), 'python-bundle.js fetches pyodide-minimal.br and checks its format'),
+    outcome(fileHas('web/python-bundle.js', '314.0.7') || fileHas('web/python-worker.js', 'v314.0.7'), 'the core pins name the Pyodide 314.0.7 build'),
+  ));
   record('micropip 0.11.1 from the jsDelivr CDN', outcome(
     fileHas('web/python-worker.js', '0.11.1') && fileHas('web/python-worker.js', 'v314.0.7') && fileHas('web/python-worker.js', 'jsdelivr'),
     'python-worker.js names micropip 0.11.1, the v314.0.7 Pyodide pin and jsDelivr',
   ));
-  record('Names in the vendored lock', outcome(fileHas('web/python-worker.js', 'bundledLock') && fileHas('web/python-worker.js', 'pyodide-lock.json'), 'python-worker.js refuses names listed in pyodide-lock.json'));
+  record('Names in the lock inside the bundle', outcome(fileHas('web/python-worker.js', 'bundledNames') && fileHas('web/python-bundle.js', 'pyodide-lock.json'), 'python-worker.js refuses names listed in pyodide-lock.json'));
   record('Flags `-s`, `-S`, `-f`, `-L`, `-q`', outcome(fileHas('web/curl-in-page.js', "'-SL'") || fileHas('web/curl-in-page.js', 'flag not supported'), 'curl-in-page.js accepts the listed flags and refuses others'));
   record('The page\'s shell functions', outcome(fileHas('web/shell-lookup.js', 'builtin command -v') && fileHas('web/shell-lookup.js', 'builtin type'), 'shell-lookup.js defines the functions over builtin command -v and builtin type'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', outcome(fileHas('web/bash-shell.js', 'EMULATION_NOTE') && fileHas('web/bash-shell.js', 'uname|whoami|hostname|id|ps|kill|tar'), 'bash-shell.js labels these commands as emulations'));
