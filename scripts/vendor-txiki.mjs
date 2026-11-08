@@ -153,6 +153,7 @@ export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.env.ZIG_GLOBAL_CACHE_DIR = join(tmpdir(), 'thebird-zig-global-cache');
   const zig = process.env.ZIG || 'zig';
   const version = execFileSync(zig, ['version'], { encoding: 'utf8' }).trim();
   if (version !== ZIG_VERSION) throw new Error(`zig ${version} is not the pinned ${ZIG_VERSION}`);
