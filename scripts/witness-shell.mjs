@@ -18,6 +18,14 @@ const MISSING = 'web/shell-core.js is not present: the txiki shell has not been 
 function memoryHost(files = {}) {
   const store = new Map(Object.entries(files));
   const dirs = new Set(['/', '/workspace']);
+  const children = (path) => {
+    const prefix = path === '/' ? '/' : path + '/';
+    const names = new Set();
+    for (const key of [...store.keys(), ...dirs]) {
+      if (key !== path && key.startsWith(prefix)) names.add(key.slice(prefix.length).split('/')[0]);
+    }
+    return [...names];
+  };
   return {
     read(path) {
       if (!store.has(path)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' });
@@ -29,16 +37,21 @@ function memoryHost(files = {}) {
     exists(path) {
       return store.has(path) || dirs.has(path);
     },
+    stat(path) {
+      if (dirs.has(path)) return { dir: true, size: 0 };
+      if (store.has(path)) return { dir: false, size: store.get(path).length };
+      return null;
+    },
     list(path) {
-      const prefix = path.endsWith('/') ? path : path + '/';
-      return [...store.keys()].filter((name) => name.startsWith(prefix) && !name.slice(prefix.length).includes('/')).map((name) => name.slice(prefix.length));
+      return children(path);
     },
     mkdir(path) {
       dirs.add(path);
     },
-    remove(path) {
-      store.delete(path);
-      dirs.delete(path);
+    remove(path, recursive) {
+      const prefix = path + '/';
+      for (const key of [...store.keys()]) if (key === path || (recursive && key.startsWith(prefix))) store.delete(key);
+      for (const dir of [...dirs]) if (dir === path || (recursive && dir.startsWith(prefix))) dirs.delete(dir);
     },
   };
 }
@@ -156,6 +169,52 @@ group('$? carry: the status and the directory persist from one run to the next',
   await run(sh, 'cd /workspace');
   const cwd = await run(sh, 'pwd');
   check('$? carry: cd persists to the next run', cwd.stdout === '/workspace\n', JSON.stringify(cwd.stdout));
+});
+
+group('coreutils: ls, mkdir, rm, find, wc, test -d, date, uname and whoami', async () => {
+  const sh = await shell({ '/workspace/notes/a.txt': 'one\ntwo\n', '/workspace/notes/.hidden': 'x', '/workspace/notes/sub/B.MD': 'three\n', '/workspace/notes/sub/c.txt': 'four\n' });
+  const listing = await run(sh, 'ls notes');
+  check('coreutils: ls lists a directory and skips dotfiles', listing.stdout === 'a.txt\nsub\n', JSON.stringify(listing.stdout));
+  const all = await run(sh, 'ls -a notes');
+  check('coreutils: ls -a includes dotfiles', all.stdout === '.hidden\na.txt\nsub\n', JSON.stringify(all.stdout));
+  const made = await run(sh, 'mkdir -p notes/deep/er && ls notes/deep');
+  check('coreutils: mkdir -p creates every missing parent', made.stdout === 'er\n' && made.exitCode === 0, JSON.stringify(made.stdout));
+  const exists = await run(sh, 'mkdir notes/deep');
+  check('coreutils: mkdir without -p refuses an existing directory', exists.exitCode === 1 && exists.stderr.includes('File exists'), JSON.stringify(exists.stderr));
+  const removed = await run(sh, 'rm notes/a.txt && ls notes');
+  check('coreutils: rm removes a file', removed.stdout === 'deep\nsub\n', JSON.stringify(removed.stdout));
+  const refused = await run(sh, 'rm notes/sub');
+  check('coreutils: rm refuses a directory without -r', refused.exitCode === 1 && refused.stderr.includes('Is a directory'), JSON.stringify(refused.stderr));
+  const recursive = await run(sh, 'rm -r notes/sub && ls notes');
+  check('coreutils: rm -r removes a directory tree', recursive.stdout === 'deep\n', JSON.stringify(recursive.stdout));
+  const forced = await run(sh, 'rm -f notes/missing.txt; echo rc=$?');
+  check('coreutils: rm -f ignores a missing file', forced.stdout === 'rc=0\n', JSON.stringify(forced.stdout));
+  const dir = await run(sh, 'test -d notes && echo dir-ok');
+  check('coreutils: test -d is true for a directory', dir.stdout === 'dir-ok\n', JSON.stringify(dir.stdout));
+});
+
+group('coreutils: find, wc, date, uname and whoami on a populated tree', async () => {
+  const sh = await shell({ '/workspace/notes/a.txt': 'one\ntwo\n', '/workspace/notes/sub/B.MD': 'three\n', '/workspace/notes/sub/c.txt': 'four\n' });
+  const byName = await run(sh, 'find notes -name "*.txt"');
+  check('coreutils: find -name matches the glob on the base name, in sorted tree order', byName.stdout === 'notes/a.txt\nnotes/sub/c.txt\n', JSON.stringify(byName.stdout));
+  const byIname = await run(sh, 'find notes -iname "*.md"');
+  check('coreutils: find -iname ignores case', byIname.stdout === 'notes/sub/B.MD\n', JSON.stringify(byIname.stdout));
+  const dirs = await run(sh, 'find notes -type d');
+  check('coreutils: find -type d lists directories only', dirs.stdout === 'notes\nnotes/sub\n', JSON.stringify(dirs.stdout));
+  const lines = await run(sh, 'cat notes/a.txt | wc -l');
+  check('coreutils: wc -l counts lines of piped input', lines.stdout === '2\n', JSON.stringify(lines.stdout));
+  const words = await run(sh, 'wc -w notes/a.txt');
+  check('coreutils: wc -w names the file it counted', words.stdout === '2 notes/a.txt\n', JSON.stringify(words.stdout));
+  const none = await run(sh, 'find notes -name "*.zzz" | wc -l');
+  check('coreutils: a find with no matches counts zero', none.stdout === '0\n', JSON.stringify(none.stdout));
+  const seconds = await run(sh, 'date +%s');
+  check('coreutils: date +%s prints epoch seconds', /^\d{10}\n$/.test(seconds.stdout), JSON.stringify(seconds.stdout));
+  const nanos = await run(sh, 'date +%s%N');
+  check('coreutils: date +%s%N prints epoch nanoseconds', /^\d{19}\n$/.test(nanos.stdout), JSON.stringify(nanos.stdout));
+  const year = await run(sh, 'date +%Y');
+  check('coreutils: date +%Y prints the year', /^\d{4}\n$/.test(year.stdout), JSON.stringify(year.stdout));
+  const system = await run(sh, 'uname -s; whoami');
+  check('coreutils: uname -s and whoami print the in-page identity', system.stdout === 'Linux\nuser\n', JSON.stringify(system.stdout));
 });
 
 for (const { title, body } of cases) {
