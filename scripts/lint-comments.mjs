@@ -13,7 +13,7 @@ const CODE = /\.(m?js|cjs)$/;
 const HTML = /\.html$/;
 const MARKDOWN = /\.md$/;
 const YAML = /\.ya?ml$/;
-const C_SOURCE = /\.[ch]$/;
+const C_SOURCE = /\.([ch]|css)$/;
 const DOTFILE_HASH = '.gitignore';
 const NO_COMMENT_SYNTAX = /\.(json|wasm)$|LICENSE|NOTICE/;
 const MIT_GRANT = 'Permission is hereby granted, free of charge';
@@ -21,6 +21,10 @@ const PROVENANCE = {
   'web/vendor/acorn.mjs': { licence: 'web/vendor/ACORN-LICENSE', upstream: 'acorn' },
   'web/vendor/isomorphic-git.mjs': { licence: 'web/vendor/ISOMORPHIC-GIT-LICENSE', upstream: 'isomorphic-git' },
   'web/vendor/sqljs/sql-wasm-browser.js': { licence: 'web/vendor/SQLJS-LICENSE', upstream: 'sql.js' },
+  'web/vendor/xterm/xterm.mjs': { licence: 'web/vendor/xterm/XTERM-LICENSE', upstream: 'xterm.js' },
+  'web/vendor/xterm/xterm.css': { licence: 'web/vendor/xterm/XTERM-LICENSE', upstream: 'xterm.js' },
+  'web/vendor/xterm/addon-fit.mjs': { licence: 'web/vendor/xterm/FIT-LICENSE', upstream: 'xterm.js' },
+  'web/vendor/xterm/addon-webgl.mjs': { licence: 'web/vendor/xterm/WEBGL-LICENSE', upstream: 'xterm.js' },
 };
 
 const lineOf = (text, offset) => text.slice(0, offset).split('\n').length;
