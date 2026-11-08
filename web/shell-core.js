@@ -21,6 +21,8 @@ class ReturnSignal {
 
 class Cancelled {}
 
+class TimedOut {}
+
 function syntaxError(message) {
   return new Error(`syntax error: ${message}`);
 }
@@ -881,19 +883,23 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
   }
 
   return {
-    async run(script, { signal } = {}) {
+    async run(script, { signal, timeoutMs = COMMAND_TIMEOUT_MS } = {}) {
       const sink = { out: '', err: '' };
       const control = new AbortController();
       const cancel = () => control.abort(new Cancelled());
       if (signal?.aborted) cancel();
       else signal?.addEventListener('abort', cancel, { once: true });
+      const timer = setTimeout(() => control.abort(new TimedOut()), timeoutMs);
       runSignal = control.signal;
       let code;
       try {
         code = await runSequence(parseScript(script), '', sink);
       } catch (err) {
         if (err instanceof ShellExit) code = err.code;
-        else if (control.signal.aborted) {
+        else if (control.signal.aborted && control.signal.reason instanceof TimedOut) {
+          code = 124;
+          sink.err += 'timeout: command timed out\n';
+        } else if (control.signal.aborted) {
           code = 130;
           sink.err += 'cancelled\n';
         } else {
@@ -901,6 +907,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
           sink.err += `${err.message}\n`;
         }
       } finally {
+        clearTimeout(timer);
         signal?.removeEventListener('abort', cancel);
         runSignal = null;
       }
