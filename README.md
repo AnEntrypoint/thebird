@@ -11,11 +11,10 @@ Live: https://anentrypoint.github.io/thebird/ (GitHub Pages, deployed from `main
 - Node >= 22, for the static server.
 - Chromium, for the witness. Set `CHROME_BIN`; the default is `/usr/bin/chromium-browser`.
 
-After a fresh clone, generate the vendored runtimes (both need network):
+After a fresh clone, generate the vendored runtime (needs network):
 
 ```bash
 node scripts/vendor-bashkit.mjs
-node scripts/vendor-pyodide.mjs
 ```
 
 ## Run

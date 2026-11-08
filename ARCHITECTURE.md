@@ -43,8 +43,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/shims/bashkit-host.js` | bashkit's host filesystem, over `fs.js`. |
 | `web/vendor/acorn.mjs` | Vendored parser used by the commit gate. |
 | `web/vendor/isomorphic-git.mjs` | Vendored git library, read as text and run inside the txiki engine. |
-| `web/vendor/bashkit/`, `web/vendor/pyodide/` | Generated, gitignored runtimes. |
-| `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs` | Generate the runtimes, checking SHA-256. |
+| `web/vendor/bashkit/` | Generated, gitignored runtime. |
+| `scripts/vendor-bashkit.mjs` | Generates the runtime, checking SHA-256. |
 | `scripts/browser-driver.mjs` | Drives headless Chromium for the witness. |
 | `scripts/lint-comments.mjs`, `scripts/lint-architecture.mjs`, `scripts/witness.mjs` | Lints and the browser witness (see Checks). |
 
@@ -102,7 +102,7 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 ## Vendored and generated files
 
 - Committed bundles: `web/vendor/acorn.mjs` (licence `web/vendor/ACORN-LICENSE`) and `web/vendor/isomorphic-git.mjs` (`web/vendor/ISOMORPHIC-GIT-LICENSE`). They keep their upstream comments and are not edited. Each licence file carries the MIT grant.
-- Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). `web/vendor/pyodide/` from `scripts/vendor-pyodide.mjs` (Pyodide 314.0.7; each file's SHA-256 is pinned in the script). Its licence notice is `web/vendor/PYODIDE-NOTICE.md`.
+- Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). Pyodide is not vendored or generated: the page fetches the stripped bundle at run time, and the witness reads the Pyodide 314.0.7 lock from its pinned jsDelivr URL (`https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json`) and checks its SHA-256 before it reads micropip from it. Its licence notice is `web/vendor/PYODIDE-NOTICE.md`.
 - Both generators need network. The witness runs the bashkit script when its files are missing.
 - Committed third-party, unmodified: `web/vendor/brotli/` holds `brotli-dec-wasm` 2.3.2 from npm (`brotli_dec_wasm.js` and `brotli_dec_wasm_bg.wasm`, byte-identical to the package's pkg directory; licences `LICENSE-MIT.txt` and `LICENSE-Apache.txt`, MIT OR Apache-2.0). `web/vendor/tte-js/` is the tte-js project from github.com/flaviocopes at commit `9b120c2f65d48f996a027ef061712bb87ad467bb` (MIT), with `web/vendor/tte-js/LICENSE`, `THIRD_PARTY_NOTICES.md` and the LICENSES directory beside it. The `laseretch` effect is defined in `web/vendor/tte-js/src/builtin-effects.js`.
 - pip fetches micropip at run time from the CDN. Nothing is vendored beyond the Pyodide core. Wheels are not added to `web/vendor/` without owner approval.
@@ -111,7 +111,7 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 
 - `npm run check` runs `node --check` on the server, the scripts and the web files.
 - `npm run lint:comments` (`scripts/lint-comments.mjs`) lists each comment in repo-owned tracked files with its file and line, and exits non-zero when there are any. Vendored bundles with comments are reported as VENDORED when their licence and upstream are recorded. A tracked file of an unknown type fails.
-- `npm run lint:architecture` (`scripts/lint-architecture.mjs`) checks the claims in `ARCHITECTURE.md` and `AGENTS.md` against the code and records the `cc242f5` check. Its live checks need `web/vendor/bashkit/` and `web/vendor/pyodide/` present, because the lint does not generate them.
+- `npm run lint:architecture` (`scripts/lint-architecture.mjs`) checks the claims in `ARCHITECTURE.md` and `AGENTS.md` against the code and records the `cc242f5` check. Its live checks need `web/vendor/bashkit/` present, because the lint does not generate it.
 - `npm run witness` (`scripts/witness.mjs`) drives headless Chromium through `scripts/browser-driver.mjs`, using `CHROME_BIN`, and checks the in-page shell end to end.
 
 ## Fresh-tree notes

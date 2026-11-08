@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -616,8 +617,12 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
-  const pyodideLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
-  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pyodideLock.packages.micropip.file_name}'`), pyodideLock.packages.micropip.file_name);
+  const PYODIDE_LOCK_URL = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json';
+  const PYODIDE_LOCK_SHA256 = '5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010';
+  const pyodideLockBytes = Buffer.from(await fetch(PYODIDE_LOCK_URL, { signal: AbortSignal.timeout(60000) }).then((response) => response.arrayBuffer()).catch(() => new ArrayBuffer(0)));
+  const pyodideLockDigest = createHash('sha256').update(pyodideLockBytes).digest('hex');
+  const pyodideLock = pyodideLockDigest === PYODIDE_LOCK_SHA256 ? JSON.parse(pyodideLockBytes.toString('utf8')) : null;
+  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', pyodideLock !== null && readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pyodideLock.packages.micropip.file_name}'`), pyodideLock ? pyodideLock.packages.micropip.file_name : `lock sha256 ${pyodideLockDigest} from ${PYODIDE_LOCK_URL} is not the pinned ${PYODIDE_LOCK_SHA256}`);
   const pipInstall = await terminal([
     ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
     ['run', 'pip install tabulate==0.9.0'],
