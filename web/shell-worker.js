@@ -3,6 +3,7 @@ import { flushFs, hydrate, mkdirSync, readdirSync } from './shims/fs.js';
 import { posix } from './shims/path.js';
 import { createShell, hasBackgroundOperator } from './bash-shell.js';
 import { onPythonPhase } from './python-in-page.js';
+import { clearCancel, setCancelWord } from './txiki-in-page.js';
 
 const WORKSPACE = '/workspace';
 globalThis.Buffer = Buffer;
@@ -32,6 +33,10 @@ try {
   await flushFs();
   postMessage({ ready: true });
   self.onmessage = async ({ data }) => {
+    if (data.init) {
+      setCancelWord(data.init.flag ? new Int32Array(data.init.flag) : null);
+      return;
+    }
     if (data.cancel) {
       shell.cancel();
       return;
@@ -50,6 +55,7 @@ try {
       } else if (hasBackgroundOperator(data.run)) {
         reply = { id: data.id, ok: false, error: BACKGROUND_REFUSED };
       } else {
+        clearCancel();
         const result = await shell.run(data.run, { onOutput: (stdout, stderr) => postMessage({ output: stdout + stderr }) });
         reply = { id: data.id, ok: true, result };
       }

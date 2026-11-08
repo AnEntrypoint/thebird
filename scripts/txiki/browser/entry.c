@@ -21,6 +21,7 @@ static int stop_status = 0;
 
 #define HOST_IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 HOST_IMPORT("tjs_now_ms") double host_now_ms(void);
+HOST_IMPORT("tjs_cancel_requested") int32_t host_cancel_requested(void);
 
 #define TJS_BROWSER_WAITING 2
 #define TJS_BROWSER_TIMED_OUT 124
@@ -30,7 +31,7 @@ static int interrupted(JSContext *ctx, void *opaque) {
     if (stop_status) {
         return 1;
     }
-    if (cancel_requested) {
+    if (cancel_requested || host_cancel_requested()) {
         stop_status = TJS_BROWSER_CANCELLED;
         return 1;
     }
@@ -74,7 +75,7 @@ static int pump(TJSRuntime *qrt) {
     JSRuntime *rt = JS_GetRuntime(ctx);
     uv_loop_t *loop = TJS_GetLoop(qrt);
 
-    if (!stop_status && cancel_requested) {
+    if (!stop_status && (cancel_requested || host_cancel_requested())) {
         stop_status = TJS_BROWSER_CANCELLED;
     }
     if (!stop_status && deadline_ms > 0 && host_now_ms() > deadline_ms) {

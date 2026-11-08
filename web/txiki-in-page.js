@@ -15,6 +15,15 @@ const TJS_WAITING = 2;
 export const TJS_TIMED_OUT = 124;
 export const TJS_CANCELLED = 130;
 const TICK_MS = 5;
+let cancelWord = null;
+
+export function setCancelWord(word) {
+  cancelWord = word;
+}
+
+export function clearCancel() {
+  if (cancelWord) Atomics.store(cancelWord, 0, 0);
+}
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const joinChunks = (chunks) => {
@@ -127,6 +136,9 @@ async function load() {
       if (message.op === 'open') startRequest(session, message);
       else if (message.op === 'abort') session.controllers.get(message.id)?.abort();
       else if (message.op === 'builtin') startBuiltin(session, message);
+    },
+    tjs_cancel_requested() {
+      return cancelWord ? Atomics.load(cancelWord, 0) : 0;
     },
     tjs_fs_open(ptr, len, create) {
       const path = absolute(textAt(ptr, len));
