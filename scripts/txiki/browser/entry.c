@@ -33,7 +33,6 @@ static int pump(TJSRuntime *qrt) {
     int status = 0;
 
     do {
-        uv_run(loop, UV_RUN_DEFAULT);
         JSContext *job_ctx;
         int job;
         while ((job = JS_ExecutePendingJob(rt, &job_ctx)) != 0) {
@@ -41,6 +40,7 @@ static int pump(TJSRuntime *qrt) {
                 status = report_exception(job_ctx);
             }
         }
+        uv_run(loop, UV_RUN_DEFAULT);
     } while (JS_IsJobPending(rt) || tjs_browser_timers_pending(loop));
 
     return status;
