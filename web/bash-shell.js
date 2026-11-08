@@ -5,6 +5,7 @@ import { sqliteBuiltin } from './sqlite-in-page.js';
 import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
 import { qjsBuiltin } from './quickjs-in-page.js';
+import { tjsBuiltin } from './txiki-in-page.js';
 import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
@@ -41,6 +42,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     python3: (ctx) => pythonBuiltin(ctx.argv, abort.signal).then(withNewline),
     pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
     qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
+    tjs: (ctx) => tjsBuiltin(ctx.argv).then(withNewline),
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
   };

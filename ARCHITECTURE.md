@@ -118,8 +118,12 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 - A tree from `git archive` has no `.git`. The lints call git, so they cannot run there.
 - The `cc242f5` record (the owner commit) reports PASS when the object resolves to a commit. It reports UNVERIFIED (no history) only when the object does not resolve and the tree has one commit. It FAILs when the object does not resolve on a tree with more history.
 
-## Decision: txiki.js rejected
+## txiki.js in the page
 
-txiki.js was evaluated as an in-page runtime and rejected. It is a native runtime (QuickJS-ng and libuv) with no browser or WebAssembly build, so it cannot run the in-page code. Node stays only as the static server.
+txiki.js is the primary goal, and the owner reversed the earlier rejection on 2026-11-08. `scripts/vendor-txiki.mjs` builds txiki.js v26.11.0 (QuickJS-ng and libuv 1.53) for wasm32-wasi with zig 0.17.1. Its libuv is replaced by `scripts/txiki/browser/uv-browser.c`: the loop, timers, handles, streams and tty are implemented there. Every other symbol the link needs is stubbed from `scripts/txiki/stubs.tsv`, one row per symbol with its reason. The same table records the modules excluded from the browser build (channel, dns, fswatch, hashing, httpclient, httpserver, miniz, posix_socket, process, tls, udp, ws and webcrypto), and libwebsockets, which is not vendored.
+
+The interim event loop is synchronous: `uv_run` spins until the next timer is due, so `TJS_Run` runs unchanged. `scripts/txiki/browser/entry.c` exports `tjs_browser_eval`, and `web/txiki-in-page.js` runs it as the `tjs -e "<code>"` builtin, with `qjs` kept alongside it.
+
+The gate counts as passing only when the wasm links with zero undefined symbols. Node stays only as the static server.
 
 The before-state of the gm removal is commit `6b060f7`. `git diff --name-status 6b060f7 0538b2c` lists the 29 paths of that change.

@@ -11,7 +11,6 @@
 #define TXIKI_CLOSING 0x4u
 #define TXIKI_CLOSED 0x8u
 
-__attribute__((import_module("env"), import_name("tjs_host_arm"))) void tjs_host_arm(double delay_ms);
 __attribute__((import_module("env"), import_name("tjs_host_write"))) void tjs_host_write(int fd, const char *base, unsigned int len);
 
 static uint64_t now_ms(void) {
@@ -201,8 +200,10 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
         if (!uv_loop_alive(loop)) break;
         if (mode == UV_RUN_ONCE) break;
         if (loop->timers) {
-            tjs_host_arm((double) next_timer_delay(loop));
-            break;
+            uint64_t until = loop->time + next_timer_delay(loop);
+            while (now_ms() < until) {
+            }
+            continue;
         }
         break;
     } while (uv_loop_alive(loop));
@@ -483,4 +484,48 @@ const char *uv_strerror(int err) {
 #undef XX
     }
     return "unknown error";
+}
+
+void uv_once(uv_once_t *guard, void (*callback)(void)) {
+    if (*guard) return;
+    *guard = 1;
+    callback();
+}
+
+char **uv_setup_args(int argc, char **argv) {
+    (void) argc;
+    return argv;
+}
+
+int uv_replace_allocator(uv_malloc_func malloc_func, uv_realloc_func realloc_func, uv_calloc_func calloc_func, uv_free_func free_func) {
+    (void) malloc_func;
+    (void) realloc_func;
+    (void) calloc_func;
+    (void) free_func;
+    return 0;
+}
+
+int uv_sem_init(uv_sem_t *sem, unsigned int value) {
+    *sem = (int) value;
+    return 0;
+}
+
+void uv_sem_destroy(uv_sem_t *sem) {
+    (void) sem;
+}
+
+void uv_sem_post(uv_sem_t *sem) {
+    *sem += 1;
+}
+
+void uv_sem_wait(uv_sem_t *sem) {
+    if (*sem > 0) *sem -= 1;
+}
+
+int uv_signal_init(uv_loop_t *loop, uv_signal_t *signal) {
+    handle_init(loop, (uv_handle_t *) signal, UV_SIGNAL);
+    queue_init(&signal->queue);
+    signal->caught_signals = 0;
+    signal->dispatched_signals = 0;
+    return 0;
 }
