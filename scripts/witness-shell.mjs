@@ -217,6 +217,26 @@ group('coreutils: find, wc, date, uname and whoami on a populated tree', async (
   check('coreutils: uname -s and whoami print the in-page identity', system.stdout === 'Linux\nuser\n', JSON.stringify(system.stdout));
 });
 
+group('coreutils: grep, hostname and id', async () => {
+  const sh = await shell({ '/workspace/log.txt': 'alpha\nbeta\nAlpha two\n', '/workspace/other.txt': 'beta here\n' });
+  const numbered = await run(sh, 'grep -in alpha log.txt');
+  check('coreutils: grep -in matches ignoring case and prints line numbers', numbered.stdout === '1:alpha\n3:Alpha two\n', JSON.stringify(numbered.stdout));
+  const inverted = await run(sh, 'grep -v alpha log.txt');
+  check('coreutils: grep -v prints the lines that do not match', inverted.stdout === 'beta\nAlpha two\n', JSON.stringify(inverted.stdout));
+  const counted = await run(sh, 'cat log.txt | grep -c alpha');
+  check('coreutils: grep -c counts the matching lines of piped input', counted.stdout === '1\n', JSON.stringify(counted.stdout));
+  const several = await run(sh, 'grep beta log.txt other.txt');
+  check('coreutils: grep over several files prefixes each line with its file name', several.stdout === 'log.txt:beta\nother.txt:beta here\n', JSON.stringify(several.stdout));
+  const missing = await run(sh, 'grep x nosuch.txt; echo rc=$?');
+  check('coreutils: grep on a missing file reports it and exits 2', missing.stdout === 'rc=2\n' && missing.stderr.includes('No such file'), JSON.stringify(missing.stdout));
+  const nothing = await run(sh, 'grep zzz log.txt; echo rc=$?');
+  check('coreutils: grep with no match exits 1', nothing.stdout === 'rc=1\n', JSON.stringify(nothing.stdout));
+  const identity = await run(sh, 'hostname; id');
+  check('coreutils: hostname and id print the in-page identity', identity.stdout === 'thebird\nuid=1000(user) gid=1000(user) groups=1000(user)\n', JSON.stringify(identity.stdout));
+  const found = await run(sh, 'command -v grep hostname id');
+  check('lookups: grep, hostname and id resolve as core commands', found.stdout === '/bin/grep\n/bin/hostname\n/bin/id\n', JSON.stringify(found.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
