@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
 import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
-import { vendorPyodide } from './vendor-pyodide.mjs';
+import { brotliDecompressSync } from 'node:zlib';
+import { BUNDLE_URL, unpack } from '../web/python-bundle.js';
 import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,7 +30,6 @@ check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST'
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
-  if (!existsSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide.asm.wasm'))) await vendorPyodide();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
 
@@ -608,7 +608,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
-  const pipLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
+  const pipLock = JSON.parse(await fetch(BUNDLE_URL).then(async (response) => unpack(new Uint8Array(brotliDecompressSync(Buffer.from(await response.arrayBuffer())))).lock));
   check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
   const pipInstall = await terminal([
     ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],

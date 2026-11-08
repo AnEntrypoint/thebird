@@ -15,7 +15,7 @@ const REQUIRED = [...Object.keys(CORE_PINS), 'pyodide-lock.json'];
 let decoder = null;
 let loading = null;
 
-function unpack(raw) {
+export function unpack(raw) {
   const headerLength = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getUint32(0, true);
   const header = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + headerLength)));
   if (header.format !== FORMAT) throw new Error(`unknown bundle format ${header.format}`);
