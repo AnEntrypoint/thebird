@@ -36,6 +36,13 @@ jobs:
         run: node scripts/vendor-quickjs.mjs
       - name: Check qjs.wasm against the pin
         run: echo "63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad  web/vendor/quickjs/qjs.wasm" | sha256sum -c -
+      - name: Build tjs.wasm
+        env:
+          ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
+          TMPDIR: /tmp
+        run: node scripts/vendor-txiki.mjs
+      - name: Check tjs.wasm against the pin
+        run: echo "e98ad67d06928779e0a583194d7ad7c0a1e46223a7dac8aa61efb9c6bc65b699  web/vendor/txiki/tjs.wasm" | sha256sum -c -
       - run: node scripts/build-pages.mjs
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:

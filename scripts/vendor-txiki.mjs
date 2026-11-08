@@ -22,7 +22,7 @@ export const CORE_SOURCES = [
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
 export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c'];
-export const TXIKI_WASM_SHA256 = '';
+export const TXIKI_WASM_SHA256 = 'e98ad67d06928779e0a583194d7ad7c0a1e46223a7dac8aa61efb9c6bc65b699';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const overlay = join(root, 'scripts', 'txiki', 'include');

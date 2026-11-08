@@ -70,6 +70,14 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - `scripts/quickjs/thebird-eval.c` exports `thebird_eval(ptr, len)`. It copies the input into a NUL-terminated buffer, evaluates it in global scope, and returns the value or `Uncaught <message>`. QuickJS's lexer reads past the input length, so the copy is required.
 - Milestone 1 ran the engine under Node with `node:wasi`. Milestone 2 runs it in the page: `web/shims/wasi-preview1.js` supplies the WASI imports the reactor uses (the rest return ENOSYS), and `web/quickjs-in-page.js` loads `./vendor/quickjs/qjs.wasm` on first use. The `qjs -e <code>` builtin exposes it: console output is returned, then the value of the last expression unless it is `undefined`, and an uncaught exception is an error. The Pages workflow builds the artifact in CI, so the public site serves `web/vendor/quickjs/qjs.wasm` and `qjs` runs there. A local checkout without the artifact reports that the engine is not built. The txiki.js build is described under txiki.js below.
 
+## txiki.js
+
+- `scripts/vendor-txiki.mjs` builds txiki.js v26.11.0 for wasm32-wasi with zig 0.17.1 into `web/vendor/txiki/tjs.wasm`. The gate passes only when every listed file compiles and the link leaves zero undefined symbols. Its libuv is `scripts/txiki/browser/uv-browser.c`, and `scripts/txiki/stubs.tsv` lists every stub and excluded module, one row each.
+- The wasm pin is `e98ad67d06928779e0a583194d7ad7c0a1e46223a7dac8aa61efb9c6bc65b699`, in `TXIKI_WASM_SHA256` and in `.github/workflows/pages.yml`. A local build and a CI build from a different checkout path gave the same bytes.
+- The build is reproducible only with the fixed inputs the script sets: `-ffile-prefix-map` for the repo, the staging directory and zig's lib dir, and `ZIG_GLOBAL_CACHE_DIR` at `$TMPDIR/thebird-zig-global-cache`. Zig writes its global cache path into the wasm, so a different cache location changes the hash.
+- `tjs -e "<code>"` runs through `web/txiki-in-page.js` and `scripts/txiki/browser/entry.c`. The event loop is synchronous: `uv_run` spins until the next timer is due, so `TJS_Run` runs unchanged.
+- `.github/workflows/txiki.yml` runs the gate on pushes that touch the txiki files and on dispatch. `pages.yml` builds the same wasm, checks it against the pin, and ships it with the site.
+
 ## Fresh-tree notes
 
 - A tree from `git archive` has no `.git`. The lints call git, so they cannot run there.
