@@ -11,7 +11,7 @@ web/terminal.js -> web/shell-client.js -> postMessage -> web/shell-worker.js
 
 The worker posts each streamed output chunk as `{ output }`, and each reply as `{ id, ok, result }` or `{ id, ok: false, error }`. The page appends streamed chunks as they arrive. The final result carries only notes and cancel text, so output is not printed twice.
 
-Lines typed while a command runs wait in a queue and run in order. Ctrl-C while busy drops the queue, posts a cancel, and bashkit's `cancel()` takes effect between commands and sleeps, not inside one blocking step.
+Lines typed while a command runs wait in a queue and run in order. Ctrl-C while busy drops the queue, posts a cancel, and bashkit's `cancel()` takes effect between commands and sleeps, not inside one blocking step. Each run also gets an `AbortController` that `cancel()` aborts; `curl` and `wget` pass its signal to `fetch`, so a pending response is abandoned.
 
 The prompt shows the working directory, read back with `pwd` after each run. Each run starts with `(exit N);` for the previous status, because bashkit resets `$?` on every `execute()`.
 

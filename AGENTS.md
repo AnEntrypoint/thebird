@@ -5,7 +5,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Runtime surface
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
-- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
+- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/quickjs/`.
 - Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
 - QuickJS-ng wasm wrapper: `scripts/quickjs/thebird-eval.c`, built only by `scripts/vendor-quickjs.mjs`.
@@ -34,7 +34,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 - History is kept in localStorage under `thebird.history`. It stores only the submitted command lines, capped at 500. No output, cwd or other state.
 - Output is plain text by default: `web/ansi.js` strips escape sequences. `?ansi=color` renders colour and style as spans, and the page text is the same in both modes.
-- `which`, `command -v` and `type` are defined in `web/shell-lookup.js` and must agree for every in-page builtin. The builtins are `git`, `sqlite3`, `python3`, `pip`, `curl` and `wget`.
+- `which`, `command -v` and `type` are defined in `web/shell-lookup.js` and must agree for every in-page builtin. The builtins are `git`, `sqlite3`, `python3`, `pip`, `qjs`, `curl` and `wget`.
 
 ## Timeout
 
@@ -42,7 +42,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Cancel
 
-- Ctrl-C does not end a builtin that is waiting on a network response, such as `curl`: the page stays busy while the response is pending.
+- Ctrl-C ends a `curl` or `wget` waiting on a response. The fetch is aborted, the command exits 130 with `cancelled`, and the page leaves the busy state. `git`, `sqlite3`, `python3` and `pip` do not take the cancel signal: Ctrl-C does not end them while they wait on the network, and the page stays busy until they return.
 
 ## Hosting
 
@@ -63,7 +63,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - The build is reproducible only with fixed paths. The script builds in `$TMPDIR/thebird-quickjs/src` with relative source names, uses the cache `$TMPDIR/thebird-quickjs/zig-cache`, and prefix-maps the repo root and zig's lib dir. The binary still embeds zig's libc source paths, and those and the build paths are specific to this machine. Another zig install or temp directory needs a re-pin.
 - `scripts/witness-quickjs.mjs` (`npm run witness:quickjs`) instantiates the wasm with `node:wasi` and runs 10 evaluations: arithmetic, JSON, BigInt, a regex, Unicode case mapping, an uncaught `TypeError`, and a `SyntaxError`. It exits 0 only when the artifact matches the pin and every evaluation matches.
 - `scripts/quickjs/thebird-eval.c` exports `thebird_eval(ptr, len)`. It copies the input into a NUL-terminated buffer, evaluates it in global scope, and returns the value or `Uncaught <message>`. QuickJS's lexer reads past the input length, so the copy is required.
-- Milestone 1 runs the engine under Node with `node:wasi`. The browser WASI shim and the libuv replacement are not started.
+- Milestone 1 ran the engine under Node with `node:wasi`. Milestone 2 runs it in the page: `web/shims/wasi-preview1.js` supplies the WASI imports the reactor uses (the rest return ENOSYS), and `web/quickjs-in-page.js` loads `./vendor/quickjs/qjs.wasm` on first use. The `qjs -e <code>` builtin exposes it: console output is returned, and an uncaught exception is an error. The Pages build does not run zig, so the artifact is absent there and `qjs` reports that the engine is not built. The libuv replacement is not started.
 
 ## Fresh-tree notes
 

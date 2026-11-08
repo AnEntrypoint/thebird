@@ -4,6 +4,7 @@ import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-page.js';
 import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
+import { qjsBuiltin } from './quickjs-in-page.js';
 import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
@@ -33,13 +34,15 @@ export function hasBackgroundOperator(command) {
 
 export async function createShell({ cwd = '/workspace' } = {}) {
   await initBashkit();
+  let abort = new AbortController();
   const customBuiltins = {
     git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
     sqlite3: (ctx) => sqliteBuiltin(ctx.argv).then(withNewline),
     python3: (ctx) => pythonBuiltin(ctx.argv).then(withNewline),
     pip: (ctx) => pipBuiltin(ctx.argv).then(withNewline),
-    curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd).then(withNewline),
-    wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd).then(withNewline),
+    qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
+    curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
+    wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
   };
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
   await bash.execute(lookupPrologue(Object.keys(customBuiltins)));
@@ -53,17 +56,20 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
       running = true;
       cancelled = false;
+      abort = new AbortController();
       let result;
       let streamed = Boolean(onOutput);
       try {
         result = await bash.execute(restore + command, onOutput ? { onOutput } : {});
       } catch (err) {
         if (!cancelled) throw err;
-        streamed = false;
-        result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };
       } finally {
         running = false;
         bash.clearCancel();
+      }
+      if (cancelled) {
+        streamed = false;
+        result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };
       }
       status = result.exitCode;
       current = (await bash.execute('pwd')).stdout.trim() || current;
@@ -74,6 +80,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     cancel() {
       if (!running) return;
       cancelled = true;
+      abort.abort();
       bash.cancel();
     },
     cwd() {

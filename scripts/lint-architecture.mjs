@@ -229,7 +229,7 @@ function agentsStatic() {
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
-  cites('Ctrl-C does not end a builtin', ['in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy']);
+  cites('Ctrl-C ends a `curl`', ['in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on']);
   cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers']);
   cites('The build job has `contents: read` only', ['pages.yml gives the build job contents read only, and the deploy job only pages and id-token write']);
   record('The actions in `pages.yml` are pinned', all(

@@ -20,17 +20,18 @@ function parse(name, argv) {
   return opts;
 }
 
-async function get(url) {
+async function get(url, signal) {
   try {
-    return await fetch(url);
+    return await fetch(url, { signal });
   } catch {
+    if (signal?.aborted) throw new Error('cancelled');
     throw new Error(`could not fetch from ${new URL(url).host}: ${CORS_NOTE}`);
   }
 }
 
-export async function curlBuiltin(name, argv, cwd) {
+export async function curlBuiltin(name, argv, cwd, signal) {
   const opts = parse(name, argv);
-  const response = await get(opts.url);
+  const response = await get(opts.url, signal);
   if (opts.fail && !response.ok) throw new Error(`HTTP ${response.status} from ${new URL(opts.url).host}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (opts.output === undefined) return new TextDecoder().decode(bytes);

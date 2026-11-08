@@ -47,6 +47,7 @@ if (existsSync(chrome)) {
   check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
+  rmSync(join(pagesDir, 'web', 'vendor', 'quickjs'), { recursive: true, force: true });
   const pagesServer = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
     const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
@@ -61,9 +62,10 @@ if (existsSync(chrome)) {
   await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"']]).toString(), timeoutMs: 180000 });
+  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: 180000 });
   pagesServer.close();
   rmSync(pagesDir, { recursive: true, force: true });
+  check('the built site without the quickjs artifact says qjs is not built, and the rest of the shell still runs', site.out.includes('qjs is not available in this site') && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
@@ -288,15 +290,22 @@ if (existsSync(chrome)) {
       await waitFor("document.body.dataset.busy === 'true'", 20000);
       const reachedBy = Date.now() + 20000;
       while (heldRequests === 0 && Date.now() < reachedBy) await new Promise((resolve) => setTimeout(resolve, 100));
+      const pressed = Date.now();
       await press('c', { ctrl: true });
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      held.busy = await evaluate("document.body.dataset.busy");
+      await waitFor("!document.body.dataset.busy", 10000);
+      held.elapsed = Date.now() - pressed;
+      await type('echo after-held-cancel');
+      await press('Enter');
+      await waitFor("/^after-held-cancel$/m.test(document.getElementById('out').textContent)", 20000);
       held.echoed = (await evaluate("document.getElementById('out').textContent")).includes('^C');
+      held.out = await evaluate("document.getElementById('out').textContent");
     },
   });
   holdServer.closeAllConnections();
   holdServer.close();
-  check('in-page terminal Ctrl-C does not end a curl waiting on a response, and the page stays busy', held.busy === 'true' && held.echoed && heldRequests > 0, `busy=${held.busy} ^C echoed=${held.echoed} requests reaching the held server=${heldRequests}`);
+  check('in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on', heldRequests > 0 && held.echoed && held.elapsed < 10000 && held.out.includes('cancelled') && /^after-held-cancel$/m.test(held.out), `requests reaching the held server=${heldRequests} ^C echoed=${held.echoed} cancel took ${held.elapsed} ms`);
+  const quickjs = await terminal([['run', 'qjs -e "console.log(6*7)"'], ['run', 'qjs -e "throw new TypeError(\'boom\')"'], ['run', 'which qjs']]);
+  check('in-page qjs runs quickjs-ng in the page, prints console output, and reports an uncaught error', quickjs.engine === 'ready' && /^42$/m.test(quickjs.out) && quickjs.out.includes('Uncaught TypeError: boom') && /^qjs$/m.test(quickjs.out), quickjs.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const editing = {};
   await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
