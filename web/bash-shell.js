@@ -32,8 +32,10 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   await initBashkit();
   let abort = new AbortController();
   let engineCancelled = false;
+  let builtinExit = null;
   const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline, (err) => {
     engineCancelled ||= err?.message === 'cancelled';
+    if (err?.exitCode !== undefined) builtinExit = err.exitCode;
     throw err;
   })]));
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
@@ -50,6 +52,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       running = true;
       cancelled = false;
       engineCancelled = false;
+      builtinExit = null;
       abort = new AbortController();
       let result;
       let streamed = Boolean(onOutput);
@@ -61,6 +64,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
         running = false;
         bash.clearCancel();
       }
+      if (builtinExit !== null) result = { ...result, exitCode: builtinExit };
       if (cancelled || engineCancelled) {
         streamed = false;
         result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };

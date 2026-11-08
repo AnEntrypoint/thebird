@@ -6,6 +6,7 @@ const WORKSPACE = '/workspace';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
 const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const CANCELLED = 'cancelled';
+const PIP_USAGE = 'usage: pip install <package>...\n       pip --version\n       pip --help';
 
 let worker = null;
 let nextId = 0;
@@ -156,10 +157,18 @@ export async function pythonBuiltin(argv, signal) {
   return finish(await runPython({ source, filename }, signal));
 }
 
+export class UsageError extends Error {
+  exitCode = 2;
+}
+
 export async function pipBuiltin(argv, signal) {
   const [verb, ...names] = argv;
-  if (verb !== 'install' || names.length === 0) throw new Error('pip install <package>...');
+  if (verb === undefined) throw new UsageError(PIP_USAGE);
+  if (verb === '--help' || verb === '-h' || verb === 'help') return PIP_USAGE;
+  if (verb === '--version' || verb === '-V') return `pip ${finish(await request('version', {}, signal)).trim()} (micropip, in-page)`;
+  if (verb !== 'install') throw new UsageError(`pip: unknown command '${verb}'\n${PIP_USAGE}`);
+  if (names.length === 0) throw new UsageError(`pip install: name at least one package\n${PIP_USAGE}`);
   const bad = names.find((name) => !PACKAGE_NAME.test(name));
-  if (bad) throw new Error(`pip install: ${bad} is not a package name (version specifiers and URLs are not supported)`);
+  if (bad) throw new UsageError(`pip install: ${bad} is not a package name (version specifiers and URLs are not supported)`);
   return finish(await request('install', { names }, signal));
 }

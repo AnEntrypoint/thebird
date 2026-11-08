@@ -79,7 +79,7 @@ function startBuiltin(current, message) {
       (out) => settle({ code: 0, out, err: '' }),
       (err) => settle(err?.message === 'cancelled'
         ? { code: 130, out: '', err: 'cancelled\n' }
-        : { code: 1, out: '', err: `${err?.message ?? err}\n` }),
+        : { code: err?.exitCode ?? 1, out: '', err: `${err?.message ?? err}\n` }),
     );
 }
 

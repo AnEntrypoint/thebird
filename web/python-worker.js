@@ -116,7 +116,20 @@ async function installMicropip(py) {
   py.unpackArchive(await response.arrayBuffer(), 'wheel');
 }
 
+function ensureMicropip(py) {
+  micropipLoaded ??= installMicropip(py).catch((err) => {
+    micropipLoaded = null;
+    throw err;
+  });
+  return micropipLoaded;
+}
+
 const handlers = {
+  async version() {
+    const py = await pythonRuntime();
+    await ensureMicropip(py);
+    return capture(() => py.runPython("import importlib.metadata\nprint(importlib.metadata.version('micropip'))"));
+  },
   load({ files, lock }) {
     bundle = { files, lock };
     bundledNames = new Set(Object.keys(JSON.parse(lock).packages));
@@ -137,11 +150,7 @@ const handlers = {
     const py = await pythonRuntime();
     const pinned = names.find((name) => bundledNames.has(normalizeName(name)));
     if (pinned) throw new Error(`pip install: ${pinned} is part of the Pyodide package set, so it cannot be installed in-page`);
-    micropipLoaded ??= installMicropip(py).catch((err) => {
-      micropipLoaded = null;
-      throw err;
-    });
-    await micropipLoaded;
+    await ensureMicropip(py);
     const list = JSON.stringify(names);
     return capture(() => py.runPythonAsync(`import micropip, importlib.metadata\nawait micropip.install(${list})\nfor name in ${list}:\n    print('installed', name, importlib.metadata.version(name))`));
   },
