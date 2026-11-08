@@ -19,6 +19,8 @@ class ReturnSignal {
   }
 }
 
+class Cancelled {}
+
 function syntaxError(message) {
   return new Error(`syntax error: ${message}`);
 }
@@ -446,6 +448,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
   const vars = new Map();
   const functions = new Map();
   const inPage = new Set(builtins);
+  let runSignal = null;
   const frames = [];
   let positional = [];
 
@@ -455,6 +458,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
+    sleep: ({ argv }) => sleepFor(Number(argv[0] ?? 0) * 1000),
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
@@ -516,6 +520,24 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
       return ok(out);
     },
   };
+
+  const sleepFor = (ms) =>
+    new Promise((resolve, reject) => {
+      const signal = runSignal;
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(ok(''));
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
 
   const locate = (name) => {
     if (functions.has(name)) return name;
@@ -849,6 +871,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
   async function runSequence(list, stdin, sink) {
     let status = 0;
     for (const { op, pipe } of list.items) {
+      if (runSignal?.aborted) throw runSignal.reason;
       if (op === '&&' && status !== 0) continue;
       if (op === '||' && status === 0) continue;
       status = await runPipeline(pipe, stdin, sink);
@@ -858,17 +881,28 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
   }
 
   return {
-    async run(script) {
+    async run(script, { signal } = {}) {
       const sink = { out: '', err: '' };
+      const control = new AbortController();
+      const cancel = () => control.abort(new Cancelled());
+      if (signal?.aborted) cancel();
+      else signal?.addEventListener('abort', cancel, { once: true });
+      runSignal = control.signal;
       let code;
       try {
         code = await runSequence(parseScript(script), '', sink);
       } catch (err) {
         if (err instanceof ShellExit) code = err.code;
-        else {
+        else if (control.signal.aborted) {
+          code = 130;
+          sink.err += 'cancelled\n';
+        } else {
           code = 2;
           sink.err += `${err.message}\n`;
         }
+      } finally {
+        signal?.removeEventListener('abort', cancel);
+        runSignal = null;
       }
       state.status = code;
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
