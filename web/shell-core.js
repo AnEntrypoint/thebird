@@ -619,6 +619,54 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     },
     uname: () => ok('Linux\n'),
     whoami: () => ok('user\n'),
+    hostname: () => ok('thebird\n'),
+    id: () => ok('uid=1000(user) gid=1000(user) groups=1000(user)\n'),
+    grep: ({ argv, stdin = '' }) => {
+      const isFlags = (arg) => /^-[a-zA-Z]+$/.test(arg);
+      const flags = argv.filter(isFlags).join('');
+      const [pattern, ...files] = argv.filter((arg) => !isFlags(arg));
+      if (pattern === undefined) return { code: 2, out: '', err: 'grep: no pattern given\n' };
+      let re;
+      try {
+        re = new RegExp(flags.includes('F') ? pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : pattern, flags.includes('i') ? 'i' : '');
+      } catch {
+        return { code: 2, out: '', err: `grep: invalid regular expression '${pattern}'\n` };
+      }
+      const invert = flags.includes('v');
+      const numbered = flags.includes('n');
+      const counting = flags.includes('c');
+      const scan = (label, text) => {
+        const lines = text.split('\n');
+        if (lines.at(-1) === '') lines.pop();
+        const hits = lines.map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => re.test(line) !== invert);
+        const out = hits.map(({ line, number }) => `${label}${numbered ? number + ':' : ''}${line}\n`).join('');
+        return { count: hits.length, out: counting ? `${label}${hits.length}\n` : out };
+      };
+      if (!files.length) {
+        const result = scan('', stdin);
+        return { code: result.count ? 0 : 1, out: result.out, err: '' };
+      }
+      const labelled = files.length > 1;
+      let out = '';
+      let err = '';
+      let code = 1;
+      let matched = 0;
+      for (const name of files) {
+        let text;
+        try {
+          text = host.read(resolvePath(name));
+        } catch {
+          err += `grep: ${name}: No such file or directory\n`;
+          code = 2;
+          continue;
+        }
+        const result = scan(labelled ? name + ':' : '', text);
+        matched += result.count;
+        out += result.out;
+      }
+      if (code !== 2 && matched) code = 0;
+      return { code, out, err };
+    },
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
