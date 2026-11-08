@@ -535,6 +535,14 @@ if (existsSync(chrome)) {
   check('in-page tjs -e opens a tjs:sqlite database and sums it', /^6$/m.test(tjsSum.out), tjsSum.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const reopened = await terminal([['run', 'sqlite3 notes/app.db "select count(*) from t"']]);
   check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+  const rowStatements = "drop table if exists people; create table people(id integer primary key, name text, score real); insert into people(name, score) values ('ann', 1.5), ('bo', null), ('cy', 3); select id, name, score from people order by id; select sum(score) as total, count(*) as n from people; select name from people where name like 'b%'";
+  const { DatabaseSync } = await import('node:sqlite');
+  const reference = new DatabaseSync(':memory:');
+  const referenceRows = rowStatements.split(';').map((sql) => sql.trim()).filter(Boolean).flatMap((sql) => reference.prepare(sql).all().map((row) => Object.values(row).map((value) => (value === null ? '' : String(value))).join('|')));
+  reference.close();
+  const expectedRows = referenceRows.join('\n');
+  const rowsRun = await terminal([['run', `sqlite3 notes/rows.db "${rowStatements}"`]]);
+  check('in-page sqlite3 returns the same rows as a reference SQLite for the same statements', expectedRows.length > 0 && rowsRun.out.includes(expectedRows), `expected ${JSON.stringify(expectedRows)} / got ${JSON.stringify(rowsRun.out.split('\n').slice(-6).join(' / ').slice(0, 220))}`);
   const python = await terminal([
     ['run', 'python3 -c "print(6*7)"'],
     ['run', 'python3 -c "1/0"'],
@@ -621,6 +629,8 @@ const seeded = await import('../web/shims/fs.js');
 const watcher = seeded.watch();
 const chained = watcher.on('change', () => {}) === watcher && watcher.once('change', () => {}) === watcher;
 check('fs.watch returns an inert handle: close is a no-op and on/once return the handle', typeof watcher.close === 'function' && chained && watcher.close() === undefined);
+const sqliteRetired = !existsSync(join(root, 'web', 'sqlite-in-page.js')) && existsSync(join(root, 'web', 'sqlite-program.js')) && readFileSync(join(root, 'web', 'bash-shell.js'), 'utf8').includes("from './sqlite-in-txiki.js'");
+check('sqlite3 runs a static txiki program, and web/sqlite-in-page.js is retired', sqliteRetired, existsSync(join(root, 'web', 'sqlite-in-page.js')) ? 'web/sqlite-in-page.js is still present' : sqliteRetired ? 'bash-shell.js imports web/sqlite-in-txiki.js, which runs web/sqlite-program.js' : 'web/sqlite-program.js is missing or bash-shell.js still imports the old file');
 const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 120000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
 check('ARCHITECTURE.md and AGENTS.md claims have no contradictions with the code', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');

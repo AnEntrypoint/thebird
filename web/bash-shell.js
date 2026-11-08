@@ -1,7 +1,7 @@
 import { Bash, initBashkit } from './vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
 import { gitBuiltin } from './git-in-page.js';
-import { sqliteBuiltin } from './sqlite-in-page.js';
+import { sqliteBuiltin } from './sqlite-in-txiki.js';
 import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
 import { qjsBuiltin } from './quickjs-in-page.js';

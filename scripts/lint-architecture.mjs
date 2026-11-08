@@ -189,7 +189,7 @@ function nodeReach(file, seen = new Set()) {
   });
 }
 
-const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
+const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-txiki.js', 'web/sqlite-program.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
 
 function agentsStatic() {
   record('quickjs-ng v0.18.0', (() => {

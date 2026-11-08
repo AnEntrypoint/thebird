@@ -19,7 +19,7 @@ thebird is a bash terminal that runs in the browser. The page does the work, and
 1. Page: `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`. xterm.js draws the screen and handles escape sequences; the adapter keeps the input line, history, Tab and the run queue, and passes keys and paste in and output bytes out.
 2. Worker: `web/shell-worker.js`. Hydrates OPFS, creates `/workspace`, answers run, complete, cwd and cancel messages, and flushes OPFS after each message.
 3. Shell: `web/bash-shell.js` over bashkit, with the lookup prologue from `web/shell-lookup.js`.
-4. Builtins: `web/git-in-page.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, and the commit gate `web/commit-gate.js`.
+4. Builtins: `web/git-in-page.js`, `web/sqlite-in-txiki.js`, `web/python-in-page.js`, `web/curl-in-page.js`, and the commit gate `web/commit-gate.js`.
 5. Storage and shims: `web/shims/`, with the OPFS-backed filesystem in `web/shims/fs.js`.
 6. Static server: `src/relay.js`, started by `bin/thebird-relay.js`.
 

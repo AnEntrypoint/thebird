@@ -31,7 +31,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/git-in-page.js` | `git` builtin: refuses remote verbs, then builds the git program from the texts below and runs it in the txiki engine with `runTjs`. |
 | `web/git-program.js` | Git program that runs inside the txiki engine: the fs adapter over `__thebirdFs`, and each git command. |
 | `web/commit-gate.js` | Gate run by `git commit` inside the txiki engine, loaded as text by `web/git-in-page.js`. |
-| `web/sqlite-in-page.js` | `sqlite3` builtin: generates a `tjs:sqlite` module and runs it through `web/txiki-in-page.js`. |
+| `web/sqlite-in-txiki.js` | `sqlite3` builtin: splits the statements and runs the static program `web/sqlite-program.js` through `web/txiki-in-page.js`, with the database path and statements passed as `args`. |
 | `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins: generate a module that calls txiki.js `fetch`, run through `web/txiki-in-page.js`. |

@@ -1,6 +1,23 @@
 import { runTjs } from './txiki-in-page.js';
 import { posix } from './shims/path.js';
 
+const PROGRAM = new URL('./sqlite-program.js', import.meta.url).href;
+
+let program = null;
+
+const programText = () => {
+  program ??= fetch(PROGRAM)
+    .then((response) => {
+      if (!response.ok) throw new Error(`sqlite3: ${PROGRAM} did not load`);
+      return response.text();
+    })
+    .catch((err) => {
+      program = null;
+      throw err;
+    });
+  return program;
+};
+
 function splitStatements(sql) {
   const statements = [];
   let current = '';
@@ -21,29 +38,12 @@ function splitStatements(sql) {
   return statements;
 }
 
-const moduleSource = (path, statements) => `import { Database } from 'tjs:sqlite';
-const cell = (value) => (value === null ? '' : String(value));
-const db = new Database(${JSON.stringify(path)});
-try {
-  for (const sql of ${JSON.stringify(statements)}) {
-    const stmt = db.prepare(sql);
-    try {
-      const rows = stmt.all();
-      if (rows.length) console.log(rows.map((row) => Object.values(row).map(cell).join('|')).join('\\n'));
-    } finally {
-      stmt.finalize();
-    }
-  }
-} finally {
-  db.close();
-}
-`;
-
 export async function sqliteBuiltin(argv, cwd = '/workspace') {
   const [file, ...sql] = argv;
   if (!file || sql.length === 0) throw new Error('sqlite3 <database> <sql>');
   const path = posix.resolve(cwd, file);
-  const { output, status } = await runTjs(moduleSource(path, splitStatements(sql.join(' '))), cwd);
+  const args = JSON.stringify({ path, statements: splitStatements(sql.join(' ')) });
+  const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd);
   if (status !== 0) throw new Error(output.trimEnd());
   return output.trimEnd();
 }
