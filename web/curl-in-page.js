@@ -1,7 +1,9 @@
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
+import { runTjs, bytesFromBase64 } from './txiki-in-page.js';
 
 const CORS_NOTE = 'the in-page shell reaches only hosts that send CORS headers to this page';
+const MARKER = '@@thebird-fetch ';
 
 function parse(name, argv) {
   const opts = { fail: false, output: undefined, url: undefined };
@@ -20,20 +22,34 @@ function parse(name, argv) {
   return opts;
 }
 
-async function get(url, signal) {
-  try {
-    return await fetch(url, { signal });
-  } catch {
-    if (signal?.aborted) throw new Error('cancelled');
-    throw new Error(`could not fetch from ${new URL(url).host}: ${CORS_NOTE}`);
-  }
+const fetchModule = (url) => `const toBase64 = (bytes) => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};
+try {
+  const response = await fetch(${JSON.stringify(url)});
+  const body = new Uint8Array(await response.arrayBuffer());
+  console.log(${JSON.stringify(MARKER)} + JSON.stringify({ status: response.status, ok: response.ok, body: toBase64(body) }));
+} catch (err) {
+  console.log(${JSON.stringify(MARKER)} + JSON.stringify({ error: true, message: String(err?.message ?? err) }));
 }
+`;
 
 export async function curlBuiltin(name, argv, cwd, signal) {
   const opts = parse(name, argv);
-  const response = await get(opts.url, signal);
-  if (opts.fail && !response.ok) throw new Error(`HTTP ${response.status} from ${new URL(opts.url).host}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const host = new URL(opts.url).host;
+  const { output, status } = await runTjs(fetchModule(opts.url), cwd, { signal });
+  if (status !== 0) throw new Error(output.trimEnd());
+  const line = output.split('\n').find((text) => text.startsWith(MARKER));
+  if (line === undefined) throw new Error(output.trimEnd());
+  const result = JSON.parse(line.slice(MARKER.length));
+  if (result.error) {
+    if (result.message.startsWith('Network request failed')) throw new Error(`could not fetch from ${host}: ${CORS_NOTE}`);
+    throw new Error(result.message);
+  }
+  if (opts.fail && !result.ok) throw new Error(`HTTP ${result.status} from ${host}`);
+  const bytes = bytesFromBase64(result.body);
   if (opts.output === undefined) return new TextDecoder().decode(bytes);
   fs.writeFileSync(posix.resolve(cwd, opts.output), bytes);
   return '';

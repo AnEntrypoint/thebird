@@ -16,7 +16,6 @@ tjs__mod_channel_init	mod_channel: module excluded from the browser build
 tjs__mod_dns_init	mod_dns: module excluded from the browser build
 tjs__mod_fswatch_init	mod_fswatch: module excluded from the browser build
 tjs__mod_hashing_init	mod_hashing: module excluded from the browser build
-tjs__mod_httpclient_init	mod_httpclient: module excluded from the browser build
 tjs__mod_httpserver_init	mod_httpserver: module excluded from the browser build
 tjs__mod_miniz_init	mod_miniz: module excluded from the browser build
 tjs__mod_posix_socket_init	mod_posix_socket: module excluded from the browser build

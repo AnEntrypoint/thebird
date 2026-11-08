@@ -199,6 +199,8 @@ if (existsSync(chrome)) {
     ['run', 'cat notes/fetched.txt'],
   ]);
   check('in-page curl and wget fetch from a host that sends CORS headers', fetched.out.split('\n').filter((line) => line === 'cors-host-hello').length >= 2, fetched.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const tjsFetch = await terminal([['run', `tjs -e "const r = await fetch('http://127.0.0.1:${corsPort}/hello'); console.log('tjs-fetch', r.status, (await r.text()).trim());"`]]);
+  check('tjs -e awaits txiki fetch, and the request goes out through the page', /^tjs-fetch 200 cors-host-hello$/m.test(tjsFetch.out), tjsFetch.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const refused = await terminal([
     ['run', `curl -s http://127.0.0.1:${plainPort}/hello`],
     ['run', 'echo after-refusal'],

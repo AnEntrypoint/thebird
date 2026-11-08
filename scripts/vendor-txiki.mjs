@@ -31,9 +31,10 @@ export const SQLITE_DEFINES = [
 ];
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
-export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c'];
-export const TXIKI_WASM_SHA256 = '07773992da3a99b939266ee203f5fc57659a221969cea8f403954fd4df67afba';
-const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', 'tjs_browser_eval'];
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c'];
+export const TXIKI_WASM_SHA256 = 'f9202222289601d290d0b89b6381b027e07ca3f927b9a11ac626c20ed426502d';
+const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_end'];
+const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const overlay = join(root, 'scripts', 'txiki', 'include');
@@ -84,6 +85,11 @@ export async function stageTxiki() {
   writeFileSync(join(tree, 'src', 'version.h'), readFileSync(join(tree, 'src', 'version.h.in'), 'utf8')
     .replace('@TJS__VERSION_MAJOR@', '26').replace('@TJS__VERSION_MINOR@', '11').replace('@TJS__VERSION_PATCH@', '0').replace('@TJS__VERSION_SUFFIX@', ''));
   return { tree, build };
+}
+
+export function writeBootstrap({ build }) {
+  const source = readFileSync(join(root, 'scripts', 'txiki', 'browser', 'http-client.js'), 'utf8');
+  writeFileSync(join(build, 'http-client-bootstrap.h'), `static const char http_client_bootstrap[] = ${JSON.stringify(source)};\n`);
 }
 
 export function writeStubs({ tree, build }) {
@@ -146,6 +152,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
   for (const file of CORE_SOURCES) compile(zig, flags, tree, file, 'cc', [], objects, results);
   for (const file of CORE_BUNDLES) compile(zig, flags, tree, file, 'cc', [], objects, results);
   for (const file of QUICKJS_SOURCES) compile(zig, flags, tree, join('deps', 'quickjs', file), 'cc', [], objects, results);
+  writeBootstrap({ build });
   for (const file of BROWSER_SOURCES) compile(zig, flags, tree, join(root, file), 'cc', [], objects, results);
   compile(zig, flags, tree, writeStubs({ tree, build }), 'cc', [], objects, results);
   return { objects, results };
@@ -153,7 +160,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
 
 export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
   const output = join(work, 'tjs.wasm');
-  const args = ['cc', '-target', 'wasm32-wasi', ...prefixMapsFor(zig), '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', '-Wl,--export=tjs_browser_eval', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
+  const args = ['cc', '-target', 'wasm32-wasi', ...prefixMapsFor(zig), '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', ...BROWSER_EXPORTS.map((name) => `-Wl,--export=${name}`), '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
   let stderr = '';
   try {
     execFileSync(zig, args, { cwd: tree, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });

@@ -6,7 +6,7 @@ thebird is a bash terminal that runs in the browser. The page does the work, and
 
 - Browser-only execution. Commands run in a Web Worker (`web/shell-worker.js`) over the OPFS tree. No host process runs commands.
 - bashkit is the shell (`web/bash-shell.js`), a WebAssembly bash that gives bash semantics without a host.
-- In-page builtins cover what bashkit lacks: git over isomorphic-git, sqlite3 over txiki.js's tjs:sqlite, python3 and pip over Pyodide, curl and wget over fetch.
+- In-page builtins cover what bashkit lacks: git over isomorphic-git, sqlite3 over txiki.js's tjs:sqlite, python3 and pip over Pyodide, curl and wget over txiki.js fetch.
 - The page has no call path to the host. The static server answers GET and HEAD only and binds 127.0.0.1 by default.
 - txiki.js runs in the browser, and it is the primary goal of thebird. An earlier evaluation rejected it as a native runtime with no browser build; the owner reversed that on 2026-11-08: "txiki.js must be built to run in the browser, with no exceptions. It is the primary purpose of thebird; everything else exists to get txiki.js complete." The browser build is gated by `scripts/vendor-txiki.mjs`, and txiki.js counts as running in the page only once that gate links the wasm with zero undefined symbols. Node stays only as the static server.
 - No external execution engine. The earlier CLI, library, REPL, verb passthrough and relay POST endpoints are gone, so the page runs every command itself.

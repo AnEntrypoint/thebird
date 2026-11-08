@@ -10,6 +10,7 @@ const decoder = new TextDecoder();
 const handles = new Map();
 let engine = null;
 let cwd = '/workspace';
+let session = null;
 
 const joinChunks = (chunks) => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -21,6 +22,64 @@ const joinChunks = (chunks) => {
   }
   return decoder.decode(out);
 };
+
+export function bytesFromBase64(text) {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+const bytesToBase64 = (bytes) => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};
+
+function emit(current, event) {
+  if (current !== session) return;
+  current.events.push(JSON.stringify(event));
+  const wake = current.wake;
+  current.wake = null;
+  wake?.();
+}
+
+const failureOf = (err, state) => {
+  if (state.timedOut) return 'TIMED_OUT';
+  if (err?.name === 'AbortError') return 'ABORTED';
+  return 'FAILED';
+};
+
+function startRequest(current, message) {
+  const { id } = message;
+  const controller = new AbortController();
+  const state = { timedOut: false };
+  current.controllers.set(id, controller);
+  const timer = message.timeout > 0 ? setTimeout(() => {
+    state.timedOut = true;
+    controller.abort();
+  }, message.timeout) : null;
+  const init = { method: message.method, headers: message.headers, signal: controller.signal, credentials: message.credentials, redirect: 'follow' };
+  if (message.body !== null) init.body = bytesFromBase64(message.body);
+  const complete = (error, reason) => {
+    clearTimeout(timer);
+    current.controllers.delete(id);
+    emit(current, { id, kind: 'complete', error, reason });
+  };
+  (async () => {
+    const response = await fetch(message.url, init);
+    emit(current, { id, kind: 'status', status: response.status });
+    emit(current, { id, kind: 'url', url: response.url });
+    response.headers.forEach((value, name) => emit(current, { id, kind: 'header', name, value }));
+    emit(current, { id, kind: 'headersend' });
+    const reader = response.body?.getReader();
+    while (reader) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      emit(current, { id, kind: 'data', data: bytesToBase64(value) });
+    }
+  })().then(() => complete(null, null), (err) => complete(failureOf(err, state), err?.message ?? null));
+}
 
 async function load() {
   const response = await fetch(WASM_URL).catch(() => null);
@@ -36,6 +95,12 @@ async function load() {
   const host = {
     tjs_host_write(fd, ptr, len) {
       (fd === 2 ? stderr : stdout).push(bytesAt(ptr, len).slice());
+    },
+    tjs_bridge_send(ptr, len) {
+      const message = JSON.parse(textAt(ptr, len));
+      if (!session) return;
+      if (message.op === 'open') startRequest(session, message);
+      else if (message.op === 'abort') session.controllers.get(message.id)?.abort();
     },
     tjs_fs_open(ptr, len, create) {
       const path = absolute(textAt(ptr, len));
@@ -135,22 +200,67 @@ function loaded() {
   return engine;
 }
 
-export async function runTjs(source, dir = '/workspace') {
+function nextEvent(current, signal) {
+  if (current.events.length) return Promise.resolve(current.events.shift());
+  return new Promise((resolve, reject) => {
+    const cancelled = () => {
+      current.wake = null;
+      reject(new Error('cancelled'));
+    };
+    if (signal?.aborted) return cancelled();
+    signal?.addEventListener('abort', cancelled, { once: true });
+    current.wake = () => {
+      signal?.removeEventListener('abort', cancelled);
+      resolve(current.events.shift());
+    };
+  });
+}
+
+function callInput(exports, call, text) {
+  const input = encoder.encode(`${text}\0`);
+  const ptr = exports.malloc(input.length);
+  new Uint8Array(exports.memory.buffer, ptr, input.length).set(input);
+  const status = call(ptr);
+  exports.free(ptr);
+  return status;
+}
+
+function resumeWith(exports, event) {
+  const bytes = encoder.encode(event);
+  const ptr = exports.malloc(bytes.length);
+  new Uint8Array(exports.memory.buffer, ptr, bytes.length).set(bytes);
+  const status = exports.tjs_browser_resume(ptr, bytes.length);
+  exports.free(ptr);
+  return status;
+}
+
+export async function runTjs(source, dir = '/workspace', { signal } = {}) {
   const { instance, stdout, stderr } = await loaded();
   cwd = dir;
+  stdout.splice(0);
+  stderr.splice(0);
+  const current = { events: [], wake: null, controllers: new Map() };
+  session = current;
   const { exports } = instance;
-  const input = encoder.encode(`${source}\0`);
-  const inputPtr = exports.malloc(input.length);
-  new Uint8Array(exports.memory.buffer, inputPtr, input.length).set(input);
-  const status = exports.tjs_browser_eval(inputPtr);
-  exports.free(inputPtr);
+  let status;
+  try {
+    status = callInput(exports, exports.tjs_browser_eval, source);
+    while (status === 0 && (current.controllers.size > 0 || current.events.length > 0)) {
+      const event = await nextEvent(current, signal);
+      status = resumeWith(exports, event);
+    }
+  } finally {
+    session = null;
+    for (const controller of current.controllers.values()) controller.abort();
+    exports.tjs_browser_end();
+  }
   const output = joinChunks(stdout.splice(0)) + joinChunks(stderr.splice(0));
   return { output, status };
 }
 
-export async function tjsBuiltin(argv, dir) {
+export async function tjsBuiltin(argv, dir, options) {
   if (argv.length !== 2 || argv[0] !== '-e') throw new Error('usage: tjs -e <code>');
-  const { output, status } = await runTjs(argv[1], dir);
+  const { output, status } = await runTjs(argv[1], dir, options);
   if (status !== 0) throw new Error([output.trimEnd(), `tjs exited with status ${status}`].filter(Boolean).join('\n'));
   return output.trimEnd();
 }

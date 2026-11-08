@@ -166,7 +166,7 @@ function architectureStatic() {
   cites('Errors show the output and summary with URLs removed', ['in-page python3 error text keeps a readable link instead of bashkit cutting it at //', 'in-page python3 reports a traceback as an error']);
   cites('| `pip` | micropip 0.11.1', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page', 'in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', 'the micropip wheel the page loads is the one pinned in the Pyodide lock']);
   cites('Installed packages live in the Python worker',['pip installs stay in Pyodide memory: no tabulate file reaches OPFS']);
-  cites('| `curl`, `wget` | fetch', ['in-page curl and wget fetch from a host that sends CORS headers', 'in-page curl refuses a host that sends no CORS headers, and the shell goes on']);
+  cites('| `curl`, `wget` | txiki.js fetch', ['in-page curl and wget fetch from a host that sends CORS headers', 'in-page curl refuses a host that sends no CORS headers, and the shell goes on', 'tjs -e awaits txiki fetch, and the request goes out through the page']);
   cites('The page\'s shell functions', ['which, command -v and type agree for every name Tab offers, path or builtin', 'in-page which drives an if: a found name passes and a missing one fails']);
   cites('each in-page builtin reports as a builtin', ['in-page git is reported as a builtin by type, command -v and which']);
   cites('Background jobs are refused', ['in-page bash refuses background jobs and keeps &&, redirects and quoted ampersands']);
@@ -310,7 +310,7 @@ function liveRecords(blocks) {
   record('Background jobs are refused', P('amp', (t) => t.includes('background jobs are not supported'), 'a bare & is refused'));
   record('Flags `-s`, `-S`, `-f`, `-L`, `-q`', P('curl-SL', (t) => !t.includes('flag not supported'), 'combined -SL is accepted'));
   record('Other flags are refused', P('curl-v', (t) => t.includes('flag not supported'), 'an unlisted flag is refused'));
-  record('| `curl`, `wget` | fetch', P('curl-cors', (t) => t.includes('cors-host-hello'), 'curl succeeds on a CORS host'));
+  record('| `curl`, `wget` | txiki.js fetch', P('curl-cors', (t) => t.includes('cors-host-hello'), 'curl succeeds on a CORS host'));
 }
 
 inDoc('ARCHITECTURE.md', () => {

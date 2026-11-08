@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <uv.h>
@@ -5,6 +6,12 @@
 
 uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
 int tjs_browser_timers_pending(const uv_loop_t *loop);
+JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
+void tjs_browser_http_release(JSContext *ctx);
+
+static TJSRuntime *runtime = NULL;
+static JSValue module_promise;
+static int has_module = 0;
 
 static int report_value(JSContext *ctx, JSValue value) {
     const char *message = JS_ToCString(ctx, value);
@@ -18,35 +25,96 @@ static int report_exception(JSContext *ctx) {
     return report_value(ctx, JS_GetException(ctx));
 }
 
-int tjs_browser_eval(const char *code) {
-    char *argv[] = {"tjs", NULL};
-    TJS_Initialize(1, argv);
-    TJSRuntime *qrt = TJS_NewRuntime();
-    if (!qrt) return 1;
+static int pump(TJSRuntime *qrt) {
     JSContext *ctx = TJS_GetJSContext(qrt);
     JSRuntime *rt = JS_GetRuntime(ctx);
     uv_loop_t *loop = TJS_GetLoop(qrt);
     int status = 0;
-
-    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_MODULE);
-    if (JS_IsException(result)) {
-        status = report_exception(ctx);
-    } else {
-        if (JS_PromiseState(ctx, result) == JS_PROMISE_REJECTED) {
-            status = report_value(ctx, JS_PromiseResult(ctx, result));
-        }
-        JS_FreeValue(ctx, result);
-    }
 
     do {
         uv_run(loop, UV_RUN_DEFAULT);
         JSContext *job_ctx;
         int job;
         while ((job = JS_ExecutePendingJob(rt, &job_ctx)) != 0) {
-            if (job < 0) status = report_exception(job_ctx);
+            if (job < 0) {
+                status = report_exception(job_ctx);
+            }
         }
     } while (JS_IsJobPending(rt) || tjs_browser_timers_pending(loop));
 
-    TJS_FreeRuntime(qrt);
     return status;
+}
+
+static int check_module(JSContext *ctx) {
+    if (!has_module) {
+        return 0;
+    }
+    int state = JS_PromiseState(ctx, module_promise);
+    if (state == JS_PROMISE_PENDING) {
+        return 0;
+    }
+    int status = 0;
+    if (state == JS_PROMISE_REJECTED) {
+        status = report_value(ctx, JS_PromiseResult(ctx, module_promise));
+    }
+    JS_FreeValue(ctx, module_promise);
+    has_module = 0;
+    return status;
+}
+
+void tjs_browser_end(void) {
+    if (!runtime) {
+        return;
+    }
+    JSContext *ctx = TJS_GetJSContext(runtime);
+    tjs_browser_http_release(ctx);
+    if (has_module) {
+        JS_FreeValue(ctx, module_promise);
+        has_module = 0;
+    }
+    TJS_FreeRuntime(runtime);
+    runtime = NULL;
+}
+
+int tjs_browser_eval(const char *code) {
+    tjs_browser_end();
+    char *argv[] = {"tjs", NULL};
+    TJS_Initialize(1, argv);
+    runtime = TJS_NewRuntime();
+    if (!runtime) {
+        return 1;
+    }
+    JSContext *ctx = TJS_GetJSContext(runtime);
+    int status = 0;
+
+    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_MODULE);
+    if (JS_IsException(result)) {
+        status = report_exception(ctx);
+    } else {
+        module_promise = result;
+        has_module = 1;
+    }
+
+    int pumped = pump(runtime);
+    int checked = check_module(ctx);
+    return status || pumped || checked;
+}
+
+int tjs_browser_resume(const char *text, int32_t len) {
+    if (!runtime) {
+        return 1;
+    }
+    JSContext *ctx = TJS_GetJSContext(runtime);
+    int status = 0;
+
+    JSValue result = tjs_browser_http_deliver(ctx, text, (size_t) len);
+    if (JS_IsException(result)) {
+        status = report_exception(ctx);
+    } else {
+        JS_FreeValue(ctx, result);
+    }
+
+    int pumped = pump(runtime);
+    int checked = check_module(ctx);
+    return status || pumped || checked;
 }
