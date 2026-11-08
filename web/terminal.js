@@ -88,12 +88,14 @@ terminalBox.addEventListener('touchend', () => {
   touchScroll.lines = 0;
 });
 
-pty.writeOutput('loading the shell\n');
+splash.loading('loading the shell');
 try {
   await client.ready;
+  splash.done();
   document.body.dataset.engine = 'ready';
   await pty.refreshPrompt();
 } catch (err) {
+  splash.failed(err.message);
   document.body.dataset.engine = 'failed';
   pty.writeOutput(`engine error: ${err.message}\n`);
 }

@@ -16,7 +16,7 @@ export function createSplash(root) {
   };
 
   return {
-    async loading() {
+    async loading(text = LOADING) {
       const current = ++run;
       stop();
       const canvas = document.createElement('canvas');
@@ -28,10 +28,10 @@ export function createSplash(root) {
       try {
         const { createTextEffect } = await import('./vendor/tte-js/src/index.js');
         if (current !== run) return;
-        effect = createTextEffect(canvas, { text: LOADING, effect: 'laseretch', loop: true });
+        effect = createTextEffect(canvas, { text, effect: 'laseretch', loop: true });
         root.dataset.mode = 'effect';
       } catch {
-        if (current === run) plain(LOADING);
+        if (current === run) plain(text);
       }
     },
     done() {

@@ -189,7 +189,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       await evaluate(`(() => { const data = new DataTransfer(); data.setData('text/plain', ${JSON.stringify('one\ntwo\nthree')}); document.querySelector('.xterm-helper-textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })); })()`);
       await new Promise((resolve) => setTimeout(resolve, 500));
       pasted.state = await evaluate('globalThis.thebird.pty.state()');
-      pasted.output = await evaluate("globalThis.thebird.text().split('\\n').filter((line) => line.trim() !== '' && !line.startsWith('thebird ') && line !== 'loading the shell')");
+      pasted.output = await evaluate("globalThis.thebird.text().split('\\n').filter((line) => line.trim() !== '' && !line.startsWith('thebird '))");
       await press('u', { ctrl: true });
     },
   });
