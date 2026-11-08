@@ -195,8 +195,10 @@ if (existsSync(chrome)) {
     },
   });
   check('a multi-line paste goes into the input line with each newline as a space, queues nothing and runs nothing', pasted.state?.line === 'one two three' && pasted.state.queued === 0 && pasted.output?.length === 0, JSON.stringify({ line: pasted.state?.line, queued: pasted.state?.queued, output: pasted.output }));
-  const host = await terminal([['run', 'node -v']]);
-  check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
+  const host = await terminal([['run', 'ruby -v']]);
+  check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
+  const nodeRun = await terminal([['run', `echo 'console.log("txiki-runtime", tjs.version)' > node-marker.js`], ['run', 'node node-marker.js'], ['run', 'node -v'], ['run', 'which node']]);
+  check('node runs a script through the txiki engine, and node -v and which node name txiki', /^txiki-runtime \S+$/m.test(nodeRun.out) && /^\d+\.\d+\.\d+$/m.test(nodeRun.out) && nodeRun.out.split('\n').includes('node'), nodeRun.out.split('\n').slice(-4).join(' / ').slice(0, 160));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });

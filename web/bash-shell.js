@@ -6,6 +6,7 @@ import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
 import { qjsBuiltin } from './qjs-in-txiki.js';
 import { tjsBuiltin } from './txiki-in-page.js';
+import { nodeBuiltin } from './node-in-txiki.js';
 import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
@@ -43,6 +44,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
     qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
     tjs: (ctx) => tjsBuiltin(ctx.argv, ctx.cwd).then(withNewline),
+    node: (ctx) => nodeBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal }).then(withNewline),
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
   };

@@ -5,7 +5,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Runtime surface
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
-- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-core.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/git-program.js`, `web/commit-gate.js`, `web/sqlite-in-txiki.js`, `web/sqlite-program.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/python-bundle.js`, `web/splash.js`, `web/curl-in-page.js`, `web/qjs-in-txiki.js`, `web/qjs-program.js`, `web/txiki-in-page.js`, `web/shims/*.js`.
+- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-core.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/git-program.js`, `web/commit-gate.js`, `web/sqlite-in-txiki.js`, `web/sqlite-program.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/python-bundle.js`, `web/splash.js`, `web/curl-in-page.js`, `web/qjs-in-txiki.js`, `web/qjs-program.js`, `web/node-in-txiki.js`, `web/txiki-in-page.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/brotli/`, `web/vendor/tte-js/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/txiki/`.
 - Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`, `scripts/witness-shell.mjs` (Node-side groups for `web/shell-core.js`, run by `npm run witness:shell`).
 
@@ -35,7 +35,8 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 - History is kept in localStorage under `thebird.history`. It stores only the submitted command lines, capped at 500. No output, cwd or other state.
 - Output is drawn by xterm.js (vendored, see Vendored). It renders colour, bold, cursor movement, clear screen and the alternate screen. `web/pty-adapter.js` keeps the input line and passes keys and paste in. Wide characters: xterm draws CJK and emoji two cells wide (Unicode 11 via the vendored addon). The adapter places the input cursor with a width table for the East Asian wide and emoji ranges and the zero-width ranges in `web/pty-adapter.js`; a character outside those ranges counts one cell. On each resize the page sends the terminal size, and the shell sets the COLUMNS and LINES shell variables before the next command.
-- `which`, `command -v` and `type` are defined in `web/shell-lookup.js` and must agree for every in-page builtin. The builtins are `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `curl` and `wget`.
+- `which`, `command -v` and `type` are defined in `web/shell-lookup.js` and must agree for every in-page builtin. The builtins are `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl` and `wget`.
+- `node` is an alias for txiki. `node <script>`, `node -e <code>` and `node -v` run through `web/node-in-txiki.js` on the same engine as `tjs -e`, so the page has no separate JavaScript runtime. Scripts get txiki's globals and module loader, not Node's `require`, `process` or `Buffer`.
 
 ## Timeout
 
