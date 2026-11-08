@@ -1,8 +1,29 @@
 # Pending validation
 
-Phase A changes. None of these has been run through `npm run check`, `npm run lint:comments`, `npm run lint:architecture`, `npm run witness`, `npm run witness:shell`, a build, Pages, or a browser. Each row names the file, the group, and the check that must pass before the change is trusted.
+Phase A changes. Validated in Phase B below; the rows that name commands not run here are listed under that section. Before Phase B, none of these had been run through `npm run check`, `npm run lint:comments`, `npm run lint:architecture`, `npm run witness`, `npm run witness:shell`, a build, Pages, or a browser. Each row names the file, the group, and the check that must pass before the change is trusted.
 
-## Committed locally, not pushed
+## Phase B validation (2026-11-08, pushed as dc3d558)
+
+Run on `dc3d558` in this checkout. Each line is the output that proves the check.
+
+- `npm run check`: exit 0.
+- `npm run lint:comments`: `68 repo-owned files checked: 0 comments; 97 tracked files, 7 vendored files with comments`, exit 0.
+- `npm run witness:shell`: `RESULT PASS=100 FAIL=0`, exit 0. Covers ls, mkdir, rm, find, wc, date, uname, whoami, grep, hostname, id, tar, sed, jq, awk, `$!`, ps, kill, wait and the saved core state.
+- `npm run lint:architecture`: `247 claims: 247 pass, 0 fail, 0 unverified; 38 prose lines with NO_CLAIM`, exit 0.
+- `npm run witness` (headless Chromium): `PASS=111 FAIL=0`, exit 0, `all checks passed`, `WITNESS-EXIT 0`. The node per-command lines are:
+  - `PASS which node names node`
+  - `PASS command -v node names node`
+  - `PASS type node reports node as a shell builtin`
+  - `PASS node -v prints a version`, value `v26.11.0`
+  - `PASS node <script> runs through the txiki engine and prints its marker`, value `txiki-runtime 26.11.0`
+  - `PASS node -e exposes typeof process and process.version`, value `object v26.11.0`
+  - `PASS a node script reads process.argv and fs.readFileSync`, value `args hello\nread true`
+  - `PASS the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run`
+- The txiki runner hang came from `entry.c`, which ran `uv_run` before the pending module jobs. A cleared timer kept the page blocked until it fired. The pump now drains jobs first. The wasm pin moved to `a9812524063e39ed98b592dda4c5af6ad91dcbb0f3c89720a276260ee7f9dae2`.
+- Pyodide: the micropip check reads the vendored `web/vendor/pyodide/pyodide-lock.json`, which pins micropip 0.11.1. The bundle lock does not list micropip.
+
+The Phase A table below is covered by these runs, except its rows that name a command not run here: the Pages build in pages.yml, and the `unpack` import check in `web/python-bundle.js`. The pip-lock row names the bundle lock, which is no longer the source the witness reads (see above). The Blocked section and the open decisions stay open. `scripts/vendor-pyodide.mjs` is unchanged.
+## Phase A table (rows covered by the runs above)
 
 | Commit | File | Group | Check needed |
 | --- | --- | --- | --- |
