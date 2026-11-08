@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 export const QUICKJS_VERSION = 'v0.18.0';
 export const QUICKJS_SOURCE_SHA256 = '28bcd89aa3683fd2a946537e5ce3f11cc46b5cbf3383c7561aaef3df5ff9f1dd';
 export const ZIG_VERSION = '0.17.1';
-export const QUICKJS_WASM_SHA256 = 'b279cdae2373a333366c1596083a48bb8955b919e6ee6e56394eba1cf1a5a62d';
+export const QUICKJS_WASM_SHA256 = '63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad';
 
 const SOURCES = ['dtoa.c', 'libregexp.c', 'libunicode.c', 'quickjs.c', 'quickjs-libc.c', 'qjs-wasi-reactor.c'];
 const EXPORTS = ['malloc', 'free', 'realloc', 'calloc'];

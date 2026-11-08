@@ -195,7 +195,7 @@ const BROWSER_FILES = ['web/terminal.js', 'web/shell-client.js', 'web/shell-work
 
 function agentsStatic() {
   record('quickjs-ng v0.18.0', (() => {
-    const pin = 'b279cdae2373a333366c1596083a48bb8955b919e6ee6e56394eba1cf1a5a62d';
+    const pin = '63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad';
     const recorded = all(
       outcome(fileHas('scripts/vendor-quickjs.mjs', pin), 'vendor-quickjs.mjs records the wasm pin'),
       outcome(fileHas('AGENTS.md', pin), 'AGENTS.md records the wasm pin'),
