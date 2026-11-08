@@ -291,6 +291,77 @@ function formatPrintf([format = '', ...args]) {
   });
 }
 
+const OPERATOR_LEVELS = [['||'], ['&&'], ['==', '!='], ['<', '>', '<=', '>='], ['+', '-'], ['*', '/', '%']];
+
+function applyOperator(op, left, right) {
+  if (op === '*') return left * right;
+  if (op === '/' || op === '%') {
+    if (right === 0) throw new Error('arithmetic: division by zero');
+    return op === '/' ? Math.trunc(left / right) : left % right;
+  }
+  if (op === '+') return left + right;
+  if (op === '-') return left - right;
+  if (op === '<') return Number(left < right);
+  if (op === '>') return Number(left > right);
+  if (op === '<=') return Number(left <= right);
+  if (op === '>=') return Number(left >= right);
+  if (op === '==') return Number(left === right);
+  if (op === '!=') return Number(left !== right);
+  if (op === '&&') return Number(Boolean(left) && Boolean(right));
+  return Number(Boolean(left) || Boolean(right));
+}
+
+export function evaluateArithmetic(src, lookup) {
+  const compact = src.replace(/\s+/g, '');
+  const tokens = compact.match(/\d+|[A-Za-z_]\w*|<=|>=|==|!=|&&|\|\||[-+*/%<>()!]/g) ?? [];
+  if (tokens.join('') !== compact) throw new Error(`arithmetic: bad expression '${src.trim()}'`);
+  let pos = 0;
+  const peek = () => tokens[pos];
+
+  const primary = () => {
+    const token = tokens[pos++];
+    if (token === undefined) throw new Error('arithmetic: unexpected end of expression');
+    if (token === '(') {
+      const value = binary(0);
+      if (tokens[pos++] !== ')') throw new Error('arithmetic: expected )');
+      return value;
+    }
+    if (/^\d+$/.test(token)) return Number(token);
+    if (/^[A-Za-z_]/.test(token)) return Number(lookup(token)) || 0;
+    throw new Error(`arithmetic: unexpected '${token}'`);
+  };
+
+  const unary = () => {
+    if (peek() === '!') {
+      pos++;
+      return Number(!unary());
+    }
+    if (peek() === '-') {
+      pos++;
+      return -unary();
+    }
+    if (peek() === '+') {
+      pos++;
+      return unary();
+    }
+    return primary();
+  };
+
+  function binary(level) {
+    if (level === OPERATOR_LEVELS.length) return unary();
+    let left = binary(level + 1);
+    while (OPERATOR_LEVELS[level].includes(peek())) {
+      const op = tokens[pos++];
+      left = applyOperator(op, left, binary(level + 1));
+    }
+    return left;
+  }
+
+  const value = binary(0);
+  if (pos < tokens.length) throw new Error(`arithmetic: unexpected '${tokens[pos]}'`);
+  return value;
+}
+
 export function createShell({ host, cwd = '/workspace' } = {}) {
   const state = { cwd, status: 0 };
   const vars = new Map();
@@ -361,6 +432,7 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
       else if (part.k === 'len') add(String((variableValue(part.name) ?? '').length), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
+      else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '')), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
     }
     return chars;
