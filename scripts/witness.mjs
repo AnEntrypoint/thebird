@@ -54,6 +54,11 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: 180000 });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
+  const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
+  const siteBundle = join(pagesDir, 'web', 'terminal.bundle.js');
+  const bundleText = existsSync(siteBundle) ? readFileSync(siteBundle, 'utf8') : '';
+  const moduleScripts = siteIndex.match(/<script type="module" src="[^"]+"/g) ?? [];
+  check('the built page loads one bundled script that has no relative module imports, and runs', moduleScripts.length === 1 && moduleScripts[0].includes('web/terminal.bundle.js') && bundleText.length > 0 && !/^import\s.*from\s+['"]\.{1,2}\//m.test(bundleText), `${moduleScripts.join(' ')}; bundle ${bundleText.length} bytes`);
   rmSync(pagesDir, { recursive: true, force: true });
   check('the built site runs qjs -e through the txiki engine, and ships no quickjs artifact', quickjsArtifactGone && /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
@@ -319,8 +324,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', `curl -s http://127.0.0.1:${corsPort}/hello`],
     ['run', `wget -O notes/fetched.txt http://127.0.0.1:${corsPort}/hello`],
     ['run', 'cat notes/fetched.txt'],
+    ['run', `wget -O /dev/null http://127.0.0.1:${corsPort}/hello && echo devnull-wget-ok`],
   ]);
   check('in-page curl and wget fetch from a host that sends CORS headers', fetched.out.split('\n').filter((line) => line === 'cors-host-hello').length >= 2, fetched.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  check('wget -O /dev/null fetches from a CORS host and discards the body without an error', /^devnull-wget-ok$/m.test(fetched.out) && !/ENOENT/.test(fetched.out), fetched.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const tjsFetch = await terminal([['run', `tjs -e "const r = await fetch('http://127.0.0.1:${corsPort}/hello'); console.log('tjs-fetch', r.status, (await r.text()).trim());"`]]);
   check('tjs -e awaits txiki fetch, and the request goes out through the page', /^tjs-fetch 200 cors-host-hello$/m.test(tjsFetch.out), tjsFetch.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const refused = await terminal([
@@ -708,6 +715,45 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const pipFiles = await terminal([['run', 'find /workspace -iname "*tabulate*" | wc -l']]);
   check('pip installs stay in Pyodide memory: no tabulate file reaches OPFS', /^0$/m.test(pipFiles.out), pipFiles.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   check('in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', pipInstall.out.includes('version specifiers and URLs are not supported') && pipInstall.out.includes('part of the Pyodide package set') && pipInstall.out.includes("Can't fetch metadata for 'definitely-not-a-real-package-xyz'") && !/https?:\/\//.test(pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join('\n')), pipInstall.out.split('\n').filter((line) => line.startsWith('pip')).join(' / ').slice(0, 200));
+  const pipCli = await terminal([
+    ['run', 'pip --version'],
+    ['run', 'pip -V'],
+    ['run', 'pip --help; echo help-rc=$?'],
+    ['run', 'pip; echo bare-rc=$?'],
+    ['run', 'pip frobnicate; echo unknown-rc=$?'],
+    ['run', 'pip install; echo install-rc=$?'],
+  ]);
+  const pipVersions = pipCli.out.split('\n').filter((line) => /^pip \d+\.\d+\.\d+ \(micropip, in-page\)$/.test(line));
+  check('pip --version and pip -V print the micropip version the page loads', pipVersions.length === 2, pipVersions.join(' / ') || pipCli.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+  check('pip --help prints usage and exits 0', /^usage: pip install <package>\.\.\.$/m.test(pipCli.out) && /^help-rc=0$/m.test(pipCli.out), pipCli.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  check('bare pip, an unknown pip command and pip install with no names exit 2 with a message', /^bare-rc=2$/m.test(pipCli.out) && /^unknown-rc=2$/m.test(pipCli.out) && /^install-rc=2$/m.test(pipCli.out) && pipCli.out.includes("pip: unknown command 'frobnicate'") && pipCli.out.includes('pip install: give at least one package name'), pipCli.out.split('\n').filter((line) => /^(pip|bare|unknown|install)/.test(line)).join(' / ').slice(0, 220));
+  const pipQuiet = await terminal([['run', 'pip 2>/dev/null; echo quiet-rc=$?']]);
+  const pipHelpStdout = await terminal([['run', 'pip --help 2>/dev/null; echo help-stdout-rc=$?']]);
+  check('a bare pip prints its usage to stderr only, and exits 2', /^quiet-rc=2$/m.test(pipQuiet.out) && !pipQuiet.out.includes('usage:'), pipQuiet.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  check('pip --help prints its usage to stdout, so it survives 2>/dev/null', /^help-stdout-rc=0$/m.test(pipHelpStdout.out) && pipHelpStdout.out.includes('usage: pip install'), pipHelpStdout.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  const splashProbe = {};
+  await terminal([], {
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const { createSplash } = await import(new URL('web/splash.js', location.href).href);
+        const el = document.createElement('div');
+        document.body.append(el);
+        const splash = createSplash(el);
+        splash.loading('loading the shell');
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const probe = { mode: el.dataset.mode, text: el.textContent, canvases: el.querySelectorAll('canvas').length };
+        splash.done();
+        el.remove();
+        globalThis.__splashProbe = probe;
+      })().catch((err) => { globalThis.__splashProbe = { error: String(err.message ?? err) }; })`);
+      await waitFor('globalThis.__splashProbe !== undefined', 60000);
+      splashProbe.probe = JSON.parse(await evaluate('JSON.stringify(globalThis.__splashProbe)'));
+      splashProbe.boot = await evaluate("globalThis.thebird.text().includes('loading the shell')");
+      splashProbe.hidden = await evaluate("document.getElementById('splash').hidden");
+    },
+  });
+  check('the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal', splashProbe.probe?.mode === 'effect' && splashProbe.probe.text === '' && splashProbe.probe.canvases === 1 && splashProbe.boot === false, JSON.stringify(splashProbe));
+  check('the boot splash is hidden once the engine is ready', splashProbe.hidden === true, JSON.stringify(splashProbe.hidden));
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]]);
   check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
