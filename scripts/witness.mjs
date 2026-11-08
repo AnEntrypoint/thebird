@@ -251,8 +251,10 @@ if (existsSync(chrome)) {
     ['run', 'echo branch-change > notes/a.txt'],
     ['run', 'git add notes/a.txt'],
     ['run', 'git commit -m branch-change'],
+    ['run', 'git commit -m nothing-staged'],
     ['run', 'git branch'],
   ]);
+  check('git commit with nothing staged is refused by the gate', branchOne.out.includes('commit refused by the in-page gate') && branchOne.out.includes('staged: nothing staged'), branchOne.out.split('\n').find((line) => line.includes('nothing staged'))?.slice(0, 160) ?? 'no refusal line');
   const original = branchOne.out.match(/^\* (\S+)$/m)?.[1];
   check('in-page git lists branches, creates one and switches to it', original !== undefined && branchOne.out.includes('created branch feature-x') && branchOne.out.includes('switched to feature-x') && /^## feature-x$/m.test(branchOne.out) && /^\* feature-x$/m.test(branchOne.out), `original ${original}`);
   const branchTwo = await terminal([
@@ -545,6 +547,31 @@ if (existsSync(chrome)) {
   const linkError = await terminal([['run', `python3 -c "raise ValueError('see https://example.org/docs')"`]]);
   check('in-page python3 error text keeps a readable link instead of bashkit cutting it at //', !linkError.out.includes('<path>') && /ValueError: see example\.org\/docs$/m.test(linkError.out), linkError.out.split('\n').find((line) => line.includes('ValueError')) ?? 'no error line');
   check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
+  const splashRun = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await evaluate(`(() => { globalThis.__splashModes = []; const splash = document.getElementById('splash'); new MutationObserver(() => globalThis.__splashModes.push(splash.dataset.mode ?? 'none')).observe(splash, { attributes: true, childList: true, subtree: true }); return true; })()`);
+      await type('python3 -c "print(6*7)"');
+      await press('Enter');
+      await waitFor("/^42$/m.test(globalThis.thebird.text())", 240000);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      splashRun.modes = await evaluate('[...new Set(globalThis.__splashModes)]');
+      splashRun.hidden = await evaluate("document.getElementById('splash').hidden");
+    },
+  });
+  check('the cold python3 call shows the tte-js splash while the bundle loads, then hides it', splashRun.modes?.includes('effect') && !splashRun.modes.includes('text') && splashRun.hidden === true, JSON.stringify(splashRun));
+  const bundleFailed = {};
+  await terminal([], {
+    blockUrls: ['https://anentrypoint.github.io/pyodide-minimal/*'],
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await type('python3 -c "print(1)"');
+      await press('Enter');
+      await waitFor("(() => { const splash = document.getElementById('splash'); return !splash.hidden && splash.dataset.mode === 'text'; })()", 240000);
+      bundleFailed.splash = await evaluate("document.getElementById('splash').textContent");
+      bundleFailed.out = await evaluate("globalThis.thebird.text()");
+    },
+  });
+  check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
   const pipLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
   check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
   const pipInstall = await terminal([

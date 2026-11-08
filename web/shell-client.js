@@ -10,9 +10,14 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   });
 
   let outputSink = () => {};
+  let phaseSink = () => {};
   worker.onmessage = ({ data }) => {
     if (data.output !== undefined) {
       outputSink(data.output);
+      return;
+    }
+    if (data.phase !== undefined) {
+      phaseSink(data.phase, data.detail);
       return;
     }
     if ('ready' in data) {
@@ -49,6 +54,9 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     },
     onOutput(sink) {
       outputSink = sink;
+    },
+    onPhase(sink) {
+      phaseSink = sink;
     },
     close() {
       worker.terminate();

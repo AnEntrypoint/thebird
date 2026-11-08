@@ -28,7 +28,7 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact }) {
+export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [] }) {
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
     '--headless',
@@ -62,11 +62,17 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       waiting.set(id, { ok, fail });
       socket.send(JSON.stringify({ id, method, params, sessionId }));
     }), CDP_TIMEOUT_MS, method);
+    const blockRequests = (sessionId) => {
+      if (blockUrls.length === 0) return;
+      send('Network.enable', {}, sessionId).catch(() => {});
+      send('Network.setBlockedURLs', { urls: blockUrls }, sessionId).catch(() => {});
+    };
     const onEvent = ({ method, params = {}, sessionId: from }) => {
       if (method === 'Target.attachedToTarget') {
         if (['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {
           send('Runtime.enable', {}, params.sessionId).catch(() => {});
           send('Log.enable', {}, params.sessionId).catch(() => {});
+          blockRequests(params.sessionId);
         }
         return;
       }
@@ -89,6 +95,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     await send('Page.enable', {}, sessionId);
     await send('Runtime.enable', {}, sessionId);
     await send('Log.enable', {}, sessionId);
+    blockRequests(sessionId);
     await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 

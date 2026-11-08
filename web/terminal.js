@@ -4,6 +4,7 @@ import { WebglAddon } from './vendor/xterm/addon-webgl.mjs';
 import { Unicode11Addon } from './vendor/xterm/addon-unicode11.mjs';
 import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
+import { createSplash } from './splash.js';
 
 const params = new URLSearchParams(location.search);
 const term = new Terminal({
@@ -52,6 +53,12 @@ const pty = createPtyAdapter({
 });
 globalThis.thebird = { term, pty, text: screenText };
 client.onOutput((text) => pty.writeOutput(text));
+const splash = createSplash(document.getElementById('splash'));
+client.onPhase((phase, detail) => {
+  if (phase === 'loading') splash.loading();
+  else if (phase === 'failed') splash.failed(detail);
+  else splash.done();
+});
 term.onData((data) => pty.onData(data));
 term.onResize(({ cols }) => pty.resize(cols));
 const terminalBox = document.getElementById('terminal');

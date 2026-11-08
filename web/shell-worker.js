@@ -2,9 +2,11 @@ import { Buffer } from './shims/buffer.js';
 import { flushFs, hydrate, mkdirSync, readdirSync } from './shims/fs.js';
 import { posix } from './shims/path.js';
 import { createShell, hasBackgroundOperator } from './bash-shell.js';
+import { onPythonPhase } from './python-in-page.js';
 
 const WORKSPACE = '/workspace';
 globalThis.Buffer = Buffer;
+onPythonPhase((phase, detail) => postMessage({ phase, detail }));
 const BACKGROUND_REFUSED = 'background jobs are not supported in the in-page shell; run the command in the foreground';
 
 function completions(prefix, cwd) {
