@@ -7,8 +7,6 @@ import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
 import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
-import { brotliDecompressSync } from 'node:zlib';
-import { BUNDLE_URL, unpack } from '../web/python-bundle.js';
 import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -201,6 +199,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
   const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello'];
   const nodeOutputs = [];
+  const txikiShell = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
       const run = async (command) => {
@@ -216,19 +215,6 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       await run(`echo 'console.log("txiki-runtime", tjs.version)' > node-marker.js`);
       await run(`echo 'const fs = require("fs"); console.log("args", process.argv.slice(2).join(" ")); console.log("read", fs.readFileSync("node-check.js", "utf8").includes("readFileSync"));' > node-check.js`);
       for (const command of NODE_COMMANDS) await run(command);
-    },
-  });
-  const nodeOutput = (command) => nodeOutputs.find((entry) => entry.command === command)?.output ?? null;
-  check('which node names node', nodeOutput('which node') === 'node', JSON.stringify(nodeOutput('which node')));
-  check('command -v node names node', nodeOutput('command -v node') === 'node', JSON.stringify(nodeOutput('command -v node')));
-  check('type node reports node as a shell builtin', nodeOutput('type node') === 'node is a shell builtin', JSON.stringify(nodeOutput('type node')));
-  check('node -v prints a version', /^v\d+\.\d+\.\d+$/.test(nodeOutput('node -v') ?? ''), JSON.stringify(nodeOutput('node -v')));
-  check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
-  check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
-  check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
-  const txikiShell = {};
-  await terminal([], {
-    interact: async ({ evaluate, waitFor }) => {
       await evaluate(`(async () => {
         const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
         const first = await shell.runShellInTxiki('mkdir -p notes/txiki && cd notes/txiki && x=7 && echo first-$x', { cwd: '/workspace' });
@@ -239,6 +225,14 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       txikiShell.runs = JSON.parse(await evaluate('JSON.stringify(globalThis.__txikiShellRuns)'));
     },
   });
+  const nodeOutput = (command) => nodeOutputs.find((entry) => entry.command === command)?.output ?? null;
+  check('which node names node', nodeOutput('which node') === 'node', JSON.stringify(nodeOutput('which node')));
+  check('command -v node names node', nodeOutput('command -v node') === 'node', JSON.stringify(nodeOutput('command -v node')));
+  check('type node reports node as a shell builtin', nodeOutput('type node') === 'node is a shell builtin', JSON.stringify(nodeOutput('type node')));
+  check('node -v prints a version', /^v\d+\.\d+\.\d+$/.test(nodeOutput('node -v') ?? ''), JSON.stringify(nodeOutput('node -v')));
+  check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
+  check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
+  check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
@@ -377,7 +371,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       await settle();
       completed.unique = await value();
       await press('u', { ctrl: true });
-      await type('ls no');
+      await type('ls note');
       await press('Tab');
       await settle();
       completed.directory = await value();
@@ -622,8 +616,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
-  const pipLock = JSON.parse(await fetch(BUNDLE_URL).then(async (response) => unpack(new Uint8Array(brotliDecompressSync(Buffer.from(await response.arrayBuffer())))).lock));
-  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
+  const pyodideLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
+  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pyodideLock.packages.micropip.file_name}'`), pyodideLock.packages.micropip.file_name);
   const pipInstall = await terminal([
     ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
     ['run', 'pip install tabulate==0.9.0'],
