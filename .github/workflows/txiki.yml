@@ -1,0 +1,40 @@
+name: txiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/vendor-txiki.mjs'
+      - 'scripts/txiki/**'
+      - '.github/workflows/txiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: txiki
+  cancel-in-progress: true
+
+jobs:
+  compile-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Install zig 0.17.1
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          sudo mkdir -p /workspace/tools
+          sudo chown "$(id -u):$(id -g)" /workspace/tools
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C /workspace/tools
+      - name: Compile gate for the txiki core
+        env:
+          ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
+          TMPDIR: /tmp
+        run: node scripts/vendor-txiki.mjs

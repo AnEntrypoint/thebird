@@ -7,7 +7,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
 - Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/quickjs/`.
-- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
+- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
 - QuickJS-ng wasm wrapper: `scripts/quickjs/thebird-eval.c`, built only by `scripts/vendor-quickjs.mjs`.
 
 ## Browser and Node split
