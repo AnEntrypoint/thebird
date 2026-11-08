@@ -51,6 +51,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   let running = false;
   let cancelled = false;
   let current = cwd;
+  let size = '';
   return {
     async run(command, { onOutput } = {}) {
       const restore = status === 0 ? '' : `(exit ${status}); `;
@@ -60,7 +61,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       let result;
       let streamed = Boolean(onOutput);
       try {
-        result = await bash.execute(restore + command, onOutput ? { onOutput } : {});
+        result = await bash.execute(size + restore + command, onOutput ? { onOutput } : {});
       } catch (err) {
         if (!cancelled) throw err;
       } finally {
@@ -76,6 +77,9 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       const note = EMULATED.test(command) ? withNewline(EMULATION_NOTE) : '';
       const text = streamed ? '' : result.stdout + result.stderr;
       return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: text + note };
+    },
+    resize({ cols, rows }) {
+      size = `export COLUMNS=${cols} LINES=${rows}; `;
     },
     cancel() {
       if (!running) return;

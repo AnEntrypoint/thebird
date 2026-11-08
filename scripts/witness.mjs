@@ -26,15 +26,6 @@ check('relay serves web files', (await fetch(relay.url + 'web/terminal.js')).sta
 check('relay refuses paths outside web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'package.json')).status === 404 && (await fetch(relay.url + 'src/relay.js')).status === 404);
 check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST', body: '{}' })).status === 405 && (await fetch(relay.url + 'web/terminal.js', { method: 'PUT' })).status === 405);
 
-const { AnsiParser } = await import('../web/ansi.js');
-const ansiParser = new AnsiParser();
-const parsedWhole = ansiParser.push('\u001b[1;31mred\u001b[0m plain \u001b]0;title\u0007ok');
-check('ansi parser keeps the text of escape sequences out of plain output', parsedWhole.map((segment) => segment.text).join('') === 'red plain ok' && parsedWhole[0].classes === 'fg-1 bold', JSON.stringify(parsedWhole));
-const split = new AnsiParser();
-const firstHalf = split.push('a\u001b[3');
-const secondHalf = split.push('1;48;5;4mred\u001b[0m');
-check('ansi parser carries a sequence split across chunks, and 256-colour indexes map to the palette', firstHalf.map((segment) => segment.text).join('') === 'a' && secondHalf.length === 1 && secondHalf[0].text === 'red' && secondHalf[0].classes === 'fg-1 bg-4', JSON.stringify([firstHalf, secondHalf]));
-
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
@@ -79,12 +70,18 @@ if (existsSync(chrome)) {
   const kept = await terminal([['run', 'readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']]);
   check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link', /^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const ansiCommand = "printf '\\033[31mred-line\\033[0m\\n\\033[1;4;42mstyled-line\\033[0m\\n'";
-  const ansiPlain = await terminal([['run', ansiCommand]]);
-  const plainLines = ansiPlain.out.split('\n').filter((line) => !line.startsWith('thebird> '));
-  check('ANSI off by default: escape sequences are stripped and the text copies as plain', plainLines.includes('red-line') && plainLines.includes('styled-line') && !plainLines.some((line) => line.includes('[31m') || line.includes('[0m')) && !ansiPlain.out.includes('\u001b') && ansiPlain.spans.length === 0, plainLines.slice(0, 3).join(' / ').slice(0, 160));
-  const ansiColour = await terminal([['ansi', 'color'], ['run', ansiCommand]]);
-  const coloured = (cls, text) => ansiColour.spans.some((span) => span.cls === cls && span.text === text);
-  check('?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain', coloured('fg-1', 'red-line') && coloured('bg-2 bold underline', 'styled-line') && !ansiColour.out.split('\n').filter((line) => !line.startsWith('thebird> ')).some((line) => line.includes('[31m')) && ansiColour.spans.length >= 2, JSON.stringify(ansiColour.spans).slice(0, 160));
+  const styled = {};
+  await terminal([['run', ansiCommand]], {
+    interact: async ({ evaluate, waitFor }) => {
+      await waitFor("globalThis.thebird.text().includes('styled-line')", 20000);
+      const styleOf = (line) => evaluate(`(() => { const buffer = globalThis.thebird.term.buffer.active; for (let row = 0; row < buffer.length; row++) { const current = buffer.getLine(row); if (current.translateToString(true) === ${JSON.stringify(line)}) { const cell = current.getCell(0); return { fg: cell.getFgColor(), palette: cell.isFgPalette(), bg: cell.getBgColor(), bgPalette: cell.isBgPalette(), bold: Boolean(cell.isBold()), underline: Boolean(cell.isUnderline()) }; } } return null; })()`);
+      styled.red = await styleOf('red-line');
+      styled.styled = await styleOf('styled-line');
+      styled.text = await evaluate('globalThis.thebird.text()');
+    },
+  });
+  check('xterm renders SGR colour: red-line uses palette 1, styled-line is bold, underlined and on palette 2', styled.red?.palette === true && styled.red.fg === 1 && styled.styled?.bold === true && styled.styled.underline === true && styled.styled.bgPalette === true && styled.styled.bg === 2, JSON.stringify(styled));
+  check('the terminal consumes the escape sequences, so the text carries none of them', /^red-line$/m.test(styled.text) && /^styled-line$/m.test(styled.text) && !styled.text.split('\n').filter((line) => !line.startsWith('thebird ')).some((line) => line.includes('[31m')), JSON.stringify(styled.text?.slice(0, 80)));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 
@@ -170,7 +167,7 @@ if (existsSync(chrome)) {
   const recalled = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
-      const value = () => evaluate("document.getElementById('line').value");
+      const value = () => evaluate("globalThis.thebird.pty.state().line");
       await type('echo first-typed');
       await press('Enter');
       await waitFor("document.body.dataset.busy !== 'true'");
@@ -211,18 +208,18 @@ if (existsSync(chrome)) {
     ['run', 'echo beta > notes/tab/beta.txt'],
   ], {
     interact: async ({ type, press, evaluate }) => {
-      const value = () => evaluate("document.getElementById('line').value");
+      const value = () => evaluate("globalThis.thebird.pty.state().line");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 800));
       await type('cat notes/fetc');
       await press('Tab');
       await settle();
       completed.unique = await value();
-      await evaluate("document.getElementById('line').value = ''");
+      await press('u', { ctrl: true });
       await type('ls no');
       await press('Tab');
       await settle();
       completed.directory = await value();
-      await evaluate("document.getElementById('line').value = ''");
+      await press('u', { ctrl: true });
       await type('cat notes/tab/');
       await press('Tab');
       await settle();
@@ -235,16 +232,16 @@ if (existsSync(chrome)) {
   const moved = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
-      const value = () => evaluate("document.getElementById('line').value");
+      const value = () => evaluate("globalThis.thebird.pty.state().line");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
       await type('cd notes');
       await press('Enter');
-      await waitFor("document.getElementById('prompt').textContent === 'thebird /workspace/notes> '", 20000);
-      moved.prompt = await evaluate("document.getElementById('prompt').textContent");
+      await waitFor("globalThis.thebird.pty.state().prompt === 'thebird /workspace/notes> '", 20000);
+      moved.prompt = await evaluate("globalThis.thebird.pty.state().prompt");
       await type('pwd');
       await press('Enter');
       await settle();
-      moved.out = await evaluate("document.getElementById('out').textContent");
+      moved.out = await evaluate("globalThis.thebird.text()");
       await type('cat fetc');
       await press('Tab');
       await settle();
@@ -262,7 +259,7 @@ if (existsSync(chrome)) {
       await press('Enter');
       await type('echo queued-two');
       await press('Enter');
-      await waitFor("document.getElementById('out').textContent.includes('queued-two')", 40000);
+      await waitFor("/^queued-two$/m.test(globalThis.thebird.text())", 40000);
     },
   });
   const firstQueued = queued.out.indexOf('\nqueued-one\n');
@@ -297,9 +294,9 @@ if (existsSync(chrome)) {
       held.elapsed = Date.now() - pressed;
       await type('echo after-held-cancel');
       await press('Enter');
-      await waitFor("/^after-held-cancel$/m.test(document.getElementById('out').textContent)", 20000);
-      held.echoed = (await evaluate("document.getElementById('out').textContent")).includes('^C');
-      held.out = await evaluate("document.getElementById('out').textContent");
+      await waitFor("/^after-held-cancel$/m.test(globalThis.thebird.text())", 20000);
+      held.echoed = (await evaluate("globalThis.thebird.text()")).includes('^C');
+      held.out = await evaluate("globalThis.thebird.text()");
     },
   });
   holdServer.closeAllConnections();
@@ -310,8 +307,8 @@ if (existsSync(chrome)) {
   const editing = {};
   await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
-      const value = () => evaluate("document.getElementById('line').value");
-      const caret = () => evaluate("document.getElementById('line').selectionStart");
+      const value = () => evaluate("globalThis.thebird.pty.state().line");
+      const caret = () => evaluate("globalThis.thebird.pty.state().cursor");
       await type('echo discarded');
       await press('u', { ctrl: true });
       editing.cleared = await value();
@@ -321,21 +318,22 @@ if (existsSync(chrome)) {
       await press('e', { ctrl: true });
       editing.end = await caret();
       editing.endLength = (await value()).length;
-      await evaluate("document.getElementById('line').value = ''");
+      await press('u', { ctrl: true });
       await press('l', { ctrl: true });
-      editing.afterClear = await evaluate("document.getElementById('out').textContent");
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      editing.afterClear = await evaluate("globalThis.thebird.text()");
     },
   });
   check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
-  check('in-page terminal Ctrl-L clears the output', editing.afterClear === '', JSON.stringify(editing.afterClear.slice(0, 80)));
+  check('in-page terminal Ctrl-L clears the output', editing.afterClear === 'thebird /workspace> ', JSON.stringify(editing.afterClear.slice(0, 80)));
   const streaming = {};
   const ticks = await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
       await type('for i in 1 2 3 4 5; do echo tick$i; sleep 0.4; done');
       await press('Enter');
-      await waitFor("document.getElementById('out').textContent.includes('tick1')", 20000);
+      await waitFor("globalThis.thebird.text().includes('tick1')", 20000);
       streaming.busy = await evaluate("document.body.dataset.busy === 'true'");
-      streaming.beforeLast = await evaluate("!document.getElementById('out').textContent.includes('tick5')");
+      streaming.beforeLast = await evaluate("!globalThis.thebird.text().includes('tick5')");
       await waitFor("document.body.dataset.busy !== 'true'", 40000);
     },
   });
@@ -347,7 +345,7 @@ if (existsSync(chrome)) {
     interact: async ({ type, press, waitFor, evaluate }) => {
       await type('echo kept-line');
       await press('Enter');
-      await waitFor("/^kept-line$/m.test(document.getElementById('out').textContent)", 20000);
+      await waitFor("/^kept-line$/m.test(globalThis.thebird.text())", 20000);
       storedBefore.raw = await evaluate("localStorage.getItem('thebird.history')");
     },
   });
@@ -362,20 +360,20 @@ if (existsSync(chrome)) {
   const reopenedHistory = await terminal([], {
     interact: async ({ press, evaluate }) => {
       await press('ArrowUp');
-      recalledAfterReload = await evaluate("document.getElementById('line').value");
+      recalledAfterReload = await evaluate("globalThis.thebird.pty.state().line");
     },
   });
-  check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'echo kept-line' && reopenedHistory.out === '', JSON.stringify(recalledAfterReload));
+  check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'echo kept-line' && !/^kept-line$/m.test(reopenedHistory.out), JSON.stringify(recalledAfterReload));
   const commandTab = {};
   await terminal([], {
     interact: async ({ type, press, evaluate }) => {
-      const value = () => evaluate("document.getElementById('line').value");
+      const value = () => evaluate("globalThis.thebird.pty.state().line");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
       await type('pyth');
       await press('Tab');
       await settle();
       commandTab.python = await value();
-      await evaluate("document.getElementById('line').value = ''");
+      await press('u', { ctrl: true });
       await type('sqli');
       await press('Tab');
       await settle();

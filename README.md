@@ -30,7 +30,6 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 ## Query parameters
 
 - `?run=<command>` runs each `run` value in order when the page loads. The body gets `data-done="true"` when they finish. Repeat the parameter for more commands.
-- `?ansi=color` keeps colour and style as spans. By default ANSI escapes are stripped, so output copies as plain text.
 
 ## What works
 

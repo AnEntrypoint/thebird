@@ -44,6 +44,9 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     cancel() {
       worker.postMessage({ cancel: true });
     },
+    resize(cols, rows) {
+      worker.postMessage({ resize: { cols, rows } });
+    },
     onOutput(sink) {
       outputSink = sink;
     },

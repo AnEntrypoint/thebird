@@ -34,6 +34,10 @@ try {
       shell.cancel();
       return;
     }
+    if (data.resize) {
+      shell.resize(data.resize);
+      return;
+    }
     let reply;
     try {
       if (data.complete !== undefined) {

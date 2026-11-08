@@ -191,7 +191,7 @@ function nodeReach(file, seen = new Set()) {
   });
 }
 
-const BROWSER_FILES = ['web/terminal.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js', 'web/ansi.js'];
+const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
 
 function agentsStatic() {
   record('quickjs-ng v0.18.0', (() => {
@@ -218,12 +218,12 @@ function agentsStatic() {
     outcome(!filesUnder('web/vendor').some((file) => file.endsWith('.whl')), 'no wheel is vendored under web/vendor'),
   ));
   record('History is kept in localStorage under `thebird.history`', all(
-    outcome(fileHas('web/terminal.js', 'HISTORY_LIMIT = 500') && fileHas('web/terminal.js', "'thebird.history'"), 'terminal.js sets the thebird.history key and a 500 cap'),
+    outcome(fileHas('web/pty-adapter.js', 'HISTORY_LIMIT = 500') && fileHas('web/pty-adapter.js', "'thebird.history'"), 'pty-adapter.js sets the thebird.history key and a 500 cap'),
     outcome(witness.includes('in-page terminal stores only the submitted command lines in localStorage'), 'witness: localStorage holds only the submitted command lines'),
   ));
-  record('Output is plain text by default', all(
-    outcome(witness.includes('ANSI off by default: escape sequences are stripped and the text copies as plain'), 'witness: ANSI off by default'),
-    outcome(witness.includes('?ansi=color renders SGR colour and style as classed spans, and the copied text stays plain'), 'witness: ?ansi=color renders SGR colour'),
+  record('Output is drawn by xterm.js', all(
+    outcome(witness.includes('xterm renders SGR colour: red-line uses palette 1'), 'witness: xterm renders SGR colour'),
+    outcome(witness.includes('the terminal consumes the escape sequences'), 'witness: escape sequences are consumed by the terminal'),
   ));
   record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 300000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 300000') && fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js sets the value and passes it to Bash'));
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
@@ -256,7 +256,7 @@ function probe(blocks, id, pass, detail) {
 
 const blocksOf = (out, probes) => Object.fromEntries(probes.map(([id]) => {
   const match = out.match(new RegExp(`^@@BEGIN-${id}\\n([\\s\\S]*?)^@@END-${id}$`, 'm'));
-  return [id, match ? match[1].split('\n').filter((line) => !line.startsWith('thebird> ')).join('\n').trimEnd() : null];
+  return [id, match ? match[1].split('\n').filter((line) => !/^thebird /.test(line)).join('\n').trimEnd() : null];
 }));
 
 const PROBES = [

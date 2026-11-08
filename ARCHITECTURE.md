@@ -3,7 +3,7 @@
 ## Flow
 
 ```
-web/terminal.js -> web/shell-client.js -> postMessage -> web/shell-worker.js
+web/terminal.js -> web/pty-adapter.js -> web/shell-client.js -> postMessage -> web/shell-worker.js
   -> web/bash-shell.js -> bashkit (web/vendor/bashkit/)
        -> custom builtins (git, sqlite3, python3, pip, curl, wget)
        -> web/shims/bashkit-host.js -> web/shims/fs.js (OPFS)
@@ -21,8 +21,9 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | --- | --- |
 | `bin/thebird-relay.js` | Node entry point; reads `--port` and `--host`, starts the server. |
 | `src/relay.js` | Node static server on 127.0.0.1 (see Relay). |
-| `web/terminal.html` | Page markup and the colour classes used by `?ansi=color`. |
-| `web/terminal.js` | Page logic: output, prompt, run queue, history, keys, Tab, `?run` and `?ansi`. |
+| `web/terminal.html` | Page markup: the full-window `#terminal` element, the xterm stylesheet and an empty favicon. |
+| `web/terminal.js` | Page logic: creates the xterm.js terminal with its fit and WebGL addons, connects it to the adapter, handles `?run`, and sets `data-engine`, `data-busy`, `data-done` and `data-renderer` on the body. |
+| `web/pty-adapter.js` | PTY-style adapter: keystrokes and paste in, output bytes out. Keeps the input line, cursor, history, Tab, the Ctrl keys and the run queue; `resize` sends the column and row count to the shell as the COLUMNS and LINES shell variables. |
 | `web/shell-client.js` | Page-side client for the worker: `run`, `complete`, `cwd`, `cancel`, `onOutput`, `ready`. |
 | `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
 | `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the six custom builtins and `COMMAND_TIMEOUT_MS`. |
@@ -33,7 +34,6 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins over fetch. |
-| `web/ansi.js` | ANSI parser: strips escapes, or classes them for `?ansi=color`. |
 | `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
 | `web/shims/fs-promises.js` | Promise wrappers over `fs.js`. |
 | `web/shims/path.js` | `posix` path functions. |

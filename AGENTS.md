@@ -5,7 +5,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Runtime surface
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
-- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
+- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/quickjs/`.
 - Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
 - QuickJS-ng wasm wrapper: `scripts/quickjs/thebird-eval.c`, built only by `scripts/vendor-quickjs.mjs`.
@@ -34,7 +34,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Browser state
 
 - History is kept in localStorage under `thebird.history`. It stores only the submitted command lines, capped at 500. No output, cwd or other state.
-- Output is plain text by default: `web/ansi.js` strips escape sequences. `?ansi=color` renders colour and style as spans, and the page text is the same in both modes.
+- Output is drawn by xterm.js (vendored, see Vendored). It renders colour, bold, cursor movement, clear screen and the alternate screen. `web/pty-adapter.js` keeps the input line and passes keys and paste in. On each resize the page sends the terminal size, and the shell sets the COLUMNS and LINES shell variables before the next command.
 - `which`, `command -v` and `type` are defined in `web/shell-lookup.js` and must agree for every in-page builtin. The builtins are `git`, `sqlite3`, `python3`, `pip`, `qjs`, `curl` and `wget`.
 
 ## Timeout
