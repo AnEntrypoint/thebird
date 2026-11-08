@@ -5,7 +5,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 ## Runtime surface
 
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
-- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
+- Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/commit-gate.js`, `web/sqlite-in-page.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/curl-in-page.js`, `web/quickjs-in-page.js`, `web/ansi.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/sqljs/`, and the generated `web/vendor/bashkit/`, `web/vendor/pyodide/` and `web/vendor/quickjs/`.
 - Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-pyodide.mjs`, `scripts/vendor-quickjs.mjs`, `scripts/witness.mjs`, `scripts/witness-quickjs.mjs`.
 - QuickJS-ng wasm wrapper: `scripts/quickjs/thebird-eval.c`, built only by `scripts/vendor-quickjs.mjs`.
@@ -42,9 +42,10 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Cancel
 
-- Ctrl-C ends a `curl`, `wget` or `pip install` waiting on the network. The fetch is aborted, the command exits 130 with `cancelled`, and the page leaves the busy state. `pip install` aborts both the micropip wheel download and each PyPI request, and the next install works after a cancel.
+- Ctrl-C ends a `curl` or `wget` waiting on the network. The fetch is aborted, the command exits 130 with `cancelled`, and the page leaves the busy state.
+- `python3` and `pip` run in a dedicated worker, `web/python-worker.js`, which holds Pyodide. Ctrl-C terminates that worker, so a busy script stops and a `pip` download in progress is abandoned. The command exits 130 with `cancelled`, and the next `python3` or `pip` starts a new worker. This needs no shared memory and no cross-origin isolation.
+- A cancel loses Python's in-memory state: globals, imported modules, files outside `/workspace`, and packages installed by earlier `pip` runs, which live in the worker's memory. Files a cancelled script wrote to `/workspace` are not kept, because the workspace takes Python's writes only when a run finishes. The first `python3` after a cancel is slower, because Pyodide starts again.
 - `git` has no network await in the page: `clone`, `fetch`, `pull` and `push` are refused before any request is made, so there is nothing to abort.
-- `python3` has no network await, and its code runs synchronously in the worker. Ctrl-C is not delivered until the script returns: the page stays busy, and the script output still prints. Ending a busy script needs a shared-memory interrupt, which needs cross-origin isolation, and the Pages site does not have it.
 
 ## Hosting
 

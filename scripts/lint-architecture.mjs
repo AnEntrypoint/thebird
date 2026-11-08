@@ -127,10 +127,10 @@ function architectureStatic() {
     return all(versionIn('web/vendor/pyodide', '314.0.7'), size);
   })());
   record('micropip 0.11.1 from the jsDelivr CDN', outcome(
-    fileHas('web/python-in-page.js', '0.11.1') && fileHas('web/python-in-page.js', 'v314.0.7') && fileHas('web/python-in-page.js', 'jsdelivr'),
-    'python-in-page.js names micropip 0.11.1, the v314.0.7 Pyodide pin and jsDelivr',
+    fileHas('web/python-worker.js', '0.11.1') && fileHas('web/python-worker.js', 'v314.0.7') && fileHas('web/python-worker.js', 'jsdelivr'),
+    'python-worker.js names micropip 0.11.1, the v314.0.7 Pyodide pin and jsDelivr',
   ));
-  record('Names in the vendored lock', outcome(fileHas('web/python-in-page.js', 'bundledLock') && fileHas('web/python-in-page.js', 'pyodide-lock.json'), 'python-in-page.js refuses names listed in pyodide-lock.json'));
+  record('Names in the vendored lock', outcome(fileHas('web/python-worker.js', 'bundledLock') && fileHas('web/python-worker.js', 'pyodide-lock.json'), 'python-worker.js refuses names listed in pyodide-lock.json'));
   record('Flags `-s`, `-S`, `-f`, `-L`, `-q`', outcome(fileHas('web/curl-in-page.js', "'-SL'") || fileHas('web/curl-in-page.js', 'flag not supported'), 'curl-in-page.js accepts the listed flags and refuses others'));
   record('The page\'s shell functions', outcome(fileHas('web/shell-lookup.js', 'builtin command -v') && fileHas('web/shell-lookup.js', 'builtin type'), 'shell-lookup.js defines the functions over builtin command -v and builtin type'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', outcome(fileHas('web/bash-shell.js', 'EMULATION_NOTE') && fileHas('web/bash-shell.js', 'uname|whoami|hostname|id|ps|kill|tar'), 'bash-shell.js labels these commands as emulations'));
@@ -165,7 +165,7 @@ function architectureStatic() {
   cites('| `python3` | Pyodide 314.0.7', ['in-page python3 runs a one-line script through Pyodide', 'in-page python3 sees a shell rewrite made after its last call', 'in-page python3 removes a file it deletes and the shell sees it gone']);
   cites('Errors show the output and summary with URLs removed', ['in-page python3 error text keeps a readable link instead of bashkit cutting it at //', 'in-page python3 reports a traceback as an error']);
   cites('| `pip` | micropip 0.11.1', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page', 'in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL', 'the micropip wheel the page loads is the one pinned in the Pyodide lock']);
-  cites('Installed packages live in Pyodide', ['pip installs stay in Pyodide memory: no tabulate file reaches OPFS']);
+  cites('Installed packages live in the Python worker',['pip installs stay in Pyodide memory: no tabulate file reaches OPFS']);
   cites('| `curl`, `wget` | fetch', ['in-page curl and wget fetch from a host that sends CORS headers', 'in-page curl refuses a host that sends no CORS headers, and the shell goes on']);
   cites('The page\'s shell functions', ['which, command -v and type agree for every name Tab offers, path or builtin', 'in-page which drives an if: a found name passes and a missing one fails']);
   cites('each in-page builtin reports as a builtin', ['in-page git is reported as a builtin by type, command -v and which']);
@@ -191,7 +191,7 @@ function nodeReach(file, seen = new Set()) {
   });
 }
 
-const BROWSER_FILES = ['web/terminal.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/curl-in-page.js', 'web/ansi.js'];
+const BROWSER_FILES = ['web/terminal.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-page.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js', 'web/ansi.js'];
 
 function agentsStatic() {
   record('quickjs-ng v0.18.0', (() => {
@@ -214,7 +214,7 @@ function agentsStatic() {
     outcome(isIgnored('web/vendor/pyodide/') && isIgnored('web/vendor/bashkit/') && fileHas('scripts/vendor-pyodide.mjs', 'sha256') && fileHas('scripts/vendor-bashkit.mjs', 'sha256'), 'both are gitignored and their generators check SHA-256'),
   ));
   record('pip loads micropip from the CDN', all(
-    outcome(witness.includes('the micropip wheel the page loads is the one pinned in the Pyodide lock') && fileHas('web/python-in-page.js', 'v314.0.7'), 'the micropip pin is checked by the witness, and python-in-page.js pins v314.0.7'),
+    outcome(witness.includes('the micropip wheel the page loads is the one pinned in the Pyodide lock') && fileHas('web/python-worker.js', 'v314.0.7'), 'the micropip pin is checked by the witness, and python-worker.js pins v314.0.7'),
     outcome(!filesUnder('web/vendor').some((file) => file.endsWith('.whl')), 'no wheel is vendored under web/vendor'),
   ));
   record('History is kept in localStorage under `thebird.history`', all(

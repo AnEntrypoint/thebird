@@ -38,7 +38,7 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   const customBuiltins = {
     git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
     sqlite3: (ctx) => sqliteBuiltin(ctx.argv).then(withNewline),
-    python3: (ctx) => pythonBuiltin(ctx.argv).then(withNewline),
+    python3: (ctx) => pythonBuiltin(ctx.argv, abort.signal).then(withNewline),
     pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
     qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),

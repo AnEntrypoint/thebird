@@ -11,7 +11,7 @@ web/terminal.js -> web/shell-client.js -> postMessage -> web/shell-worker.js
 
 The worker posts each streamed output chunk as `{ output }`, and each reply as `{ id, ok, result }` or `{ id, ok: false, error }`. The page appends streamed chunks as they arrive. The final result carries only notes and cancel text, so output is not printed twice.
 
-Lines typed while a command runs wait in a queue and run in order. Ctrl-C while busy drops the queue, posts a cancel, and bashkit's `cancel()` takes effect between commands and sleeps, not inside one blocking step. Each run also gets an `AbortController` that `cancel()` aborts; `curl` and `wget` pass its signal to `fetch`, so a pending response is abandoned. `pip install` runs with a worker-level `fetch` wrapper that adds the current run's signal, which covers the micropip wheel and PyPI requests.
+Lines typed while a command runs wait in a queue and run in order. Ctrl-C while busy drops the queue, posts a cancel, and bashkit's `cancel()` takes effect between commands and sleeps, not inside one blocking step. Each run also gets an `AbortController` that `cancel()` aborts; `curl` and `wget` pass its signal to `fetch`, so a pending response is abandoned. `python3` and `pip` run in `web/python-worker.js`, a nested worker that holds Pyodide. Ctrl-C terminates that worker, which stops a busy script and abandons pip's requests. A cancel loses Python's in-memory state: globals, imports, packages installed by earlier `pip` runs, and files outside `/workspace`. Files a cancelled script wrote to `/workspace` are not kept, because the shell takes Python's writes only when a run finishes. The next `python3` starts Pyodide again.
 
 The prompt shows the working directory, read back with `pwd` after each run. Each run starts with `(exit N);` for the previous status, because bashkit resets `$?` on every `execute()`.
 
@@ -30,7 +30,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/git-in-page.js` | `git` builtin over isomorphic-git. |
 | `web/commit-gate.js` | In-page gate run by `git commit`. |
 | `web/sqlite-in-page.js` | `sqlite3` builtin over sql.js. |
-| `web/python-in-page.js` | `python3` and `pip` builtins over Pyodide. |
+| `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
+| `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins over fetch. |
 | `web/ansi.js` | ANSI parser: strips escapes, or classes them for `?ansi=color`. |
 | `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
@@ -61,8 +62,8 @@ The witness checks the expiry: six 55 s sleeps in a loop are cut at 300 s with `
 | --- | --- | --- |
 | `git` | isomorphic-git 1.44.11 (`web/vendor/isomorphic-git.mjs`) | `init`, `status` (porcelain v1 after a `## <branch>` line), `log [-n N]`, `diff` (working tree against HEAD, no hunk headers), `add`, `commit -m`, local `branch`, `checkout` and `checkout -b`. `--version` reports the library version. No remotes, `push`, `fetch`, `pull`, stash or path checkout. `.thebird/` is excluded from the index. |
 | `sqlite3` | sql.js (`web/vendor/sqljs/`) | `sqlite3 <database> <sql>`. The database is a file on OPFS, read at the start of each call and written back at the end. |
-| `python3` | Pyodide 314.0.7 (`web/vendor/pyodide/`) | `-c <code>` or `<file>`. Pyodide loads on the first call. `/workspace` is mirrored into Pyodide's memory filesystem: before a call only files whose revision (`revisionOf` in `web/shims/fs.js`) changed are uploaded; after it every Pyodide file is compared with the mirror, and changed, new and deleted files are written back. Errors show the output and summary with URLs removed. |
-| `pip` | micropip 0.11.1 from the jsDelivr CDN, pinned to `v314.0.7` | `pip install <name>...`. Plain names only; version specifiers and URLs are refused. Names in the vendored lock (`pyodide-lock.json`) are refused, because the vendored index has no wheels for them. Pure wheels come from PyPI. Installed packages live in Pyodide's memory for the page session and are not written to OPFS. |
+| `python3` | Pyodide 314.0.7 (`web/vendor/pyodide/`) | `-c <code>` or `<file>`. Pyodide loads in `web/python-worker.js` on the first call. `/workspace` is mirrored into Pyodide's memory filesystem in that worker: before a call the shell sends the paths and the files whose revision (`revisionOf` in `web/shims/fs.js`) changed; after it the worker compares every Pyodide file with its mirror and returns the changed, new and deleted files, which the shell writes back. Errors show the output and summary with URLs removed. |
+| `pip` | micropip 0.11.1 from the jsDelivr CDN, pinned to `v314.0.7` | `pip install <name>...`. Plain names only; version specifiers and URLs are refused. Names in the vendored lock (`pyodide-lock.json`) are refused, because the vendored index has no wheels for them. Pure wheels come from PyPI. Installed packages live in the Python worker's memory and are not written to OPFS. A cancel terminates that worker, so they are gone until installed again. |
 | `curl`, `wget` | fetch | Flags `-s`, `-S`, `-f`, `-L`, `-q`, alone or combined. `curl -o file` and `wget -O file`. Other flags are refused. Only hosts that send CORS headers to the page are reachable. |
 
 The page's shell functions `which`, `command -v` and `type` (`web/shell-lookup.js`) answer from bashkit's own `builtin command -v` and `builtin type`, except that each in-page builtin reports as a builtin, and `which` prints the name for it. Shell functions are visible to `type` and `compgen -c`; `type -a` is not handled.

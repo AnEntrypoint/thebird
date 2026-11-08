@@ -2,27 +2,56 @@ import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
 
 const WORKSPACE = '/workspace';
-const PYODIDE_DIR = new URL('./vendor/pyodide/', import.meta.url).href;
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
+const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const CANCELLED = 'cancelled';
 
-let runtime;
-let captured = null;
+let worker = null;
+let nextId = 0;
+const pending = new Map();
 const known = new Map();
 const knownRevision = new Map();
 
-const pythonRuntime = () => {
-  runtime ??= (async () => {
-    const { loadPyodide } = await import(`${PYODIDE_DIR}pyodide.mjs`);
-    return loadPyodide({
-      indexURL: PYODIDE_DIR,
-      stdout: (text) => captured?.push(text),
-      stderr: (text) => captured?.push(text),
-    });
-  })();
-  return runtime;
-};
-
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
+const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+function spawn() {
+  if (worker) return worker;
+  worker = new Worker(new URL('./python-worker.js', import.meta.url), { type: 'module' });
+  worker.onmessage = ({ data }) => {
+    const call = pending.get(data.id);
+    pending.delete(data.id);
+    if (data.ok) call.resolve(data.result);
+    else call.reject(new Error(data.error));
+  };
+  worker.onerror = (event) => stop(new Error(event.message || 'python worker failed'));
+  return worker;
+}
+
+function stop(reason) {
+  worker?.terminate();
+  worker = null;
+  known.clear();
+  knownRevision.clear();
+  for (const call of pending.values()) call.reject(reason);
+  pending.clear();
+}
+
+function request(op, payload, signal) {
+  if (signal?.aborted) return Promise.reject(new Error(CANCELLED));
+  const target = spawn();
+  const id = ++nextId;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => stop(new Error(CANCELLED));
+    const settle = (done) => (value) => {
+      signal?.removeEventListener('abort', onAbort);
+      done(value);
+    };
+    pending.set(id, { resolve: settle(resolve), reject: settle(reject) });
+    signal?.addEventListener('abort', onAbort, { once: true });
+    target.postMessage({ id, op, ...payload });
+  });
+}
 
 function shimPaths(dir = WORKSPACE, out = new Set()) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -34,59 +63,61 @@ function shimPaths(dir = WORKSPACE, out = new Set()) {
   return out;
 }
 
-function pyodideTree(py, dir = WORKSPACE, out = new Map()) {
-  for (const name of py.FS.readdir(dir)) {
-    if (name === '.' || name === '..') continue;
-    const path = `${dir}/${name}`;
-    if (SKIPPED.test(path)) continue;
-    const { mode } = py.FS.stat(path);
-    if (py.FS.isDir(mode)) pyodideTree(py, path, out);
-    else if (py.FS.isFile(mode)) out.set(path, py.FS.readFile(path));
-  }
-  return out;
-}
-
-const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
-
-function syncIn(py) {
+function outbound() {
   const paths = shimPaths();
+  const put = [];
   for (const path of paths) {
     const revision = fs.revisionOf(path);
     if (knownRevision.get(path) === revision) continue;
     const bytes = fs.readFileSync(path);
-    if (!known.has(path) || !sameBytes(known.get(path), bytes)) {
-      py.FS.mkdirTree(parentOf(path));
-      py.FS.writeFile(path, bytes);
-    }
+    if (!known.has(path) || !sameBytes(known.get(path), bytes)) put.push([path, bytes]);
     known.set(path, bytes);
     knownRevision.set(path, revision);
   }
   for (const path of [...known.keys()]) {
     if (paths.has(path)) continue;
-    py.FS.unlink(path);
     known.delete(path);
     knownRevision.delete(path);
   }
+  return { paths: [...paths], put };
 }
 
-function syncOut(py) {
-  const after = pyodideTree(py);
-  for (const [path, bytes] of after) {
-    if (known.has(path) && sameBytes(known.get(path), bytes)) continue;
+function inbound(writes, drops) {
+  for (const [path, bytes] of writes) {
+    if (SKIPPED.test(path)) continue;
     fs.mkdirSync(parentOf(path), { recursive: true });
     fs.writeFileSync(path, bytes);
     known.set(path, bytes);
     knownRevision.set(path, fs.revisionOf(path));
   }
-  for (const path of [...known.keys()]) {
-    if (after.has(path)) continue;
+  for (const path of drops) {
+    if (SKIPPED.test(path)) continue;
     fs.rmSync(path, { force: true });
     known.delete(path);
     knownRevision.delete(path);
   }
 }
 
-export async function pythonBuiltin(argv) {
+async function runPython(payload, signal) {
+  const { paths, put } = outbound();
+  let reply;
+  try {
+    reply = await request('run', { ...payload, paths, put }, signal);
+  } catch (err) {
+    known.clear();
+    knownRevision.clear();
+    throw err;
+  }
+  inbound(reply.writes, reply.drops);
+  return reply;
+}
+
+function finish({ output, error }) {
+  if (error === null) return output;
+  throw new Error([output, error].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
+}
+
+export async function pythonBuiltin(argv, signal) {
   const [first, ...rest] = argv;
   let source;
   let filename;
@@ -100,60 +131,7 @@ export async function pythonBuiltin(argv) {
   } else {
     throw new Error('python3 -c <code> or python3 <file>');
   }
-  const py = await pythonRuntime();
-  py.FS.mkdirTree(WORKSPACE);
-  syncIn(py);
-  py.FS.chdir(WORKSPACE);
-  const buffer = [];
-  captured = buffer;
-  let failure = null;
-  try {
-    py.runPython(source, { filename });
-  } catch (err) {
-    failure = err;
-  }
-  syncOut(py);
-  const output = buffer.join('\n');
-  if (captured === buffer) captured = null;
-  if (failure) {
-    const summary = failure.message.trim().split('\n').pop();
-    throw new Error([output, summary].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
-  }
-  return output;
-}
-
-const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
-const MICROPIP_WHEEL = 'micropip-0.11.1-py3-none-any.whl';
-const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-let micropipLoaded = null;
-let bundledLock = null;
-
-const normalizeName = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
-
-async function bundledNames() {
-  bundledLock ??= fetch(`${PYODIDE_DIR}pyodide-lock.json`).then((response) => response.json()).then((lock) => new Set(Object.keys(lock.packages))).catch((err) => {
-    bundledLock = null;
-    throw err;
-  });
-  return bundledLock;
-}
-
-let installSignal = null;
-let fetchWrapped = false;
-
-function cancelFetchesDuring(signal) {
-  if (!fetchWrapped) {
-    const original = globalThis.fetch;
-    globalThis.fetch = (input, init = {}) => {
-      if (!installSignal) return original(input, init);
-      return original(input, { ...init, signal: init.signal ? AbortSignal.any([init.signal, installSignal]) : installSignal });
-    };
-    fetchWrapped = true;
-  }
-  installSignal = signal;
-  return () => {
-    installSignal = null;
-  };
+  return finish(await runPython({ source, filename }, signal));
 }
 
 export async function pipBuiltin(argv, signal) {
@@ -161,44 +139,5 @@ export async function pipBuiltin(argv, signal) {
   if (verb !== 'install' || names.length === 0) throw new Error('pip install <package>...');
   const bad = names.find((name) => !PACKAGE_NAME.test(name));
   if (bad) throw new Error(`pip install: ${bad} is not a package name (version specifiers and URLs are not supported)`);
-  const release = cancelFetchesDuring(signal);
-  try {
-    return await installPackages(names, signal);
-  } finally {
-    release();
-  }
-}
-
-async function installMicropip(py, signal) {
-  const response = await fetch(PYODIDE_CDN + MICROPIP_WHEEL, { signal });
-  if (!response.ok) throw new Error(`micropip wheel: HTTP ${response.status}`);
-  py.unpackArchive(await response.arrayBuffer(), 'wheel');
-}
-
-async function installPackages(names, signal) {
-  const bundled = await bundledNames();
-  const pinned = names.find((name) => bundled.has(normalizeName(name)));
-  if (pinned) throw new Error(`pip install: ${pinned} is part of the Pyodide package set, which is not vendored, so it cannot be installed in-page`);
-  const py = await pythonRuntime();
-  micropipLoaded ??= installMicropip(py, signal).catch((err) => {
-    micropipLoaded = null;
-    throw err;
-  });
-  await micropipLoaded;
-  const list = JSON.stringify(names);
-  const buffer = [];
-  captured = buffer;
-  let failure = null;
-  try {
-    await py.runPythonAsync(`import micropip, importlib.metadata\nawait micropip.install(${list})\nfor name in ${list}:\n    print('installed', name, importlib.metadata.version(name))`);
-  } catch (err) {
-    failure = err;
-  }
-  const output = buffer.join('\n');
-  if (captured === buffer) captured = null;
-  if (failure) {
-    const summary = failure.message.trim().split('\n').pop();
-    throw new Error([output, summary].filter(Boolean).join('\n').replace(/https?:\/\//g, ''));
-  }
-  return output;
+  return finish(await request('install', { names }, signal));
 }

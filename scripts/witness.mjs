@@ -427,7 +427,7 @@ if (existsSync(chrome)) {
   check('in-page python3 error text keeps a readable link instead of bashkit cutting it at //', !linkError.out.includes('<path>') && /ValueError: see example\.org\/docs$/m.test(linkError.out), linkError.out.split('\n').find((line) => line.includes('ValueError')) ?? 'no error line');
   check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
   const pipLock = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'pyodide', 'pyodide-lock.json'), 'utf8'));
-  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-in-page.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
+  check('the micropip wheel the page loads is the one pinned in the Pyodide lock', readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pipLock.packages.micropip.file_name}'`), pipLock.packages.micropip.file_name);
   const pipInstall = await terminal([
     ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
     ['run', 'pip install tabulate==0.9.0'],
