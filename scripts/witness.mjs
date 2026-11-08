@@ -147,6 +147,27 @@ if (existsSync(chrome)) {
     },
   });
   check('a container resize with no window resize changes the columns, the screen fits the box, and the shell sees the new COLUMNS', resized.narrow < resized.wide && resized.wideFit.right && resized.wideFit.bottom && resized.narrowFit.right && resized.narrowFit.bottom && resized.shellCols === 'cols-' + resized.narrow, JSON.stringify(resized));
+  const palette = {};
+  await terminal([
+    ['run', "printf '\\033[38;5;196mX196\\033[0m\\n'"],
+    ['run', "printf '\\033[38;2;255;0;0mRGB255\\033[0m\\n'"],
+    ['run', "printf 'no-newline-yet'"],
+    ['run', 'echo after-no-newline'],
+  ], {
+    interact: async ({ evaluate, waitFor }) => {
+      await waitFor("globalThis.thebird.text().includes('after-no-newline')", 40000);
+      const styleOf = (line) => evaluate(`(() => { const buffer = globalThis.thebird.term.buffer.active; for (let row = 0; row < buffer.length; row++) { const current = buffer.getLine(row); if (current.translateToString(true) === ${JSON.stringify(line)}) { const cell = current.getCell(0); return { fg: cell.getFgColor(), palette: Boolean(cell.isFgPalette()), rgb: Boolean(cell.isFgRGB()) }; } } return null; })()`);
+      palette.x196 = await styleOf('X196');
+      palette.rgb = await styleOf('RGB255');
+      palette.lines = await evaluate("globalThis.thebird.text().split('\\n')");
+    },
+  });
+  const noNewlineAt = palette.lines.indexOf('no-newline-yet');
+  const alone = await terminal([['run', "printf 'alone-no-newline'"]]);
+  const aloneLines = alone.out.split('\n');
+  const aloneAt = aloneLines.indexOf('alone-no-newline');
+  check('colour: a 256-colour index and a truecolour value reach the cell, and queued output starts its own row after unterminated output', palette.x196?.fg === 196 && palette.x196.palette === true && palette.rgb?.rgb === true && palette.rgb.fg === 0xff0000 && noNewlineAt !== -1 && palette.lines[noNewlineAt + 1] === 'after-no-newline', JSON.stringify({ x196: palette.x196, rgb: palette.rgb, around: palette.lines.slice(Math.max(noNewlineAt, 0), noNewlineAt + 3) }));
+  check('colour: unterminated output is followed by the prompt on its own row', aloneAt !== -1 && aloneLines[aloneAt + 1]?.startsWith('thebird '), JSON.stringify(aloneLines.slice(-3)));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 

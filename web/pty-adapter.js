@@ -101,9 +101,10 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
   };
 
   async function execute(command) {
+    if (!atLineStart) writeOutput('\n');
     try {
       const result = await client.run(command);
-      if (result.output) writeOutput(result.output.endsWith('\n') ? result.output : result.output + '\n');
+      if (result.output) writeOutput(result.output);
     } catch (err) {
       writeOutput('error: ' + err.message + '\n');
     }
