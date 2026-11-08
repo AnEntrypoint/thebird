@@ -122,6 +122,12 @@
 
     const deliver = (text) => {
         const event = JSON.parse(text);
+
+        if (event.kind === 'bridge') {
+            globalThis.__thebirdBridge?.onResult?.(event);
+            return;
+        }
+
         const client = clients.get(event.id);
 
         if (!client) {

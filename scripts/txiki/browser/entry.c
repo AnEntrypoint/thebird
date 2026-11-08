@@ -10,6 +10,7 @@ void tjs_browser_stop_timers(uv_loop_t *loop);
 JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
 void tjs_browser_http_release(JSContext *ctx);
 void tjs_browser_fs_install(JSContext *ctx);
+void tjs_browser_bridge_install(JSContext *ctx);
 
 static TJSRuntime *runtime = NULL;
 static JSValue module_promise;
@@ -143,6 +144,7 @@ int tjs_browser_eval(const char *code) {
     JSContext *ctx = TJS_GetJSContext(runtime);
     JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupted, NULL);
     tjs_browser_fs_install(ctx);
+    tjs_browser_bridge_install(ctx);
     int status = 0;
 
     JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_MODULE);

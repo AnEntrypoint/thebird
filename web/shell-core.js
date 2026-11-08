@@ -1169,8 +1169,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   async function dispatch(argv, stdin, signal) {
     const name = argv[0];
     if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal);
-    if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
-    return commands[name]({ argv: argv.slice(1), stdin, signal });
+    if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin, signal });
+    if (inPage.has(name)) return host.external(name, argv.slice(1), state.cwd);
+    return { code: 127, out: '', err: `${name}: command not found\n` };
   }
 
   async function runIf(node, stdin, sink) {

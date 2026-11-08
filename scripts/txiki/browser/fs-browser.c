@@ -5,6 +5,7 @@
 
 #define HOST_IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 
+HOST_IMPORT("tjs_bridge_send") void host_bridge_send(const char *ptr, int32_t len);
 HOST_IMPORT("tjs_fs_open") int32_t host_fs_open(const char *path, int32_t len, int32_t create);
 HOST_IMPORT("tjs_fs_close") void host_fs_close(int32_t handle);
 HOST_IMPORT("tjs_fs_size") int32_t host_fs_size(int32_t handle);
@@ -250,5 +251,24 @@ void tjs_browser_fs_install(JSContext *ctx) {
     define_function(ctx, native, "readlink", fs_readlink, 1);
     JSValue global = JS_GetGlobalObject(ctx);
     JS_DefinePropertyValueStr(ctx, global, "__thebirdFs", native, JS_PROP_C_W_E);
+    JS_FreeValue(ctx, global);
+}
+
+static JSValue bridge_send(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+    size_t len = 0;
+    const char *text = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (!text) {
+        return JS_EXCEPTION;
+    }
+    host_bridge_send(text, (int32_t) len);
+    JS_FreeCString(ctx, text);
+    return JS_UNDEFINED;
+}
+
+void tjs_browser_bridge_install(JSContext *ctx) {
+    JSValue bridge = JS_NewObject(ctx);
+    define_function(ctx, bridge, "send", bridge_send, 1);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_DefinePropertyValueStr(ctx, global, "__thebirdBridge", bridge, JS_PROP_C_W_E);
     JS_FreeValue(ctx, global);
 }

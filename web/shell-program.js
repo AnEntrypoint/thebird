@@ -1,8 +1,23 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const enoent = (path) => Object.assign(new Error(`ENOENT: no such file or directory, '${path}'`), { code: 'ENOENT' });
+const bridgeWaiting = new Map();
+let bridgeLast = 0;
+
+__thebirdBridge.onResult = (event) => {
+  const settle = bridgeWaiting.get(event.id);
+  bridgeWaiting.delete(event.id);
+  settle?.(event);
+};
 
 const host = {
+  external(name, argv, cwd) {
+    return new Promise((settle) => {
+      const id = ++bridgeLast;
+      bridgeWaiting.set(id, settle);
+      __thebirdBridge.send(JSON.stringify({ op: 'builtin', id, name, argv, cwd }));
+    });
+  },
   read(path) {
     const bytes = __thebirdFs.readFile(path);
     if (bytes === undefined) throw enoent(path);

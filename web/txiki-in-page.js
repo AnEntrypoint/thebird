@@ -55,6 +55,26 @@ const failureOf = (err, state) => {
   return 'FAILED';
 };
 
+function startBuiltin(current, message) {
+  const { id } = message;
+  const controller = new AbortController();
+  current.calls.set(id, controller);
+  const settle = (result) => {
+    if (current.calls.delete(id)) emit(current, { id, kind: 'bridge', ...result });
+  };
+  Promise.resolve()
+    .then(() => {
+      if (!current.builtin) throw new Error(`${message.name}: no builtin bridge is open for this run`);
+      return current.builtin(message.name, message.argv, message.cwd, controller.signal);
+    })
+    .then(
+      (out) => settle({ code: 0, out, err: '' }),
+      (err) => settle(err?.message === 'cancelled'
+        ? { code: 130, out: '', err: 'cancelled\n' }
+        : { code: 1, out: '', err: `${err?.message ?? err}\n` }),
+    );
+}
+
 function startRequest(current, message) {
   const { id } = message;
   const controller = new AbortController();
@@ -106,6 +126,7 @@ async function load() {
       if (!session) return;
       if (message.op === 'open') startRequest(session, message);
       else if (message.op === 'abort') session.controllers.get(message.id)?.abort();
+      else if (message.op === 'builtin') startBuiltin(session, message);
     },
     tjs_fs_open(ptr, len, create) {
       const path = absolute(textAt(ptr, len));
@@ -307,13 +328,13 @@ function resumeWith(exports, event) {
   return status;
 }
 
-export async function runTjs(source, dir = '/workspace', { signal, timeoutMs } = {}) {
+export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, builtin } = {}) {
   if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
   const { instance, stdout, stderr } = await loaded();
   cwd = dir;
   stdout.splice(0);
   stderr.splice(0);
-  const current = { events: [], wake: null, controllers: new Map() };
+  const current = { events: [], wake: null, controllers: new Map(), calls: new Map(), builtin };
   session = current;
   const { exports } = instance;
   const cancel = () => exports.tjs_browser_cancel();
@@ -322,7 +343,7 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs } =
   try {
     exports.tjs_browser_set_deadline(timeoutMs ? Date.now() + timeoutMs : 0);
     status = callInput(exports, exports.tjs_browser_eval, source);
-    while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.events.length > 0))) {
+    while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.calls.size > 0 || current.events.length > 0))) {
       if (current.events.length) status = resumeWith(exports, current.events.shift());
       else if (status === TJS_WAITING) {
         await pause(TICK_MS);
@@ -334,6 +355,7 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs } =
     exports.tjs_browser_set_deadline(0);
     session = null;
     for (const controller of current.controllers.values()) controller.abort();
+    for (const call of current.calls.values()) call.abort();
     exports.tjs_browser_end();
   }
   const output = joinChunks(stdout.splice(0)) + joinChunks(stderr.splice(0));
