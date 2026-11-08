@@ -22,13 +22,16 @@ Run on `dc3d558` in this checkout. Each line is the output that proves the check
 - The txiki runner hang came from `entry.c`, which ran `uv_run` before the pending module jobs. A cleared timer kept the page blocked until it fired. The pump now drains jobs first. The wasm pin moved to `a9812524063e39ed98b592dda4c5af6ad91dcbb0f3c89720a276260ee7f9dae2`.
 - Pyodide: the micropip check reads the vendored `web/vendor/pyodide/pyodide-lock.json`, which pins micropip 0.11.1. The bundle lock does not list micropip.
 
-The Phase A table below is covered by these runs, except its rows that name a command not run here: the Pages build in pages.yml, and the `unpack` import check in `web/python-bundle.js`. The pip-lock row names the bundle lock, which is no longer the source the witness reads (see above). The Blocked section and the open decisions stay open. `scripts/vendor-pyodide.mjs` is unchanged.
+The Phase A table below is covered by these runs, except its rows that name a command not run here: the Pages build in pages.yml, and the `unpack` import check in `web/python-bundle.js`. The pip-lock row names the source the witness reads after 18403ed (see the vendor-pyodide section below). The Blocked section and the open decisions stay open. `scripts/vendor-pyodide.mjs` was retired in 18403ed.
+
+Push gate: do not push the Phase A commits listed below before Phase B. `pages.yml` checks the wasm against the pin `a9812524...`, which is still the pinned build. The page now calls `tjs_browser_set_deadline` (5eafce5) and the shell program uses the `__thebirdBridge` native (this series), and the pinned wasm exports neither, so every engine-backed builtin fails until the wasm is rebuilt and the pin is moved.
+
 ## Phase A table (rows covered by the runs above)
 
 | Commit | File | Group | Check needed |
 | --- | --- | --- | --- |
 | 6943688 | scripts/build-pages.mjs | Pages build | `node scripts/build-pages.mjs` completes without calling `vendorPyodide`, after `vendorBashkit` and the txiki wasm are in place. The pages.yml build job runs it. |
-| 6943688 | scripts/witness.mjs | pip lock | The witness reads the pip lock from `BUNDLE_URL` via `unpack(...).lock`. Chromium witness passes the pip-refusal check against the lock. |
+| 6943688 | scripts/witness.mjs | pip lock | Superseded by 18403ed: the witness reads the Pyodide 314.0.7 lock from `https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json`, checks its SHA-256 `5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010`, then reads micropip from it. The Chromium witness passes the pip-refusal check against that lock. |
 | 6943688 | web/python-bundle.js | `unpack` export | `unpack` is importable from Node (the brotli wasm glue loads under Node). Run `node -e "import('./web/python-bundle.js').then(m => console.log(typeof m.unpack))"`. |
 | c7ea6e7 | web/shell-core.js | coreutils: ls, mkdir, rm, find, wc, date, uname, whoami | `npm run witness:shell` coreutils groups pass. Expected strings: `ls` one-per-line, `mkdir -p` and the "File exists" error, `rm -r` / `rm -f` messages, `find -name/-iname/-type`, `wc -l/-w/-c` number formats, `date +%s/%N/%Y/%m/%d/%H/%M/%S/%%`, `uname` = Linux, `whoami` = user. |
 | c7ea6e7 | web/shell-core.js | `Array.prototype.findLastIndex` | Used by `globField`; confirm it exists in the txiki engine (quickjs-ng) or replace it. |
@@ -94,12 +97,64 @@ Witness, to run in Phase B:
 - Terminal path (bashkit, unchanged): the existing witness checks `in-page ln -s makes a link that readlink reports, and a read and a stat follow it` and `in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link` still apply.
 - Until Phase B rebuilds `tjs.wasm`: `shell-program.js` calls `__thebirdFs.lstat`, which the current wasm does not export. Every txiki shell run fails with a missing-function error until the rebuild. That is expected for this pass and is fixed by the Phase B build.
 
+## Phase A: Pyodide vendor script retired (18403ed, not built)
+
+The owner decision was to retire `scripts/vendor-pyodide.mjs` and the vendored Pyodide tree. Changed in one commit:
+
+- `scripts/vendor-pyodide.mjs`: deleted. Its `.gitignore` line is removed.
+- `scripts/witness.mjs`: the micropip check reads the pinned lock URL above and checks its SHA-256 before it reads micropip.
+- `scripts/lint-architecture.mjs`: a `pyodideNotVendored` record replaces the vendored-tree checks.
+- `ARCHITECTURE.md`, `AGENTS.md`, `README.md` (the fresh-clone step now runs only `vendor-bashkit`), and `web/vendor/PYODIDE-NOTICE.md`: rewritten to match.
+- The local directory `web/vendor/pyodide/` is untracked and stale. It was left in place, not deleted.
+
+Witness, to run in Phase B: `npm run lint:architecture` passes the `pyodideNotVendored` record; `npm run witness` passes the micropip check against the pinned lock.
+
+## Phase A: interrupt handler for synchronous loops (5eafce5, not built)
+
+A loop with no `await` never returns to the page, so the cancel flag cannot be set during it. The engine now installs a JS interrupt handler (`JS_SetInterruptHandler` in `scripts/txiki/browser/entry.c`). It stops the running job when the cancel flag is set or the deadline has passed. A stop reports 130 (cancelled) or 124 (timed out), and the pump stops the timers.
+
+- The page sets the deadline per run with `tjs_browser_set_deadline` (a new export, in `BROWSER_EXPORTS`). `runTjs` takes `timeoutMs`. `bash-shell.js` passes `COMMAND_TIMEOUT_MS` (300000) to `tjs`, `node` and `qjs`. `runShellInTxiki` forwards its `timeoutMs`.
+- `tjs`, `node` and `qjs` map 124 to `timeout: command timed out`. `tjs`, `node` and `qjs` map 130 to `cancelled`. `qjs` previously reported a cancel as an empty error. `tjs` now takes the abort signal too.
+- `shell-in-txiki.js` and `qjs-in-txiki.js` pass the timeout and signal through.
+
+Witness, to run in Phase B (`npm run witness`, the block after the txiki shell check): `runTjs('while (true) {}', ..., { timeoutMs: 1000 })` returns status 124 with no `Uncaught` line in under 5 s; `runTjs('setTimeout(() => {}, 60000);', ..., { timeoutMs: 1000 })` returns 124 in under 5 s; an abort at 500 ms on a waiting run returns 130 in under 5 s; `tjsBuiltin` and `qjsBuiltin` on `while (true) {}` throw `timeout: command timed out`. The four checks are in `scripts/witness.mjs`.
+
+Limit, recorded: Ctrl-C does not stop a loop that never yields. The shell runs the engine synchronously inside its worker, so the page's cancel message waits until the engine returns. See the Blocked section.
+
+## Phase A: host-call bridge for builtins on the txiki path (not built)
+
+Before this change the txiki shell could not run an external builtin at all: `shell-core.js` knew the names for `which` and `type` but had no way to call them. The engine now posts a request with `__thebirdBridge.send` (a native in `scripts/txiki/browser/fs-browser.c`, installed by `tjs_browser_bridge_install`). The page's `tjs_bridge_send` takes `op: 'builtin'` and runs the builtin through the `builtin` option of `runTjs`. The result comes back as an event of kind `bridge` through `tjs_browser_resume`. `scripts/txiki/browser/http-client.js` routes it to `__thebirdBridge.onResult` before the HTTP client lookup. The run stays alive while a bridged call is pending. A run's abort reaches each pending call.
+
+How each builtin is served:
+
+| Builtin | Served by | On the txiki shell | Why |
+| --- | --- | --- | --- |
+| `python3` | Page: the Pyodide worker, bridged | Served through the bridge | The worker is separate from the engine. |
+| `pip` | Page: the Pyodide worker, bridged | Served through the bridge | As `python3`. |
+| `git` | Page: its own txiki run | Refused, exit 1 | A second `runTjs` calls `tjs_browser_end` on the one global runtime and frees the outer run. |
+| `sqlite3` | Page: its own txiki run | Refused, exit 1 | As `git`. |
+| `curl`, `wget` | Page: their own txiki run | Refused, exit 1 | As `git`. |
+| `qjs`, `tjs`, `node` | Page: their own txiki run | Refused, exit 1 | As `git`. |
+
+On the bash page (`web/bash-shell.js`, bashkit) every builtin is served by the page, as before. The txiki shell is not the production path. `which`, `command -v` and `type` answer the same for all nine names in both paths.
+
+Refusal text: `NAME: not available in the txiki shell: it runs its own txiki engine, and the txiki shell cannot start a second engine run while this one is live`.
+
+Witness, to run in Phase B (through `runShellInTxiki`, with the rebuilt wasm):
+
+- `python3 -c "print(1+2)"`: stdout `3\n`, exit 0.
+- `python3 -c "import time; time.sleep(30)"` with an abort at 500 ms: rejects with `status 130`, in under 5 s.
+- `pip install six` (needs network to PyPI): exit 0.
+- `git status`, `sqlite3 x.db "select 1"`, `qjs -e "1"`, `tjs -e "1"`, `node -v`, `curl http://127.0.0.1:1/` and `wget -O /dev/null http://127.0.0.1:1/`: each gives exit 1 and a stderr line that contains `not available in the txiki shell`.
+
+The refusal has one owner decision open: a second wasm instance would let these builtins run inside the txiki shell. That needs the per-instance page state (session, handles, fs) to be separate, which is not built.
+
 ## Blocked (not coded, named blocker)
 
 | Group | Blocker | What it needs |
 | --- | --- | --- |
-| External builtins from the txiki run (`git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`) | The engine run is synchronous and cannot call page-side workers or fetch. | A host-call bridge, or a stepwise design. Owner decision. |
-| Ctrl-C in the txiki path (`node`, `tjs -e`) | Code written in Phase A, not built, not validated. The drop points and the change are in the Phase A section above Blocked. A synchronous JS loop that never yields (`node -e "while (true) {}"`) cannot see Ctrl-C, because the page cannot run the message while the engine runs. | Phase B: rebuild the wasm, repin, and run the witness entry in the Phase A section. |
+| `git`, `sqlite3`, `qjs`, `tjs`, `node`, `curl`, `wget` inside the txiki shell | Each runs its own engine run on the one global runtime, so a nested run would free the outer one. Refused for now (see the bridge section). | Owner decision: a second wasm instance with its own page state, or leave them refused on the txiki path. |
+| Ctrl-C while a synchronous loop runs (`node -e "while (true) {}"`) | The engine runs inside the shell worker, so the page cannot run the cancel message until the engine returns. The interrupt handler (5eafce5) stops such a loop at the timeout, not at Ctrl-C. Shared memory for a cross-thread flag needs `SharedArrayBuffer`, which needs cross-origin isolation, and the Pages site does not send those headers. | Owner decision: accept the timeout as the stop for a loop that never yields, or run the engine on a worker that a cancel can terminate (which drops its state, as Python's cancel does). |
 
 ## Process model: a deliberate deviation
 
@@ -107,5 +162,5 @@ The brief asked for the process list and signals to come from the txiki runtime 
 
 ## Open decisions
 
-- `scripts/vendor-pyodide.mjs`: kept for now. Its retirement is a Phase B decision. In Phase A the references in ARCHITECTURE.md and AGENTS.md to `web/vendor/pyodide/` and `scripts/vendor-pyodide.mjs`, and the checks in `scripts/lint-architecture.mjs`, are left unchanged. No build or witness calls `vendorPyodide` any more (6943688). In Phase B, once the build and witnesses run, decide whether to keep or retire the script, then update the docs and the lint in the same change.
-- The owner has not yet confirmed the licence of the stripped Pyodide bundle.
+- `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
+- Pyodide bundle licence: held by the owner. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass, and its licence is not confirmed. `web/vendor/PYODIDE-NOTICE.md` records it as held by the owner, not yet confirmed.
