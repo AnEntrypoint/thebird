@@ -8,14 +8,14 @@ const TEMP_DIR = '/.thebird';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const handles = new Map();
-let engine = null;
-let cwd = '/workspace';
-let session = null;
+const idle = [];
+let modulePromise = null;
+let cancelWord = null;
 const TJS_WAITING = 2;
 export const TJS_TIMED_OUT = 124;
 export const TJS_CANCELLED = 130;
 const TICK_MS = 5;
-let cancelWord = null;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function setCancelWord(word) {
   cancelWord = word;
@@ -24,7 +24,6 @@ export function setCancelWord(word) {
 export function clearCancel() {
   if (cancelWord) Atomics.store(cancelWord, 0, 0);
 }
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const joinChunks = (chunks) => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -51,7 +50,7 @@ const bytesToBase64 = (bytes) => {
 };
 
 function emit(current, event) {
-  if (current !== session) return;
+  if (!current.live) return;
   current.events.push(JSON.stringify(event));
   const wake = current.wake;
   current.wake = null;
@@ -115,27 +114,36 @@ function startRequest(current, message) {
   })().then(() => complete(null, null), (err) => complete(failureOf(err, state), err?.message ?? null));
 }
 
-async function load() {
-  const response = await fetch(WASM_URL).catch(() => null);
-  if (!response?.ok) throw new Error(NOT_BUILT);
-  const module = await WebAssembly.compile(await response.arrayBuffer());
-  const stdout = [];
-  const stderr = [];
-  const wasi = createWasi({ args: ['tjs'], stdout: (chunk) => stdout.push(chunk), stderr: (chunk) => stderr.push(chunk) });
-  let memory = null;
-  const bytesAt = (ptr, len) => new Uint8Array(memory.buffer, ptr, len);
+function compiled() {
+  modulePromise ??= (async () => {
+    const response = await fetch(WASM_URL).catch(() => null);
+    if (!response?.ok) throw new Error(NOT_BUILT);
+    return WebAssembly.compile(await response.arrayBuffer());
+  })().catch((err) => {
+    modulePromise = null;
+    throw err;
+  });
+  return modulePromise;
+}
+
+async function instantiate() {
+  const module = await compiled();
+  const slot = { stdout: [], stderr: [], cwd: '/workspace', session: null, memory: null, exports: null };
+  const wasi = createWasi({ args: ['tjs'], stdout: (chunk) => slot.stdout.push(chunk), stderr: (chunk) => slot.stderr.push(chunk) });
+  const bytesAt = (ptr, len) => new Uint8Array(slot.memory.buffer, ptr, len);
   const textAt = (ptr, len) => decoder.decode(bytesAt(ptr, len));
-  const absolute = (name) => posix.resolve(cwd, name);
+  const absolute = (name) => posix.resolve(slot.cwd, name);
   const host = {
     tjs_host_write(fd, ptr, len) {
-      (fd === 2 ? stderr : stdout).push(bytesAt(ptr, len).slice());
+      (fd === 2 ? slot.stderr : slot.stdout).push(bytesAt(ptr, len).slice());
     },
     tjs_bridge_send(ptr, len) {
       const message = JSON.parse(textAt(ptr, len));
-      if (!session) return;
-      if (message.op === 'open') startRequest(session, message);
-      else if (message.op === 'abort') session.controllers.get(message.id)?.abort();
-      else if (message.op === 'builtin') startBuiltin(session, message);
+      const current = slot.session;
+      if (!current) return;
+      if (message.op === 'open') startRequest(current, message);
+      else if (message.op === 'abort') current.controllers.get(message.id)?.abort();
+      else if (message.op === 'builtin') startBuiltin(current, message);
     },
     tjs_cancel_requested() {
       return cancelWord ? Atomics.load(cancelWord, 0) : 0;
@@ -213,7 +221,7 @@ async function load() {
     tjs_fs_stat(ptr, len, out) {
       const info = fs.statSync(absolute(textAt(ptr, len)), { throwIfNoEntry: false });
       if (!info) return -1;
-      const slots = new Float64Array(memory.buffer, out, 4);
+      const slots = new Float64Array(slot.memory.buffer, out, 4);
       slots[0] = info.isDirectory() ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
@@ -252,7 +260,7 @@ async function load() {
       if (!info) return -1;
       const link = info.isSymbolicLink();
       const dir = !link && info.isDirectory();
-      const slots = new Float64Array(memory.buffer, out, 4);
+      const slots = new Float64Array(slot.memory.buffer, out, 4);
       slots[0] = link ? 3 : dir ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
@@ -292,18 +300,17 @@ async function load() {
     },
   };
   const instance = await WebAssembly.instantiate(module, { ...wasi.imports, env: host });
-  memory = instance.exports.memory;
+  slot.memory = instance.exports.memory;
+  slot.exports = instance.exports;
   wasi.bind(instance);
   instance.exports._initialize();
-  return { instance, stdout, stderr };
+  return slot;
 }
 
-function loaded() {
-  engine ??= load().catch((err) => {
-    engine = null;
-    throw err;
-  });
-  return engine;
+const acquire = () => idle.pop() ?? instantiate();
+
+function release(slot) {
+  idle.push(slot);
 }
 
 function nextEvent(current, signal) {
@@ -342,13 +349,13 @@ function resumeWith(exports, event) {
 
 export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, builtin } = {}) {
   if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
-  const { instance, stdout, stderr } = await loaded();
-  cwd = dir;
-  stdout.splice(0);
-  stderr.splice(0);
-  const current = { events: [], wake: null, controllers: new Map(), calls: new Map(), builtin };
-  session = current;
-  const { exports } = instance;
+  const slot = await acquire();
+  const { exports } = slot;
+  slot.cwd = dir;
+  slot.stdout.splice(0);
+  slot.stderr.splice(0);
+  const current = { live: true, events: [], wake: null, controllers: new Map(), calls: new Map(), builtin };
+  slot.session = current;
   const cancel = () => exports.tjs_browser_cancel();
   signal?.addEventListener('abort', cancel, { once: true });
   let status;
@@ -365,12 +372,14 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, bu
   } finally {
     signal?.removeEventListener('abort', cancel);
     exports.tjs_browser_set_deadline(0);
-    session = null;
+    current.live = false;
+    slot.session = null;
     for (const controller of current.controllers.values()) controller.abort();
     for (const call of current.calls.values()) call.abort();
     exports.tjs_browser_end();
+    release(slot);
   }
-  const output = joinChunks(stdout.splice(0)) + joinChunks(stderr.splice(0));
+  const output = joinChunks(slot.stdout.splice(0)) + joinChunks(slot.stderr.splice(0));
   return { output, status };
 }
 
