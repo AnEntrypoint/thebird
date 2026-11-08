@@ -4,7 +4,7 @@ import { gitBuiltin } from './git-in-page.js';
 import { sqliteBuiltin } from './sqlite-in-txiki.js';
 import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
 import { curlBuiltin } from './curl-in-page.js';
-import { qjsBuiltin } from './quickjs-in-page.js';
+import { qjsBuiltin } from './qjs-in-txiki.js';
 import { tjsBuiltin } from './txiki-in-page.js';
 import { lookupPrologue } from './shell-lookup.js';
 

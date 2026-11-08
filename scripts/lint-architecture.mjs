@@ -81,7 +81,7 @@ const objectType = (name) => {
   }
 };
 
-const definedIn = (text, name) => new RegExp(`(\\bfunction\\s*\\*?\\s*${name}\\b|\\b(const|let|var|class)\\s+${name}\\b|\\b${name}\\s*\\([^)]*\\)\\s*\\{|['"]${name}['"]\\s*[:,)]|\\b${name}\\s*:)`).test(text);
+const definedIn = (text, name) => new RegExp(`(\\bfunction\\s*\\*?\\s*${name}\\b|\\b(const|let|var|class)\\s+${name}\\b|\\b${name}\\s*\\([^)]*\\)\\s*\\{|['"]${name}['"]\\s*[:,)]|\\b${name}\\s*:|\\bprocess\\.env\\.${name}\\s*=)`).test(text);
 const sourceText = [...walk(repo('src')), ...walk(repo('web')).filter((path) => !path.includes('/vendor/')), ...walk(repo('scripts')), ...walk(repo('bin'))]
   .filter((path) => /\.(m?js|html|js|c|h)$/.test(path))
   .map((path) => readFileSync(path, 'utf8'))
@@ -192,16 +192,6 @@ function nodeReach(file, seen = new Set()) {
 const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-txiki.js', 'web/sqlite-program.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
 
 function agentsStatic() {
-  record('quickjs-ng v0.18.0', (() => {
-    const pin = '63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad';
-    const recorded = all(
-      outcome(fileHas('scripts/vendor-quickjs.mjs', pin), 'vendor-quickjs.mjs records the wasm pin'),
-      outcome(fileHas('AGENTS.md', pin), 'AGENTS.md records the wasm pin'),
-    );
-    if (!existsSync(repo('web/vendor/quickjs/qjs.wasm'))) return all(recorded, outcome(null, 'web/vendor/quickjs/qjs.wasm is not present in this checkout'));
-    const digest = createHash('sha256').update(readFileSync(repo('web/vendor/quickjs/qjs.wasm'))).digest('hex');
-    return all(recorded, outcome(digest === pin, `vendored qjs.wasm sha256 ${digest === pin ? 'matches' : 'does not match'} the pin`));
-  })());
   record('Browser (page and worker)', outcome(BROWSER_FILES.every((file) => existsSync(repo(file)) && !nodeReach(repo(file))), 'none of the browser files reaches a Node module, directly or through a relative import'));
   record('Node only: `bin/thebird-relay.js`', outcome(['bin/thebird-relay.js', 'src/relay.js'].every((file) => nodeReach(repo(file))), 'each Node-only file reaches a node: module, directly or through a relative import'));
   record('Everything under `web/` is browser-only', outcome(!walk(repo('web')).filter((file) => /\.m?js$|\.js$/.test(file) && !file.includes('/vendor/')).some((file) => /from 'node:/.test(readFileSync(file, 'utf8'))), 'no web file outside vendor imports a node: module'));

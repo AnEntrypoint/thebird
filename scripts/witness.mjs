@@ -38,7 +38,6 @@ if (existsSync(chrome)) {
   check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
-  rmSync(join(pagesDir, 'web', 'vendor', 'quickjs'), { recursive: true, force: true });
   const pagesServer = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
     const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
@@ -55,9 +54,9 @@ if (existsSync(chrome)) {
   const pagesResponse = await fetch(pagesUrl);
   const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: 180000 });
   pagesServer.close();
-  const quickjsServed = existsSync(join(pagesDir, 'web', 'vendor', 'quickjs', 'qjs.wasm'));
+  const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   rmSync(pagesDir, { recursive: true, force: true });
-  check(quickjsServed ? 'the built site serves qjs.wasm, and qjs -e runs in the page' : 'the built site without the quickjs artifact says qjs is not built, and the rest of the shell still runs', quickjsServed ? /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out) : site.out.includes('qjs is not available in this site') && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  check('the built site runs qjs -e through the txiki engine, and ships no quickjs artifact', quickjsArtifactGone && /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
@@ -423,7 +422,7 @@ if (existsSync(chrome)) {
   holdServer.close();
   check('in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on', heldRequests > 0 && held.echoed && held.elapsed < 10000 && held.out.includes('cancelled') && /^after-held-cancel$/m.test(held.out), `requests reaching the held server=${heldRequests} ^C echoed=${held.echoed} cancel took ${held.elapsed} ms`);
   const quickjs = await terminal([['run', 'qjs -e "console.log(6*7)"'], ['run', 'qjs -e "throw new TypeError(\'boom\')"'], ['run', 'which qjs']]);
-  check('in-page qjs runs quickjs-ng in the page, prints console output, and reports an uncaught error', quickjs.engine === 'ready' && /^42$/m.test(quickjs.out) && quickjs.out.includes('Uncaught TypeError: boom') && /^qjs$/m.test(quickjs.out), quickjs.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+  check('in-page qjs runs quickjs-ng through the txiki engine, prints console output, and reports an uncaught error', quickjs.engine === 'ready' && /^42$/m.test(quickjs.out) && quickjs.out.includes('Uncaught TypeError: boom') && /^qjs$/m.test(quickjs.out), quickjs.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const editing = {};
   await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
@@ -631,6 +630,8 @@ const chained = watcher.on('change', () => {}) === watcher && watcher.once('chan
 check('fs.watch returns an inert handle: close is a no-op and on/once return the handle', typeof watcher.close === 'function' && chained && watcher.close() === undefined);
 const sqliteRetired = !existsSync(join(root, 'web', 'sqlite-in-page.js')) && existsSync(join(root, 'web', 'sqlite-program.js')) && readFileSync(join(root, 'web', 'bash-shell.js'), 'utf8').includes("from './sqlite-in-txiki.js'");
 check('sqlite3 runs a static txiki program, and web/sqlite-in-page.js is retired', sqliteRetired, existsSync(join(root, 'web', 'sqlite-in-page.js')) ? 'web/sqlite-in-page.js is still present' : sqliteRetired ? 'bash-shell.js imports web/sqlite-in-txiki.js, which runs web/sqlite-program.js' : 'web/sqlite-program.js is missing or bash-shell.js still imports the old file');
+const qjsRetired = !existsSync(join(root, 'web', 'quickjs-in-page.js')) && !existsSync(join(root, 'web', 'vendor', 'quickjs')) && existsSync(join(root, 'web', 'qjs-program.js')) && readFileSync(join(root, 'web', 'bash-shell.js'), 'utf8').includes("from './qjs-in-txiki.js'");
+check('qjs runs as a static txiki program, and the quickjs-ng wasm and its build are retired', qjsRetired, existsSync(join(root, 'web', 'quickjs-in-page.js')) ? 'web/quickjs-in-page.js is still present' : existsSync(join(root, 'web', 'vendor', 'quickjs')) ? 'web/vendor/quickjs is still present' : qjsRetired ? 'bash-shell.js imports web/qjs-in-txiki.js, which runs web/qjs-program.js' : 'web/qjs-program.js is missing or bash-shell.js still imports the old file');
 const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 120000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
 check('ARCHITECTURE.md and AGENTS.md claims have no contradictions with the code', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');

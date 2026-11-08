@@ -29,13 +29,6 @@ jobs:
           sudo mkdir -p /workspace/tools
           sudo chown "$(id -u):$(id -g)" /workspace/tools
           tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C /workspace/tools
-      - name: Build qjs.wasm
-        env:
-          ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
-          TMPDIR: /tmp
-        run: node scripts/vendor-quickjs.mjs
-      - name: Check qjs.wasm against the pin
-        run: echo "63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad  web/vendor/quickjs/qjs.wasm" | sha256sum -c -
       - name: Build tjs.wasm
         env:
           ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
