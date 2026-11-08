@@ -59,37 +59,22 @@ typedef struct {
   char* errmsg;
 } uv_lib_t;
 
+struct uv__pending {
+  void (*fn)(void* arg);
+  void* arg;
+  struct uv__pending* next;
+};
+
 #define UV_LOOP_PRIVATE_FIELDS \
-  unsigned long flags; \
-  int backend_fd; \
-  struct uv__queue pending_queue; \
-  struct uv__queue watcher_queue; \
-  uv__io_t** watchers; \
-  unsigned int nwatchers; \
-  unsigned int nfds; \
-  struct uv__queue wq; \
-  uv_mutex_t wq_mutex; \
-  uv_async_t* wq_async; \
-  uv_rwlock_t cloexec_lock; \
-  uv_handle_t* closing_handles; \
-  struct uv__queue process_handles; \
+  struct uv__queue idle_handles; \
   struct uv__queue prepare_handles; \
   struct uv__queue check_handles; \
-  struct uv__queue idle_handles; \
   struct uv__queue async_handles; \
-  void (*async_unused)(void); \
-  uv__io_t async_io_watcher; \
-  int async_wfd; \
-  struct { \
-    void* min; \
-    unsigned int nelts; \
-  } timer_heap; \
-  uint64_t timer_counter; \
-  uint64_t time; \
-  int signal_pipefd[2]; \
-  uv__io_t signal_io_watcher; \
-  uv_signal_t* child_watcher; \
-  int emfile_fd;
+  uv_handle_t* closing_handles; \
+  uv_timer_t* timers; \
+  struct uv__pending* pending_head; \
+  struct uv__pending* pending_tail; \
+  uint64_t time;
 
 #define UV_REQ_TYPE_PRIVATE
 
@@ -163,10 +148,9 @@ struct uv__req_write_extra_s {
   int pending;
 #define UV_TIMER_PRIVATE_FIELDS \
   uv_timer_cb timer_cb; \
-  void* heap_node[3]; \
+  uv_timer_t* next_timer; \
   uint64_t timeout; \
-  uint64_t repeat; \
-  uint64_t start_id;
+  uint64_t repeat;
 #define UV_GETADDRINFO_PRIVATE_FIELDS \
   struct uv__queue queue;
 #define UV_GETNAMEINFO_PRIVATE_FIELDS \
@@ -196,7 +180,8 @@ struct uv__req_write_extra_s {
   unsigned int caught_signals; \
   unsigned int dispatched_signals;
 #define UV_FS_POLL_PRIVATE_FIELDS
-#define UV_TTY_PRIVATE_FIELDS
+#define UV_TTY_PRIVATE_FIELDS \
+  int fd;
 struct uv_sockaddr_s {
   unsigned short sa_family;
   char sa_data[14];

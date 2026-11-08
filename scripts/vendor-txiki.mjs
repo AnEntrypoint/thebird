@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync, cpSync, existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const TXIKI_VERSION = 'v26.11.0';
@@ -19,6 +19,9 @@ export const CORE_SOURCES = [
   'src/mod_sys.c', 'src/mod_fs.c', 'src/mod_streams.c', 'src/worker.c', 'src/eval.c',
   'src/cli.c', 'src/url.c', 'src/mod_engine.c', 'src/version.c',
 ];
+export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
+export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c'];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const overlay = join(root, 'scripts', 'txiki', 'include');
@@ -39,14 +42,7 @@ function extract(archive, into) {
   execFileSync('tar', ['-xzf', archive, '-C', into, '--strip-components=1']);
 }
 
-function zigLibDir(zig) {
-  const exe = execFileSync('readlink', ['-f', execFileSync('which', [zig], { encoding: 'utf8' }).trim()], { encoding: 'utf8' }).trim();
-  return resolve(dirname(exe), 'lib');
-}
-
-export async function stageTxiki({ zig = process.env.ZIG || 'zig' } = {}) {
-  const zigVersion = execFileSync(zig, ['version'], { encoding: 'utf8' }).trim();
-  if (zigVersion !== ZIG_VERSION) throw new Error(`zig ${zigVersion} is not the pinned ${ZIG_VERSION}`);
+export async function stageTxiki() {
   rmSync(work, { recursive: true, force: true });
   const tree = join(work, 'txiki');
   mkdirSync(work, { recursive: true });
@@ -59,42 +55,76 @@ export async function stageTxiki({ zig = process.env.ZIG || 'zig' } = {}) {
   const libuvInclude = join(tree, 'deps', 'libuv', 'include');
   const build = join(work, 'include');
   mkdirSync(join(build, 'uv'), { recursive: true });
+  mkdirSync(join(build, 'mbedtls'), { recursive: true });
   cpSync(join(libuvInclude, 'uv.h'), join(build, 'uv.h'));
   cpSync(join(libuvInclude, 'uv', 'errno.h'), join(build, 'uv', 'errno.h'));
   cpSync(join(libuvInclude, 'uv', 'version.h'), join(build, 'uv', 'version.h'));
-  cpSync(join(overlay, 'uv', 'browser.h'), join(build, 'uv', 'browser.h'));
-  cpSync(join(overlay, "libwebsockets.h"), join(build, "libwebsockets.h"));
-  mkdirSync(join(build, "mbedtls"), { recursive: true });
-  for (const header of ['x509_crt.h', 'entropy.h']) cpSync(join(overlay, 'mbedtls', header), join(build, 'mbedtls', header));
-  cpSync(join(overlay, 'txiki-browser.h'), join(build, 'txiki-browser.h'));
+  for (const header of ['uv/browser.h', 'libwebsockets.h', 'mbedtls/x509_crt.h', 'mbedtls/entropy.h', 'txiki-browser.h']) {
+    cpSync(join(overlay, header), join(build, header));
+  }
   const uvPath = join(build, 'uv.h');
   writeFileSync(uvPath, readFileSync(uvPath, 'utf8').replace('#if defined(UV_FREERTOS)\n# include "uv/freertos.h"', '#if 1\n# include "uv/browser.h"'));
   writeFileSync(join(tree, 'src', 'version.h'), readFileSync(join(tree, 'src', 'version.h.in'), 'utf8')
     .replace('@TJS__VERSION_MAJOR@', '26').replace('@TJS__VERSION_MINOR@', '11').replace('@TJS__VERSION_PATCH@', '0').replace('@TJS__VERSION_SUFFIX@', ''));
-  return { tree, build, zig, zigVersion };
+  return { tree, build };
 }
 
-export function compileCheck({ tree, build, zig }) {
-  const quickjs = join(tree, 'deps', 'quickjs');
-  const base = ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${quickjs}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`];
-  const units = [{ file: 'deps/ada/ada.cpp', command: 'c++', flags: ['-std=c++20', '-fno-exceptions', '-fno-rtti'] }, ...CORE_SOURCES.map((file) => ({ file, command: 'cc', flags: [] }))];
-  const results = units.filter((unit) => existsSync(join(tree, unit.file))).map(({ file, command, flags }) => {
-    try {
-      execFileSync(zig, [command, ...base, ...flags, '-c', file, '-o', join(work, `${file.replace(/\W/g, '_')}.o`)], { cwd: tree, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
-      return { file, ok: true };
-    } catch (err) {
-      const firstError = String(err.stderr || '').split('\n').find((line) => line.includes('error:')) ?? 'failed';
-      return { file, ok: false, firstError };
-    }
-  });
-  return results;
+function flagsFor({ tree, build }) {
+  return ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${join(tree, 'deps', 'quickjs')}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`];
+}
+
+function compile(zig, flags, tree, source, command, extra, objects, results) {
+  const object = join(work, `${basename(source).replace(/\W/g, '_')}.o`);
+  try {
+    execFileSync(zig, [command, ...flags, ...extra, '-c', source, '-o', object], { cwd: tree, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+    objects.push(object);
+    results.push({ file: source, ok: true });
+  } catch (err) {
+    const firstError = String(err.stderr || '').split('\n').find((line) => line.includes('error:')) ?? 'failed';
+    results.push({ file: source, ok: false, firstError });
+  }
+}
+
+export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
+  const flags = flagsFor({ tree, build });
+  const objects = [];
+  const results = [];
+  compile(zig, flags, tree, 'deps/ada/ada.cpp', 'c++', ['-std=c++20', '-fno-exceptions', '-fno-rtti'], objects, results);
+  for (const file of CORE_SOURCES) compile(zig, flags, tree, file, 'cc', [], objects, results);
+  for (const file of CORE_BUNDLES) compile(zig, flags, tree, file, 'cc', [], objects, results);
+  for (const file of QUICKJS_SOURCES) compile(zig, flags, tree, join('deps', 'quickjs', file), 'cc', [], objects, results);
+  for (const file of BROWSER_SOURCES) compile(zig, flags, tree, join(root, file), 'cc', [], objects, results);
+  return { objects, results };
+}
+
+export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
+  const output = join(work, 'tjs.wasm');
+  const args = ['cc', '-target', 'wasm32-wasi', '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
+  let stderr = '';
+  try {
+    execFileSync(zig, args, { cwd: tree, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
+  } catch (err) {
+    stderr = String(err.stderr || '');
+  }
+  const undefinedSymbols = [...new Set([...stderr.matchAll(/undefined symbol: (\S+)/g)].map((match) => match[1]))].sort();
+  return { linked: existsSync(output) && undefinedSymbols.length === 0, undefinedSymbols };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const zig = process.env.ZIG || 'zig';
+  const version = execFileSync(zig, ['version'], { encoding: 'utf8' }).trim();
+  if (version !== ZIG_VERSION) throw new Error(`zig ${version} is not the pinned ${ZIG_VERSION}`);
   const staged = await stageTxiki();
-  const results = compileCheck(staged);
+  const { objects, results } = compileAll(staged, zig);
   for (const result of results) console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.file}${result.ok ? '' : ` :: ${result.firstError}`}`);
   const failed = results.filter((result) => !result.ok).length;
-  console.log(`txiki core compile gate: ${results.length - failed} of ${results.length} files compile for wasm32-wasi`);
-  if (failed) process.exitCode = 1;
+  console.log(`txiki compile gate: ${results.length - failed} of ${results.length} files compile for wasm32-wasi`);
+  if (failed) {
+    process.exitCode = 1;
+  } else {
+    const link = linkCheck(staged, objects, zig);
+    const uvSymbols = link.undefinedSymbols.filter((name) => name.startsWith('uv_'));
+    console.log(`txiki link gate: ${link.undefinedSymbols.length} undefined symbols (${uvSymbols.length} uv_*)`);
+    for (const name of link.undefinedSymbols) console.log(`UNDEFINED ${name}`);
+  }
 }
