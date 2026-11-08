@@ -11,6 +11,10 @@ const handles = new Map();
 let engine = null;
 let cwd = '/workspace';
 let session = null;
+const TJS_WAITING = 2;
+export const TJS_CANCELLED = 130;
+const TICK_MS = 5;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const joinChunks = (chunks) => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -272,6 +276,7 @@ function resumeWith(exports, event) {
 }
 
 export async function runTjs(source, dir = '/workspace', { signal } = {}) {
+  if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
   const { instance, stdout, stderr } = await loaded();
   cwd = dir;
   stdout.splice(0);
@@ -279,14 +284,20 @@ export async function runTjs(source, dir = '/workspace', { signal } = {}) {
   const current = { events: [], wake: null, controllers: new Map() };
   session = current;
   const { exports } = instance;
+  const cancel = () => exports.tjs_browser_cancel();
+  signal?.addEventListener('abort', cancel, { once: true });
   let status;
   try {
     status = callInput(exports, exports.tjs_browser_eval, source);
-    while (status === 0 && (current.controllers.size > 0 || current.events.length > 0)) {
-      const event = await nextEvent(current, signal);
-      status = resumeWith(exports, event);
+    while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.events.length > 0))) {
+      if (current.events.length) status = resumeWith(exports, current.events.shift());
+      else if (status === TJS_WAITING) {
+        await pause(TICK_MS);
+        status = exports.tjs_browser_tick();
+      } else status = resumeWith(exports, await nextEvent(current, signal));
     }
   } finally {
+    signal?.removeEventListener('abort', cancel);
     session = null;
     for (const controller of current.controllers.values()) controller.abort();
     exports.tjs_browser_end();
@@ -298,6 +309,7 @@ export async function runTjs(source, dir = '/workspace', { signal } = {}) {
 export async function tjsBuiltin(argv, dir, options) {
   if (argv.length !== 2 || argv[0] !== '-e') throw new Error('usage: tjs -e <code>');
   const { output, status } = await runTjs(argv[1], dir, options);
+  if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status !== 0) throw new Error([output.trimEnd(), `tjs exited with status ${status}`].filter(Boolean).join('\n'));
   return output.trimEnd();
 }

@@ -49,13 +49,40 @@ The Phase A table below is covered by these runs, except its rows that name a co
 | jq commit | web/shell-jq.js | jq | `jq: ...` group: -r on a string field, negative index and iterate with -c, a pipe, select with a comparison, a pretty-printed object with exact indentation, -nc with add and length, a runtime error at mixed.json:2 with exit 5 and the other inputs still printed, a missing file with exit 2, and a syntax error with exit 3. Not supported: variables, reduce, foreach, if-then-else, try-catch (only a trailing ?), def, paths, update operators, string interpolation, -e, -j, -S, -a. Object key order follows JS object rules, so integer-like keys sort first. |
 | awk commit | web/shell-awk.js | awk | `awk: ...` group: default whitespace split, -F with OFS join, a regex pattern alone, a numeric comparison pattern, BEGIN and END with a sum and NR, printf through ctx.format without ORS, toupper, length and substr, division by zero (exit 2), and a missing file (exit 2 with the rest read). Extras beyond the spec: C-style for, break, continue and # comments in the program text. Not supported: arrays and split, user functions, getline, output redirection, sub, gsub, match, math functions, range patterns. printf is limited to what ctx.format supports. |
 
+## Phase A: Ctrl-C on the txiki node path (code only, not built)
+
+Where the abort was dropped, at 50edc12:
+
+- `web/txiki-in-page.js:284` runs the whole program in `callInput(exports, exports.tjs_browser_eval, source)` with no abort check. The page signal is only read in `nextEvent` (listener at line 248), and the loop at line 285 is entered only when fetch controllers or events exist. A timer-only program never enters it, so the abort is never seen.
+- `scripts/txiki/browser/entry.c:43` runs `uv_run(loop, UV_RUN_DEFAULT)` to the end of every timer, with no flag check.
+- `scripts/txiki/browser/uv-browser.c:202` busy-waits for a timer (`while (now_ms() < until) {}`), so the main thread stays inside wasm and the Ctrl-C message cannot run until the timer fires.
+- `web/node-in-txiki.js:62` reports status 130 as `node exited with status 130`, not as `cancelled`.
+
+The bash side is intact: `web/pty-adapter.js:170` `client.cancel()`, then `web/shell-client.js` `cancel()`, then `web/shell-worker.js` `shell.cancel()`, then `web/bash-shell.js` `cancel()`, which calls `abort.abort()`. That signal is the one `nodeBuiltin` receives.
+
+Changes:
+
+- `scripts/txiki/browser/entry.c`: `pump` is one turn. It checks `cancel_requested`, drains jobs, runs `uv_run` with `UV_RUN_NOWAIT`, drains again, and returns 2 (`TJS_BROWSER_WAITING`) while timers are pending, 130 (`TJS_BROWSER_CANCELLED`) after a cancel, otherwise 0. New exports: `tjs_browser_cancel` and `tjs_browser_tick`. `tjs_browser_eval` clears the flag.
+- `scripts/txiki/browser/uv-browser.c`: `tjs_browser_stop_timers` stops every pending timer when a run is cancelled.
+- `web/txiki-in-page.js`: `runTjs` attaches the signal to `tjs_browser_cancel`, ticks while status is 2 with a 5 ms pause, and returns status 130 on a cancel. `TJS_CANCELLED` is exported. `tjs -e` throws `cancelled`.
+- `web/node-in-txiki.js`: status 130 throws `cancelled`, so the shell reports `cancelled` and exit 130.
+- `scripts/vendor-txiki.mjs`: `BROWSER_EXPORTS` adds `tjs_browser_tick` and `tjs_browser_cancel`, so the link keeps them and `REQUIRED_EXPORTS` checks them.
+- Not changed in Phase A: the pin, and `web/vendor/txiki/tjs.wasm`. The local wasm predates these exports. With it, a timer-only run completes as before, but an abort raises a TypeError in the listener, because `tjs_browser_cancel` is missing. Phase B rebuilds the wasm and moves the pin.
+
+Witness entry (Phase B, Chromium on the local relay and on the public site):
+
+- Type `node -e "await new Promise((r) => setTimeout(r, 8000)); console.log('late')"` and press Enter.
+- Press Ctrl-C two seconds later.
+- Expected: `^C` is echoed at about 2 s; a line `cancelled` appears; the prompt returns about 1 s after Ctrl-C, well before the 8 s mark; `late` is never printed; `echo $?` then prints `130`.
+- The run of this entry is recorded in this file with its output lines.
+
 ## Blocked (not coded, named blocker)
 
 | Group | Blocker | What it needs |
 | --- | --- | --- |
 | Symlinks (`ln -s`, `readlink`, `test -L`, `ls -l` arrows, `rm` of a link surviving a restart) | The txiki fs binding has no link or readlink host import. | A C change in `scripts/txiki/browser/fs-browser.c`, a zig rebuild, a new `tjs.wasm` pin in `scripts/vendor-txiki.mjs` and `.github/workflows/pages.yml`, and the txiki workflow. |
 | External builtins from the txiki run (`git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`) | The engine run is synchronous and cannot call page-side workers or fetch. | A host-call bridge, or a stepwise design. Owner decision. |
-| Ctrl-C and `COMMAND_TIMEOUT_MS` in the txiki path | The page's abort signal does not reach the engine. Only timeouts inside the program via `setTimeout` exist. | An engine-side abort event. |
+| Ctrl-C in the txiki path (`node`, `tjs -e`) | Code written in Phase A, not built, not validated. The drop points and the change are in the Phase A section above Blocked. A synchronous JS loop that never yields (`node -e "while (true) {}"`) cannot see Ctrl-C, because the page cannot run the message while the engine runs. | Phase B: rebuild the wasm, repin, and run the witness entry in the Phase A section. |
 
 ## Process model: a deliberate deviation
 

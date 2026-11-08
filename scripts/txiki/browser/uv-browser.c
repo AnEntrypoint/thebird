@@ -549,3 +549,7 @@ int uv_os_homedir(char *buffer, size_t *size) {
 int tjs_browser_timers_pending(const uv_loop_t *loop) {
     return loop->timers != NULL;
 }
+
+void tjs_browser_stop_timers(uv_loop_t *loop) {
+    while (loop->timers) uv_timer_stop(loop->timers);
+}

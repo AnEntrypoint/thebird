@@ -6,6 +6,7 @@
 
 uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
 int tjs_browser_timers_pending(const uv_loop_t *loop);
+void tjs_browser_stop_timers(uv_loop_t *loop);
 JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
 void tjs_browser_http_release(JSContext *ctx);
 void tjs_browser_fs_install(JSContext *ctx);
@@ -13,6 +14,10 @@ void tjs_browser_fs_install(JSContext *ctx);
 static TJSRuntime *runtime = NULL;
 static JSValue module_promise;
 static int has_module = 0;
+static volatile int cancel_requested = 0;
+
+#define TJS_BROWSER_WAITING 2
+#define TJS_BROWSER_CANCELLED 130
 
 static int report_value(JSContext *ctx, JSValue value) {
     const char *message = JS_ToCString(ctx, value);
@@ -26,24 +31,37 @@ static int report_exception(JSContext *ctx) {
     return report_value(ctx, JS_GetException(ctx));
 }
 
+static int drain_jobs(JSRuntime *rt) {
+    int status = 0;
+    JSContext *job_ctx;
+    int job;
+    while ((job = JS_ExecutePendingJob(rt, &job_ctx)) != 0) {
+        if (job < 0) {
+            status = report_exception(job_ctx);
+        }
+    }
+    return status;
+}
+
 static int pump(TJSRuntime *qrt) {
     JSContext *ctx = TJS_GetJSContext(qrt);
     JSRuntime *rt = JS_GetRuntime(ctx);
     uv_loop_t *loop = TJS_GetLoop(qrt);
-    int status = 0;
 
-    do {
-        JSContext *job_ctx;
-        int job;
-        while ((job = JS_ExecutePendingJob(rt, &job_ctx)) != 0) {
-            if (job < 0) {
-                status = report_exception(job_ctx);
-            }
-        }
-        uv_run(loop, UV_RUN_DEFAULT);
-    } while (JS_IsJobPending(rt) || tjs_browser_timers_pending(loop));
-
-    return status;
+    if (cancel_requested) {
+        tjs_browser_stop_timers(loop);
+        return TJS_BROWSER_CANCELLED;
+    }
+    int status = drain_jobs(rt);
+    if (status) {
+        return status;
+    }
+    uv_run(loop, UV_RUN_NOWAIT);
+    status = drain_jobs(rt);
+    if (status) {
+        return status;
+    }
+    return tjs_browser_timers_pending(loop) ? TJS_BROWSER_WAITING : 0;
 }
 
 static int check_module(JSContext *ctx) {
@@ -79,6 +97,7 @@ void tjs_browser_end(void) {
 
 int tjs_browser_eval(const char *code) {
     tjs_browser_end();
+    cancel_requested = 0;
     char *argv[] = {"tjs", NULL};
     TJS_Initialize(1, argv);
     runtime = TJS_NewRuntime();
@@ -119,4 +138,18 @@ int tjs_browser_resume(const char *text, int32_t len) {
     int pumped = pump(runtime);
     int checked = check_module(ctx);
     return status || pumped || checked;
+}
+
+void tjs_browser_cancel(void) {
+    cancel_requested = 1;
+}
+
+int tjs_browser_tick(void) {
+    if (!runtime) {
+        return 1;
+    }
+    JSContext *ctx = TJS_GetJSContext(runtime);
+    int pumped = pump(runtime);
+    int checked = check_module(ctx);
+    return pumped || checked;
 }
