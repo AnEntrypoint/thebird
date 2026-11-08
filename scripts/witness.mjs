@@ -64,8 +64,9 @@ if (existsSync(chrome)) {
   const pagesResponse = await fetch(pagesUrl);
   const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: 180000 });
   pagesServer.close();
+  const quickjsServed = existsSync(join(pagesDir, 'web', 'vendor', 'quickjs', 'qjs.wasm'));
   rmSync(pagesDir, { recursive: true, force: true });
-  check('the built site without the quickjs artifact says qjs is not built, and the rest of the shell still runs', site.out.includes('qjs is not available in this site') && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  check(quickjsServed ? 'the built site serves qjs.wasm, and qjs -e runs in the page' : 'the built site without the quickjs artifact says qjs is not built, and the rest of the shell still runs', quickjsServed ? /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out) : site.out.includes('qjs is not available in this site') && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));

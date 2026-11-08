@@ -22,6 +22,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
+      - name: Install zig 0.17.1
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          sudo mkdir -p /workspace/tools
+          sudo chown "$(id -u):$(id -g)" /workspace/tools
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C /workspace/tools
+      - name: Build qjs.wasm
+        env:
+          ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
+          TMPDIR: /tmp
+        run: node scripts/vendor-quickjs.mjs
+      - name: Check qjs.wasm against the pin
+        run: echo "63748df2bd9299200c85815da6e4bffc72a26748f14345d5060ebc204e7ebbad  web/vendor/quickjs/qjs.wasm" | sha256sum -c -
       - run: node scripts/build-pages.mjs
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
