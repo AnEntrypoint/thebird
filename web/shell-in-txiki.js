@@ -25,7 +25,7 @@ const programText = () => {
 
 export async function runShellInTxiki(script, { cwd = '/workspace', saved = null, timeoutMs, signal } = {}) {
   const args = JSON.stringify({ script, cwd, saved, timeoutMs, builtins: BUILTINS });
-  const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd, { signal });
+  const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd, { signal, timeoutMs });
   await flushFs();
   const at = output.lastIndexOf(MARKER);
   if (status !== 0 || at < 0) throw new Error([output.trimEnd(), `shell engine exited with status ${status}`].filter(Boolean).join('\n'));

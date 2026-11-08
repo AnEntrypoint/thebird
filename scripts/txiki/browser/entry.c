@@ -15,11 +15,36 @@ static TJSRuntime *runtime = NULL;
 static JSValue module_promise;
 static int has_module = 0;
 static volatile int cancel_requested = 0;
+static double deadline_ms = 0;
+static int stop_status = 0;
+
+#define HOST_IMPORT(name) __attribute__((import_module("env"), import_name(name)))
+HOST_IMPORT("tjs_now_ms") double host_now_ms(void);
 
 #define TJS_BROWSER_WAITING 2
+#define TJS_BROWSER_TIMED_OUT 124
 #define TJS_BROWSER_CANCELLED 130
 
+static int interrupted(JSContext *ctx, void *opaque) {
+    if (stop_status) {
+        return 1;
+    }
+    if (cancel_requested) {
+        stop_status = TJS_BROWSER_CANCELLED;
+        return 1;
+    }
+    if (deadline_ms > 0 && host_now_ms() > deadline_ms) {
+        stop_status = TJS_BROWSER_TIMED_OUT;
+        return 1;
+    }
+    return 0;
+}
+
 static int report_value(JSContext *ctx, JSValue value) {
+    if (stop_status) {
+        JS_FreeValue(ctx, value);
+        return stop_status;
+    }
     const char *message = JS_ToCString(ctx, value);
     fprintf(stderr, "Uncaught %s\n", message ? message : "exception");
     JS_FreeCString(ctx, message);
@@ -48,9 +73,15 @@ static int pump(TJSRuntime *qrt) {
     JSRuntime *rt = JS_GetRuntime(ctx);
     uv_loop_t *loop = TJS_GetLoop(qrt);
 
-    if (cancel_requested) {
+    if (!stop_status && cancel_requested) {
+        stop_status = TJS_BROWSER_CANCELLED;
+    }
+    if (!stop_status && deadline_ms > 0 && host_now_ms() > deadline_ms) {
+        stop_status = TJS_BROWSER_TIMED_OUT;
+    }
+    if (stop_status) {
         tjs_browser_stop_timers(loop);
-        return TJS_BROWSER_CANCELLED;
+        return stop_status;
     }
     int status = drain_jobs(rt);
     if (status) {
@@ -95,9 +126,14 @@ void tjs_browser_end(void) {
     runtime = NULL;
 }
 
+void tjs_browser_set_deadline(double ms) {
+    deadline_ms = ms;
+}
+
 int tjs_browser_eval(const char *code) {
     tjs_browser_end();
     cancel_requested = 0;
+    stop_status = 0;
     char *argv[] = {"tjs", NULL};
     TJS_Initialize(1, argv);
     runtime = TJS_NewRuntime();
@@ -105,6 +141,7 @@ int tjs_browser_eval(const char *code) {
         return 1;
     }
     JSContext *ctx = TJS_GetJSContext(runtime);
+    JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupted, NULL);
     tjs_browser_fs_install(ctx);
     int status = 0;
 

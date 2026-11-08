@@ -42,9 +42,9 @@ export async function createShell({ cwd = '/workspace' } = {}) {
     sqlite3: (ctx) => sqliteBuiltin(ctx.argv, ctx.cwd).then(withNewline),
     python3: (ctx) => pythonBuiltin(ctx.argv, abort.signal).then(withNewline),
     pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
-    qjs: (ctx) => qjsBuiltin(ctx.argv).then(withNewline),
-    tjs: (ctx) => tjsBuiltin(ctx.argv, ctx.cwd).then(withNewline),
-    node: (ctx) => nodeBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal }).then(withNewline),
+    qjs: (ctx) => qjsBuiltin(ctx.argv, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
+    tjs: (ctx) => tjsBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
+    node: (ctx) => nodeBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
     curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
     wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
   };

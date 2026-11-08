@@ -12,6 +12,7 @@ let engine = null;
 let cwd = '/workspace';
 let session = null;
 const TJS_WAITING = 2;
+export const TJS_TIMED_OUT = 124;
 export const TJS_CANCELLED = 130;
 const TICK_MS = 5;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -306,7 +307,7 @@ function resumeWith(exports, event) {
   return status;
 }
 
-export async function runTjs(source, dir = '/workspace', { signal } = {}) {
+export async function runTjs(source, dir = '/workspace', { signal, timeoutMs } = {}) {
   if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
   const { instance, stdout, stderr } = await loaded();
   cwd = dir;
@@ -319,6 +320,7 @@ export async function runTjs(source, dir = '/workspace', { signal } = {}) {
   signal?.addEventListener('abort', cancel, { once: true });
   let status;
   try {
+    exports.tjs_browser_set_deadline(timeoutMs ? Date.now() + timeoutMs : 0);
     status = callInput(exports, exports.tjs_browser_eval, source);
     while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.events.length > 0))) {
       if (current.events.length) status = resumeWith(exports, current.events.shift());
@@ -329,6 +331,7 @@ export async function runTjs(source, dir = '/workspace', { signal } = {}) {
     }
   } finally {
     signal?.removeEventListener('abort', cancel);
+    exports.tjs_browser_set_deadline(0);
     session = null;
     for (const controller of current.controllers.values()) controller.abort();
     exports.tjs_browser_end();
@@ -341,6 +344,7 @@ export async function tjsBuiltin(argv, dir, options) {
   if (argv.length !== 2 || argv[0] !== '-e') throw new Error('usage: tjs -e <code>');
   const { output, status } = await runTjs(argv[1], dir, options);
   if (status === TJS_CANCELLED) throw new Error('cancelled');
+  if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
   if (status !== 0) throw new Error([output.trimEnd(), `tjs exited with status ${status}`].filter(Boolean).join('\n'));
   return output.trimEnd();
 }

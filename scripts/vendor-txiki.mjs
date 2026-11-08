@@ -33,7 +33,7 @@ export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worke
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
 export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
 export const TXIKI_WASM_SHA256 = 'a9812524063e39ed98b592dda4c5af6ad91dcbb0f3c89720a276260ee7f9dae2';
-const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_end'];
+const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');

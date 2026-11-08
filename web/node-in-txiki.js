@@ -1,4 +1,4 @@
-import { runTjs, TJS_CANCELLED } from './txiki-in-page.js';
+import { runTjs, TJS_CANCELLED, TJS_TIMED_OUT } from './txiki-in-page.js';
 import * as fs from './shims/fs.js';
 import { resolve } from './shims/path.js';
 
@@ -60,6 +60,7 @@ export async function nodeBuiltin(argv, dir, options) {
   const prelude = `(${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
   const { output, status } = await runTjs(prelude + source, dir, options);
   if (status === TJS_CANCELLED) throw new Error('cancelled');
+  if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
   if (status !== 0) throw new Error([output.trimEnd(), `node exited with status ${status}`].filter(Boolean).join('\n'));
   return output.trimEnd();
 }

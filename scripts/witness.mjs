@@ -235,6 +235,41 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
+  const loops = {};
+  await terminal([], {
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const txiki = await import(new URL('web/txiki-in-page.js', location.href).href);
+        const qjs = await import(new URL('web/qjs-in-txiki.js', location.href).href);
+        const timed = async (run) => {
+          const started = performance.now();
+          try {
+            return { ...(await run()), error: null, elapsed: performance.now() - started };
+          } catch (err) {
+            return { error: String(err.message ?? err), elapsed: performance.now() - started };
+          }
+        };
+        const aborted = () => {
+          const controller = new AbortController();
+          setTimeout(() => controller.abort(), 500);
+          return txiki.runTjs('setTimeout(() => {}, 60000);', '/workspace', { signal: controller.signal });
+        };
+        globalThis.__loopRuns = {
+          spinning: await timed(() => txiki.runTjs('while (true) {}', '/workspace', { timeoutMs: 1000 })),
+          waiting: await timed(() => txiki.runTjs('setTimeout(() => {}, 60000);', '/workspace', { timeoutMs: 1000 })),
+          aborted: await timed(aborted),
+          tjs: await timed(() => txiki.tjsBuiltin(['-e', 'while (true) {}'], '/workspace', { timeoutMs: 1000 })),
+          qjs: await timed(() => qjs.qjsBuiltin(['-e', 'while (true) {}'], { timeoutMs: 1000 })),
+        };
+      })().catch((err) => { globalThis.__loopRuns = { failed: String(err.message ?? err) }; })`);
+      await waitFor('globalThis.__loopRuns !== undefined', 120000);
+      loops.runs = JSON.parse(await evaluate('JSON.stringify(globalThis.__loopRuns)'));
+    },
+  });
+  check('a synchronous loop in tjs -e is cut at the timeout with status 124 and no uncaught line', loops.runs?.spinning?.status === 124 && !/Uncaught/.test(loops.runs.spinning.output ?? '') && loops.runs.spinning.elapsed < 5000, JSON.stringify(loops.runs?.spinning));
+  check('a pending timer does not hold the engine past the timeout: status 124 well before the 60 s timer', loops.runs?.waiting?.status === 124 && loops.runs.waiting.elapsed < 5000, JSON.stringify(loops.runs?.waiting));
+  check('an abort cancels a waiting engine run at the next tick and reports status 130', loops.runs?.aborted?.status === 130 && loops.runs.aborted.elapsed < 5000, JSON.stringify(loops.runs?.aborted));
+  check('tjs and qjs report the timeout as a timeout error', loops.runs?.tjs?.error === 'timeout: command timed out' && loops.runs?.qjs?.error === 'timeout: command timed out', JSON.stringify({ tjs: loops.runs?.tjs?.error, qjs: loops.runs?.qjs?.error }));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
