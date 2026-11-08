@@ -226,6 +226,20 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
+  const txikiShell = {};
+  await terminal([], {
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
+        const first = await shell.runShellInTxiki('mkdir -p notes/txiki && cd notes/txiki && x=7 && echo first-$x', { cwd: '/workspace' });
+        const second = await shell.runShellInTxiki('echo second-$x; pwd', { cwd: '/workspace', saved: first.saved });
+        globalThis.__txikiShellRuns = { first: { stdout: first.stdout, exitCode: first.exitCode }, second: { stdout: second.stdout, exitCode: second.exitCode } };
+      })().catch((err) => { globalThis.__txikiShellRuns = { error: String(err.message ?? err) }; })`);
+      await waitFor('globalThis.__txikiShellRuns !== undefined', 300000);
+      txikiShell.runs = JSON.parse(await evaluate('JSON.stringify(globalThis.__txikiShellRuns)'));
+    },
+  });
+  check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
