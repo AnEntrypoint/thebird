@@ -35,7 +35,7 @@ jobs:
           TMPDIR: /tmp
         run: node scripts/vendor-txiki.mjs
       - name: Check tjs.wasm against the pin
-        run: echo "a9812524063e39ed98b592dda4c5af6ad91dcbb0f3c89720a276260ee7f9dae2  web/vendor/txiki/tjs.wasm" | sha256sum -c -
+        run: echo "6f5d1cff957ee7d5f19f3afa1bc7999864c3c40774cbac9d9644fec32179ff55  web/vendor/txiki/tjs.wasm" | sha256sum -c -
       - run: node scripts/build-pages.mjs
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
