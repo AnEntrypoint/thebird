@@ -1,4 +1,5 @@
 import { runSed } from './shell-sed.js';
+import { runTar } from './shell-tar.js';
 
 export const COMMAND_TIMEOUT_MS = 300000;
 
@@ -798,6 +799,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return ok(out);
     },
     sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
+    tar: ({ argv, stdin }) => runTar(argv, toolContext(stdin)),
   };
 
   const signalNumber = (spec) => {

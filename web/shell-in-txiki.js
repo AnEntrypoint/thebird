@@ -1,6 +1,6 @@
 import { runTjs } from './txiki-in-page.js';
 
-const MODULES = ['shell-sed.js', 'shell-core.js', 'shell-program.js'];
+const MODULES = ['shell-sed.js', 'shell-tar.js', 'shell-core.js', 'shell-program.js'];
 const MARKER = '\u0001';
 const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget'];
 
