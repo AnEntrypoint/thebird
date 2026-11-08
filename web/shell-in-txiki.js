@@ -1,22 +1,10 @@
 import { runTjs } from './txiki-in-page.js';
 import { flushFs } from './shims/fs.js';
-import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
+import { BUILTIN_NAMES, runBuiltin } from './builtins.js';
 
 const MODULES = ['shell-sed.js', 'shell-tar.js', 'shell-jq.js', 'shell-awk.js', 'shell-core.js', 'shell-program.js'];
 const MARKER = '\u0001';
-const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget'];
-const SERVED = new Map([
-  ['python3', (argv, signal) => pythonBuiltin(argv, signal)],
-  ['pip', (argv, signal) => pipBuiltin(argv, signal)],
-]);
-const REFUSED_CAUSE = 'runs its own txiki engine, and the txiki shell cannot start a second engine run while this one is live';
 const withNewline = (text) => (text ? text + '\n' : '');
-
-const bridgedBuiltin = (name, argv, cwd, signal) => {
-  const serve = SERVED.get(name);
-  if (!serve) return Promise.reject(new Error(`${name}: not available in the txiki shell: it ${REFUSED_CAUSE}`));
-  return serve(argv, signal).then(withNewline);
-};
 
 let source = null;
 
@@ -36,9 +24,11 @@ const programText = () => {
   return source;
 };
 
+const bridgedBuiltin = (timeoutMs) => (name, argv, cwd, signal) => runBuiltin(name, argv, { cwd, signal, timeoutMs }).then(withNewline);
+
 export async function runShellInTxiki(script, { cwd = '/workspace', saved = null, timeoutMs, signal } = {}) {
-  const args = JSON.stringify({ script, cwd, saved, timeoutMs, builtins: BUILTINS });
-  const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd, { signal, timeoutMs, builtin: bridgedBuiltin });
+  const args = JSON.stringify({ script, cwd, saved, timeoutMs, builtins: BUILTIN_NAMES });
+  const { output, status } = await runTjs(`const args = ${args};\n${await programText()}`, cwd, { signal, timeoutMs, builtin: bridgedBuiltin(timeoutMs) });
   await flushFs();
   const at = output.lastIndexOf(MARKER);
   if (status !== 0 || at < 0) throw new Error([output.trimEnd(), `shell engine exited with status ${status}`].filter(Boolean).join('\n'));

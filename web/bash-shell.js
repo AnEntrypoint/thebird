@@ -1,12 +1,6 @@
 import { Bash, initBashkit } from './vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
-import { gitBuiltin } from './git-in-page.js';
-import { sqliteBuiltin } from './sqlite-in-txiki.js';
-import { pythonBuiltin, pipBuiltin } from './python-in-page.js';
-import { curlBuiltin } from './curl-in-page.js';
-import { qjsBuiltin } from './qjs-in-txiki.js';
-import { tjsBuiltin } from './txiki-in-page.js';
-import { nodeBuiltin } from './node-in-txiki.js';
+import { BUILTIN_NAMES, runBuiltin } from './builtins.js';
 import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
@@ -37,17 +31,7 @@ export function hasBackgroundOperator(command) {
 export async function createShell({ cwd = '/workspace' } = {}) {
   await initBashkit();
   let abort = new AbortController();
-  const customBuiltins = {
-    git: (ctx) => gitBuiltin(ctx.argv).then(withNewline),
-    sqlite3: (ctx) => sqliteBuiltin(ctx.argv, ctx.cwd).then(withNewline),
-    python3: (ctx) => pythonBuiltin(ctx.argv, abort.signal).then(withNewline),
-    pip: (ctx) => pipBuiltin(ctx.argv, abort.signal).then(withNewline),
-    qjs: (ctx) => qjsBuiltin(ctx.argv, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
-    tjs: (ctx) => tjsBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
-    node: (ctx) => nodeBuiltin(ctx.argv, ctx.cwd, { signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline),
-    curl: (ctx) => curlBuiltin('curl', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
-    wget: (ctx) => curlBuiltin('wget', ctx.argv, ctx.cwd, abort.signal).then(withNewline),
-  };
+  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline)]));
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
   await bash.execute(lookupPrologue(Object.keys(customBuiltins)));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
