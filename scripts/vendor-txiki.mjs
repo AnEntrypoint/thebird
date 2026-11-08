@@ -30,7 +30,12 @@ const work = join(tmpdir(), 'thebird-txiki');
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 async function fetchArchive(url, expected, dest) {
-  const response = await fetch(url);
+  let response;
+  for (let attempt = 1; ; attempt++) {
+    response = await fetch(url);
+    if (response.ok || attempt === 4 || response.status < 500) break;
+    await new Promise((done) => setTimeout(done, attempt * 5000));
+  }
   if (!response.ok) throw new Error(`fetch ${url}: HTTP ${response.status}`);
   writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
   const digest = sha256(dest);
