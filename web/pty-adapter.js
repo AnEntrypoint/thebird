@@ -12,7 +12,7 @@ const CONTROL_KEYS = {
   '\x01': 'home', '\x05': 'end', '\x02': 'left', '\x06': 'right', '\x10': 'up', '\x0e': 'down',
   '\x0b': 'killEnd', '\x15': 'killHome', '\x17': 'killWord', '\x0c': 'clear', '\t': 'complete',
 };
-const CLEAR_SCREEN = '\x1b[2J\x1b[3J\x1b[H';
+const CLEAR_SCREEN = '\x1b[H\x1b[2J';
 const up = (rows) => (rows > 0 ? `\x1b[${rows}A` : '');
 const isSpace = (char) => /\s/.test(char);
 const commonPrefix = (words) => words.reduce((prefix, word) => {

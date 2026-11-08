@@ -114,6 +114,22 @@ if (existsSync(chrome)) {
   check('xterm enters and leaves the alternate screen, and the normal screen does not keep its text', vt.alternate === 'alternate' && vt.normal === 'normal' && vt.altGone === true, JSON.stringify(vt));
   check('a 200-character line wraps across rows and reads back as one line', vt.wrapped >= 2 && vt.longLine === true, JSON.stringify(vt));
   check('a terminal resize reaches the shell as COLUMNS and LINES', vt.size === 'cols-60-lines-20', JSON.stringify(vt.size));
+  const scroll = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await type('seq 1 300');
+      await press('Enter');
+      await waitFor("document.body.dataset.busy !== 'true'", 40000);
+      scroll.history = await evaluate('globalThis.thebird.term.buffer.active.baseY');
+      await evaluate('globalThis.thebird.term.scrollLines(-50)');
+      scroll.viewportUp = await evaluate('globalThis.thebird.term.buffer.active.viewportY');
+      await press('l', { ctrl: true });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      scroll.historyAfterClear = await evaluate('globalThis.thebird.term.buffer.active.baseY');
+      scroll.lineOneKept = await evaluate("globalThis.thebird.text().split('\\n').includes('1')");
+    },
+  });
+  check('scrollback keeps history: wheel-style scrolling moves the viewport up, and Ctrl-L keeps the history and line 1', scroll.history > 0 && scroll.viewportUp < scroll.history && scroll.historyAfterClear > 0 && scroll.lineOneKept === true, JSON.stringify(scroll));
   const host = await terminal([['run', 'node -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('node: command not found'));
 
