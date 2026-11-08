@@ -83,7 +83,7 @@ const objectType = (name) => {
 
 const definedIn = (text, name) => new RegExp(`(\\bfunction\\s*\\*?\\s*${name}\\b|\\b(const|let|var|class)\\s+${name}\\b|\\b${name}\\s*\\([^)]*\\)\\s*\\{|['"]${name}['"]\\s*[:,)]|\\b${name}\\s*:)`).test(text);
 const sourceText = [...walk(repo('src')), ...walk(repo('web')).filter((path) => !path.includes('/vendor/')), ...walk(repo('scripts')), ...walk(repo('bin'))]
-  .filter((path) => /\.(m?js|html|js)$/.test(path))
+  .filter((path) => /\.(m?js|html|js|c|h)$/.test(path))
   .map((path) => readFileSync(path, 'utf8'))
   .join('\n');
 
