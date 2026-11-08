@@ -55,6 +55,7 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 - Tab: command names on the first word, otherwise workspace paths.
 - Ctrl-C: cancels the running command and drops queued lines.
 - Ctrl-L clears the output. Ctrl-U clears the line. Ctrl-A and Ctrl-E move to the start and end of the line.
+- Left, Right, Home, End and Delete edit the line, Ctrl-K cuts to the end and Ctrl-W cuts the word before the cursor. Paste inserts the text, and each pasted newline submits a line.
 
 History is kept in localStorage under `thebird.history`. It holds the submitted command lines only, capped at 500.
 
