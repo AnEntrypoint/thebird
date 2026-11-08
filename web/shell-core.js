@@ -4,6 +4,7 @@ const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')'
 const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', '>>', '>', '<', '|', '(', ')', ';', '&'];
 const REDIRECTS = new Set(['>', '>>', '<', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
+const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 
 class ShellExit {
   constructor(code) {
@@ -47,7 +48,7 @@ function parameterPart(text) {
   const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:(:?[-+=?])(.*))?$/s.exec(text);
   if (!m) throw syntaxError(`bad substitution ${text}`);
   if (m[1]) return { k: 'len', name: m[2] };
-  return { k: 'param', name: m[2], op: m[3] ?? null, word: m[4] ?? '' };
+  return { k: 'param', name: m[2], op: m[3] ?? null, word: readParts(m[4] ?? '', 0, new Set()).parts };
 }
 
 function readDollar(src, i) {
@@ -66,9 +67,9 @@ function readDollar(src, i) {
     if (close < 0) throw unterminated('parameter expansion');
     return { part: parameterPart(src.slice(i + 2, close)), end: close + 1 };
   }
-  if (next !== undefined && /[?#@*$!0-9]/.test(next)) return { part: { k: 'param', name: next, op: null, word: '' }, end: i + 2 };
+  if (next !== undefined && /[?#@*$!0-9]/.test(next)) return { part: { k: 'param', name: next, op: null, word: [] }, end: i + 2 };
   const name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i + 1));
-  if (name) return { part: { k: 'param', name: name[0], op: null, word: '' }, end: i + 1 + name[0].length };
+  if (name) return { part: { k: 'param', name: name[0], op: null, word: [] }, end: i + 1 + name[0].length };
   return { part: { k: 'sq', s: '$' }, end: i + 1 };
 }
 
@@ -162,6 +163,14 @@ export function tokenize(src) {
   return tokens;
 }
 
+const isAssignment = (parts) => parts[0]?.k === 'lit' && ASSIGNMENT.test(parts[0].s);
+
+function parseAssignment(parts) {
+  const [, name] = ASSIGNMENT.exec(parts[0].s);
+  const rest = parts[0].s.slice(name.length + 1);
+  return { name, value: rest ? [{ k: 'lit', s: rest }, ...parts.slice(1)] : parts.slice(1) };
+}
+
 function parse(tokens) {
   let pos = 0;
 
@@ -175,18 +184,22 @@ function parse(tokens) {
   };
 
   const parseSimple = () => {
+    const assigns = [];
     const words = [];
     const redirects = [];
     while (pos < tokens.length) {
       const token = tokens[pos];
-      if (token.parts) {
+      if (token.parts && !words.length && isAssignment(token.parts)) {
+        assigns.push(parseAssignment(token.parts));
+        pos++;
+      } else if (token.parts) {
         words.push(token.parts);
         pos++;
       } else if (REDIRECTS.has(token.op)) redirects.push(parseRedirect());
       else break;
     }
-    if (!words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
-    return { type: 'simple', words, redirects };
+    if (!assigns.length && !words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
+    return { type: 'simple', assigns, words, redirects };
   };
 
   const parseCommand = () => {
@@ -292,6 +305,13 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
     },
+    export: ({ argv }) => {
+      for (const arg of argv) {
+        const eq = arg.indexOf('=');
+        if (eq > 0) vars.set(arg.slice(0, eq), arg.slice(eq + 1));
+      }
+      return ok('');
+    },
     cat({ argv, stdin }) {
       if (!argv.length) return ok(stdin ?? '');
       let out = '';
@@ -323,12 +343,13 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     },
   };
 
-  const paramValue = (part) => {
-    if (part.name === '?') return String(state.status);
-    throw new Error(`$${part.name} is not supported yet`);
+  const variableValue = (name) => {
+    if (name === '?') return String(state.status);
+    if (/^[0-9#@*$!]$/.test(name)) throw new Error(`$${name} is not supported yet`);
+    return vars.get(name);
   };
 
-  async function expandChars(parts, inDouble) {
+  async function expandChars(parts, inDouble, sink) {
     const chars = [];
     const add = (text, quoted) => {
       for (const c of text) chars.push({ c, q: quoted, split: !quoted });
@@ -336,11 +357,36 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     for (const part of parts) {
       if (part.k === 'lit') add(part.s, false);
       else if (part.k === 'sq') add(part.s, true);
-      else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true)));
-      else if (part.k === 'param') add(paramValue(part), inDouble);
+      else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
+      else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
+      else if (part.k === 'len') add(String((variableValue(part.name) ?? '').length), inDouble);
+      else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
     }
     return chars;
+  }
+
+  async function parameterText(part, sink) {
+    const value = variableValue(part.name);
+    const unset = part.op?.startsWith(':') ? !value : value === undefined;
+    if (part.op === null) return value ?? '';
+    if (part.op === ':-' || part.op === '-') return unset ? await expandText(part.word, sink) : value;
+    throw new Error(`${part.name}${part.op} is not supported yet`);
+  }
+
+  async function expandText(parts, sink) {
+    return (await expandChars(parts, false, sink)).map((ch) => ch.c).join('');
+  }
+
+  async function commandText(src, sink) {
+    const sub = { out: '', err: '' };
+    try {
+      await runSequence(parseScript(src), '', sub);
+    } catch (err) {
+      if (!(err instanceof ShellExit)) throw err;
+    }
+    sink.err += sub.err;
+    return sub.out.replace(/\n+$/, '');
   }
 
   function splitFields(chars) {
@@ -356,34 +402,52 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return fields;
   }
 
-  async function expandWord(parts) {
-    const fields = splitFields(await expandChars(parts, false));
+  async function expandWord(parts, sink) {
+    const fields = splitFields(await expandChars(parts, false, sink));
     if (!fields.length && parts.some((part) => part.k === 'sq' || part.k === 'dq')) return [''];
     return fields.map((field) => field.map((ch) => ch.c).join(''));
   }
 
-  async function expandWords(words) {
+  async function expandWords(words, sink) {
     const argv = [];
-    for (const word of words) argv.push(...(await expandWord(word)));
+    for (const word of words) argv.push(...(await expandWord(word, sink)));
     return argv;
   }
 
-  const wordPath = async (parts) => resolvePath((await expandWord(parts))[0] ?? '');
+  const wordPath = async (parts, sink) => resolvePath((await expandWord(parts, sink))[0] ?? '');
 
-  async function runSimple(node, stdin) {
-    const argv = await expandWords(node.words);
+  async function runSimple(node, stdin, sink) {
+    const argv = await expandWords(node.words, sink);
+    const assigned = [];
+    for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
+    if (!argv.length) {
+      for (const [name, value] of assigned) vars.set(name, value);
+      return ok('');
+    }
+    const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
+    for (const [name, value] of assigned) vars.set(name, value);
+    try {
+      return await runCommand(node, argv, stdin, sink);
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) vars.delete(name);
+        else vars.set(name, value);
+      }
+    }
+  }
+
+  async function runCommand(node, argv, stdin, sink) {
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op === '<') {
         try {
-          input = host.read(await wordPath(redirect.target));
+          input = host.read(await wordPath(redirect.target, sink));
         } catch {
-          return { code: 1, out: '', err: `${argv[0] ?? ''}: no such file\n` };
+          return { code: 1, out: '', err: `${argv[0]}: no such file\n` };
         }
       }
     }
     const name = argv[0];
-    if (name === undefined) return ok('');
     if (!Object.hasOwn(commands, name)) return { code: 127, out: '', err: `${name}: command not found\n` };
     const result = await commands[name]({ argv: argv.slice(1), stdin: input });
     let { out, err } = result;
@@ -392,12 +456,12 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
         out += err;
         err = '';
       } else if (redirect.op === '>' || redirect.op === '>>') {
-        const path = await wordPath(redirect.target);
+        const path = await wordPath(redirect.target, sink);
         const prior = redirect.op === '>>' && host.exists(path) ? host.read(path) : '';
         host.write(path, prior + out);
         out = '';
       } else if (redirect.op === '2>' || redirect.op === '2>>') {
-        const path = await wordPath(redirect.target);
+        const path = await wordPath(redirect.target, sink);
         const prior = redirect.op === '2>>' && host.exists(path) ? host.read(path) : '';
         host.write(path, prior + err);
         err = '';
@@ -406,13 +470,13 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     return { code: result.code, out, err };
   }
 
-  async function runSubshell(node, stdin) {
+  async function runSubshell(node, stdin, sink) {
     const savedCwd = state.cwd;
     const savedVars = new Map(vars);
-    const sink = { out: '', err: '' };
+    const inner = { out: '', err: '' };
     let code;
     try {
-      code = await runSequence(node.list, stdin, sink);
+      code = await runSequence(node.list, stdin, inner);
     } catch (err) {
       if (!(err instanceof ShellExit)) throw err;
       code = err.code;
@@ -421,7 +485,7 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
       vars.clear();
       for (const [name, value] of savedVars) vars.set(name, value);
     }
-    return { code, out: sink.out, err: sink.err };
+    return { code, out: inner.out, err: inner.err };
   }
 
   async function runPipeline(pipe, stdin, sink) {
@@ -429,7 +493,7 @@ export function createShell({ host, cwd = '/workspace' } = {}) {
     let code = 0;
     for (let i = 0; i < pipe.cmds.length; i++) {
       const cmd = pipe.cmds[i];
-      const result = cmd.type === 'subshell' ? await runSubshell(cmd, input) : await runSimple(cmd, input);
+      const result = cmd.type === 'subshell' ? await runSubshell(cmd, input, sink) : await runSimple(cmd, input, sink);
       code = result.code;
       sink.err += result.err;
       if (i === pipe.cmds.length - 1) sink.out += result.out;
