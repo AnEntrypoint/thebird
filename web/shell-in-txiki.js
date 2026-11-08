@@ -1,7 +1,6 @@
 import { runTjs } from './txiki-in-page.js';
 
-const CORE = new URL('./shell-core.js', import.meta.url).href;
-const PROGRAM = new URL('./shell-program.js', import.meta.url).href;
+const MODULES = ['shell-sed.js', 'shell-core.js', 'shell-program.js'];
 const MARKER = '\u0001';
 const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget'];
 
@@ -14,8 +13,8 @@ const loadText = async (url) => {
 };
 
 const programText = () => {
-  source ??= Promise.all([loadText(CORE), loadText(PROGRAM)])
-    .then(([core, program]) => `${core.replace(/^export /gm, '')}\n${program}`)
+  source ??= Promise.all(MODULES.map((name) => loadText(new URL(`./${name}`, import.meta.url).href)))
+    .then((texts) => texts.map((text) => text.replace(/^import .*;$/gm, '').replace(/^export /gm, '')).join('\n'))
     .catch((err) => {
       source = null;
       throw err;

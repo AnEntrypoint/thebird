@@ -23,6 +23,7 @@ Phase A changes. None of these has been run through `npm run check`, `npm run li
 | this series (see git log) | scripts/witness-shell.mjs | grep, hostname, id | Same group as above. |
 | process model commit | web/shell-core.js | &, $!, ps, kill, wait | Background jobs: `cmd &` starts a pipeline with its own AbortController, `$!` is its PID, `wait` returns its status, `kill` aborts it with a signal number (code 128 + signal), `ps` prints the table. The witness group `process: ...` in scripts/witness-shell.mjs must pass: PIDs start at 101, the shell is PID 100, `ps` header and shell row are exact, `kill` of an unknown PID exits 1, `kill -l` lists HUP INT KILL TERM. Jobs still running at the end of a run receive SIGHUP (129). |
 | process model commit | web/shell-core.js | sink signal | Each sink carries its signal (`sink.signal`) instead of a module-level `runSignal`. `sleep` takes the signal from dispatch. Every inner sink (group, subshell, if, for, function, command substitution) copies it. The coreutils and Ctrl-C groups must still pass, since abort now travels through the sink. |
+| sed commit | web/shell-sed.js | sed | `sed: ...` group in scripts/witness-shell.mjs: s with g, -n with a numeric address and p, a regex range with d, & and \\1 \\2 replacements, -i then cat, a missing file exits 2 with `can't read`, an unknown command exits 1 with `char 1: unknown command`. The module is JavaScript RegExp, not POSIX. Hold space, branching, q, a, i, c, y, w, r and the `!` negation are not supported. |
 
 ## Blocked (not coded, named blocker)
 
@@ -31,8 +32,7 @@ Phase A changes. None of these has been run through `npm run check`, `npm run li
 | Symlinks (`ln -s`, `readlink`, `test -L`, `ls -l` arrows, `rm` of a link surviving a restart) | The txiki fs binding has no link or readlink host import. | A C change in `scripts/txiki/browser/fs-browser.c`, a zig rebuild, a new `tjs.wasm` pin in `scripts/vendor-txiki.mjs` and `.github/workflows/pages.yml`, and the txiki workflow. |
 | External builtins from the txiki run (`git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`) | The engine run is synchronous and cannot call page-side workers or fetch. | A host-call bridge, or a stepwise design. Owner decision. |
 | Ctrl-C and `COMMAND_TIMEOUT_MS` in the txiki path | The page's abort signal does not reach the engine. Only timeouts inside the program via `setTimeout` exist. | An engine-side abort event. |
-| `tar` | Coded in web/shell-tar.js (see the tar rows). Listed here until its witness runs. | Witness group `tar: ...`. |
-| `sed`, `awk`, `jq` | bashkit provides them today; not in the core. Each is a parser of its own. | One group each, with its own witness. |
+| `awk`, `jq` | bashkit provides them today; not in the core. Each is a parser of its own. | One group each, with its own witness. |
 
 ## Process model: a deliberate deviation
 

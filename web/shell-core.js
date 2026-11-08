@@ -1,3 +1,5 @@
+import { runSed } from './shell-sed.js';
+
 export const COMMAND_TIMEOUT_MS = 300000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
@@ -795,6 +797,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       return ok(out);
     },
+    sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
   };
 
   const signalNumber = (spec) => {
@@ -1223,6 +1226,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     }
     return status;
   }
+
+  const toolContext = (stdin) => ({ host, cwd: state.cwd, stdin: stdin ?? '', resolve: resolvePath, format: formatPrintf });
 
   const stopJobs = async () => {
     const running = [...jobs.values()].filter((job) => !job.done);

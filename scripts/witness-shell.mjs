@@ -264,6 +264,26 @@ group('process: & starts a job, $! names its PID, ps lists it, kill signals it a
   check('process: ps and kill resolve as core commands and wait as a builtin', found.stdout === '/bin/ps\n/bin/kill\nbuiltin\n', JSON.stringify(found.stdout));
 });
 
+group('sed: substitution, addresses, ranges, replacements, in-place edits and errors', async () => {
+  const sh = await shell({ '/workspace/a.txt': 'one\ntwo\nthree\nfour\n', '/workspace/b.txt': 'x\ny' });
+  const global = await run(sh, "sed 's/o/0/g' a.txt");
+  check('sed: s with g replaces every match on each line', global.stdout === '0ne\ntw0\nthree\nf0ur\n', JSON.stringify(global.stdout));
+  const numbered = await run(sh, "sed -n '2p' a.txt");
+  check('sed: -n with a numeric address and p prints only that line', numbered.stdout === 'two\n', JSON.stringify(numbered.stdout));
+  const ranged = await run(sh, "sed '/two/,/three/d' a.txt");
+  check('sed: a regex range with d deletes the lines from start to end inclusive', ranged.stdout === 'one\nfour\n', JSON.stringify(ranged.stdout));
+  const groups = await run(sh, "sed -E 's/(o)(n)/[&]\\2\\1/' a.txt");
+  check('sed: & inserts the whole match and \\1 and \\2 insert the groups', groups.stdout === '[on]noe\ntwo\nthree\nfour\n', JSON.stringify(groups.stdout));
+  const unterminated = await run(sh, "sed 's/y/z/' b.txt");
+  check('sed: input without a trailing newline gives output without one', unterminated.stdout === 'x\nz', JSON.stringify(unterminated.stdout));
+  const inPlace = await run(sh, "sed -i 's/two/TWO/' a.txt; cat a.txt");
+  check('sed: -i rewrites the file and prints nothing itself', inPlace.stdout === 'one\nTWO\nthree\nfour\n', JSON.stringify(inPlace.stdout));
+  const missing = await run(sh, 'sed p nosuch.txt; echo rc=$?');
+  check('sed: a missing file is reported and exits 2', missing.stdout === 'rc=2\n' && missing.stderr.includes("sed: can't read nosuch.txt: No such file or directory"), JSON.stringify([missing.stdout, missing.stderr]));
+  const unknown = await run(sh, 'sed k a.txt; echo rc=$?');
+  check('sed: an unknown command is reported with its position and exits 1', unknown.stdout === 'rc=1\n' && unknown.stderr.includes("sed: -e expression #1, char 1: unknown command: 'k'"), JSON.stringify([unknown.stdout, unknown.stderr]));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
