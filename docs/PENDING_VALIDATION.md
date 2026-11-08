@@ -181,6 +181,33 @@ Witness, to run in Phase B (through `runShellInTxiki`, with the rebuilt wasm):
 
 The brief asked for the process list and signals to come from the txiki runtime own process and /proc access. The browser build of txiki does not provide them: `scripts/txiki/stubs.tsv` excludes `mod_process` (`tjs__mod_process_init`), and stubs `uv_os_getpid` and `uv_os_getppid` as having no host process information. There is no /proc in the page. So the process model is emulated inside `web/shell-core.js`: a table of jobs with PIDs, where the shell is PID 100 and jobs start at 101. Signals are delivered by aborting the job AbortController with a `Signalled` reason. This is the only model the browser can run. Confirm it in Phase B, and revisit only if the txiki build gains a process binding.
 
+## Phase A: pip, boot splash, bundle and wget (74e0b7d, 43258cb, f7cdc6c, 482c0fd, f825d17, 6131631, not built)
+
+Each row names the file, the place in it, and the witness that must pass in Phase B. The witness names are the `check(...)` labels in `scripts/witness.mjs`.
+
+| Commit | File | Row | Witness |
+| --- | --- | --- | --- |
+| 74e0b7d | web/python-worker.js | `ensureMicropip` (memoised, reset on failure) and the `version` handler, which reads micropip's version from `importlib.metadata` | `pip --version and pip -V print the micropip version the page loads` |
+| 74e0b7d | web/python-worker.js | `install` calls `ensureMicropip` before it installs | `in-page pip installs a pure package from PyPI, and python3 imports it in the same page` |
+| 74e0b7d | web/python-in-page.js | `PIP_USAGE`, `UsageError` (`exitCode = 2`), and the `pipBuiltin` branches for no verb, `--help`/`-h`/`help`, `--version`/`-V`, an unknown verb, and `install` with no names | `pip --help prints usage and exits 0`; `bare pip, an unknown pip command and pip install with no names exit 2 with a message`; `a bare pip prints its usage to stderr only, and exits 2`; `pip --help prints its usage to stdout, so it survives 2>/dev/null` |
+| 74e0b7d, f825d17 | web/python-in-page.js | `pipBuiltin` names check: a bad name throws `UsageError`; the empty-install message is worded as an instruction | `in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL` |
+| 74e0b7d | web/bash-shell.js | `builtinExit`: a builtin's `err.exitCode` becomes `$?` (the custom-builtin wrapper records it, and `run` applies it) | `bare pip, an unknown pip command and pip install with no names exit 2 with a message` (the `bare-rc=2`, `unknown-rc=2`, `install-rc=2` values) |
+| 74e0b7d | web/txiki-in-page.js | `startBuiltin` settles a builtin error with `code: err?.exitCode ?? 1` (a cancelled builtin is 130) | No witness yet covers a pip usage error through the txiki shell. The pip rows above run in the page shell. Phase B must add a txiki-shell check of `pip frobnicate` (exit 2) or record it as not covered. |
+| 43258cb | web/splash.js | `loading(text = LOADING)`: the text reaches the effect and the plain fallback | `the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal` |
+| 43258cb | web/terminal.js | `splash.loading('loading the shell')` replaces the `pty.writeOutput('loading the shell\n')` line; `splash.done()` after `client.ready`; `splash.failed` in the catch | `the boot splash is hidden once the engine is ready`; `the cold python3 call shows the tte-js splash while the bundle loads, then hides it` |
+| 43258cb | scripts/witness.mjs | the `loading the shell` filter is removed from the terminal-line comparison (its line was 191) | `the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal` |
+| f7cdc6c | web/curl-in-page.js | `if (opts.output === '/dev/null') return '';` before the file write | `wget -O /dev/null fetches from a CORS host and discards the body without an error` |
+| 482c0fd | scripts/build-pages.mjs | `build` from esbuild bundles `_site/web/terminal.js` into `_site/web/terminal.bundle.js` (`esm`, `es2022`), and `_site/index.html` is rewritten to load the bundle | `the built page loads one bundled script that has no relative module imports, and runs` |
+| 482c0fd | package.json, package-lock.json | `esbuild` `0.28.2` as an exact devDependency, with its lockfile | `node scripts/build-pages.mjs` completes (Phase B); the bundle check above |
+| 482c0fd | .github/workflows/pages.yml | `npm ci` before `node scripts/build-pages.mjs` in the build job; no witness is added to CI | `npm ci` installs the pinned esbuild in the Pages build (Phase B) |
+| 6131631 | scripts/witness.mjs | the pip CLI block, the quiet and stdout `--help` checks, the splash probe, the bundle check and the `wget -O /dev/null` run in the `fetched` list | the checks named in the rows above; `devnull-wget-ok` |
+
+Also in Phase A: `web/terminal.html` still loads `web/terminal.js` for the dev relay. Only the built `_site/index.html` loads the bundle.
+
+Phase B must also confirm that `web/python-in-page.js` line 35 (`new URL('./python-worker.js', import.meta.url)`) still resolves in the bundle. The worker is a separate file in `_site/web/`, so the bundle does not move it.
+
+Open defect, found in the local Chromium witness run (117 PASS, 1 FAIL, `WITNESS-EXIT 1`) and not fixed here: the python warm-call timing check (178 ms over 30 calls against a 5 ms budget). Measured cause: each call walks the workspace on both sides (`shimPaths` and `outbound` in `web/python-in-page.js`, `workspaceTree` and `collect` in `web/python-worker.js`). An empty workspace costs 3.4 ms, 300 files cost 9.6–13.3 ms, the page walk 1.7 ms, and the worker reads every file on each call. The fix path is a change journal (the page records writes and the worker keeps a revision per file), so a warm call touches only changed paths. The threshold is not moved.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
