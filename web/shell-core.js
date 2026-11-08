@@ -450,10 +450,10 @@ export function evaluateArithmetic(src, lookup) {
   return value;
 }
 
-export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
-  const state = { cwd, status: 0 };
-  const vars = new Map();
-  const functions = new Map();
+export function createShell({ host, cwd = '/workspace', builtins = [], saved = null } = {}) {
+  const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
+  const vars = new Map(saved?.vars ?? []);
+  const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
   let runSignal = null;
   const frames = [];
@@ -1077,5 +1077,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [] } = {}) {
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], functions: [...functions] }),
   };
 }
