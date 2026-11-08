@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,8 +103,15 @@ function bodyFor(symbol, returns) {
   return 'return 0;';
 }
 
-function flagsFor({ tree, build }) {
-  return ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${join(tree, 'deps', 'quickjs')}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`];
+const zigLibDir = (zig) => {
+  const exe = realpathSync(execFileSync('which', [zig], { encoding: 'utf8' }).trim());
+  return resolve(dirname(exe), 'lib');
+};
+
+const prefixMapsFor = (zig) => [`-ffile-prefix-map=${root}=thebird`, `-ffile-prefix-map=${work}=build`, `-ffile-prefix-map=${zigLibDir(zig)}=zig-lib`];
+
+function flagsFor({ tree, build }, zig) {
+  return ['-target', 'wasm32-wasi', '-O2', '-D_GNU_SOURCE', ...prefixMapsFor(zig), '-D_WASI_EMULATED_SIGNAL', '-D_WASI_EMULATED_PROCESS_CLOCKS', '-D_WASI_EMULATED_GETPID', '-DTJS__PLATFORM="wasi"', '-include', join(build, 'txiki-browser.h'), '-w', `-I${build}`, `-I${join(tree, 'src')}`, `-I${join(tree, 'deps', 'quickjs')}`, `-I${join(tree, 'deps', 'libuv', 'include')}`, `-I${join(tree, 'deps', 'ada')}`];
 }
 
 function compile(zig, flags, tree, source, command, extra, objects, results) {
@@ -120,7 +127,7 @@ function compile(zig, flags, tree, source, command, extra, objects, results) {
 }
 
 export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
-  const flags = flagsFor({ tree, build });
+  const flags = flagsFor({ tree, build }, zig);
   const objects = [];
   const results = [];
   compile(zig, flags, tree, 'deps/ada/ada.cpp', 'c++', ['-std=c++20', '-fno-exceptions', '-fno-rtti'], objects, results);
@@ -134,7 +141,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
 
 export function linkCheck({ tree }, objects, zig = process.env.ZIG || 'zig') {
   const output = join(work, 'tjs.wasm');
-  const args = ['cc', '-target', 'wasm32-wasi', '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
+  const args = ['cc', '-target', 'wasm32-wasi', ...prefixMapsFor(zig), '-mexec-model=reactor', '-Wl,--no-entry', '-Wl,--export-dynamic', '-Wl,--no-gc-sections', '-Wl,--export=malloc', '-Wl,--export=free', '-Wl,--export=realloc', '-Wl,--export=calloc', '-lc++', '-lc++abi', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks', '-lwasi-emulated-getpid', '-lm', '-o', output, ...objects];
   let stderr = '';
   try {
     execFileSync(zig, args, { cwd: tree, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' });
