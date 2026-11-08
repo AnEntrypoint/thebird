@@ -1,28 +1,61 @@
 const WORKSPACE = '/workspace';
-const PYODIDE_DIR = new URL('./vendor/pyodide/', import.meta.url).href;
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
+const INDEX_URL = 'https://pyodide.invalid/v314.0.7/';
 const MICROPIP_WHEEL = 'micropip-0.11.1-py3-none-any.whl';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
 
-let runtime;
+let runtime = null;
 let captured = null;
 let mirror = new Map();
 let micropipLoaded = null;
-let bundledLock = null;
+let bundle = null;
+let bundledNames = new Set();
 
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
 const normalizeName = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+const requestUrl = (input) => (typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+const contentType = (name) => (name.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream');
+
+function serveBundle() {
+  const network = self.fetch.bind(self);
+  self.fetch = (input, init) => {
+    const url = requestUrl(input);
+    if (!url.startsWith(INDEX_URL)) return network(input, init);
+    const name = url.slice(INDEX_URL.length);
+    const bytes = bundle.files.get(name);
+    if (!bytes) return Promise.resolve(new Response(null, { status: 404 }));
+    return Promise.resolve(new Response(bytes, { headers: { 'content-type': contentType(name) } }));
+  };
+}
+
+async function importBytes(bytes) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+  try {
+    return await import(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 const pythonRuntime = () => {
+  if (!bundle) throw new Error('the Python bundle has not been sent to the worker');
   runtime ??= (async () => {
-    const { loadPyodide } = await import(`${PYODIDE_DIR}pyodide.mjs`);
+    serveBundle();
+    const { loadPyodide } = await importBytes(bundle.files.get('pyodide.mjs'));
+    const { default: createPyodideModule } = await importBytes(bundle.files.get('pyodide.asm.mjs'));
     return loadPyodide({
-      indexURL: PYODIDE_DIR,
+      indexURL: INDEX_URL,
+      packageBaseUrl: INDEX_URL,
+      lockFileContents: bundle.lock,
+      createPyodideModule,
       stdout: (text) => captured?.push(text),
       stderr: (text) => captured?.push(text),
     });
-  })();
+  })().catch((err) => {
+    runtime = null;
+    throw err;
+  });
   return runtime;
 };
 
@@ -83,28 +116,27 @@ async function installMicropip(py) {
   py.unpackArchive(await response.arrayBuffer(), 'wheel');
 }
 
-async function bundledNames() {
-  bundledLock ??= fetch(`${PYODIDE_DIR}pyodide-lock.json`).then((response) => response.json()).then((lock) => new Set(Object.keys(lock.packages))).catch((err) => {
-    bundledLock = null;
-    throw err;
-  });
-  return bundledLock;
-}
-
 const handlers = {
+  load({ files, lock }) {
+    bundle = { files, lock };
+    bundledNames = new Set(Object.keys(JSON.parse(lock).packages));
+    return null;
+  },
   async run({ paths, put, source, filename }) {
     const py = await pythonRuntime();
     py.FS.mkdirTree(WORKSPACE);
     py.FS.chdir(WORKSPACE);
     reconcile(py, paths, put);
-    const result = await capture(() => py.runPython(source, { filename }));
+    const result = await capture(async () => {
+      await py.loadPackagesFromImports(source, { messageCallback: () => {}, errorCallback: (text) => captured?.push(text) });
+      py.runPython(source, { filename });
+    });
     return { ...result, ...collect(py) };
   },
   async install({ names }) {
     const py = await pythonRuntime();
-    const bundled = await bundledNames();
-    const pinned = names.find((name) => bundled.has(normalizeName(name)));
-    if (pinned) throw new Error(`pip install: ${pinned} is part of the Pyodide package set, which is not vendored, so it cannot be installed in-page`);
+    const pinned = names.find((name) => bundledNames.has(normalizeName(name)));
+    if (pinned) throw new Error(`pip install: ${pinned} is part of the Pyodide package set, so it cannot be installed in-page`);
     micropipLoaded ??= installMicropip(py).catch((err) => {
       micropipLoaded = null;
       throw err;

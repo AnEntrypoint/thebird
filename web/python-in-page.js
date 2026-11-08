@@ -1,5 +1,6 @@
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
+import { pythonBundle } from './python-bundle.js';
 
 const WORKSPACE = '/workspace';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
@@ -11,21 +12,40 @@ let nextId = 0;
 const pending = new Map();
 const known = new Map();
 const knownRevision = new Map();
+let phaseSink = () => {};
 
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
 
-function spawn() {
+export function onPythonPhase(sink) {
+  phaseSink = sink;
+}
+
+function spawn(bundle) {
   if (worker) return worker;
   worker = new Worker(new URL('./python-worker.js', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     const call = pending.get(data.id);
+    if (!call) return;
     pending.delete(data.id);
     if (data.ok) call.resolve(data.result);
     else call.reject(new Error(data.error));
   };
   worker.onerror = (event) => stop(new Error(event.message || 'python worker failed'));
+  worker.postMessage({ id: 0, op: 'load', files: bundle.files, lock: bundle.lock });
   return worker;
+}
+
+async function bundleFor(signal) {
+  try {
+    const bundle = await pythonBundle({ signal, onStart: () => phaseSink('loading') });
+    phaseSink('done');
+    return bundle;
+  } catch (err) {
+    phaseSink(signal?.aborted ? 'done' : 'failed', err.message);
+    if (signal?.aborted) throw new Error(CANCELLED);
+    throw err;
+  }
 }
 
 function stop(reason) {
@@ -37,9 +57,11 @@ function stop(reason) {
   pending.clear();
 }
 
-function request(op, payload, signal) {
-  if (signal?.aborted) return Promise.reject(new Error(CANCELLED));
-  const target = spawn();
+async function request(op, payload, signal) {
+  if (signal?.aborted) throw new Error(CANCELLED);
+  const bundle = await bundleFor(signal);
+  if (signal?.aborted) throw new Error(CANCELLED);
+  const target = spawn(bundle);
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     const onAbort = () => stop(new Error(CANCELLED));
