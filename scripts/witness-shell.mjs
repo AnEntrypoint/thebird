@@ -284,7 +284,7 @@ group('links: ln -s, readlink, test -L, ls -l arrows, rm of a link, and links ac
   const second = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
   const restarted = await run(second, 'cd notes && readlink dirlink && test -L dirlink && echo still-link');
   check('links: a link survives a new shell over the same store', restarted.stdout === 'dir\nstill-link\n', JSON.stringify(restarted.stdout));
-  await run(second, 'cd notes && rm dirlink');
+  await run(second, 'rm dirlink');
   const third = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
   const gone = await run(third, 'cd notes && test -L dirlink || echo gone && ls dir');
   check('links: rm of a link is still in effect after a restart, and the directory it pointed at is untouched', gone.stdout === 'gone\ninner.txt\n', JSON.stringify(gone.stdout));
