@@ -129,7 +129,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else {
     const link = linkCheck(staged, objects, zig);
     const uvSymbols = link.undefinedSymbols.filter((name) => name.startsWith('uv_'));
-    console.log(`txiki link gate: ${link.undefinedSymbols.length} undefined symbols (${uvSymbols.length} uv_*)`);
+    console.log(`txiki link gate: ${link.undefinedSymbols.length} undefined symbols (${uvSymbols.length} uv_*), linked ${link.linked}`);
     for (const name of link.undefinedSymbols) console.log(`UNDEFINED ${name}`);
+    if (!link.linked) process.exitCode = 1;
   }
 }
