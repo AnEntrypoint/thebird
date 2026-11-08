@@ -167,7 +167,7 @@ export async function pipBuiltin(argv, signal) {
   if (verb === '--help' || verb === '-h' || verb === 'help') return PIP_USAGE;
   if (verb === '--version' || verb === '-V') return `pip ${finish(await request('version', {}, signal)).trim()} (micropip, in-page)`;
   if (verb !== 'install') throw new UsageError(`pip: unknown command '${verb}'\n${PIP_USAGE}`);
-  if (names.length === 0) throw new UsageError(`pip install: name at least one package\n${PIP_USAGE}`);
+  if (names.length === 0) throw new UsageError(`pip install: give at least one package name\n${PIP_USAGE}`);
   const bad = names.find((name) => !PACKAGE_NAME.test(name));
   if (bad) throw new UsageError(`pip install: ${bad} is not a package name (version specifiers and URLs are not supported)`);
   return finish(await request('install', { names }, signal));
