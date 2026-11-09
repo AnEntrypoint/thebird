@@ -32,14 +32,15 @@ export async function createShell({ cwd = '/workspace' } = {}) {
   await initBashkit();
   let abort = new AbortController();
   let engineCancelled = false;
-  let builtinExit = null;
+  let builtinStatus = 1;
   const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline, (err) => {
     engineCancelled ||= err?.message === 'cancelled';
-    if (err?.exitCode !== undefined) builtinExit = err.exitCode;
+    builtinStatus = err?.message === 'cancelled' ? 130 : (err?.exitCode ?? 1);
     throw err;
   })]));
+  customBuiltins.thebird_status = () => String(builtinStatus);
   const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
-  await bash.execute(lookupPrologue(Object.keys(customBuiltins)));
+  await bash.execute(lookupPrologue(BUILTIN_NAMES));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
   let status = 0;
   let running = false;
@@ -52,7 +53,6 @@ export async function createShell({ cwd = '/workspace' } = {}) {
       running = true;
       cancelled = false;
       engineCancelled = false;
-      builtinExit = null;
       abort = new AbortController();
       let result;
       let streamed = Boolean(onOutput);
@@ -64,7 +64,6 @@ export async function createShell({ cwd = '/workspace' } = {}) {
         running = false;
         bash.clearCancel();
       }
-      if (builtinExit !== null) result = { ...result, exitCode: builtinExit };
       if (cancelled || engineCancelled) {
         streamed = false;
         result = { exitCode: 130, stdout: '', stderr: 'cancelled\n' };

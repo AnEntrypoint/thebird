@@ -34,5 +34,6 @@ type() {
   done
   return $rc
 }
-`;
+`
+  + inPageNames.map((name) => `${name}() {\n  command ${name} "$@" || return "$(thebird_status)"\n}\n`).join('');
 }
