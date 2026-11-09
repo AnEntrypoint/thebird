@@ -225,6 +225,26 @@ Observed before this pass, not a witness result for these commits: on the built 
 
 Known in this set: `thebird_status` is a bashkit builtin, so it shows in `compgen -c` and `command -v thebird_status`. Nothing else depends on it.
 
+## Phase B run 3: restart persistence and the command limit (final tree, not pushed until the witness is green)
+
+| Change | File | Cause and evidence | Witness |
+| --- | --- | --- | --- |
+| Files loaded from OPFS get a revision when the tree is hydrated | web/shims/fs.js (`loadTree`) | After a reload nothing had a revision, so the python journal (`changedSince(0)`) never sent those files to a new worker. `cat` read them, and python raised `FileNotFoundError`. The witness run before this fix failed `in-page python3 files survive a browser restart`. | `in-page python3 files survive a browser restart — PY-HELLO / PY-HELLO` (the python process reads the file after the reload) |
+| `COMMAND_TIMEOUT_MS` 300000 to 600000 | web/bash-shell.js, web/shell-core.js, scripts/witness.mjs (expiry check now twelve 55 s sleeps, `tick10` in and `tick11` out), scripts/witness-shell.mjs, scripts/lint-architecture.mjs, ARCHITECTURE.md, AGENTS.md, README.md | Cause: the first cold `python3` call on this link idles at about 290 s (5 MB bundle at about 80 KB/s, then Pyodide start and the micropip wheel). With the 300 s limit the first `pip --version` was cut: `error: resource limit exceeded: execution timeout (300s)`. bashkit's `execute()` ignores a per-call `timeoutMs` (probe: a constructor limit of 2 s cut `sleep 5` although the call asked for 10 s), so the limit cannot apply to the cold call alone. 600 s is about twice the measured load. | `timeout: the production limit is 600000 ms`; `a command past 600 s is cut at the limit with the expiry message`; `in-page pip installs a pure package from PyPI, and python3 imports it in the same page` |
+
+Pip on the warm page, built site (`_site`, served without COOP/COEP), typed into the page's terminal after a cold `python3 -c "print(1)"` that finished inside the limit. Each command wrote its stdout and stderr to files and echoed the exit code:
+
+```
+thebird /workspace> pip --version: rc=0 / OUT: pip 0.11.1 (micropip, in-page) / ERR: (empty)
+thebird /workspace> pip -V:        rc=0 / OUT: pip 0.11.1 (micropip, in-page) / ERR: (empty)
+thebird /workspace> pip --help:    rc=0 / OUT: usage: pip install <package>... / pip --version / pip --help / ERR: (empty)
+thebird /workspace> pip:           rc=2 / OUT: (empty) / ERR: pip: usage: pip install <package>... / pip --version / pip --help
+```
+
+Architecture lint, run alone: `258 claims: 258 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, exit 0. The hang recorded earlier: the run started in the previous session printed nothing for more than fifteen minutes, and its live check was a headless Chromium run that never returned. The lint writes only at its end, so its log holds no cause. Not established: whether the Chromium run stalled or the lint was waiting on the relay. This run finished in one wait under the same code.
+
+Full witness on this tree (`CHROME_BIN=/usr/bin/chromium npm run witness`): 134 PASS, 0 FAIL, `WITNESS-EXIT=0`, including the restart check, the 600 s expiry check and the pip rows. `npm run witness:shell`: 108 PASS, 0 FAIL. `npm run check`, `npm run lint:comments` (0 comments) and `node scripts/build-pages.mjs` pass.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
