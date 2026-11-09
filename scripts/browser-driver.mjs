@@ -28,7 +28,7 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [] }) {
+export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress }) {
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
     '--headless',
@@ -37,7 +37,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: 'ignore', detached: true });
 
   try {
     const portFile = join(profile, 'DevToolsActivePort');
@@ -106,6 +106,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     const until = Date.now() + timeoutMs;
     while (!(await evaluate("document.body && document.body.dataset.done === 'true'"))) {
       if (Date.now() > until) throw new Error('terminal did not finish: ' + url);
+      if (onProgress) onProgress(await evaluate("globalThis.thebird ? globalThis.thebird.text() : ''"));
       await sleep(300);
     }
     if (interact) {
@@ -131,9 +132,18 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     await Promise.race([once(child, 'exit'), sleep(10000)]);
     return state;
   } finally {
-    if (child.exitCode === null) {
-      child.kill('SIGKILL');
-      await once(child, 'exit');
+    if (child.exitCode === null && child.signalCode === null) {
+      killGroup(child);
+      await Promise.race([once(child, 'exit'), sleep(10000)]);
     }
+    killGroup(child);
+  }
+}
+
+function killGroup(child) {
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL');
   }
 }
