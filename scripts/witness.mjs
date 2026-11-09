@@ -11,6 +11,7 @@ import { vendorBashkit } from './vendor-bashkit.mjs';
 import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const COLD_START_MS = 900000;
 let failures = 0;
 
 function check(name, ok, detail = '') {
@@ -30,7 +31,7 @@ const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
-  const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), ...options });
+  const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: COLD_START_MS, ...options });
 
   const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40']]);
   check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
@@ -51,7 +52,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: 180000 });
+  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: COLD_START_MS });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
@@ -225,7 +226,27 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
         const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
         const first = await shell.runShellInTxiki('mkdir -p notes/txiki && cd notes/txiki && x=7 && echo first-$x', { cwd: '/workspace' });
         const second = await shell.runShellInTxiki('echo second-$x; pwd', { cwd: '/workspace', saved: first.saved });
-        globalThis.__txikiShellRuns = { first: { stdout: first.stdout, exitCode: first.exitCode }, second: { stdout: second.stdout, exitCode: second.exitCode } };
+        const pipVersion = await shell.runShellInTxiki('pip --version; echo rc=$?', { cwd: '/workspace' });
+        const pipBare = await shell.runShellInTxiki('pip; echo rc=$?', { cwd: '/workspace' });
+        const pipUnknown = await shell.runShellInTxiki('pip frobnicate; echo rc=$?', { cwd: '/workspace' });
+        const sqlite = await shell.runShellInTxiki('mkdir -p txiki-sql && cd txiki-sql && sqlite3 x.db "select 1"; echo rc=$?', { cwd: '/workspace' });
+        const curl = await shell.runShellInTxiki('curl http://127.0.0.1:1/; echo after-curl-rc=$?', { cwd: '/workspace' });
+        const pyController = new AbortController();
+        const pyStarted = performance.now();
+        setTimeout(() => pyController.abort(), 500);
+        const pyAbort = await shell.runShellInTxiki('python3 -c "import time; time.sleep(30)"', { cwd: '/workspace', signal: pyController.signal }).then((r) => ({ status: 'resolved ' + r.exitCode }),(err) => ({ status: String(err.message) })).then((r) => ({ ...r, elapsed: Math.round(performance.now() - pyStarted) }));
+        const engineRun = await (await import(new URL('web/txiki-in-page.js', location.href).href)).runTjs('console.log([typeof TextEncoder, typeof TextDecoder, typeof [].findLastIndex, JSON.stringify(String.fromCharCode(1)).length].join(" "))', '/workspace');
+        globalThis.__txikiShellRuns = {
+          sqlite: { stdout: sqlite.stdout, stderr: sqlite.stderr, exitCode: sqlite.exitCode },
+          curl: { stdout: curl.stdout, stderr: curl.stderr, exitCode: curl.exitCode },
+          pyAbort,
+          engine: engineRun.output,
+          first: { stdout: first.stdout, exitCode: first.exitCode },
+          second: { stdout: second.stdout, exitCode: second.exitCode },
+          pipVersion: { stdout: pipVersion.stdout, stderr: pipVersion.stderr, exitCode: pipVersion.exitCode },
+          pipBare: { stdout: pipBare.stdout, stderr: pipBare.stderr, exitCode: pipBare.exitCode },
+          pipUnknown: { stdout: pipUnknown.stdout, stderr: pipUnknown.stderr, exitCode: pipUnknown.exitCode },
+        };
       })().catch((err) => { globalThis.__txikiShellRuns = { error: String(err.message ?? err) }; })`);
       await waitFor('globalThis.__txikiShellRuns !== undefined', 300000);
       txikiShell.runs = JSON.parse(await evaluate('JSON.stringify(globalThis.__txikiShellRuns)'));
@@ -240,6 +261,17 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
+  const txikiPip = txikiShell.runs?.pipVersion ?? {};
+  check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));
+  const txikiBare = txikiShell.runs?.pipBare ?? {};
+  check('the txiki shell prints bare pip usage on stderr and exits 2', txikiBare.stdout === 'rc=2\n' && txikiBare.stderr.startsWith('pip: usage: pip install <package>...\n'), JSON.stringify(txikiBare));
+  const txikiUnknown = txikiShell.runs?.pipUnknown ?? {};
+  check("the txiki shell names an unknown pip command on stderr and exits 2", txikiUnknown.stdout === 'rc=2\n' && txikiUnknown.stderr.startsWith("pip: unknown command 'frobnicate'\n"), JSON.stringify(txikiUnknown));
+  const txikiRuns = txikiShell.runs ?? {};
+  check('sqlite3 inside the txiki shell prints 1 for select 1 and exits 0', txikiRuns.sqlite?.stdout === '1\nrc=0\n' && txikiRuns.sqlite?.stderr === '', JSON.stringify(txikiRuns.sqlite));
+  check('curl to a refused port inside the txiki shell writes an error to stderr, and the next command still runs', (txikiRuns.curl?.stderr ?? '') !== '' && /^after-curl-rc=[1-9]\d*$/m.test(txikiRuns.curl?.stdout ?? ''), JSON.stringify(txikiRuns.curl));
+  check('a python3 sleep is aborted at 500 ms inside the txiki shell and rejects with status 130 in under 5 s', txikiRuns.pyAbort?.status?.includes('status 130') === true && txikiRuns.pyAbort?.elapsed < 5000, JSON.stringify(txikiRuns.pyAbort));
+  check('the txiki engine has TextEncoder, TextDecoder and findLastIndex, and JSON escapes the marker byte', txikiRuns.engine === 'function function function 8\n', JSON.stringify(txikiRuns.engine));
   const loops = {};
   await terminal([], {
     interact: async ({ evaluate, waitFor }) => {
@@ -779,8 +811,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
   check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
-  const expiry = await terminal([['run', 'for i in 1 2 3 4 5 6; do sleep 55; echo tick$i; done; echo late-finish']], { timeoutMs: 900000 });
-  check('a command past 300 s is cut at the limit with the expiry message', expiry.out.includes('error: resource limit exceeded: execution timeout (300s)') && /^tick5$/m.test(expiry.out) && !/^late-finish$/m.test(expiry.out), expiry.out.split('\n').slice(-2).join(' / ').slice(0, 160));
+  const expiry = await terminal([['run', 'for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 55; echo tick$i; done; echo late-finish']], { timeoutMs: 1200000 });
+  check('a command past 600 s is cut at the limit with the expiry message', expiry.out.includes('error: resource limit exceeded: execution timeout (600s)') && /^tick10$/m.test(expiry.out) && !/^tick11$/m.test(expiry.out) && !/^late-finish$/m.test(expiry.out), expiry.out.split('\n').slice(-2).join(' / ').slice(0, 160));
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
