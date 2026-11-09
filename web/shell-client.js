@@ -10,6 +10,8 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   let grace = null;
   let markReady;
   let markFailed;
+  let markOnline;
+  let online = null;
   const ready = new Promise((ok, fail) => {
     markReady = ok;
     markFailed = fail;
@@ -28,8 +30,10 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
       return;
     }
     if ('ready' in data) {
-      if (data.ready) markReady();
-      else markFailed(new Error(data.error));
+      if (data.ready) {
+        markOnline();
+        markReady();
+      } else markFailed(new Error(data.error));
       return;
     }
     const waiter = pending.get(data.id);
@@ -47,10 +51,14 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   }
 
   function spawn() {
-    worker = new Worker(url, { type: 'module' });
-    worker.onmessage = onMessage;
-    worker.onerror = (event) => markFailed(new Error(event.message || 'shell worker failed to start'));
-    worker.postMessage({ init: { flag: cancelFlag } });
+    const target = new Worker(url, { type: 'module' });
+    worker = target;
+    target.onmessage = onMessage;
+    target.onerror = (event) => markFailed(new Error(event.message || 'shell worker failed to start'));
+    online = new Promise((ok) => {
+      markOnline = ok;
+    });
+    online.then(() => target.postMessage({ init: { flag: cancelFlag } }));
   }
 
   function replaceWorker() {
@@ -64,15 +72,18 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
       else waiter.fail(new Error('the shell restarted'));
     }
     spawn();
-    worker.postMessage({ id: 0, run: '(exit 130)' });
+    const target = worker;
+    online.then(() => target.postMessage({ id: 0, run: '(exit 130)' }));
   }
 
   function request(message, run = false) {
     const id = nextId++;
     if (run) runId = id;
+    const target = worker;
+    const sent = online;
     return new Promise((ok, fail) => {
       pending.set(id, { ok, fail, run });
-      worker.postMessage({ id, ...message });
+      sent.then(() => target.postMessage({ id, ...message }));
     });
   }
 

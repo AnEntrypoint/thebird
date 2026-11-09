@@ -32,19 +32,8 @@ try {
   const shell = await createShell({ cwd: WORKSPACE });
   await flushFs();
   postMessage({ ready: true });
-  self.onmessage = async ({ data }) => {
-    if (data.init) {
-      setCancelWord(data.init.flag ? new Int32Array(data.init.flag) : null);
-      return;
-    }
-    if (data.cancel) {
-      shell.cancel();
-      return;
-    }
-    if (data.resize) {
-      shell.resize(data.resize);
-      return;
-    }
+  let queue = Promise.resolve();
+  const answer = async (data) => {
     let reply;
     try {
       if (data.complete !== undefined) {
@@ -64,6 +53,21 @@ try {
     }
     await flushFs();
     postMessage(reply);
+  };
+  self.onmessage = ({ data }) => {
+    if (data.init) {
+      setCancelWord(data.init.flag ? new Int32Array(data.init.flag) : null);
+      return;
+    }
+    if (data.cancel) {
+      shell.cancel();
+      return;
+    }
+    if (data.resize) {
+      shell.resize(data.resize);
+      return;
+    }
+    queue = queue.then(() => answer(data)).catch((err) => postMessage({ id: data.id, ok: false, error: err.message }));
   };
 } catch (err) {
   postMessage({ ready: false, error: err.message });
