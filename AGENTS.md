@@ -7,7 +7,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - Node only: `bin/thebird-relay.js`, `src/relay.js`.
 - Browser (page and worker): `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`, `web/shell-worker.js`, `web/bash-shell.js`, `web/builtins.js`, `web/shell-core.js`, `web/shell-sed.js`, `web/shell-tar.js`, `web/shell-jq.js`, `web/shell-awk.js`, `web/shell-program.js`, `web/shell-in-txiki.js`, `web/shell-lookup.js`, `web/git-in-page.js`, `web/git-program.js`, `web/commit-gate.js`, `web/sqlite-in-txiki.js`, `web/sqlite-program.js`, `web/python-in-page.js`, `web/python-worker.js`, `web/python-bundle.js`, `web/splash.js`, `web/curl-in-page.js`, `web/qjs-in-txiki.js`, `web/qjs-program.js`, `web/node-in-txiki.js`, `web/txiki-in-page.js`, `web/shims/*.js`.
 - Vendored: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs`, `web/vendor/brotli/`, `web/vendor/tte-js/`, and the generated `web/vendor/bashkit/` and `web/vendor/txiki/`.
-- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/vendor-bashkit.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`, `scripts/witness-shell.mjs` (Node-side groups for `web/shell-core.js`, run by `npm run witness:shell`).
+- Scripts: `scripts/browser-driver.mjs`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `scripts/lint-comments.mjs`, `scripts/lint-live.mjs` (the architecture lint's live probes, run in their own process), `scripts/vendor-bashkit.mjs`, `scripts/vendor-txiki.mjs` (compile gate for the txiki core; its browser libuv and libwebsockets placeholder headers are in `scripts/txiki/include/`), `scripts/witness.mjs`, `scripts/witness-shell.mjs` (Node-side groups for `web/shell-core.js`, run by `npm run witness:shell`).
 
 ## Browser and Node split
 
@@ -41,7 +41,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Timeout
 
-`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 600000 and is passed to bashkit's `Bash` as `timeoutMs`. Do not lower it: the first cold `python3` or `pip` call on this link takes about 290 s, as recorded in `ARCHITECTURE.md`. bashkit's `execute()` ignores a per-call `timeoutMs`, so the limit is shared by every command line. Change the value only with a witnessed cold install.
+`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000 and is passed to bashkit's `Bash` as `timeoutMs`. Do not lower it: the first cold `python3` or `pip` call takes 210 s run alone and 546 s to 600 s or more under contention, as recorded in `ARCHITECTURE.md`. bashkit's `execute()` ignores a per-call `timeoutMs`, so the limit is shared by every command line. Change the value only with a witnessed cold install.
 
 ## Cancel
 

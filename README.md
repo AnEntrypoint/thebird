@@ -46,7 +46,7 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 - No `node` and no host binaries; they exit 127.
 - No git remotes. `push`, `fetch` and `pull` are refused.
 - pip takes plain names only. Version specifiers, URLs and packages in the Pyodide set are refused. Installed packages last for the page session.
-- Each command line has a 600 s limit. See `ARCHITECTURE.md`.
+- Each command line has a 900 s limit. See `ARCHITECTURE.md`.
 
 ## Keys
 

@@ -3,7 +3,7 @@ import { runTar } from './shell-tar.js';
 import { runJq } from './shell-jq.js';
 import { runAwk } from './shell-awk.js';
 
-export const COMMAND_TIMEOUT_MS = 600000;
+export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
 const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', '>>', '>', '<', '|', '(', ')', ';', '&'];
