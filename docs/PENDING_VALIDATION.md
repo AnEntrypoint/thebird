@@ -370,6 +370,18 @@ Each row is one change in this pass. Phase B is the run that checks them.
 
 Effect on the MIT notice: MIT asks that the copyright notice and permission notice travel with copies of the software or substantial portions of it. Deleting the MIT texts from `web/vendor` removes the copies of those notices from this repository, and the repository has no top-level LICENSE file. The owner has asked for the removal, so it is done. The owner needs to decide whether the notices go back in another form before the next release.
 
+### Phase B results for the licence removal (on 049b7b3)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0 |
+| `npm run lint:comments` | `VENDORED` for `acorn.mjs` (993 comments kept), `isomorphic-git.mjs`, `xterm/addon-fit.mjs`, `addon-unicode11.mjs`, `addon-webgl.mjs`, `xterm.css`, `xterm.mjs`, each with `upstream <name> named (third-party, not edited)`; `70 repo-owned files checked: 0 comments; 85 tracked files, 7 vendored files with comments`; exit 0. The count is 70 because `scripts/lint-live.mjs` is tracked now. |
+| `npm run witness:shell` | `RESULT PASS=108 FAIL=0`, exit 0 |
+| `npm run lint:architecture` | `255 claims: 255 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, `ARCH-EXIT=0`. The count was 259 before this pass. The four claims that went were on the sentences that named licence files and were reworded to drop them; the rest pass. |
+| The `scripts/witness.mjs` line 835 predicate, run over the real `lint:comments` output | `true` (7 VENDORED lines, each with `named (third-party, not edited)`, no FAIL). The full witness was not run in this pass. |
+
+No defect surfaced in Phase B, so none was fixed. Nothing was pushed in Phase A.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
