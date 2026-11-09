@@ -241,9 +241,111 @@ thebird /workspace> pip --help:    rc=0 / OUT: usage: pip install <package>... /
 thebird /workspace> pip:           rc=2 / OUT: (empty) / ERR: pip: usage: pip install <package>... / pip --version / pip --help
 ```
 
-Architecture lint, run alone: `258 claims: 258 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, exit 0. The hang recorded earlier: the run started in the previous session printed nothing for more than fifteen minutes, and its live check was a headless Chromium run that never returned. The lint writes only at its end, so its log holds no cause. Not established: whether the Chromium run stalled or the lint was waiting on the relay. This run finished in one wait under the same code.
+Architecture lint, run alone: `258 claims: 258 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, exit 0. The hang recorded earlier printed nothing for more than fifteen minutes. Its cause is set out in Phase B run 4 (driver group kill, relay keep-alive close, streamed claims, live check in its own bounded process).
 
 Full witness on this tree (`CHROME_BIN=/usr/bin/chromium npm run witness`): 134 PASS, 0 FAIL, `WITNESS-EXIT=0`, including the restart check, the 600 s expiry check and the pip rows. `npm run witness:shell`: 108 PASS, 0 FAIL. `npm run check`, `npm run lint:comments` (0 comments) and `node scripts/build-pages.mjs` pass.
+
+## Phase B run 4: lint hang cause, command limit, restart checks through playwriter (final tree)
+
+### Architecture lint hang: cause established
+
+The lint printed nothing until its end and ran its live check (headless Chromium) in the same process, so an earlier hang left no step in its log. The mechanism below was reproduced one step at a time.
+
+1. The driver's Chromium wrapper (`/usr/bin/chromium`, a bash script) was killed with SIGKILL, so `chromium.real` survived as an orphan with PPID 1. HEAD left 10 processes after a run; the fixed driver leaves 0 (group kill).
+2. `relay.close()` called `server.close()` without closing keep-alive sockets. With a half-sent request in flight, HEAD's close took 10002 ms; the fixed close (`closeAllConnections()` then `close()`) took 1 ms.
+3. Lint reproduction with a delayed wasm response and a 20 s limit, HEAD: `live: closing relay` at 04:12:47.5 and `live: relay closed` at 04:14:39.1, 112 s, waiting on the orphan's in-flight wasm request. It would not return if that response never completed. Fixed driver and relay: `live: closing relay` at 04:15:16.336, `live: relay closed` at 04:15:16.337. Repeated twice, clean, no orphan.
+4. An unbounded `once(child, 'exit')` after a signal exit hung 8000 ms in a test. The fixed branch skips the wait when `signalCode` is set.
+
+Caveat: the earlier hang was not logged step by step, so the exact step that waited in that run is not observed directly. Its conditions (a parallel run, shutdown with live Chromium) match steps 1 to 3, and each step is reproduced on its own.
+
+### Fixes for the hang
+
+| File | Change |
+| --- | --- |
+| scripts/browser-driver.mjs | `runTerminal` takes `onProgress`; the browser is spawned with `detached: true`; `finally` kills the whole process group (`killGroup`) and waits at most 10 s for exit unless a signal already ended it. Every CDP call is bounded by `withTimeout` at 60 s. |
+| src/relay.js | `close()` calls `server.closeAllConnections()` before `server.close()`. |
+| scripts/lint-architecture.mjs | Each claim is streamed as it starts and ends (`add`). The live check runs in its own process, `scripts/lint-live.mjs`, bounded by `LIVE_TIMEOUT_MS = 900000`. On timeout the child is killed and the last streamed line is reported. |
+| scripts/lint-live.mjs (new) | The live probes. Streams `live probe <id> started` and `finished`, `live: closing relay`, `live: relay closed`, then prints `LIVE-RESULT <json>`. |
+
+### Command limit: 900 s
+
+`COMMAND_TIMEOUT_MS` is 900000 in `web/bash-shell.js` and `web/shell-core.js`. Evidence: the architecture lint's cold `python3 -c` probe, run beside the witness, was cut at `error: resource limit exceeded: execution timeout (600s)` (03:42:04 to 03:52:04). The same cold call took 210 s run alone and 546 s beside the witness. 900 s is about 1.5 times the slowest measured cold call. The witness expiry check runs seventeen 55 s ticks, expects `execution timeout (900s)`, `tick16` present and `tick17` absent, in a 1500000 ms terminal wait.
+
+### Browser restart checks, through playwriter (invariant 11)
+
+Setup ran in the profile's default context, `context.browser().contexts()[0]` of this project's browser (profile `/workspace/thebird/.playwriter/browser-profile`). Each command printed its marker:
+
+```
+thebird /workspace> mkdir -p notes/links && echo restart-ok > notes/a.txt && echo S1-OK
+S1-OK
+thebird /workspace> echo link-target > notes/links/target.txt && ln -s target.txt notes/links/alias.txt && echo S2-OK
+S2-OK
+thebird /workspace> sqlite3 notes/restart.db "create table t(x); insert into t values (1),(2),(3)" && echo S3-OK
+S3-OK
+thebird /workspace> python3 -c "open('notes/pyr.txt','w').write('py-ok')" && echo S4-OK
+S4-OK
+```
+
+Then `gm.browser_close_machine({ confirm: true })` closed this project's browser (pid 41276), and jayzee's browser (pid 12638) kept running. After the reopen, the default context was listed again and the four checks ran in it:
+
+```
+R1-BEGIN
+restart-ok
+R1-END
+R2-BEGIN
+target.txt
+link-target
+lrw-r--r--        0 2026-11-09 04:28 alias.txt -> target.txt
+-rw-r--r--        0 2026-11-09 04:28 target.txt
+R2-END
+R3-BEGIN
+3
+R3-END
+R4-BEGIN
+py-ok
+R4-END
+```
+
+| Check | Result |
+| --- | --- |
+| R1 OPFS file survives the restart | PASS: `restart-ok` |
+| R2 symlink survives the restart | PASS: `readlink` gives `target.txt`, `cat` gives `link-target`, `ls -l` shows `alias.txt -> target.txt` |
+| R3 sqlite3 database survives the restart | PASS: `select count(*) from t` gives `3` |
+| R4 python3 file survives the restart | PASS: `py-ok` |
+
+A first attempt in the run's own context failed: `cat: notes/a.txt: ENOENT` (R1), `sqlite3: Uncaught Error: unable to open database file` (R3), and R2 printed nothing. That was a fault in the test path, not in the app. A probe showed that the run context's OPFS root held `thebird-workspace` while the profile's default context's root was empty for the same origin, so a run context's storage is separate from the profile's and does not survive the browser close. The restart checks must use `contexts()[0]`.
+
+Repeated on the final tree in a later session (gm run `2026-11-09-04-49-57-7fa949`): setup in the default context of the browser pid 103980, `browser_close_machine({confirm: true})` closed only that pid (the witness browser on `/tmp/thebird-profile-hPmCXI` kept running), and the checks ran in the relaunched browser pid 104720 on the same profile:
+
+| Check | Result |
+| --- | --- |
+| R1 OPFS file | PASS: `restart-ok-run2` |
+| R2 symlink | PASS: `readlink` and `cat` give `target.txt` and `link-target-run2`; `ls -l` shows `alias.txt -> target.txt` |
+| R3 sqlite3 table | PASS: `select count(*) from t` gives `3` |
+| R4 python3 file | PASS: `py-ok-run2` |
+
+Run `2026-11-09-04-48-59-ff0fa0` was partial: the relaunched browser listed no default context to that run, so it ran no check. Its witness says so. Two steps later the checks above ran in the new run.
+
+### Browser checks: what moved and what did not
+
+- The four restart checks run through playwriter, in the profile's default context. Their results are above.
+- The node witness (`scripts/witness.mjs`) keeps its other browser checks on CDP through `scripts/browser-driver.mjs`. The blocker: playwriter verbs are reachable only as gm verbs inside a gm `run_code` body, not from a node process. The failing call, from inside a run: `gm.browser_close_machine({})` returned `browser_close_machine needs confirm true: it closes the whole project browser, with every run's tabs in it`.
+
+### Phase B run 4 totals (final tree, witness and lint run to a clean end)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit 0 |
+| `npm run lint:comments` | 69 repo-owned files checked: 0 comments; exit 0 |
+| `npm run witness:shell` | `RESULT PASS=108 FAIL=0`, exit 0 |
+| `CHROME_BIN=/usr/bin/chromium npm run witness` (log `/tmp/p14-witness.log`) | 134 PASS, 0 FAIL, `WITNESS-EXIT=0` |
+| `npm run lint:architecture` run alone (log `/tmp/p14-lint.log`) | `259 claims: 259 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, `LINT-EXIT=0`; the cold `python-c` live probe finished in 45 s, and `live: closing relay` and `live: relay closed` followed |
+
+The first witness and lint runs of this pass were stopped with the previous session and were not counted. Both were run again from the start.
+
+### Process note
+
+Two node processes on this machine are not from this session and were not stopped: `node bin/thebird-relay.js --port 8877` (pid 3051450) and `node scripts/groundy-replay-witness.mjs` (pid 54546).
 
 ## Open decisions
 
