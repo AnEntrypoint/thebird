@@ -1,16 +1,15 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startRelay } from '../src/relay.js';
-import { runTerminal } from './browser-driver.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const staticOnly = process.argv.includes('--static');
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
+const LIVE_TIMEOUT_MS = 900000;
+const stamp = () => new Date().toISOString().slice(11, 23);
+const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : ok === 'NO_CLAIM' ? 'NO_CLAIM' : 'UNVERIFIED');
 const docs = Object.fromEntries(['ARCHITECTURE.md', 'AGENTS.md'].map((name) => [name, readFileSync(join(root, name), 'utf8').split('\n')]));
 let docName = 'ARCHITECTURE.md';
 let docLines = docs[docName];
@@ -22,7 +21,6 @@ const inDoc = (name, fn) => {
 const witness = readFileSync(join(root, 'scripts', 'witness.mjs'), 'utf8');
 const results = [];
 const covered = new Set();
-const COMMANDS = 'echo printf test seq sed awk grep sort uniq wc head tail cut tr find xargs tee ls cp mv rm mkdir touch cat basename dirname date env export type jq base64 md5sum sha256sum gzip gunzip sleep';
 
 const outcome = (ok, detail) => ({ ok, detail });
 const all = (...items) => {
@@ -30,14 +28,19 @@ const all = (...items) => {
   return outcome(ok, items.map((item) => item.detail).join('; '));
 };
 
+const add = (entry) => {
+  results.push(entry);
+  console.log(`${stamp()} ${label(entry.ok).padEnd(10)} ${entry.doc}:${entry.line}  ${entry.text.slice(0, 100)}\n           ${entry.detail}`);
+};
+
 const record = (needle, result) => {
   const index = docLines.findIndex((line) => line.includes(needle));
   if (index === -1) {
-    results.push({ doc: docName, line: 0, text: needle, ok: false, detail: `anchor not found in ${docName}; update the lint` });
+    add({ doc: docName, line: 0, text: needle, ok: false, detail: `anchor not found in ${docName}; update the lint` });
     return;
   }
   covered.add(`${docName}:${index + 1}`);
-  results.push({ doc: docName, line: index + 1, text: docLines[index].trim(), ok: result.ok, detail: result.detail });
+  add({ doc: docName, line: index + 1, text: docLines[index].trim(), ok: result.ok, detail: result.detail });
 };
 
 const repo = (path) => join(root, path);
@@ -115,13 +118,13 @@ function architectureStatic() {
     return outcome(false, 'cc242f5 is not in the repository');
   })());
 
-  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 600000', all(
-    outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 600000'), 'bash-shell.js sets COMMAND_TIMEOUT_MS to 600000'),
+  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000', all(
+    outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000'), 'bash-shell.js sets COMMAND_TIMEOUT_MS to 900000'),
     outcome(fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js passes it to Bash as timeoutMs'),
   ));
   cites('In one of seven recorded witness runs', ['in-page bash runs a 40-second sleep without a timeout']);
-  cites('The witness checks the expiry', ['a command past 600 s is cut at the limit with the expiry message']);
-  cites('With 600 s, a cold tabulate install completes', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page']);
+  cites('The witness checks the expiry', ['a command past 900 s is cut at the limit with the expiry message']);
+  cites('With 900 s, a cold tabulate install completes', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page']);
 
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
   record('isomorphic-git 1.44.11', versionIn('web/vendor/isomorphic-git.mjs', '1.44.11'));
@@ -219,7 +222,7 @@ function agentsStatic() {
     outcome(witness.includes('xterm renders SGR colour: red-line uses palette 1'), 'witness: xterm renders SGR colour'),
     outcome(witness.includes('the terminal consumes the escape sequences'), 'witness: escape sequences are consumed by the terminal'),
   ));
-  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 600000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 600000') && fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js sets the value and passes it to Bash'));
+  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000') && fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js sets the value and passes it to Bash'));
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
@@ -248,50 +251,51 @@ function probe(blocks, id, pass, detail) {
   return outcome(pass(text), `${detail} (${id}: ${JSON.stringify(text).slice(0, 120)})`);
 }
 
-const blocksOf = (out, probes) => Object.fromEntries(probes.map(([id]) => {
-  const match = out.match(new RegExp(`^@@BEGIN-${id}\\n([\\s\\S]*?)^@@END-${id}$`, 'm'));
-  return [id, match ? match[1].split('\n').filter((line) => !/^thebird /.test(line)).join('\n').trimEnd() : null];
-}));
-
-const PROBES = [
-  ['pipe', String.raw`printf "a\nb\n" | sort -r | head -1`],
-  ['quotes', String.raw`printf "%s|%s\n" "(x)" 'y z'`],
-  ['head', 'seq 1 100000 | head -1'],
-  ['sqlite', `sqlite3 lint.db "create table t(a,b); insert into t values (1,'two'); select a,b from t"`],
-  ['node', 'node -v; echo rc=$?'],
-  ['host', 'ruby -v; echo rc=$?'],
-  ['tar', 'tar --version'],
-  ['commands', `for n in ${COMMANDS}; do command -v "$n" >/dev/null || echo missing-$n; done; echo all-resolved`],
-  ['type-t', 'type -t git'],
-  ['type-fn', 'type which'],
-  ['python-c', 'python3 -c "print(40+2)"'],
-  ['curl-v', 'curl -v http://127.0.0.1:9/'],
-  ['curl-SL', 'curl -SL http://127.0.0.1:9/'],
-  ['amp', 'sleep 0 & echo x'],
-];
+function runLive() {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [join(root, 'scripts', 'lint-live.mjs')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let result = null;
+    let last = 'no line streamed yet';
+    let pending = '';
+    const onLine = (line) => {
+      if (line.startsWith('LIVE-RESULT ')) result = JSON.parse(line.slice('LIVE-RESULT '.length));
+      else {
+        last = line;
+        console.log(`           ${line}`);
+      }
+    };
+    child.stdout.on('data', (chunk) => {
+      pending += chunk;
+      let end = pending.indexOf('\n');
+      while (end !== -1) {
+        onLine(pending.slice(0, end));
+        pending = pending.slice(end + 1);
+        end = pending.indexOf('\n');
+      }
+    });
+    child.stderr.on('data', (chunk) => onLine(`stderr: ${String(chunk).trim()}`));
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ timedOut: true, last, result: null });
+    }, LIVE_TIMEOUT_MS);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ timedOut: false, code, last, result });
+    });
+  });
+}
 
 async function liveChecks() {
-  const workspace = mkdtempSync(join(tmpdir(), 'lint-workspace-'));
-  const profile = mkdtempSync(join(tmpdir(), 'lint-profile-'));
-  const relay = await startRelay({});
-  const corsHost = createServer((req, res) => {
-    res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
-    res.end('cors-host-hello\n');
-  });
-  await new Promise((ok) => corsHost.listen(0, '127.0.0.1', ok));
-  const corsPort = corsHost.address().port;
-  try {
-    const probes = [...PROBES, ['curl-cors', `curl -s http://127.0.0.1:${corsPort}/hello`]];
-    const pairs = [
-      ...probes.flatMap(([id, command]) => [['run', `echo @@BEGIN-${id}`], ['run', command], ['run', `echo @@END-${id}`]]),
-    ];
-    const state = await runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: 900000 });
-    return blocksOf(state.out, probes);
-  } finally {
-    await relay.close();
-    corsHost.close();
-    for (const dir of [workspace, profile]) rmSync(dir, { recursive: true, force: true });
+  const live = await runLive();
+  if (live.timedOut) {
+    add({ doc: 'live', line: 0, text: 'live probes', ok: false, detail: `live probes did not finish within ${LIVE_TIMEOUT_MS} ms; the last streamed line was: ${live.last}` });
+    return;
   }
+  if (!live.result) {
+    add({ doc: 'live', line: 0, text: 'live probes', ok: false, detail: `live probes exited with code ${live.code} and no result; the last streamed line was: ${live.last}` });
+    return;
+  }
+  inDoc('ARCHITECTURE.md', () => liveRecords(live.result));
 }
 
 function liveRecords(blocks) {
@@ -319,28 +323,23 @@ inDoc('AGENTS.md', () => {
 });
 if (!staticOnly) {
   if (!existsSync(chrome)) {
-    results.push({ doc: 'live', line: 0, text: 'live probes', ok: null, detail: `no Chromium at ${chrome}; live probes are unverified (set CHROME_BIN)` });
+    add({ doc: 'live', line: 0, text: 'live probes', ok: null, detail: `no Chromium at ${chrome}; live probes are unverified (set CHROME_BIN)` });
   } else {
-    try {
-      const blocks = await liveChecks();
-      inDoc('ARCHITECTURE.md', () => liveRecords(blocks));
-    } catch (error) {
-      results.push({ doc: 'live', line: 0, text: 'live probes', ok: false, detail: `live probes did not run: ${error.message}` });
-    }
+    console.log(`${stamp()} live probes: separate process, limit ${LIVE_TIMEOUT_MS} ms, streamed below`);
+    await liveChecks();
   }
 }
 
 for (const doc of Object.keys(docs)) {
   docs[doc].forEach((raw, index) => {
     const line = raw.trim();
-    if (line && !/^(\||```|#)/.test(line) && !covered.has(`${doc}:${index + 1}`)) results.push({ doc, line: index + 1, text: line, ok: 'NO_CLAIM', detail: 'prose line with no claim record' });
+    if (line && !/^(\||```|#)/.test(line) && !covered.has(`${doc}:${index + 1}`)) add({ doc, line: index + 1, text: line, ok: 'NO_CLAIM', detail: 'prose line with no claim record' });
   });
 }
-results.sort((a, b) => a.doc.localeCompare(b.doc) || a.line - b.line);
-const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : ok === 'NO_CLAIM' ? 'NO_CLAIM' : 'UNVERIFIED');
-for (const result of results) {
+const count = (ok) => results.filter((result) => result.ok === ok).length;
+console.log(`\nNot passing:`);
+for (const result of results.filter((item) => item.ok !== true).sort((a, b) => a.doc.localeCompare(b.doc) || a.line - b.line)) {
   console.log(`${label(result.ok).padEnd(10)} ${result.doc}:${result.line}  ${result.text.slice(0, 100)}\n           ${result.detail}`);
 }
-const count = (ok) => results.filter((result) => result.ok === ok).length;
 console.log(`\n${count(true) + count(false) + count(null)} claims: ${count(true)} pass, ${count(false)} fail, ${count(null)} unverified; ${count('NO_CLAIM')} prose lines with NO_CLAIM`);
 if (count(false)) process.exitCode = 1;
