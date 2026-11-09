@@ -5,7 +5,7 @@ import { lookupPrologue } from './shell-lookup.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill|tar)\b/;
-const COMMAND_TIMEOUT_MS = 300000;
+const COMMAND_TIMEOUT_MS = 600000;
 const EMULATION_NOTE ='note: uname, whoami, hostname, id, ps, kill and tar are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
 
 export function hasBackgroundOperator(command) {

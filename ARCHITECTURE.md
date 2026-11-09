@@ -51,11 +51,11 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 
 ## Command timeout
 
-`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 300000 (300 s). It is passed as `timeoutMs` to bashkit's `Bash` constructor, and bashkit applies it to each `execute()` call, one command line.
+`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 600000 (600 s). It is passed as `timeoutMs` to bashkit's `Bash` constructor, and bashkit applies it to each `execute()` call, one command line. bashkit's `execute()` ignores a `timeoutMs` in its own options (probed: a constructor limit of 2 s cut a `sleep 5` even with `{ timeoutMs: 10000 }` on the call), so the limit cannot differ per call. The page shell and `web/shell-core.js` share the value.
 
-bashkit's default is 30 s, which was too short. In one of seven recorded witness runs a cold `pip install` of tabulate failed with `execution timeout (30s)`. With 300 s, a cold tabulate install completes in about 19-28 s in the in-page shell, and `sleep 40` completes.
+bashkit's default is 30 s, which was too short. In one of seven recorded witness runs a cold `pip install` of tabulate failed with `execution timeout (30s)`. The first cold `python3` or `pip` call on the public site, on this link, took about 290 s to idle (5 MB stripped bundle at about 80 KB/s, then Pyodide start and the micropip wheel). With the former 300 s limit that call was cut: `pip --version` printed `error: resource limit exceeded: execution timeout (300s)`. At 600 s the cold call has about twice its measured load. With 600 s, a cold tabulate install completes in about 19-28 s in the in-page shell, and `sleep 40` completes.
 
-The witness checks the expiry: six 55 s sleeps in a loop are cut at 300 s with `execution timeout (300s)`. That check takes about five and a half minutes.
+The witness checks the expiry: twelve 55 s sleeps in a loop are cut at 600 s with `execution timeout (600s)`, after `tick10` and before `tick11`. That check takes about eleven minutes.
 
 ## In-page builtins
 

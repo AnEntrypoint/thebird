@@ -186,7 +186,7 @@ group('timeout: a command past the limit is stopped', async () => {
   const sh = await shell({});
   const limited = await run(sh, 'sleep 5; echo late', { timeoutMs: 200 });
   check('timeout: a command past timeoutMs ends with exit 124 and a timed-out message', limited.exitCode === 124 && /timed out/.test(limited.stderr), `exit ${limited.exitCode}`);
-  check('timeout: the production limit is 300000 ms, as in bash-shell.js', core.COMMAND_TIMEOUT_MS === 300000, String(core.COMMAND_TIMEOUT_MS));
+  check('timeout: the production limit is 600000 ms, as in bash-shell.js', core.COMMAND_TIMEOUT_MS === 600000, String(core.COMMAND_TIMEOUT_MS));
 });
 
 group('$? carry: the status and the directory persist from one run to the next', async () => {

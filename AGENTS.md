@@ -41,7 +41,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Timeout
 
-`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 300000 and is passed to bashkit's `Bash` as `timeoutMs`. Do not lower it. bashkit's 30 s default is too short for a cold `pip install`, as recorded in `ARCHITECTURE.md`. Change the value only with a witnessed cold install.
+`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 600000 and is passed to bashkit's `Bash` as `timeoutMs`. Do not lower it: the first cold `python3` or `pip` call on this link takes about 290 s, as recorded in `ARCHITECTURE.md`. bashkit's `execute()` ignores a per-call `timeoutMs`, so the limit is shared by every command line. Change the value only with a witnessed cold install.
 
 ## Cancel
 
