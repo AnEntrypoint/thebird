@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '../web/vendor/acorn.mjs';
@@ -15,16 +15,15 @@ const MARKDOWN = /\.md$/;
 const YAML = /\.ya?ml$/;
 const C_SOURCE = /\.([ch]|css)$/;
 const DOTFILE_HASH = '.gitignore';
-const NO_COMMENT_SYNTAX = /\.(json|wasm|tsv)$|LICENSE|NOTICE/;
-const MIT_GRANT = 'Permission is hereby granted, free of charge';
+const NO_COMMENT_SYNTAX = /\.(json|wasm|tsv)$/;
 const PROVENANCE = {
-  'web/vendor/acorn.mjs': { licence: 'web/vendor/ACORN-LICENSE', upstream: 'acorn' },
-  'web/vendor/isomorphic-git.mjs': { licence: 'web/vendor/ISOMORPHIC-GIT-LICENSE', upstream: 'isomorphic-git' },
-  'web/vendor/xterm/xterm.mjs': { licence: 'web/vendor/xterm/XTERM-LICENSE', upstream: 'xterm.js' },
-  'web/vendor/xterm/xterm.css': { licence: 'web/vendor/xterm/XTERM-LICENSE', upstream: 'xterm.js' },
-  'web/vendor/xterm/addon-fit.mjs': { licence: 'web/vendor/xterm/FIT-LICENSE', upstream: 'xterm.js' },
-  'web/vendor/xterm/addon-webgl.mjs': { licence: 'web/vendor/xterm/WEBGL-LICENSE', upstream: 'xterm.js' },
-  'web/vendor/xterm/addon-unicode11.mjs': { licence: 'web/vendor/xterm/UNICODE11-LICENSE', upstream: 'xterm.js' },
+  'web/vendor/acorn.mjs': 'acorn',
+  'web/vendor/isomorphic-git.mjs': 'isomorphic-git',
+  'web/vendor/xterm/xterm.mjs': 'xterm.js',
+  'web/vendor/xterm/xterm.css': 'xterm.js',
+  'web/vendor/xterm/addon-fit.mjs': 'xterm.js',
+  'web/vendor/xterm/addon-webgl.mjs': 'xterm.js',
+  'web/vendor/xterm/addon-unicode11.mjs': 'xterm.js',
 };
 
 const lineOf = (text, offset) => text.slice(0, offset).split('\n').length;
@@ -85,11 +84,9 @@ function commentsOf(file) {
 const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || C_SOURCE.test(file) || YAML.test(file) || basename(file) === DOTFILE_HASH || NO_COMMENT_SYNTAX.test(file);
 
 function provenanceProblem(file) {
-  const entry = PROVENANCE[file];
-  if (!entry) return 'no provenance entry';
-  if (!existsSync(join(root, entry.licence))) return `licence ${entry.licence} is missing`;
-  if (!readFileSync(join(root, entry.licence), 'utf8').includes(MIT_GRANT)) return `licence ${entry.licence} has no MIT grant`;
-  if (!readFileSync(join(root, file), 'utf8').toLowerCase().includes(entry.upstream)) return `upstream name ${entry.upstream} does not appear in the file`;
+  const upstream = PROVENANCE[file];
+  if (!upstream) return 'no provenance entry';
+  if (!readFileSync(join(root, file), 'utf8').toLowerCase().includes(upstream)) return `upstream name ${upstream} does not appear in the file`;
   return null;
 }
 
@@ -106,7 +103,7 @@ for (const file of tracked) {
   if (isVendored(file)) {
     const problem = provenanceProblem(file);
     vendoredReport.push(file);
-    findings.push(problem ? `FAIL ${file}  ${problem}` : `VENDORED ${file}: ${comments.length} comments kept; licence ${PROVENANCE[file].licence} (MIT grant), upstream named (third-party, not edited)`);
+    findings.push(problem ? `FAIL ${file}  ${problem}` : `VENDORED ${file}: ${comments.length} comments kept; upstream ${PROVENANCE[file]} named (third-party, not edited)`);
     continue;
   }
   const text = readFileSync(join(root, file), 'utf8');

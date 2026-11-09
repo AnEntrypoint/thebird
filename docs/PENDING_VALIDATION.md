@@ -347,7 +347,31 @@ The first witness and lint runs of this pass were stopped with the previous sess
 
 Two node processes on this machine are not from this session and were not stopped: `node bin/thebird-relay.js --port 8877` (pid 3051450) and `node scripts/groundy-replay-witness.mjs` (pid 54546).
 
+## Phase A: licence removal (chore(license), not built, not run, not witnessed)
+
+Each row is one change in this pass. Phase B is the run that checks them.
+
+| File | Row | Check that must pass in Phase B |
+| --- | --- | --- |
+| web/vendor/ACORN-LICENSE, web/vendor/ISOMORPHIC-GIT-LICENSE | deleted (`git rm`) | `npm run lint:comments` lists `acorn.mjs` and `isomorphic-git.mjs` as VENDORED with the upstream named, and no tracked file is a licence or notice file |
+| web/vendor/PYODIDE-NOTICE.md | deleted (`git rm`); its open question is recorded under Open decisions | same lint run |
+| web/vendor/xterm/XTERM-LICENSE, FIT-LICENSE, WEBGL-LICENSE, UNICODE11-LICENSE | deleted (`git rm`) | same lint run; `xterm.mjs`, `xterm.css`, `addon-fit.mjs`, `addon-webgl.mjs`, `addon-unicode11.mjs` report VENDORED |
+| web/vendor/brotli/LICENSE-MIT.txt, LICENSE-Apache.txt | deleted (`git rm`) | same lint run |
+| web/vendor/tte-js/LICENSE, LICENSES/terminaltexteffects-MIT.txt, LICENSES/ttfx-MIT.txt, LICENSES/ttfx-NOTICE.txt, THIRD_PARTY_NOTICES.md | deleted (`git rm`) | same lint run; `git ls-files | grep -i 'licen\|notice'` prints nothing |
+| scripts/lint-comments.mjs | `NO_COMMENT_SYNTAX` drops `LICENSE\|NOTICE`; `MIT_GRANT` and the licence paths are removed; `PROVENANCE` maps a vendored file to its upstream name; `provenanceProblem` checks only that the upstream name appears in the file; the VENDORED line reads `upstream <name> named (third-party, not edited)`; the unused `existsSync` import is removed | `npm run lint:comments` exits 0 and prints `69 repo-owned files checked: 0 comments` |
+| scripts/witness.mjs (line 835) | the provenance check is now `every vendored bundle with comments has a provenance witness (upstream name)` and matches `named (third-party, not edited)` | not in the Phase B list; the next full witness run covers it. Until then this row is recorded as not run. |
+| AGENTS.md (vendored section) | the acorn and isomorphic-git bullet and the xterm bullet name no licence files and no MIT; the unicode11 SHA-256 for its licence file is removed; the Pyodide bundle bullet no longer states the licence sentence | docs only; `npm run lint:architecture` (not in the Phase B list) would check cited claims, and it is run in Phase B |
+| DESIGN.md (line 15) | "committed with their licence files" becomes "committed unmodified" | docs only |
+| ARCHITECTURE.md (lines 105, 106, 108, 114) | the bundle lines name no licence file; the Pyodide notice sentence is removed; the brotli and tte-js licence names and the MIT label are removed; the lint-comments line reads "when their upstream is recorded" | docs only |
+| package.json | no `license` field (removed earlier in ab32804); no change in this pass | `npm run check` |
+| package-lock.json | the root package has no `license` field; the `"license": "MIT"` lines are the upstream dependency fields and are left alone | none |
+| README.md | no licence mention; no change | none |
+| web/vendor/pyodide/ | untracked, not added | `git status` shows it untracked |
+
+Effect on the MIT notice: MIT asks that the copyright notice and permission notice travel with copies of the software or substantial portions of it. Deleting the MIT texts from `web/vendor` removes the copies of those notices from this repository, and the repository has no top-level LICENSE file. The owner has asked for the removal, so it is done. The owner needs to decide whether the notices go back in another form before the next release.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
-- Pyodide bundle licence: held by the owner. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass, and its licence is not confirmed. `web/vendor/PYODIDE-NOTICE.md` records it as held by the owner, not yet confirmed.
+- Pyodide bundle licence: held by the owner, and not confirmed. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass. The licence notice file `web/vendor/PYODIDE-NOTICE.md` was removed in the licence removal above, so this question is recorded only here.
+- Licence notices for the vendored bundles: removed in the licence removal above. Whether they return in another form is the owner's decision.

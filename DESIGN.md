@@ -12,7 +12,7 @@ thebird is a bash terminal that runs in the browser. The page does the work, and
 - No external execution engine. The earlier CLI, library, REPL, verb passthrough and relay POST endpoints are gone, so the page runs every command itself.
 - No library API and no CLI. The package exports nothing; the product is the page.
 - Browser code uses the modules in `web/shims/` in place of `node:` imports.
-- Third-party bundles are committed with their licence files. Generated runtimes (bashkit, Pyodide) are gitignored and pinned by SHA-256.
+- Third-party bundles are committed unmodified. Generated runtimes (bashkit, Pyodide) are gitignored and pinned by SHA-256.
 
 ## Layers
 
