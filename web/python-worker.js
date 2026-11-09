@@ -7,6 +7,7 @@ const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
 let runtime = null;
 let captured = null;
 let mirror = new Map();
+let lastCollect = 0;
 let micropipLoaded = null;
 let bundle = null;
 let bundledNames = new Set();
@@ -59,23 +60,28 @@ const pythonRuntime = () => {
   return runtime;
 };
 
-function workspaceTree(py, dir = WORKSPACE, out = new Map()) {
+function scanStats(py, dir = WORKSPACE, out = new Map()) {
   for (const name of py.FS.readdir(dir)) {
     if (name === '.' || name === '..') continue;
     const path = `${dir}/${name}`;
     if (SKIPPED.test(path)) continue;
-    const { mode } = py.FS.stat(path);
-    if (py.FS.isDir(mode)) workspaceTree(py, path, out);
-    else if (py.FS.isFile(mode)) out.set(path, py.FS.readFile(path));
+    const stat = py.FS.stat(path);
+    if (py.FS.isDir(stat.mode)) scanStats(py, path, out);
+    else if (py.FS.isFile(stat.mode)) out.set(path, { size: stat.size, mtime: +stat.mtime });
   }
   return out;
+}
+
+function signature(py, path) {
+  const stat = py.FS.stat(path);
+  return { size: stat.size, mtime: +stat.mtime };
 }
 
 function reconcile(py, paths, put) {
   for (const [path, bytes] of put) {
     py.FS.mkdirTree(parentOf(path));
     py.FS.writeFile(path, bytes);
-    mirror.set(path, bytes);
+    mirror.set(path, { bytes, ...signature(py, path) });
   }
   const wanted = new Set(paths);
   for (const path of [...mirror.keys()]) {
@@ -86,10 +92,23 @@ function reconcile(py, paths, put) {
 }
 
 function collect(py) {
-  const after = workspaceTree(py);
-  const writes = [...after].filter(([path, bytes]) => !(mirror.has(path) && sameBytes(mirror.get(path), bytes)));
-  const drops = [...mirror.keys()].filter((path) => !after.has(path));
-  mirror = after;
+  const started = Date.now();
+  const after = scanStats(py);
+  const writes = [];
+  for (const [path, { size, mtime }] of after) {
+    const known = mirror.get(path);
+    if (known && known.size === size && known.mtime === mtime && mtime < lastCollect) continue;
+    const bytes = py.FS.readFile(path);
+    if (!known || !sameBytes(known.bytes, bytes)) writes.push([path, bytes]);
+    mirror.set(path, { bytes, size, mtime });
+  }
+  const drops = [];
+  for (const path of [...mirror.keys()]) {
+    if (after.has(path)) continue;
+    drops.push(path);
+    mirror.delete(path);
+  }
+  lastCollect = started;
   return { writes, drops };
 }
 

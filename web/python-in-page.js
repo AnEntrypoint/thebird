@@ -12,7 +12,7 @@ let worker = null;
 let nextId = 0;
 const pending = new Map();
 const known = new Map();
-const knownRevision = new Map();
+let synced = 0;
 let phaseSink = () => {};
 
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
@@ -53,7 +53,7 @@ function stop(reason) {
   worker?.terminate();
   worker = null;
   known.clear();
-  knownRevision.clear();
+  synced = 0;
   for (const call of pending.values()) call.reject(reason);
   pending.clear();
 }
@@ -76,33 +76,21 @@ async function request(op, payload, signal) {
   });
 }
 
-function shimPaths(dir = WORKSPACE, out = new Set()) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const path = `${dir}/${entry.name}`;
-    if (SKIPPED.test(path)) continue;
-    if (entry.isDirectory()) shimPaths(path, out);
-    else if (entry.isFile()) out.add(path);
-  }
-  return out;
-}
-
 function outbound() {
-  const paths = shimPaths();
+  const paths = fs.listFiles().filter((path) => path.startsWith(`${WORKSPACE}/`) && !SKIPPED.test(path));
+  const current = new Set(paths);
   const put = [];
-  for (const path of paths) {
-    const revision = fs.revisionOf(path);
-    if (knownRevision.get(path) === revision) continue;
+  for (const path of fs.changedSince(synced)) {
+    if (!current.has(path)) {
+      known.delete(path);
+      continue;
+    }
     const bytes = fs.readFileSync(path);
     if (!known.has(path) || !sameBytes(known.get(path), bytes)) put.push([path, bytes]);
     known.set(path, bytes);
-    knownRevision.set(path, revision);
   }
-  for (const path of [...known.keys()]) {
-    if (paths.has(path)) continue;
-    known.delete(path);
-    knownRevision.delete(path);
-  }
-  return { paths: [...paths], put };
+  synced = fs.currentRevision();
+  return { paths, put };
 }
 
 function inbound(writes, drops) {
@@ -111,13 +99,11 @@ function inbound(writes, drops) {
     fs.mkdirSync(parentOf(path), { recursive: true });
     fs.writeFileSync(path, bytes);
     known.set(path, bytes);
-    knownRevision.set(path, fs.revisionOf(path));
   }
   for (const path of drops) {
     if (SKIPPED.test(path)) continue;
     fs.rmSync(path, { force: true });
     known.delete(path);
-    knownRevision.delete(path);
   }
 }
 
@@ -128,7 +114,7 @@ async function runPython(payload, signal) {
     reply = await request('run', { ...payload, paths, put }, signal);
   } catch (err) {
     known.clear();
-    knownRevision.clear();
+    synced = 0;
     throw err;
   }
   inbound(reply.writes, reply.drops);

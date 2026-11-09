@@ -51,6 +51,20 @@ export function revisionOf(path) {
   return revisions.get(norm(path)) ?? 0;
 }
 
+export function currentRevision() {
+  return revision;
+}
+
+export function changedSince(since) {
+  const changed = [];
+  for (const [path, rev] of revisions) if (rev > since) changed.push(path);
+  return changed;
+}
+
+export function listFiles() {
+  return [...files.keys()];
+}
+
 function markTree(path, op) {
   for (const file of files.keys()) if (file === path || file.startsWith(path + '/')) mark(file, op);
   for (const dir of dirs) if (dir === path || dir.startsWith(path + '/')) mark(dir, op);
@@ -514,6 +528,7 @@ async function loadTree() {
         const file = await entry.getFile();
         files.set(full, Buffer.from(await file.arrayBuffer()));
         meta.set(full, { mtimeMs: file.lastModified });
+        revisions.set(full, ++revision);
       }
     }
   }
