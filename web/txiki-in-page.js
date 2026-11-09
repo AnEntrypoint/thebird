@@ -72,14 +72,14 @@ function startBuiltin(current, message) {
   };
   Promise.resolve()
     .then(() => {
-      if (!current.builtin) throw new Error(`${message.name}: no builtin bridge is open for this run`);
+      if (!current.builtin) throw new Error('no builtin bridge is open for this run');
       return current.builtin(message.name, message.argv, message.cwd, controller.signal);
     })
     .then(
       (out) => settle({ code: 0, out, err: '' }),
       (err) => settle(err?.message === 'cancelled'
         ? { code: 130, out: '', err: 'cancelled\n' }
-        : { code: err?.exitCode ?? 1, out: '', err: `${err?.message ?? err}\n` }),
+        : { code: err?.exitCode ?? 1, out: '', err: `${message.name}: ${err?.message ?? err}\n` }),
     );
 }
 
