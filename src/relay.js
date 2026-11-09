@@ -60,6 +60,9 @@ export async function startRelay({ host = '127.0.0.1', port = 0 } = {}) {
   const { port: bound } = server.address();
   return {
     url: `http://${host}:${bound}/`,
-    close: () => new Promise((ok) => server.close(ok)),
+    close: () => new Promise((ok) => {
+      server.closeAllConnections();
+      server.close(ok);
+    }),
   };
 }
