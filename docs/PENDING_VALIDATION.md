@@ -1064,3 +1064,14 @@ Run 3 totals, quoted from the log: `witness totals: PASS 184 FAIL 3`, `WITNESS-E
 (3) Ctrl-O. The check was wrong, not the screen. The run 3 log shows the full-transcript footer `esc close · pgup/pgdn scroll`, so the full view opened. The check required `line 1` and `line 60` on one screen, but the viewer is windowed and pages with pgup/pgdn, so the two ends are never on screen together. The `closed` capture is the main transcript tail (lines 37 to 53), which is the view after Escape. Fixed in `scripts/witness.mjs`: the check now reads the footer. It passes when `esc close` is on screen after Ctrl-O, and fails when it is gone after Escape.
 
 Not pushed. Commit as lanmower with no trailer. The ask check and the approval check (which matched the input echo, not a panel) remain open until fx advertises a tool to this page.
+
+## Approval check: asserts the panel, not the echo (not run)
+
+Change, in `scripts/witness.mjs`. The old check matched `echo approval` anywhere on the screen, and the typed prompt echo `┃ [tool:bash] [input:{"command":"echo approval"}]` contains it, so it proved nothing about the panel.
+- The approval step now waits for `Allow once`, the first option of the approval panel.
+- `approval: a bash tool call opens the approval panel with its options and its command row` asserts `1. Allow once` and `3. Deny` on the screen, which are the option labels in fx's `src/ui/footer/approval_ui.zig` (line 1747 and line 1749, for a request with an argument preview), and at least one row that contains `echo approval` and does not start with `┃`. A `┃` row is the input echo, so a row outside it is the tool line from the panel.
+- `negative control: a plain prompt with no approval-requiring tool shows no approval panel` uses the transcript screen after the plain prompt `hello`. It asserts the stub answer is there and that neither `Allow once` nor `3. Deny` is on it.
+
+Witness it needs (Phase B, after fx's push and the go-ahead): the full `npm run witness`, reading the approval check's `options` and `commandRows` detail and the negative control's detail.
+
+Expected result, and why: with `tools: []` on this page, the stub now sends no tool call for `[tool:bash]` (`scripts/fx-stub-gateway.mjs`, `tool-not-advertised=bash` in the reply), so the panel will not open and the approval check is expected to FAIL on the same fx advertisement cause as the ask check. A PASS needs fx to advertise a tool that needs approval to this page. The negative control can pass on its own.

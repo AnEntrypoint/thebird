@@ -200,7 +200,7 @@ if (existsSync(chrome)) {
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
       await submit('[tool:bash] [input:{"command":"echo approval"}]');
-      surfaces.approvalShown = await settle(hasText('echo approval'), 90000);
+      surfaces.approvalShown = await settle(hasText('Allow once'), 90000);
       await grab('approval');
       await press('Escape');
       await new Promise((ok) => setTimeout(ok, 2000));
@@ -225,7 +225,9 @@ if (existsSync(chrome)) {
   const surfaceHas = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line.includes(text));
   const surfaceRow = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line === text);
   check('transcript: the prompt and the stub answer appear in the TUI transcript', surfaces.transcriptShown === true && surfaceHas('transcript', 'stub gateway answer: prompt=hello'), JSON.stringify({ shown: surfaces.transcriptShown, stub: stubTui.seen.slice(0, 2) }));
-  check('approval: a bash tool call shows its command in the TUI approval panel', surfaces.approvalShown === true && surfaceHas('approval', 'echo approval') && surfaceHas('approval', 'bash'), JSON.stringify((surfaces.approval ?? '').split('\n').slice(0, 6)));
+  const approvalPanelRows = (name) => (surfaces[name] ?? '').split('\n').filter((line) => line.includes('echo approval') && !line.startsWith('┃'));
+  check('approval: a bash tool call opens the approval panel with its options and its command row', surfaces.approvalShown === true && surfaceHas('approval', '1. Allow once') && surfaceHas('approval', '3. Deny') && approvalPanelRows('approval').length > 0, JSON.stringify({ options: (surfaces.approval ?? '').split('\n').filter((line) => /1\. Allow once|3\. Deny/.test(line)), commandRows: approvalPanelRows('approval') }));
+  check('negative control: a plain prompt with no approval-requiring tool shows no approval panel', surfaceHas('transcript', 'stub gateway answer: prompt=hello') && !surfaceHas('transcript', 'Allow once') && !surfaceHas('transcript', '3. Deny'), JSON.stringify((surfaces.transcript ?? '').split('\n').filter((line) => /Allow once|3\. Deny/.test(line))));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askAnswered', 'tool-result=seen'), JSON.stringify((surfaces.askAnswered ?? '').split('\n').slice(-6)));
   check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('fullClosed', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
