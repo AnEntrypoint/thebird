@@ -595,6 +595,22 @@ Witness of this phase, the focused run (`/tmp/p28/focused.mjs`, the same `runTer
 
 Other validation. `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 comments in 86 repo-owned files. `node scripts/lint-architecture.mjs --static` reports `303 claims: 303 pass, 0 fail, 0 unverified`. The lint's expected strings and the ARCHITECTURE.md expiry paragraph are updated for the window change. The full witness has not run in this phase; that is Phase B.
 
+## Phase B: full witness in two foreground calls, and the live architecture lint (queue pass 10)
+
+The witness on the tree at `7f2f2c2` plus the ledger commit, run as sequential foreground calls with `THEBIRD_WITNESS_CHECKPOINT=/tmp/p28-witness CHROME_BIN=/usr/bin/chromium timeout 590 node scripts/witness.mjs`. Each call stops before a new browser run after 330 s.
+
+Call 1: `CALL 1 PAUSED before terminal 25: checks this call PASS 60 FAIL 0`, exit 75, wall 04:54:06 to 04:59:37 UTC (331 s), log `/tmp/p28/call-1.log`.
+
+Call 2: resumed from the checkpoint (25 browser runs replayed, the rest live). `checkpoint /tmp/p28-witness: call 2, 93 browser runs recorded`, `witness totals: PASS 144 FAIL 0`, `all checks passed`, exit 0, wall 04:59:43 to 05:03:02 UTC (199 s), log `/tmp/p28/call-2.log`. The replay diverged zero times. The two playwriter checks, the birdman sha check, the expiry window check (`9 ticks; error: resource limit exceeded: execution timeout (10s)`) and the production-value check all PASS. Wall time for the witness is 530 s across the two calls.
+
+Live architecture lint, in the foreground: `CHROME_BIN=/usr/bin/chromium npm run lint:architecture`, exit 0, `314 claims: 314 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, log `/tmp/p28/lint-live.log`. The live terminal ran 05:03:12 to 05:09:36 UTC (384 s).
+
+Defects found in this phase. None in the witness or the component. The change in Phase A broke three static architecture claims (the exact strings in the lint and the ARCHITECTURE.md expiry paragraph), and those were fixed in Phase A.
+
+Final validation on the tree: `npm run check` exits 0. `npm run lint:comments` exits 0, with `87 repo-owned files checked: 0 comments`.
+
+Push: `origin main`, once, after this ledger commit. The pushed range includes the esbuild pin (`fd3f297`), the playwriter and birdman checks (`944831b`, `fb27a52`), and the expiry window and checkpoint (`7f2f2c2`).
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
