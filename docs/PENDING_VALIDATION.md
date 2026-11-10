@@ -520,6 +520,23 @@ Witness run 4 has not run. The tracked tree was not clean at that point: another
 
 Upstream issue, still open: the Pages floosie step needs floosie `main` to declare `esbuild`, as noted in the Phase A section.
 
+## Shared-tree validation: playwriter, birdman, and the floosie and txiki pass (queue pass 6)
+
+The witness ran once on the shared tree, with another session's uncommitted playwriter and birdman work in place: `CHROME_BIN=/usr/bin/chromium npm run witness`, started 05:22:03 and ended 05:40:56 (18 min 53 s), log `/tmp/p23-witness2.log`. It printed 140 PASS, 0 FAIL, 0 UNVERIFIED, 0 SKIP, `all checks passed` and `WITNESS-EXIT 0`. The witness has no playwriter or birdman check. Its gm check shows the hub with the `playwriter` endpoint registered, which is the extent of its coverage of that feature.
+
+Before this run, another session ran the witness on the same tree (`/tmp/push-witness.log`, exit 1). Its micropip check read an empty Pyodide lock, whose SHA-256 is the empty-input hash `e3b0c442…`, so the CDN fetch failed during that run. Its provenance check failed on the lint as it stood then. `scripts/lint-comments.mjs` changed on disk during that run, and the current lint passes.
+
+Collision defects, each fixed at its cause:
+- `web/vendor/gm/manifest.json`: the `gm-in-page.js` hash was stale after the playwriter edit to `web/gm-in-page.js`. It is now `12a0a00e…`.
+- `AGENTS.md`: the builtin list omitted `playwriter`, which `BUILTIN_NAMES` in `web/builtins.js` includes. It now names it. `web/shell-lookup.js` gets its names from `lookupPrologue(BUILTIN_NAMES)`, so `which`, `command -v` and `type` already agree for it.
+- `scripts/lint-comments.mjs`: the manifest reader knew only `modules` and `browser`. The birdman manifest uses a `client` entry, so a commented birdman bundle would have failed once tracked. The reader now takes every named entry.
+
+Hunk attribution. Both groups were committed in this pass, path-limited, after the run above.
+- Other session (playwriter and birdman): `web/playwriter-in-page.js`, `scripts/vendor-birdman.mjs`, `web/vendor/birdman/` (`client.js` SHA-256 `c98ed24b…`, which matches its manifest), `web/builtins.js` (the `playwriter` builtin), `web/gm-in-page.js` (the playwriter import, the verbs scope, and `hub.attach('playwriter', …)`), `AGENTS.md` (the Browser list and the birdman line), `ARCHITECTURE.md` (the builtin list, the twelve builtins, the playwriter row, and the gm row), `README.md` (the playwriter usage line), and the birdman entry in `scripts/lint-comments.mjs`.
+- This pass: `web/vendor/gm/manifest.json`, the `playwriter` name in the AGENTS builtin list, and the manifest reader in `scripts/lint-comments.mjs`.
+
+Validation on the same tree. `npm run check` exits 0. `npm run lint:comments` exits 0, and its 17 vendored bundles are each named or listed. `node scripts/lint-architecture.mjs --static` reports 299 claims pass, 0 fail, 0 unverified. The full live architecture lint was not run in this pass.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
