@@ -382,6 +382,22 @@ Effect on the MIT notice: MIT asks that the copyright notice and permission noti
 
 No defect surfaced in Phase B, so none was fixed. Nothing was pushed in Phase A.
 
+## Phase A: queue pass (python journal, sqlite witness, pip row, stale pyodide directory)
+
+| Commit | File | Row | Witness that must pass in Phase B |
+| --- | --- | --- | --- |
+| 547b55d | web/python-worker.js | Change journal. The worker installs a `sys.addaudithook` once per runtime (`JOURNAL`). It records the absolute path of every workspace file Python opens for writing (`open` with a write mode or write flags), removes or renames (`os.remove`, `os.rmdir`, `os.rename`, `os.replace`), and `sqlite3.connect`. `drainJournal` returns and clears the record before and after each run. `collect` stats and reads only those paths, so the full `scanStats` walk and `signature` are gone. `reconcile` takes `put`, `drops` and `keep`: `keep` is sent only on a full resync, and `lastCollect` is removed. | `python3 warm calls are timed in-page over 300 files and average under 5 ms`; `in-page python3 sees a shell rewrite made after its last call`; `in-page python3 removes a file it deletes and the shell sees it gone`; `in-page python3 files survive a browser restart` |
+| 547b55d | web/python-in-page.js | `outbound` walks only the page's changed paths (`fs.changedSince(synced)`), where `isFile` is `lstatSync(...).isFile()` so a link never syncs as a copy. A changed path that is no longer a file becomes a `drops` entry. A full resync (`synced === 0`) sends the workspace list as `keep`. `runPython` sends `put`, `drops` and `keep`; the `paths` argument is gone. | the same rows as above; the sqlite row below |
+| 28da1ec | scripts/witness.mjs | Incremental block: a `python3` run creates `notes/inc.db` with sqlite3 and the shell reads its row. The check `in-page python3 writes a sqlite3 database through the write journal, and the shell reads its row` expects the output line `5`. This guards the one write the audit hook sees only through `sqlite3.connect`. | `in-page python3 writes a sqlite3 database through the write journal, and the shell reads its row` |
+| (unchanged at HEAD) | scripts/witness.mjs, txiki block | The txiki-shell `pip frobnicate` check from the earlier row is already in the witness: `the txiki shell names an unknown pip command on stderr and exits 2`, with `rc=2` and `pip: unknown command 'frobnicate'`. No change in this pass. | `the txiki shell names an unknown pip command on stderr and exits 2` |
+| (untracked, deleted) | web/vendor/pyodide/ | Removed with `rm -rf`. Checked first: nothing in code, scripts, workflows or the build references the directory (the only hits are the lint's `.gitignore` string check, which does not read it, and historical notes in this file). Its `pyodide-lock.json` is version 2.4.0, not the pinned 314.0.7 core. `scripts/build-pages.mjs` copies all of `web/` into `_site`, so a local build would have shipped it. It was untracked and not ignored. | `git status` no longer lists it; `npm run check` |
+
+Known limit of the journal: a write that reaches the Emscripten file system without a Python audit event (a C extension writing a file directly, other than through `sqlite3`) is not journaled. It reaches the page only when the page changes that path. Python's `open`, `os` and `shutil` writes are covered by the audit events.
+
+Phase B must also confirm the warm-call figure. The 178 ms over 30 calls recorded above was measured before this change, and the 5 ms budget is unchanged.
+
+Scope left out of this pass: the `scripts/witness.mjs` peer hunks for `fx` and `pinMismatches`, the uncommitted `scripts/vendor-fx.mjs`, `web/fx-in-page.js`, `web/builtins.js`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `.gitignore` and `.github/workflows/pages.yml`. These are another peer's uncommitted work in the shared checkout. They are not committed or pushed by this pass.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
