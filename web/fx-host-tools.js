@@ -27,3 +27,9 @@ export const PAGE_HOST_TOOLS = [
 ];
 
 export const PAGE_HOST_TOOL_NAMES = PAGE_HOST_TOOLS.map((tool) => tool.name);
+
+export function pageHostToolsJson() {
+  return JSON.stringify({
+    tools: PAGE_HOST_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+  });
+}
