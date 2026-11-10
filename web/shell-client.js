@@ -1,6 +1,6 @@
 const CANCEL_GRACE_MS = 1500;
 
-export function shellClient({ url = new URL('./shell-worker.js', import.meta.url).href } = {}) {
+export function shellClient({ url = new URL('./shell-worker.js', import.meta.url).href, commandTimeoutMs } = {}) {
   const cancelFlag = globalThis.crossOriginIsolated ? new SharedArrayBuffer(4) : null;
   const cancelWord = cancelFlag && new Int32Array(cancelFlag);
   const pending = new Map();
@@ -51,7 +51,7 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   }
 
   function spawn() {
-    const target = new Worker(url, { type: 'module' });
+    const target = new Worker(commandTimeoutMs ? `${url}?commandTimeoutMs=${encodeURIComponent(commandTimeoutMs)}` : url, { type: 'module' });
     worker = target;
     target.onmessage = onMessage;
     target.onerror = (event) => markFailed(new Error(event.message || 'shell worker failed to start'));

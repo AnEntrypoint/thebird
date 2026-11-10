@@ -28,7 +28,11 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress }) {
+export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay }) {
+  if (replay) {
+    await replayTerminal({ replay, interact, timeoutMs });
+    return replay.state;
+  }
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
     '--headless',
@@ -110,21 +114,32 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       await sleep(300);
     }
     if (interact) {
-      const waitFor = async (expression, limit = timeoutMs) => {
-        const deadline = Date.now() + limit;
-        while (!(await evaluate(expression))) {
-          if (Date.now() > deadline) throw new Error('timed out waiting for: ' + expression);
-          await sleep(100);
-        }
-      };
-      const press = async (key, { ctrl = false } = {}) => {
-        const spec = KEYS[key];
-        const base = { key, code: spec.code, windowsVirtualKeyCode: spec.keyCode, nativeVirtualKeyCode: spec.keyCode, modifiers: ctrl ? 2 : 0 };
-        await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: spec.text }, sessionId);
-        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
-      };
-      const type = (text) => send('Input.insertText', { text }, sessionId);
-      await interact({ evaluate, waitFor, press, type });
+      const traced = (entry) => trace?.push(entry);
+      await interact(driverFor({
+        evaluate: async (expression) => {
+          const value = await evaluate(expression);
+          traced({ kind: 'eval', expression, value });
+          return value;
+        },
+        press: async (key, { ctrl = false } = {}) => {
+          const spec = KEYS[key];
+          const base = { key, code: spec.code, windowsVirtualKeyCode: spec.keyCode, nativeVirtualKeyCode: spec.keyCode, modifiers: ctrl ? 2 : 0 };
+          await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: spec.text }, sessionId);
+          await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+          traced({ kind: 'press', key, ctrl });
+        },
+        type: async (text) => {
+          await send('Input.insertText', { text }, sessionId);
+          traced({ kind: 'type', text });
+        },
+        note: async (name, read) => {
+          const value = read();
+          traced({ kind: 'note', name, value });
+          return value;
+        },
+        pause: () => sleep(100),
+        limit: timeoutMs,
+      }));
     }
     const state = { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: globalThis.thebird.text() })")) };
     await send('Browser.close').catch(() => {});
@@ -138,6 +153,42 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     }
     killGroup(child);
   }
+}
+
+function driverFor({ evaluate, press, type, note, pause, limit }) {
+  const waitFor = async (expression, wait = limit) => {
+    const deadline = Date.now() + wait;
+    while (!(await evaluate(expression))) {
+      if (Date.now() > deadline) throw new Error('timed out waiting for: ' + expression);
+      await pause();
+    }
+  };
+  return { evaluate, waitFor, press, type, note, pause };
+}
+
+async function replayTerminal({ replay, interact, timeoutMs }) {
+  let step = 0;
+  const take = (probe) => {
+    const entry = replay.trace[step++];
+    if (!entry || Object.keys(probe).some((key) => entry[key] !== probe[key])) {
+      throw new Error(`checkpoint replay diverged at step ${step}: expected ${JSON.stringify(probe)}`);
+    }
+    return entry;
+  };
+  if (!interact) return;
+  await interact(driverFor({
+    evaluate: async (expression) => take({ kind: 'eval', expression }).value,
+    press: async (key, { ctrl = false } = {}) => {
+      take({ kind: 'press', key, ctrl });
+    },
+    type: async (text) => {
+      take({ kind: 'type', text });
+    },
+    note: async (name) => take({ kind: 'note', name }).value,
+    pause: async () => {},
+    limit: timeoutMs,
+  }));
+  if (step !== replay.trace.length) throw new Error(`checkpoint replay left ${replay.trace.length - step} steps unused`);
 }
 
 function killGroup(child) {

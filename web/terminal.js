@@ -42,7 +42,7 @@ try {
   document.body.dataset.renderer = 'dom';
 }
 
-const client = shellClient();
+const client = shellClient({ commandTimeoutMs: params.get('commandTimeoutMs') ?? undefined });
 const pty = createPtyAdapter({
   term,
   client,

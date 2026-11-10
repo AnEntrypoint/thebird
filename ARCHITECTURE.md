@@ -59,7 +59,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 
 bashkit's default is 30 s, which was too short. In one of seven recorded witness runs a cold `pip install` of tabulate failed with `execution timeout (30s)`. The first cold `python3` or `pip` call on the public site, on this link, took about 290 s to idle (5 MB stripped bundle at about 80 KB/s, then Pyodide start and the micropip wheel). With the former 300 s limit that call was cut: `pip --version` printed `error: resource limit exceeded: execution timeout (300s)`. Under contention the cold call took longer than 600 s: the architecture lint's live `python3 -c` probe, run while the witness ran, started at 03:42:04 and was cut at 03:52:04 with `error: resource limit exceeded: execution timeout (600s)`. Run alone, the same cold probe took 210 s, and run beside the witness it took 546 s. 900 s is about 1.5 times the slowest measured cold call. With 900 s, a cold tabulate install completes in about 19-28 s in the in-page shell, and `sleep 40` completes.
 
-The witness checks the expiry: seventeen 55 s sleeps in a loop are cut at 900 s with `execution timeout (900s)`, after `tick16` and before `tick17`. That check takes about fifteen minutes.
+The witness checks the expiry through the component's own window: the terminal page takes a `commandTimeoutMs` URL parameter, the shell worker passes it to `createShell`, and one-second sleeps are cut at a 10 s window with `execution timeout (10s)`. The shipped window stays 900 s, and the witness checks that value in `web/bash-shell.js`. The expiry check takes a few seconds, so it fits in one foreground call.
 
 ## In-page builtins
 

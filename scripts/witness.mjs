@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
 import { runTerminal, withTimeout } from './browser-driver.mjs';
+import { digest, openCheckpoint, PAUSED } from './witness-checkpoint.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorFx } from './vendor-fx.mjs';
 import { vendorGm } from './vendor-gm.mjs';
@@ -15,14 +16,38 @@ import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COLD_START_MS = 900000;
-let failures = 0;
+const checkpoint = process.env.THEBIRD_WITNESS_CHECKPOINT ? openCheckpoint({ dir: resolve(process.env.THEBIRD_WITNESS_CHECKPOINT), root }) : null;
+const recorded = checkpoint?.state.checks ?? [];
+let checkCount = 0;
+let callPassed = 0;
+let callFailed = 0;
+let failures = recorded.filter((entry) => !entry.ok).length;
 
 function check(name, ok, detail = '') {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
-  if (!ok) failures++;
+  const passed = Boolean(ok);
+  const index = checkCount++;
+  if (index < recorded.length) {
+    if (recorded[index].name !== name || recorded[index].ok !== passed) {
+      failures++;
+      console.log(`FAIL replay diverged at check ${index + 1}: ${name}`);
+    }
+    return;
+  }
+  recorded.push({ name, ok: passed });
+  console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
+  if (passed) callPassed++;
+  else {
+    callFailed++;
+    failures++;
+  }
 }
+const portOf = (name) => checkpoint?.state.ports[name] ?? 0;
+const rememberPort = (name, port) => {
+  if (checkpoint) checkpoint.state.ports[name] = port;
+};
 
-const relay = await startRelay({});
+const relay = await startRelay({ port: portOf('relay') });
+rememberPort('relay', Number(new URL(relay.url).port));
 check('relay serves the browser terminal page', (await fetch(relay.url)).status === 200);
 const isolated = await fetch(relay.url);
 check('relay sends the cross-origin isolation headers', isolated.headers.get('cross-origin-opener-policy') === 'same-origin' && isolated.headers.get('cross-origin-embedder-policy') === 'require-corp');
@@ -36,8 +61,35 @@ if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
   if (!existsSync(join(root, 'web', 'vendor', 'gm', 'gm-core.wasm'))) await vendorGm();
   if (!existsSync(join(root, 'web', 'vendor', 'floosie', 'browser.js'))) await vendorFloosie();
-  const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
-  const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: COLD_START_MS, ...options });
+  const profile = checkpoint ? checkpoint.profile : mkdtempSync(join(tmpdir(), 'thebird-profile-'));
+  if (checkpoint) mkdirSync(profile, { recursive: true });
+  const recordedRun = async (material, options) => {
+    if (!checkpoint) return runTerminal({ chrome, profile, ...options });
+    const index = checkpoint.state.terminals;
+    const key = digest(JSON.stringify(material));
+    const file = checkpoint.terminalFile(index);
+    if (existsSync(file)) {
+      const saved = JSON.parse(readFileSync(file, 'utf8'));
+      if (saved.key !== key) throw new Error(`checkpoint terminal ${index} does not match this witness`);
+      return runTerminal({ replay: saved, interact: options.interact, timeoutMs: options.timeoutMs });
+    }
+    if (checkpoint.overBudget()) {
+      checkpoint.save();
+      console.log(`CALL ${checkpoint.state.calls} PAUSED before terminal ${index}: checks this call PASS ${callPassed} FAIL ${callFailed}`);
+      process.exit(PAUSED);
+    }
+    const trace = [];
+    const state = await runTerminal({ chrome, profile, ...options, trace });
+    writeFileSync(file, `${JSON.stringify({ key, trace, state })}\n`);
+    checkpoint.state.terminals = index + 1;
+    checkpoint.save();
+    return state;
+  };
+  const terminal = (pairs, options = {}) => {
+    const { params = [], interact, ...rest } = options;
+    const url = relay.url + '?' + new URLSearchParams([...pairs, ...params]).toString();
+    return recordedRun({ url, pairs, params, ...rest }, { chrome, profile, url, timeoutMs: COLD_START_MS, interact, ...rest });
+  };
 
   const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40'], ['run', 'playwriter --version'], ['run', 'which playwriter; command -v playwriter; type playwriter'], ['run', "playwriter frobnicate; echo after-frobnicate"]]);
   check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
@@ -58,10 +110,12 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     res.writeHead(200, { 'content-type': SITE_TYPES[extname(file)] ?? 'application/octet-stream' });
     res.end(readFileSync(file));
   });
-  await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => pagesServer.listen(portOf('pages'), '127.0.0.1', resolve));
+  rememberPort('pages', pagesServer.address().port);
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'gm --version'], ['run', 'gm check'], ['run', 'gm serve'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', 'gm attach'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString(), timeoutMs: COLD_START_MS });
+  const siteUrl = pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'gm --version'], ['run', 'gm check'], ['run', 'gm serve'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', 'gm attach'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString();
+  const site = await recordedRun({ url: siteUrl }, { chrome, profile, url: siteUrl, timeoutMs: COLD_START_MS });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
@@ -366,7 +420,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
 
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
-  for (const server of [corsHost, plainHost]) await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  for (const [name, server] of [['cors', corsHost], ['plain', plainHost]]) {
+    await new Promise((resolve) => server.listen(portOf(name), '127.0.0.1', resolve));
+    rememberPort(name, server.address().port);
+  }
   const corsPort = corsHost.address().port;
   const plainPort = plainHost.address().port;
   const fetched = await terminal([
@@ -566,19 +623,20 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page terminal Ctrl-C drops lines queued behind the cancelled command', !/^dropped-line$/m.test(dropped.out) && dropped.out.includes('^C'), dropped.out.split('\n').filter((line) => line === '^C' || line.includes('dropped')).join(' / ').slice(0, 140));
   let heldRequests = 0;
   const holdServer = createServer(() => { heldRequests++; });
-  await new Promise((resolve) => holdServer.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => holdServer.listen(portOf('hold'), '127.0.0.1', resolve));
+  rememberPort('hold', holdServer.address().port);
   const held = {};
   await terminal([], {
-    interact: async ({ type, press, evaluate, waitFor }) => {
+    interact: async ({ type, press, evaluate, waitFor, note, pause }) => {
       await type(`curl -s http://127.0.0.1:${holdServer.address().port}/held`);
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'", 20000);
-      const reachedBy = Date.now() + 20000;
-      while (heldRequests === 0 && Date.now() < reachedBy) await new Promise((resolve) => setTimeout(resolve, 100));
-      const pressed = Date.now();
+      for (let poll = 0; poll < 200 && (await note('held-requests', () => heldRequests)) === 0; poll++) await pause();
+      const pressed = await note('pressed-at', () => Date.now());
       await press('c', { ctrl: true });
       await waitFor("!document.body.dataset.busy", 10000);
-      held.elapsed = Date.now() - pressed;
+      held.elapsed = await note('cancel-elapsed', () => Date.now() - pressed);
+      held.requests = await note('held-requests-at-cancel', () => heldRequests);
       await type('echo after-held-cancel');
       await press('Enter');
       await waitFor("/^after-held-cancel$/m.test(globalThis.thebird.text())", 20000);
@@ -588,7 +646,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   holdServer.closeAllConnections();
   holdServer.close();
-  check('in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on', heldRequests > 0 && held.echoed && held.elapsed < 10000 && held.out.includes('cancelled') && /^after-held-cancel$/m.test(held.out), `requests reaching the held server=${heldRequests} ^C echoed=${held.echoed} cancel took ${held.elapsed} ms`);
+  check('in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on', held.requests > 0 && held.echoed && held.elapsed < 10000 && held.out.includes('cancelled') && /^after-held-cancel$/m.test(held.out), `requests reaching the held server=${held.requests} ^C echoed=${held.echoed} cancel took ${held.elapsed} ms`);
   const quickjs = await terminal([['run', 'qjs -e "console.log(6*7)"'], ['run', 'qjs -e "throw new TypeError(\'boom\')"'], ['run', 'which qjs']]);
   check('in-page qjs runs quickjs-ng through the txiki engine, prints console output, and reports an uncaught error', quickjs.engine === 'ready' && /^42$/m.test(quickjs.out) && quickjs.out.includes('Uncaught TypeError: boom') && /^qjs$/m.test(quickjs.out), quickjs.out.split('\n').slice(-4).join(' / ').slice(0, 160));
   const editing = {};
@@ -831,8 +889,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
   check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
-  const expiry = await terminal([['run', 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do sleep 55; echo tick$i; done; echo late-finish']], { timeoutMs: 1500000 });
-  check('a command past 900 s is cut at the limit with the expiry message', expiry.out.includes('error: resource limit exceeded: execution timeout (900s)') && /^tick16$/m.test(expiry.out) && !/^tick17$/m.test(expiry.out) && !/^late-finish$/m.test(expiry.out), expiry.out.split('\n').slice(-2).join(' / ').slice(0, 160));
+  const EXPIRY_WINDOW_MS = 10000;
+  const expiry = await terminal([['run', 'for i in $(seq 1 30); do sleep 1; echo tick$i; done; echo late-finish']], { params: [['commandTimeoutMs', String(EXPIRY_WINDOW_MS)]] });
+  const expiryTicks = [...expiry.out.matchAll(/^tick(\d+)$/gm)].map((match) => Number(match[1]));
+  check('a command past the expiry window is cut at the window with the expiry message, and the lines after it do not run', expiry.out.includes(`error: resource limit exceeded: execution timeout (${EXPIRY_WINDOW_MS / 1000}s)`) && expiryTicks.length >= 5 && expiryTicks.length < 30 && !/^late-finish$/m.test(expiry.out), `${expiryTicks.length} ticks; ` + expiry.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   rmSync(profile, { recursive: true, force: true });
 } else {
   console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
@@ -942,6 +1002,11 @@ const hungCall = await withTimeout(new Promise(() => {}), 50, 'Runtime.evaluate'
 check('a DevTools call that never answers aborts with a timeout instead of stalling', hungCall === 'Runtime.evaluate did not answer within 50 ms', hungCall);
 const promptCall = await withTimeout(Promise.resolve('answered'), 50, 'Runtime.evaluate');
 check('a DevTools call that answers in time is returned unchanged (negative control)', promptCall === 'answered', promptCall);
+const bashShellSource = readFileSync(join(root, 'web', 'bash-shell.js'), 'utf8');
+const shellWorkerSource = readFileSync(join(root, 'web', 'shell-worker.js'), 'utf8');
+check('the component ships the 900 s command expiry window, and the page can shorten it only through commandTimeoutMs', /^const COMMAND_TIMEOUT_MS = 900000;$/m.test(bashShellSource) && bashShellSource.includes('commandTimeoutMs = COMMAND_TIMEOUT_MS') && shellWorkerSource.includes('commandTimeoutMs: windowFromUrl(self.location.search)'), 'web/bash-shell.js and web/shell-worker.js');
 await relay.close();
+if (checkpoint) console.log(`checkpoint ${process.env.THEBIRD_WITNESS_CHECKPOINT}: call ${checkpoint.state.calls}, ${checkpoint.state.terminals} browser runs recorded`);
+console.log(`witness totals: PASS ${recorded.filter((entry) => entry.ok).length} FAIL ${recorded.filter((entry) => !entry.ok).length}`);
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exitCode = failures ? 1 : 0;

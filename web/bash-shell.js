@@ -28,18 +28,18 @@ export function hasBackgroundOperator(command) {
   return false;
 }
 
-export async function createShell({ cwd = '/workspace' } = {}) {
+export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMAND_TIMEOUT_MS } = {}) {
   await initBashkit();
   let abort = new AbortController();
   let engineCancelled = false;
   let builtinStatus = 1;
-  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: COMMAND_TIMEOUT_MS }).then(withNewline, (err) => {
+  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: commandTimeoutMs }).then(withNewline, (err) => {
     engineCancelled ||= err?.message === 'cancelled';
     builtinStatus = err?.message === 'cancelled' ? 130 : (err?.exitCode ?? 1);
     throw err;
   })]));
   customBuiltins.thebird_status = () => String(builtinStatus);
-  const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: COMMAND_TIMEOUT_MS });
+  const bash = new Bash({ cwd, fs: createHost(), customBuiltins, timeoutMs: commandTimeoutMs });
   await bash.execute(lookupPrologue(BUILTIN_NAMES));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
   let status = 0;

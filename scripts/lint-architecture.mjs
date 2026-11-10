@@ -120,10 +120,10 @@ function architectureStatic() {
 
   record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000', all(
     outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000'), 'bash-shell.js sets COMMAND_TIMEOUT_MS to 900000'),
-    outcome(fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js passes it to Bash as timeoutMs'),
+    outcome(fileHas('web/bash-shell.js', 'commandTimeoutMs = COMMAND_TIMEOUT_MS') && fileHas('web/bash-shell.js', 'timeoutMs: commandTimeoutMs'), 'bash-shell.js defaults commandTimeoutMs to it and passes it to Bash as timeoutMs'),
   ));
   cites('In one of seven recorded witness runs', ['in-page bash runs a 40-second sleep without a timeout']);
-  cites('The witness checks the expiry', ['a command past 900 s is cut at the limit with the expiry message']);
+  cites('The witness checks the expiry', ['a command past the expiry window is cut at the window with the expiry message']);
   cites('With 900 s, a cold tabulate install completes', ['in-page pip installs a pure package from PyPI, and python3 imports it in the same page']);
 
   record('`@everruns/bashkit-wasm` 0.20.3', versionIn('web/vendor/bashkit', '0.20.3'));
@@ -228,7 +228,7 @@ function agentsStatic() {
     outcome(witness.includes('xterm renders SGR colour: red-line uses palette 1'), 'witness: xterm renders SGR colour'),
     outcome(witness.includes('the terminal consumes the escape sequences'), 'witness: escape sequences are consumed by the terminal'),
   ));
-  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000') && fileHas('web/bash-shell.js', 'timeoutMs: COMMAND_TIMEOUT_MS'), 'bash-shell.js sets the value and passes it to Bash'));
+  record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000') && fileHas('web/bash-shell.js', 'timeoutMs: commandTimeoutMs'), 'bash-shell.js sets the value and passes it to Bash'));
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));

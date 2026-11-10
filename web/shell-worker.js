@@ -6,6 +6,10 @@ import { onPythonPhase } from './python-in-page.js';
 import { clearCancel, setCancelWord } from './txiki-in-page.js';
 
 const WORKSPACE = '/workspace';
+const windowFromUrl = (search) => {
+  const ms = Number(new URLSearchParams(search).get('commandTimeoutMs'));
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+};
 globalThis.Buffer = Buffer;
 onPythonPhase((phase, detail) => postMessage({ phase, detail }));
 const BACKGROUND_REFUSED = 'background jobs are not supported in the in-page shell; run the command in the foreground';
@@ -29,7 +33,7 @@ function completions(prefix, cwd) {
 try {
   await hydrate();
   mkdirSync(WORKSPACE, { recursive: true });
-  const shell = await createShell({ cwd: WORKSPACE });
+  const shell = await createShell({ cwd: WORKSPACE, commandTimeoutMs: windowFromUrl(self.location.search) });
   await flushFs();
   postMessage({ ready: true });
   let queue = Promise.resolve();
