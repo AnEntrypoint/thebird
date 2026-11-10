@@ -398,6 +398,26 @@ Phase B must also confirm the warm-call figure. The 178 ms over 30 calls recorde
 
 Scope left out of this pass: the `scripts/witness.mjs` peer hunks for `fx` and `pinMismatches`, the uncommitted `scripts/vendor-fx.mjs`, `web/fx-in-page.js`, `web/builtins.js`, `scripts/build-pages.mjs`, `scripts/lint-architecture.mjs`, `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `.gitignore` and `.github/workflows/pages.yml`. These are another peer's uncommitted work in the shared checkout. They are not committed or pushed by this pass.
 
+## Phase B: queue pass witness (final tree, not pushed: witness not green)
+
+| Step | Command | Result | Wall time |
+| --- | --- | --- | --- |
+| Lint | `npm run check` | exit 0 | not timed |
+| Comments | `npm run lint:comments` | 70 repo-owned files checked: 0 comments; exit 0 | not timed |
+| Shell witness | `npm run witness:shell` | RESULT PASS=108 FAIL=0; exit 0 | not timed |
+| Full witness | `CHROME_BIN=/usr/bin/chromium npm run witness` | PASS=133, FAIL=4, WITNESS-EXIT 1 | 2026-11-10T00:48:35Z to 01:08:01Z, 19 min 26 s (1166 s) |
+
+Phase A rows in the full witness: `python3 warm calls are timed in-page over 300 files and average under 5 ms` PASS, measured 43 ms for 30 calls (about 1.4 ms per call; the 178 ms over 30 calls baseline is replaced). `in-page python3 sees a shell rewrite made after its last call` PASS. `in-page python3 removes a file it deletes and the shell sees it gone` PASS. `in-page python3 writes a sqlite3 database through the write journal, and the shell reads its row` PASS (output `5`). `the txiki shell names an unknown pip command on stderr and exits 2` PASS (`rc=2`, `pip: unknown command 'frobnicate'`). `in-page python3 files survive a browser restart` PASS.
+
+The four FAIL lines, all from the peer's uncommitted hunks in the shared checkout and none from this pass's commits:
+
+- `in-page fx reports its bundled WASM version and passes its offline check`: the check was added to `scripts/witness.mjs` by the uncommitted peer hunk; `web/fx-in-page.js` and `scripts/vendor-fx.mjs` are untracked.
+- `pages.yml SHAs match the AGENTS.md Hosting mapping (local, no network)`, `every AGENTS.md tag still resolves on GitHub to the SHA pages.yml pins (gh)` and `gh unavailable with every pin matching gives UNVERIFIED and no FAIL`: the peer's uncommitted `.github/workflows/pages.yml` adds a second `actions/checkout@11d5960...` (the gmfx checkout), so the pinned count is 4 and the recorded count in AGENTS.md is 3. HEAD's `pages.yml` pins 3 actions.
+
+Not rerun, by instruction (the witness runs once after the last change). The peer's changes are left uncommitted and unpushed. Because the run is not green, nothing is pushed in this pass; the Phase A commits 547b55d, 28da1ec and 606d969 are local on main.
+
+Known limit: the witness ran on the working tree, which includes the peer's hunks, so it does not prove HEAD alone is green. HEAD's own witness has not been run.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
