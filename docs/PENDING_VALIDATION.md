@@ -969,7 +969,7 @@ The stub now answers a streamed request with the events fx's gateway client pars
 ## Witness checks to add (Phase B, after fx pushes and the go-ahead; none run here)
 
 Each runs through `runTerminal` with `interact` and `THEBIRD_FX` set to the stub (`apiKey` `thebird-stub-key`, `gatewayChatUrl` the stub URL), in `scripts/witness.mjs` beside the TUI checks:
-1. Transcript: type `hello [tool:none]`-free text, press Enter, wait for `stub gateway answer: prompt=hello`. Witness: the transcript rows show the user line and the answer. Needs: the text reply path.
+1. Transcript: type `hello`, press Enter, wait for `stub gateway answer: prompt=hello`. Witness: the transcript rows show the user line and the answer. Needs: the text reply path.
 2. Full-transcript screen: type `[lines:60] long`, Enter, then open the full-transcript view (the TUI key fx uses for it; confirm in fx's keymap before the witness). Witness: the heading, `line 1`, and `line 60` are on the screen. Needs: `[lines:N]`.
 3. Approval: type `[tool:bash] [input:{"command":"echo approval"}]`, Enter. Witness: the approval panel names the tool and shows `echo approval`; a deny key returns to the input box with no tool result. Needs: the tool-call path, and `seen` shows `tools` from the request.
 4. Ask presentation: a tool whose name fx treats as an ask (confirm the name in fx before the witness; the stub passes any NAME). Type `[tool:ask] [input:{"question":"pick"}]`, Enter, answer in the input, Enter. Witness: the question row, then the answer row, then `tool-result=seen` in the reply. Needs: the tool-call path and the second request with a tool message.
