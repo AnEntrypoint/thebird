@@ -28,7 +28,7 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay }) {
+export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay, initScript }) {
   if (replay) {
     await replayTerminal({ replay, interact, timeoutMs });
     return replay.state;
@@ -97,6 +97,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Page.enable', {}, sessionId);
+    if (initScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript }, sessionId);
     await send('Runtime.enable', {}, sessionId);
     await send('Log.enable', {}, sessionId);
     blockRequests(sessionId);

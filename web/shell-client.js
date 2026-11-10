@@ -1,5 +1,11 @@
 const CANCEL_GRACE_MS = 1500;
 
+const fxConfig = () => {
+  const value = globalThis.THEBIRD_FX;
+  if (!value || typeof value !== 'object') return undefined;
+  return { apiKey: value.apiKey, model: value.model, gatewayChatUrl: value.gatewayChatUrl };
+};
+
 export function shellClient({ url = new URL('./shell-worker.js', import.meta.url).href, commandTimeoutMs } = {}) {
   const cancelFlag = globalThis.crossOriginIsolated ? new SharedArrayBuffer(4) : null;
   const cancelWord = cancelFlag && new Int32Array(cancelFlag);
@@ -91,7 +97,7 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
 
   return {
     ready,
-    run: (command) => request({ run: command }, true),
+    run: (command) => request({ run: command, fx: fxConfig() }, true),
     complete: (prefix, { command = false } = {}) => request({ complete: prefix, command }),
     cwd: () => request({ query: 'cwd' }),
     cancel() {

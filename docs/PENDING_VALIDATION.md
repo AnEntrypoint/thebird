@@ -775,6 +775,32 @@ Witness checks I tightened in this phase, so they cannot pass on another line: t
 - Not done: the live witness of the new npm surface. It needs a green Pages deploy of `114a7fb` or later, and then the same playwriter check.
 - Committed locally and not pushed: this section. The push rule for this stretch allowed one push, and it was used for `114a7fb`.
 
+## Phase A: fx in the browser (stretch 1, local build, not built)
+
+Reproduction on the local relay (`node bin/thebird-relay.js --port 0`) through the playwriter setup (`gm.playwriter_execute`, project browser for `/workspace/thebird`), with `window.THEBIRD_FX` set by an init script to a stub key and a loopback gateway. Quoted terminal output, before the fix:
+- `fx --version` → `fx-core.wasm 1c894cb9b15f libfx SDK 2`
+- `fx check` → `fx ready: JSPI available; core application/wasm`
+- `fx ask hello` → `fx: fx ask needs window.THEBIRD_FX with apiKey and model`, though the page had `window.THEBIRD_FX` set.
+
+Cause, found by reading the wiring: `web/fx-in-page.js` reads `globalThis.THEBIRD_FX`, and `fx` runs in the shell worker (`web/shell-worker.js`), whose global is not the page's `window`. Nothing carried the configuration across. Fix: `web/shell-client.js` sends `fx: { apiKey, model, gatewayChatUrl }` (`fxConfig`, the three fields only) with each run message, and `web/shell-worker.js` sets `globalThis.THEBIRD_FX` from it before the command. The key moves by `postMessage` to the same origin and stays in memory; it is never written to the workspace.
+
+After that fix, `fx ask hello` against the stub gateway:
+- Stub saw `POST /v4/ai/language-model` with `ai-language-model-streaming: true`, `authorization: Bearer …` and the prompt `hello`.
+- Output: `stub gateway answer: prompt=hello streaming=true authorized=true` (the stub answers with fx's SSE shape: `text-delta` events and a `finish` with `finishReason.unified` = `stop`, the shape in `src/gateway/host_stream_provider.zig`).
+
+Other causes checked and not found:
+- JSPI detection (`supportsJspi`, `WebAssembly.Suspending` and `promising`) is correct: `JSPI available` on Chromium 155.
+- Vendored modules: all ten files in `web/vendor/fx/` are byte-equal to the sibling checkout `/workspace/fx/fx/sdk/`, and `fx-core.wasm` (`1c894cb9b15f…`) equals its `zig-out/bin/fx-core.wasm`.
+- The real gateway allows the page's preflight: `OPTIONS https://ai-gateway.vercel.sh/v4/ai/language-model` with `Origin` set to the relay answers 200 with `access-control-allow-headers` including `Authorization`, `ai-language-model-id` and `ai-language-model-streaming`. A wrong key with a 401 from a stub prints `AI_GATEWAY_API_KEY authentication failed · HTTP 401` (fx's own message). The owner's real key was not used and was not requested.
+
+Open, not fixed here (upstream, the fx core): a gateway 500 is retried by the core and then printed as `fx: HostStreamFailed`, a raw code, not a message. The fix belongs in the fx core.
+
+Upstream dependency, recorded as the owner asked: the fx core build depends on the private gmfx checkout. `scripts/vendor-fx.mjs` builds from the sibling `fx` checkout (`FX_REPO`), and `pages.yml` checks out `AnEntrypoint/gmfx` (private), which fails the Pages build (see the Item 3 entry). That is why fx is not on the live site. Leave `pages.yml` as it is until the owner decides gmfx access.
+
+Witness added to `scripts/witness.mjs` (the browser block, after the playwriter checks): a stub gateway from `scripts/fx-stub-gateway.mjs` on the fixed loopback port 18931 (`THEBIRD_FX_STUB_PORT` overrides), the page config from `browser-driver.mjs`'s new `initScript` option (`Page.addScriptToEvaluateOnNewDocument`), and three terminal lines `fx --version`, `fx check`, `fx ask hello`. Checks: the stub answer line, and the version and JSPI lines. The check fails when the key path breaks, because the stub answers 401 without the key.
+
+Focused run before the witness, through `scripts/browser-driver.mjs` on `/usr/bin/chromium` (no playwriter, since it is the same local relay and the playwriter run above already covered the browser): `WALL 1.7s`, output as above, and `stub saw [{"streaming":true,"authorized":true,"prompt":"hello"}]`.
+
 ## Open decisions
 
 - Pages build: `AnEntrypoint/gmfx` is private and the workflow cannot check it out (see Item 3). Owner decision: make it readable to the workflow, or add a read token secret.

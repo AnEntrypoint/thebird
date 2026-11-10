@@ -49,6 +49,7 @@ try {
         reply = { id: data.id, ok: false, error: BACKGROUND_REFUSED };
       } else {
         clearCancel();
+        globalThis.THEBIRD_FX = data.fx;
         const result = await shell.run(data.run, { onOutput: (stdout, stderr) => postMessage({ output: stdout + stderr }) });
         reply = { id: data.id, ok: true, result };
       }

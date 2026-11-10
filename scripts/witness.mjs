@@ -10,6 +10,7 @@ import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { digest, openCheckpoint, PAUSED } from './witness-checkpoint.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorFx } from './vendor-fx.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from './fx-stub-gateway.mjs';
 import { vendorGm } from './vendor-gm.mjs';
 import { vendorFloosie } from './vendor-floosie.mjs';
 import { buildPages } from './build-pages.mjs';
@@ -97,6 +98,12 @@ if (existsSync(chrome)) {
   const helloLines = hello.out.split('\n');
   check('playwriter answers --version, and which, command -v and type agree that it is a shell builtin', helloLines.includes('birdman playwriter 0.1.0') && helloLines.filter((line) => line === 'playwriter').length >= 2 && helloLines.includes('playwriter is a shell builtin'), helloLines.filter((line) => /playwriter/.test(line)).join(' / ').slice(0, 140));
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
+  const fxStub = await startFxStubGateway();
+  const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
+  const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello']], { initScript: fxInit });
+  await fxStub.close();
+  check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
+  check('fx --version and fx check report the bundled wasm and JSPI from the shell worker', /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(fxAsk.out) && /^fx ready: JSPI available; core application\/wasm$/m.test(fxAsk.out), JSON.stringify(fxAsk.out.slice(0, 300)));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {
