@@ -1350,3 +1350,12 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
 - Witness, `scripts/witness.mjs`: step `uvos-info` (reads `tjs.pid`, `tjs.ppid`, `tjs.userInfo.userName`, `tjs.userInfo.homeDir`, `tjs.cpuInfo()`, `tjs.networkInterfaces()`, `tjs.uptime()`, `tjs.chdir` to a missing path, `tjs.exePath`, `tjs.cwd`). Check: `uv_os_getpid, uv_os_getppid, uv_os_get_passwd, uv_cpu_info, uv_interface_addresses, uv_uptime, uv_chdir and uv_exepath read the browser record; chdir to a missing path is rejected` expects `uvos-info 1 0 thebird /.thebird true 0 true rejected /.thebird/tjs /workspace`.
 - Semantics to know: `tjs.chdir` changes the page's directory for the rest of that `tjs -e` run only, because `runTjs` sets `slot.cwd` from the calling shell's directory each time. The shell's own working directory (bashkit) is not changed.
 - Not run: no build, no test, no witness in this round.
+
+## JS-only gates on the local HEAD (no build, no witness; not pushed)
+
+- Run once each on HEAD `4e4cb08` (the round 5 commit), in the order listed:
+  - `npm test`: exit 0, wall 1 s. Output: `ℹ tests 7`, `ℹ pass 7`, `ℹ fail 0`.
+  - `npm run check`: exit 0, wall 1 s. Output ends with the `node --check` chain for `bin/`, `src/`, `scripts/`, `web/` and `web/shims/`, all passing.
+  - `npm run lint:comments`: exit 0, wall 1 s. Output: `VENDORED web/vendor/xterm/xterm.mjs: 3 comments kept; upstream xterm.js named (third-party, not edited)` and `100 repo-owned files checked: 0 comments; 147 tracked files, 19 vendored files with comments`.
+- Defects found: none. No fix was needed, so no fix commit was made.
+- Not run in this turn: the wasm build, `npm run witness`, the witness steps, and `npm run lint:architecture`.
