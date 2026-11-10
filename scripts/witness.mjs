@@ -117,11 +117,11 @@ if (existsSync(chrome)) {
   const uvDoubling = Array.from({ length: 13 }, (_, i) => `cat /workspace/uvfs-c${i} /workspace/uvfs-c${i} > /workspace/uvfs-c${i + 1}`).join(' && ');
   const uvFs = await terminal([
     ['run', `${uvSeed} && ${uvDoubling} && printf 'short' > /workspace/uvfs-src.txt && printf 'long-content-to-truncate' > /workspace/uvfs-dst.txt && echo seeded`],
-    ['run', `tjs -e "tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((d) => tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((e) => console.log('uvfs-mkdtemp', d.startsWith('/workspace/uvfs-'), d.length, tjs.statSync(d).isDirectory, d !== e)))"`],
-    ['run', `tjs -e "tjs.mkstemp('/workspace/uvfs-XXXXXX').then((f) => console.log('uvfs-mkstemp', f.path.startsWith('/workspace/uvfs-'), f.path.length, tjs.statSync(f.path).isFile))"`],
+    ['run', `tjs -e "tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((d) => tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((e) => tjs.stat(d).then((s) => console.log('uvfs-mkdtemp', d.startsWith('/workspace/uvfs-'), d.length, s.isDirectory, d !== e))))"`],
+    ['run', `tjs -e "tjs.makeTempFile('/workspace/uvfs-XXXXXX').then((f) => tjs.stat(f.path).then((s) => console.log('uvfs-mkstemp', f.path.startsWith('/workspace/uvfs-'), f.path.length, s.isFile)))"`],
     ['run', `tjs -e "tjs.makeTempDir('/workspace/uvfs-nope').then(() => console.log('uvfs-bad-template ok'), () => console.log('uvfs-bad-template rejected'))"`],
     ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-src.txt', '/workspace/uvfs-dst.txt').then(() => tjs.readFile('/workspace/uvfs-dst.txt')).then((b) => console.log('uvfs-copy-truncate', new TextDecoder().decode(b)))"`],
-    ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-c13', '/workspace/uvfs-big-copy.bin').then(() => console.log('uvfs-copy-big', tjs.statSync('/workspace/uvfs-big-copy.bin').size))"`],
+    ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-c13', '/workspace/uvfs-big-copy.bin').then(() => tjs.stat('/workspace/uvfs-big-copy.bin')).then((s) => console.log('uvfs-copy-big', s.size))"`],
     ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-none.txt', '/workspace/uvfs-x.txt').then(() => console.log('uvfs-copy-missing ok'), () => console.log('uvfs-copy-missing rejected'))"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');

@@ -1214,3 +1214,12 @@ Changes:
 - `AGENTS.md`: the list of still-stubbed rows now matches `stubs.tsv`, with the reason.
 
 Expected in Phase B: the wasm changes, so `scripts/txiki/pin.json` must move to the new digest. That is the consequence of the C change, and it is recorded when the build runs.
+
+## Phase B: uv_fs_* rows (build and witness)
+
+- Build: the first `scripts/vendor-txiki.mjs` run passed both gates (compile 40 of 40, link 0 undefined symbols) and then stopped at the pin check, because the C change moved the digest to `3e5ccc55…`. The pin moved to that digest (`scripts/txiki/pin.json`, and AGENTS.md). A second build ran with the new pin and wrote `web/vendor/txiki/tjs.wasm` (exit 0, wall 195 s, sha256 `3e5ccc55fc9a06790dd1717fd54ddfc0e67c3733e3e8fb37ef0b5a8c4553556e`). The first run's wall time was not recorded.
+- Witness run 19 (full witness, before the witness fix): wall 872 s, `WITNESS-EXIT 1`, PASS 190, FAIL 6 (the three uv_fs checks below, the resize, approval and ask checks).
+  - `uv_fs_mkdtemp rejects a template without XXXXXX` PASS, `uv_fs_copyfile replaces the destination` PASS, `uv_fs_copyfile rejects a missing source` PASS.
+  - mkdtemp, mkstemp and copy-big FAIL. The cause is in the witness, not in the C: it called `tjs.statSync` and `tjs.mkstemp`, which are not on the global `tjs` (`typeof tjs.statSync` is `undefined`, and `tjs.mkstemp` throws "not a function"). The engine's names are `tjs.stat` (async, `size`, `isFile`, `isDirectory`) and `tjs.makeTempFile`.
+- Probe of the live page (`/tmp/fx-tui/uvprobe/probe2.out`) with the correct names: `F 22 true`, `SIZE 32 false`, `D 22 true`. makeTempDir alone had already returned `D /workspace/uvfs-z01n6h`.
+- Witness fix: the three checks now use `tjs.stat` and `tjs.makeTempFile`. The witness is rerun once more in full, so the uv_fs lines come from a run with the corrected code.
