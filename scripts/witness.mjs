@@ -798,10 +798,13 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', `python3 -c "import os; print(os.path.exists('notes/inc.txt'))"`],
     ['run', 'echo three > notes/inc.txt'],
     ['run', `python3 -c "print(open('notes/inc.txt').read().strip())"`],
+    ['run', `python3 -c "import sqlite3; c = sqlite3.connect('notes/inc.db'); c.execute('create table t (x)'); c.execute('insert into t values (5)'); c.commit(); c.close()"`],
+    ['run', 'sqlite3 notes/inc.db "select x from t"'],
   ]);
   const incLines = incremental.out.split('\n');
   check('in-page python3 sees a shell rewrite made after its last call', incLines.includes('one') && incLines.includes('two') && incLines.indexOf('two') > incLines.indexOf('one'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
   check('in-page python3 removes a file it deletes and the shell sees it gone', incLines.includes('False') && incLines.includes('three'), incLines.filter((line) => /^(one|two|three|True|False)$/.test(line)).join(' / '));
+  check('in-page python3 writes a sqlite3 database through the write journal, and the shell reads its row', incLines.includes('5'), incLines.slice(-4).join(' / ').slice(0, 160));
   const warmCalls = Array.from({ length: 30 }, () => 'python3 -c "print(1)"').join('; ');
   const timed = await terminal([
     ['run', 'mkdir -p notes/bulk'],
