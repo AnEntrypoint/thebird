@@ -134,6 +134,7 @@ if (existsSync(chrome)) {
     ['run', `tjs -e "tjs.statFs('/workspace').then((s) => console.log('uvfs-statfs', s.bsize, s.blocks > 0, s.bfree <= s.blocks, s.bavail <= s.bfree), (e) => console.log('uvfs-statfs-err', String(e)))"`],
     ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.sync().then(() => console.log('uvfs-fsync ok')).then(() => f.datasync()).then(() => console.log('uvfs-fdatasync ok')).then(() => f.close()), (e) => console.log('uvfs-sync-err', String(e)))"`],
     ['run', `tjs -e "tjs.link('/workspace/uvfs-link-src.txt', '/workspace/uvfs-nlink-x.txt').then(() => tjs.stat('/workspace/uvfs-link-src.txt')).then((s) => console.log('uvfs-nlink', s.nlink), (e) => console.log('uvfs-nlink-err', String(e)))"`],
+    ['run', `tjs -e "console.log('uvos-env', tjs.getenv('PATH') === undefined, Object.keys(tjs.environ()).length, tjs.tmpDir, tjs.loadavg().join(','))"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
@@ -153,6 +154,7 @@ if (existsSync(chrome)) {
   check('uv_fs_fsync (File.sync) completes after the OPFS flush', uvFsLines.includes('uvfs-fsync ok'), uvFsSeen);
   check('uv_fs_fdatasync (File.datasync) completes after the OPFS flush', uvFsLines.includes('uvfs-fdatasync ok'), uvFsSeen);
   check('uv_fs stat reports a hard link\'s real link count (three names after a third link)', uvFsLines.includes('uvfs-nlink 3'), uvFsSeen);
+  check('uv_os_getenv and uv_os_environ report an empty environment, and uv_os_tmpdir reports /.thebird', uvFsLines.includes('uvos-env true 0 /.thebird 0,0,0'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
@@ -240,6 +242,7 @@ if (existsSync(chrome)) {
       await type('fx');
       await press('Enter');
       surfaces.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      surfaces.hostToolCount = await evaluate('globalThis.thebirdHostToolCount ?? null');
       await submit('hello');
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
@@ -272,6 +275,9 @@ if (existsSync(chrome)) {
   const approvalPanelRows = (name) => (surfaces[name] ?? '').split('\n').filter((line) => line.includes('echo approval') && !line.startsWith('┃'));
   check('approval: a bash tool call opens the approval panel with its options and its command row', surfaces.approvalShown === true && surfaceHas('approval', '1. Allow once') && surfaceHas('approval', '3. Deny') && approvalPanelRows('approval').length > 0, JSON.stringify({ options: (surfaces.approval ?? '').split('\n').filter((line) => /1\. Allow once|3\. Deny/.test(line)), commandRows: approvalPanelRows('approval') }));
   check('negative control: a plain prompt with no approval-requiring tool shows no approval panel', surfaceHas('transcript', 'stub gateway answer: prompt=hello') && !surfaceHas('transcript', 'Allow once') && !surfaceHas('transcript', '3. Deny'), JSON.stringify((surfaces.transcript ?? '').split('\n').filter((line) => /Allow once|3\. Deny/.test(line))));
+  check('host tools: fx_terminal_initialize accepted the page host tools before the TUI started (count 2)', surfaces.hostToolCount === 2, String(surfaces.hostToolCount));
+  const tuiTools = [...new Set(stubTui.seen.flatMap((request) => request.tools))].sort();
+  check('host tools: the TUI advertises exactly bash and ask to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash']), JSON.stringify(tuiTools));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askReply', 'tool-result=seen'), JSON.stringify((surfaces.askReply ?? '').split('\n').slice(-6)));
   check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('closedScreen', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };

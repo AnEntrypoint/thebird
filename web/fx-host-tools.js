@@ -36,6 +36,7 @@ export function initializeHostTools(instance) {
   new Uint8Array(memory.buffer, ptr, bytes.byteLength).set(bytes);
   const count = instance.exports.fx_terminal_initialize(ptr, bytes.byteLength);
   if (count < 0) throw new Error('fx_terminal_initialize rejected the host tools');
+  globalThis.thebirdHostToolCount = count;
   return count;
 }
 

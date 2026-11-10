@@ -579,3 +579,38 @@ void tjs_browser_flush_writes(uv_loop_t *loop) {
 void tjs_browser_stop_timers(uv_loop_t *loop) {
     while (loop->timers) uv_timer_stop(loop->timers);
 }
+
+int uv_os_getenv(const char *name, char *buffer, size_t *size) {
+    (void) name;
+    (void) buffer;
+    (void) size;
+    return UV_ENOENT;
+}
+
+int uv_os_environ(uv_env_item_t **envitems, int *count) {
+    *envitems = NULL;
+    *count = 0;
+    return 0;
+}
+
+void uv_os_free_environ(uv_env_item_t *envitems, int count) {
+    (void) envitems;
+    (void) count;
+}
+
+int uv_os_tmpdir(char *buffer, size_t *size) {
+    static const char dir[] = "/.thebird";
+    if (*size < sizeof(dir)) {
+        *size = sizeof(dir);
+        return UV_ENOBUFS;
+    }
+    memcpy(buffer, dir, sizeof(dir));
+    *size = sizeof(dir) - 1;
+    return 0;
+}
+
+void uv_loadavg(double avg[3]) {
+    avg[0] = 0;
+    avg[1] = 0;
+    avg[2] = 0;
+}
