@@ -15,6 +15,42 @@ const lastUserText = (prompt) => {
   return typeof part?.text === 'string' ? part.text : '';
 };
 
+const hasToolResult = (prompt) => (Array.isArray(prompt) ? prompt : []).some((item) => item?.role === 'tool');
+
+const directive = (text, pattern) => text.match(pattern)?.[1];
+
+export const sseEvent = (event) => `data: ${JSON.stringify(event)}\n\n`;
+
+export function streamPlan({ prompt }) {
+  const text = lastUserText(prompt);
+  const toolName = directive(text, /\[tool:([\w.-]+)\]/);
+  const toolInput = directive(text, /\[input:(\{.*?\})\]/);
+  const lines = Number(directive(text, /\[lines:(\d+)\]/) ?? 0);
+  const answered = hasToolResult(prompt);
+  if (toolName && !answered) {
+    let input = {};
+    try { input = toolInput ? JSON.parse(toolInput) : {}; } catch { input = {}; }
+    return {
+      events: [
+        { type: 'tool-input-start', id: 'call_stub_1', toolName },
+        { type: 'tool-input-delta', id: 'call_stub_1', delta: JSON.stringify(input) },
+        { type: 'tool-input-end', id: 'call_stub_1' },
+        { type: 'tool-call', toolCallId: 'call_stub_1', toolName, input },
+      ],
+      finish: 'tool-calls',
+    };
+  }
+  if (lines > 0) {
+    const body = Array.from({ length: lines }, (_, index) => `line ${index + 1}`).join('\n');
+    return { events: [{ type: 'text-delta', id: 't', delta: body }], finish: 'stop' };
+  }
+  const suffix = answered ? ' tool-result=seen' : '';
+  return {
+    events: [{ type: 'text-delta', id: 't', delta: `stub gateway answer: prompt=${text} streaming=true authorized=true${suffix}` }],
+    finish: 'stop',
+  };
+}
+
 export function startFxStubGateway({ port = FX_STUB_PORT, host = '127.0.0.1' } = {}) {
   const seen = [];
   const server = createServer((req, res) => {
@@ -31,13 +67,14 @@ export function startFxStubGateway({ port = FX_STUB_PORT, host = '127.0.0.1' } =
     req.on('end', () => {
       const streaming = req.headers['ai-language-model-streaming'] === 'true';
       const authorized = req.headers.authorization === `Bearer ${FX_STUB_KEY}`;
-      let prompt = '';
+      let request = {};
       try {
-        prompt = lastUserText(JSON.parse(body).prompt);
+        request = JSON.parse(body);
       } catch {
-        prompt = '';
+        request = {};
       }
-      seen.push({ streaming, authorized, prompt });
+      const prompt = lastUserText(request.prompt);
+      seen.push({ streaming, authorized, prompt, tools: (request.tools ?? []).map((tool) => tool?.name) });
       if (!authorized) {
         res.writeHead(401, { ...CORS, 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: { message: 'invalid api key' } }));
@@ -46,9 +83,10 @@ export function startFxStubGateway({ port = FX_STUB_PORT, host = '127.0.0.1' } =
         res.writeHead(400, { ...CORS, 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: { message: 'stub expects a streaming request' } }));
       }
+      const plan = streamPlan(request);
       res.writeHead(200, { ...CORS, 'content-type': 'text/event-stream' });
-      res.write(`data: ${JSON.stringify({ type: 'text-delta', id: 't', delta: `stub gateway answer: prompt=${prompt} streaming=${streaming} authorized=${authorized}` })}\n\n`);
-      res.end(`data: ${JSON.stringify({ type: 'finish', finishReason: { unified: 'stop' } })}\n\n`);
+      for (const event of plan.events) res.write(sseEvent(event));
+      res.end(sseEvent({ type: 'finish', finishReason: { unified: plan.finish } }));
     });
   });
   return new Promise((ok, fail) => {

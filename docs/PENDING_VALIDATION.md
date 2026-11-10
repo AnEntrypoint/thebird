@@ -951,3 +951,28 @@ Changes in Phase A: none to code. The only change is this section. What the witn
 6. Resize: the palette-then-resize check ("a resize after the command palette keeps the welcome panel and the rules at 70 columns") stays the fx-owned FAIL until fx's `src/ui/resize_runtime.zig` fix is pushed; rerun it then, with no thebird workaround.
 
 These four surfaces need the stub gateway to answer a streamed turn and a tool call, which the current stub does not do. The gateway change is part of the Phase A code work for the next pass, once the owner names the VT surface.
+
+## Decision: xterm.js stays the VT surface (dispatcher, recorded in Phase A, not built)
+
+- Decision: keep xterm.js (`web/vendor/xterm/`, adapter `web/vendor/fx/xterm.js`) as the VT surface for `fx-term.wasm`. Do not vendor `ghostty-vt.wasm` or a WTerm grid.
+- Reason: neither ghostty-vt.wasm nor WTerm is in this repo or in the fx checkout, and nothing we have names their source or artifact (fx.sh/try names neither; see the Phase A TUI section above). Without an artifact there is nothing to vendor and no hash to pin.
+- Revisit condition: a parity gap that a witness shows and that xterm.js cannot draw, with the owner naming the artifact or source for the replacement. Until then a gap is fixed in the adapter or in fx, not by a new VT engine.
+
+## Stub gateway: streamed turns and tool calls (scripts/fx-stub-gateway.mjs, not run)
+
+The stub now answers a streamed request with the events fx's gateway client parses (`src/gateway/client.zig`): `text-delta`, `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-call` (`toolCallId`, `toolName`, `input`) and `finish` (`finishReason.unified`). It records each request's tool names (`request.tools`) in `seen`. Directives in the last user text choose the reply:
+- `[tool:NAME]` and optional `[input:{json}]`: a tool call to NAME. Once the prompt carries a `tool` role message (a tool result), the stub answers with text and `tool-result=seen`.
+- `[lines:N]`: a text reply of N lines `line 1` … `line N`, for the full-transcript screen.
+- no directive: the earlier text reply, `stub gateway answer: prompt=… streaming=true authorized=true`, unchanged for the `fx ask` check.
+- Unverified by a build: the finish value `tool-calls` is taken from the client's tool-call path; the witness must show the TUI runs the tool, and if it does not, check the value against `src/gateway/client.zig`.
+
+## Witness checks to add (Phase B, after fx pushes and the go-ahead; none run here)
+
+Each runs through `runTerminal` with `interact` and `THEBIRD_FX` set to the stub (`apiKey` `thebird-stub-key`, `gatewayChatUrl` the stub URL), in `scripts/witness.mjs` beside the TUI checks:
+1. Transcript: type `hello [tool:none]`-free text, press Enter, wait for `stub gateway answer: prompt=hello`. Witness: the transcript rows show the user line and the answer. Needs: the text reply path.
+2. Full-transcript screen: type `[lines:60] long`, Enter, then open the full-transcript view (the TUI key fx uses for it; confirm in fx's keymap before the witness). Witness: the heading, `line 1`, and `line 60` are on the screen. Needs: `[lines:N]`.
+3. Approval: type `[tool:bash] [input:{"command":"echo approval"}]`, Enter. Witness: the approval panel names the tool and shows `echo approval`; a deny key returns to the input box with no tool result. Needs: the tool-call path, and `seen` shows `tools` from the request.
+4. Ask presentation: a tool whose name fx treats as an ask (confirm the name in fx before the witness; the stub passes any NAME). Type `[tool:ask] [input:{"question":"pick"}]`, Enter, answer in the input, Enter. Witness: the question row, then the answer row, then `tool-result=seen` in the reply. Needs: the tool-call path and the second request with a tool message.
+5. Resize, palette then 70×24: unchanged; the FAIL stays until fx's `src/ui/resize_runtime.zig` fix is pushed, then rerun with no thebird workaround.
+
+Stub check: after each run, `seen` in the stub holds `streaming: true`, `authorized: true` and the expected `prompt`, and the witness asserts that before reading the screen.
