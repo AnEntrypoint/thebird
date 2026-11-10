@@ -1437,3 +1437,19 @@ Witness run 5 (after b101dda, `npm run witness`, 20m53.6s, `WITNESS-EXIT 1`, `wi
 - `FAIL npm install debug …` (two rows) and `FAIL the txiki shell answers pip --version …` (`pip: Failed to fetch`) and `FAIL the txiki shell serves git, node, qjs and python3 …` (`shell engine exited with status 124`). These passed in run 4; the registry and PyPI fetches and the nested-engine timeout look environmental. Not confirmed by a rerun.
 
 Host-tools and ask rows: PASS in run 4 and run 5. Approval and the palette resize: FAIL. Nothing is pushed. The push waits for the approval row to pass, or for the owner to accept it open.
+
+## Run 5 regression: cause of each of the seven new failures (queue pass 7)
+
+Run 4 was `PASS 210 FAIL 2`; run 5 was `PASS 205 FAIL 7`. The seven rows, and their cause:
+
+- `FAIL a resize after the command palette …` and `FAIL approval: …`: fx-owned, in the TUI. Left out of this push. See the two entries below.
+- `FAIL the built GitHub Pages site runs bash and python3 …`: the `python3` run reached the 42 check only in run 4. In run 5 the Pages bundle fetch from `anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` failed (a plain `curl` of the same URL in this session took 30 s and timed out). Transient network.
+- `FAIL npm install debug …` (two rows): the registry fetch from `registry.npmjs.org` was slow in this session (26 s for one `GET`). Transient network.
+- `FAIL the txiki shell answers pip --version …`: `pip: Failed to fetch`. That message is the browser's network-error text from `fetch(PYODIDE_CDN + MICROPIP_WHEEL)` in `web/python-worker.js`. Transient network.
+- `FAIL the txiki shell serves git, node, qjs and python3 …`: `shell engine exited with status 124`, the engine deadline, reached while the nested `python3` cold start waited on the same bundle fetch. Transient network.
+
+Check: the same four paths re-run on the same code in one browser session pass: `python3 -c "print(6*7)"` gives `42`; `pip --version` gives `pip 0.11.1 (micropip, in-page)`, `rc=0`; `npm install debug` gives `+ debug@4.4.3`, `+ ms@2.1.3`, `npmrc=0`; the nested line gives `1`, `git version 1.44.11 …`, `2`, `3`, `4`; wall 324.5 s. No code change was made for these four, because no code defect was reproduced. A bounded retry on the CDN and bundle fetches would make the run less sensitive to network stalls; it is not added here, because nothing in the tree failed deterministically.
+
+Left out of this push, with the change each needs:
+- Approval row: `/permissions ask` now switches the TUI to ask mode (`b101dda`), and the approval panel still does not open: the stub answers the `[tool:bash]` prompt with text, not a tool call, in the request after the mode change. The cause is in what fx sends after `/permissions ask`, or in how the TUI handles the tool call in ask mode. It needs an fx change to the tool-call handling in ask mode, or a witness change once fx confirms the flow. fx-owned; not fixed here.
+- Palette resize row: fx's `src/ui/resize_runtime.zig` never settles after the command palette is opened and closed. Needs the fx fix named in the Phase A notes above, then a rerun with no thebird workaround.
