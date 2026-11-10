@@ -258,7 +258,7 @@ function agentsStatic() {
   })());
   record('Validation: `npm run check`', (() => {
     const scripts = JSON.parse(read('package.json')).scripts ?? {};
-    return outcome(Boolean(scripts.witness) && !scripts.test, `witness script ${scripts.witness ? 'is defined' : 'is missing'}; test script ${scripts.test ? 'exists' : 'is absent'}`);
+    return outcome(Boolean(scripts.witness) && scripts.test === 'node --test test/fx-stub-tools.test.mjs', `witness script ${scripts.witness ? 'is defined' : 'is missing'}; test script ${scripts.test ? 'is the single node:test file' : 'is absent'}`);
   })());
 }
 

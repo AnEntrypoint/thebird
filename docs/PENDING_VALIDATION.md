@@ -1143,3 +1143,13 @@ Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, an
 - Tests: `test/fx-stub-tools.test.mjs` (`npm test`), five cases: list is bash and ask; listed tool emits a call; unlisted name is refused; unlisted name refused even when advertised; page tools report unavailable.
 - Witness needed: `fx ask advertises exactly the page tools bash and ask to the gateway` (added to scripts/witness.mjs), plus the approval and ask TUI surfaces.
 - Limit: the TUI (`fx-term.wasm`) builds its own request and has no channel for a host tool list (no FX_ env key, no option in `createFxTerminal`). Its requests keep `tools: []` unless fx changes. The approval and ask TUI surfaces depend on that, so they are expected to keep failing; that is an fx defect, and fx is not changed here.
+
+## Phase B: witness run 14 (page tool list, HEAD after AGENTS.md entry)
+
+- Wall 875 s, `WITNESS-EXIT 1`, PASS 186, FAIL 4.
+- PASS: `fx ask advertises exactly the page tools bash and ask to the gateway — ["bash","ask"]`.
+- FAIL, approval: `{"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}] streaming=true"]}`. The TUI request has no tool list: `fx-term.wasm` builds its own request, and `createFxTerminal` and the FX_ env keys offer no host-tool channel, so the page cannot send `libfx.tools` to the TUI. Recorded as an fx defect: the TUI needs a host-tool input. fx is not changed here.
+- FAIL, ask: `["","  0s (↑1 ↓16)","","┃","","auto · haiku 5.5"]`, same cause.
+- PASS: `negative control: a plain prompt with no approval-requiring tool shows no approval panel — []`.
+- FAIL (fixed after the run): `ARCHITECTURE.md and AGENTS.md claims` on the `npm run witness` line "There is no test suite". `npm test` now exists, so AGENTS.md:105 names the one test file and `scripts/lint-architecture.mjs` checks for it. Direct `node scripts/lint-architecture.mjs` after the fix: exit 0, no FAIL lines. Not rerun inside the witness, per the one-witness rule.
+- Resize FAIL: the known upstream fx defect, unchanged.
