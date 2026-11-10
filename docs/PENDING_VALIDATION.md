@@ -105,7 +105,7 @@ The owner decision was to retire `scripts/vendor-pyodide.mjs` and the vendored P
 - `scripts/witness.mjs`: the micropip check reads the pinned lock URL above and checks its SHA-256 before it reads micropip.
 - `scripts/lint-architecture.mjs`: a `pyodideNotVendored` record replaces the vendored-tree checks.
 - `ARCHITECTURE.md`, `AGENTS.md`, `README.md` (the fresh-clone step now runs only `vendor-bashkit`), and `web/vendor/PYODIDE-NOTICE.md`: rewritten to match.
-- The local directory `web/vendor/pyodide/` is untracked and stale. It was left in place, not deleted.
+- The local directory `web/vendor/pyodide/` was untracked and stale. It was left in place here, and removed later (see the queue pass entry below, which records the removal).
 
 Witness, to run in Phase B: `npm run lint:architecture` passes the `pyodideNotVendored` record; `npm run witness` passes the micropip check against the pinned lock.
 
@@ -611,8 +611,29 @@ Final validation on the tree: `npm run check` exits 0. `npm run lint:comments` e
 
 Push: `origin main`, once, after this ledger commit. The pushed range includes the esbuild pin (`fd3f297`), the playwriter and birdman checks (`944831b`, `fb27a52`), and the expiry window and checkpoint (`7f2f2c2`).
 
+## Phase A: expiry decision, ledger ranking, and stale pyodide entries (queue pass 11)
+
+Docs only. No build, test, gate or witness ran in this phase. Its witness is the Phase B list below.
+
+Decision, recorded in `ARCHITECTURE.md` (Command timeout) and here. The live 900 s cut stays unexercised. A single browser session would need about 935 s for seventeen 55 s sleeps that pass the limit, and a witness call is capped at 600000 ms. Nothing can carry the session across calls without a process that outlives the call, which the owner ruled out. The accepted witness is the static check of the shipped 900 s value in `web/bash-shell.js`, plus the 10 s window through the same expiry path (`execution timeout (10s)`, 9 ticks, no `late-finish`, 11.0 s wall, recorded in the queue pass 10 Phase A entry).
+
+Ranking of the reachable remaining items, done in this order:
+1. Expiry decision: written to `ARCHITECTURE.md` and this ledger. Change only, docs. Witness: Phase B, the full witness's static 900 s check and the expiry window check.
+2. Stale pyodide entries: the two ledger lines that said `web/vendor/pyodide/` was left in place now point to its removal, which the queue pass entry records. Docs only. Witness: Phase B static lint, which checks that `scripts/vendor-pyodide.mjs` is gone.
+3. Process model confirmation: the ledger's "Confirm it in Phase B" item. No code change. Witness: Phase B runs `npm run witness:shell`, whose groups cover `ps`, `kill`, the job table and `$!` (`scripts/witness-shell.mjs`, the process group).
+
+Not reachable in this pass, and why:
+- Ctrl-C on the Pages site without cross-origin isolation (Blocked table above). The owner must choose between accepting the restart and isolating the site with a service worker.
+- `web/stream-hub.js`: tracked and not imported by anything. Removing it is the owner's decision.
+- Licences: thebird has no LICENSE for its own code, the Pyodide bundle licence is unconfirmed, and the vendored notices are the owner's call.
+- Journal limit: a C extension that writes a file without a Python audit event is not journaled. This is documented, and it has no in-repo fix.
+- Upstream floosie `esbuild` declaration: an external repo. The vendor step no longer depends on it (`fd3f297`).
+- Shell on txiki (AGENTS.md, "assessed and not built"): needs a bash-subset parser, which is a separate project and is not a ledger item.
+
+Changes in this phase: `ARCHITECTURE.md` (decision paragraph), `docs/PENDING_VALIDATION.md` (this section, and the two stale pyodide lines).
+
 ## Open decisions
 
-- `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
+- `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).
 - Pyodide bundle licence: held by the owner, and not confirmed. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass. The licence notice file `web/vendor/PYODIDE-NOTICE.md` was removed in the licence removal above, so this question is recorded only here.
 - Licence notices for the vendored bundles: removed in the licence removal above. Whether they return in another form is the owner's decision.
