@@ -457,6 +457,16 @@ Run 2 on a clean HEAD after 48749d8 is not yet run. The shared checkout holds an
 
 Known: commit 48749d8 (the fx witness fix) also committed the other agent's gm check lines in scripts/witness.mjs, because it staged the whole file. Those lines are in HEAD with that commit. Nothing was pushed, so the history was not rewritten.
 
+## Phase B: gm addition witness run 2 on HEAD e930fe8
+
+| Step | Command | Result | Wall time |
+| --- | --- | --- | --- |
+| Full witness, run 2 | `CHROME_BIN=/usr/bin/chromium npm run witness` on HEAD e930fe8, started on a clean tree | PASS=138, FAIL=1, WITNESS-EXIT 1 | 2026-11-10T01:35:43Z to 01:55:09Z, 19 min 26 s (1166 s) |
+
+The one FAIL was `in-page gm reports its bundled WASM version, passes its offline check and serves MCP methods`. The check required `browser-mcp` anywhere in the site output, but the run only called `gm call write_file`, which returns `{path, bytes}` and not the content. Fixed by a witness-only commit: the run now reads the file back with `cat gm-note.txt`, and the check matches the line `^browser-mcp$`. The fix is staged through the index on top of HEAD's file, so the other agent's working-tree hunks were not committed.
+
+Caveat for run 2: the other agent's uncommitted floosie and gm changes (web/gm-in-page.js, web/vendor/floosie/, scripts/vendor-floosie.mjs, scripts/witness.mjs) appeared in the working tree during the run, between about 03:40 and 03:55 local. The pages-site check reads the copy built at the start of the run. The in-page checks read live files. A clean-tree run 3 has not been done.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
