@@ -766,8 +766,18 @@ Witness, final tree (commit of Phase B plus this section), on headless Chromium 
 
 Witness checks I tightened in this phase, so they cannot pass on another line: the dev and peer checks print labels (`dev-flag true`, `react-installed true`), and the npx, `npm run`, uninstall and `npm ci` lines carry a `npx:`, `run:`, `uninstall:` or `ci:` prefix from `sed`, so each matches only its own command.
 
+## Item 3: live site through playwriter (blocked by the Pages build)
+
+- Pages run `42773709466` for `114a7fb` failed in `build`: `fatal: repository 'https://github.com/AnEntrypoint/gmfx/' not found`. `AnEntrypoint/gmfx` is private (`gh repo view`), and `.github/workflows/pages.yml` checks it out with the default token, which cannot read another private repository. Every Pages run since `61a76ce` (2026-11-09) has failed the same way (`579e2e6`, `f6acf20`, `4525610`, `837c78c`, `79bd180`, `114a7fb`), so the site has not been rebuilt since `61a76ce`. Fix needs the owner: make `gmfx` readable to the workflow, or give the workflow a read token secret. No secret is visible to this run, and the repository's visibility is not changed here.
+- The txiki gate, `txiki.yml` run for `114a7fb`, passed (`completed success`).
+- Live check, through playwriter in gm (`gm.playwriter_execute`, project browser for `/workspace/thebird`): the live page loads and its terminal accepts `run` URL parameters. The live site runs `61a76ce`, so it shows what was deployed before the npm work: `npm -v` gives `npm: command not found. Package managers are not available in the sandbox.`, `npx -v` gives `npx: command not found`, and `node -e "console.log('x'); process.exit(0)"` prints `node: quickjs exited with status 0` with no `x`. That confirms the defects this stretch fixes, and it confirms the new code is not live.
+- Why headless Chromium ran the local checks: playwriter cannot test the new build until Pages deploys it, and the relay serves the tree on disk. The local witness, the focused runner and the live lint used `scripts/browser-driver.mjs` on `/usr/bin/chromium` against that relay. The live terminal check above used playwriter.
+- Not done: the live witness of the new npm surface. It needs a green Pages deploy of `114a7fb` or later, and then the same playwriter check.
+- Committed locally and not pushed: this section. The push rule for this stretch allowed one push, and it was used for `114a7fb`.
+
 ## Open decisions
 
+- Pages build: `AnEntrypoint/gmfx` is private and the workflow cannot check it out (see Item 3). Owner decision: make it readable to the workflow, or add a read token secret.
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).
 - Pyodide bundle licence: held by the owner, and not confirmed. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass. The licence notice file `web/vendor/PYODIDE-NOTICE.md` was removed in the licence removal above, so this question is recorded only here.
 - Licence notices for the vendored bundles: removed in the licence removal above. Whether they return in another form is the owner's decision.
