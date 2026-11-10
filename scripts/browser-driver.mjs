@@ -12,6 +12,7 @@ const KEYS = {
   Escape: { code: 'Escape', keyCode: 27 },
   Backspace: { code: 'Backspace', keyCode: 8 },
   c: { code: 'KeyC', keyCode: 67 },
+  o: { code: 'KeyO', keyCode: 79 },
   a: { code: 'KeyA', keyCode: 65 },
   e: { code: 'KeyE', keyCode: 69 },
   l: { code: 'KeyL', keyCode: 76 },

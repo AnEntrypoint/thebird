@@ -180,6 +180,54 @@ if (existsSync(chrome)) {
   check('a resize after the command palette keeps the welcome panel and the rules at 70 columns (native fx fails the same way: upstream fx TUI defect)', tui.paletteResizeSettled === true && screenRows('paletteResized').some((line) => line.includes('Welcome to fx')) && screenRows('paletteResized').filter((line) => /^─{70}$/.test(line)).length === 2, JSON.stringify({ settled: tui.paletteResizeSettled, screen: screenRows('paletteResized').slice(0, 4) }));
   check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
   check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
+  const stubTui = await startFxStubGateway();
+  const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url })};`;
+  const surfaces = {};
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    initScript: stubInit,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      const linesOf = `globalThis.thebird.text().split('\\n')`;
+      const hasText = (text) => `${linesOf}.some((line) => line.includes(${JSON.stringify(text)}))`;
+      const hasRow = (text) => `${linesOf}.some((line) => line === ${JSON.stringify(text)})`;
+      const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
+      const submit = async (text) => { await type(text); await press('Enter'); };
+      await type('fx');
+      await press('Enter');
+      surfaces.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      await submit('hello');
+      surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
+      await grab('transcript');
+      await submit('[tool:bash] [input:{"command":"echo approval"}]');
+      surfaces.approvalShown = await settle(hasText('echo approval'), 90000);
+      await grab('approval');
+      await press('Escape');
+      await new Promise((ok) => setTimeout(ok, 2000));
+      await grab('approvalDismissed');
+      await submit('[tool:ask] [input:{"question":"pick"}]');
+      surfaces.askShown = await settle(hasText('pick'), 90000);
+      await grab('ask');
+      await submit('blue');
+      surfaces.askAnswered = await settle(hasText('tool-result=seen'), 90000);
+      await grab('askAnswered');
+      await submit('[lines:60] long');
+      surfaces.linesShown = await settle(hasRow('line 60'), 90000);
+      await press('o', { ctrl: true });
+      surfaces.fullShown = await settle(`${hasRow('line 1')} && ${hasRow('line 60')}`, 60000);
+      await grab('full');
+      await press('Escape');
+      surfaces.fullClosed = await settle(`!${hasRow('line 1')}`, 30000);
+      await grab('fullClosed');
+    },
+  });
+  await stubTui.close();
+  const surfaceHas = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line.includes(text));
+  const surfaceRow = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line === text);
+  check('transcript: the prompt and the stub answer appear in the TUI transcript', surfaces.transcriptShown === true && surfaceHas('transcript', 'stub gateway answer: prompt=hello'), JSON.stringify({ shown: surfaces.transcriptShown, stub: stubTui.seen.slice(0, 2) }));
+  check('approval: a bash tool call shows its command in the TUI approval panel', surfaces.approvalShown === true && surfaceHas('approval', 'echo approval') && surfaceHas('approval', 'bash'), JSON.stringify((surfaces.approval ?? '').split('\n').slice(0, 6)));
+  check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askAnswered', 'tool-result=seen'), JSON.stringify((surfaces.askAnswered ?? '').split('\n').slice(-6)));
+  check('Ctrl-O opens the full transcript with line 1 and line 60, and Escape closes it', surfaces.fullShown === true && surfaceRow('full', 'line 1') && surfaceRow('full', 'line 60') && surfaces.fullClosed === true && !surfaceRow('fullClosed', 'line 1'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, head: (surfaces.full ?? '').split('\n').slice(0, 4) }));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {
