@@ -21,7 +21,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - Repo-owned code has no comments. `npm run lint:comments` lists each one with its file and line, and exits non-zero when there are any.
 - When a change touches a file, remove the comments in that file as part of the change. Prose that cannot become self-explanatory code moves to `AGENTS.md` or `ARCHITECTURE.md`, after checking it is still true.
 - Shebang lines in `bin/` are syntax, not comments.
-- Vendored bundles keep their upstream comments and are not edited. `lint:comments` reports them as VENDORED and fails a vendored file with comments that has no provenance entry in `scripts/lint-comments.mjs` and is not listed in `web/vendor/fx/manifest.json`.
+- Vendored bundles keep their upstream comments and are not edited. `lint:comments` reports them as VENDORED and fails a vendored file with comments that has no provenance entry in `scripts/lint-comments.mjs` and is not listed in `web/vendor/fx/manifest.json` or `web/vendor/floosie/manifest.json`.
 
 ## Vendored and generated files
 
