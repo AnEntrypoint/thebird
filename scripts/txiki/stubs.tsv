@@ -42,8 +42,6 @@ uv_os_gethostname	os: reachable as tjs.hostName; the stub returns UV_ENOSYS beca
 uv_os_get_passwd	os: reachable as tjs.userInfo; the stub returns UV_ENOSYS because the browser has no user database
 uv_os_getpid	os: reachable as tjs.pid; the stub returns UV_ENOSYS because the browser exposes no process id
 uv_os_getppid	os: reachable as tjs.ppid; the stub returns UV_ENOSYS because the browser exposes no parent process id
-uv_os_setenv	os: reachable as tjs.setenv; the stub returns UV_ENOSYS because the page has no writable environment table
-uv_os_unsetenv	os: reachable as tjs.unsetenv; the stub returns UV_ENOSYS because the page has no writable environment table
 uv_pipe_bind2	pipe: no pipes or process handles in the browser
 uv_pipe_connect2	pipe: no pipes or process handles in the browser
 uv_pipe_getpeername	pipe: no pipes or process handles in the browser

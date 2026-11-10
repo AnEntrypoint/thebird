@@ -580,22 +580,105 @@ void tjs_browser_stop_timers(uv_loop_t *loop) {
     while (loop->timers) uv_timer_stop(loop->timers);
 }
 
+struct env_var {
+    char *name;
+    char *value;
+};
+
+static struct env_var *env_vars = NULL;
+static size_t env_count = 0;
+static size_t env_capacity = 0;
+
+static char *env_copy(const char *text, size_t len) {
+    char *copy = malloc(len + 1);
+    if (!copy) return NULL;
+    memcpy(copy, text, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+static size_t env_find(const char *name) {
+    for (size_t i = 0; i < env_count; i++) {
+        if (strcmp(env_vars[i].name, name) == 0) return i;
+    }
+    return env_count;
+}
+
 int uv_os_getenv(const char *name, char *buffer, size_t *size) {
-    (void) name;
-    (void) buffer;
-    (void) size;
-    return UV_ENOENT;
+    size_t index = env_find(name);
+    if (index == env_count) return UV_ENOENT;
+    size_t len = strlen(env_vars[index].value);
+    if (*size <= len) {
+        *size = len + 1;
+        return UV_ENOBUFS;
+    }
+    memcpy(buffer, env_vars[index].value, len + 1);
+    *size = len;
+    return 0;
+}
+
+int uv_os_setenv(const char *name, const char *value) {
+    if (name[0] == '\0' || strchr(name, '=') != NULL) return UV_EINVAL;
+    size_t index = env_find(name);
+    if (index < env_count) {
+        char *copy = env_copy(value, strlen(value));
+        if (!copy) return UV_ENOMEM;
+        free(env_vars[index].value);
+        env_vars[index].value = copy;
+        return 0;
+    }
+    if (env_count == env_capacity) {
+        size_t capacity = env_capacity ? env_capacity * 2 : 8;
+        struct env_var *grown = realloc(env_vars, capacity * sizeof(*grown));
+        if (!grown) return UV_ENOMEM;
+        env_vars = grown;
+        env_capacity = capacity;
+    }
+    char *name_copy = env_copy(name, strlen(name));
+    char *value_copy = env_copy(value, strlen(value));
+    if (!name_copy || !value_copy) {
+        free(name_copy);
+        free(value_copy);
+        return UV_ENOMEM;
+    }
+    env_vars[env_count].name = name_copy;
+    env_vars[env_count].value = value_copy;
+    env_count++;
+    return 0;
+}
+
+int uv_os_unsetenv(const char *name) {
+    size_t index = env_find(name);
+    if (index == env_count) return 0;
+    free(env_vars[index].name);
+    free(env_vars[index].value);
+    env_count--;
+    env_vars[index] = env_vars[env_count];
+    return 0;
 }
 
 int uv_os_environ(uv_env_item_t **envitems, int *count) {
-    *envitems = NULL;
-    *count = 0;
+    uv_env_item_t *items = calloc(env_count ? env_count : 1, sizeof(*items));
+    if (!items) return UV_ENOMEM;
+    for (size_t i = 0; i < env_count; i++) {
+        items[i].name = env_copy(env_vars[i].name, strlen(env_vars[i].name));
+        items[i].value = env_copy(env_vars[i].value, strlen(env_vars[i].value));
+        if (!items[i].name || !items[i].value) {
+            uv_os_free_environ(items, (int) i + 1);
+            return UV_ENOMEM;
+        }
+    }
+    *envitems = items;
+    *count = (int) env_count;
     return 0;
 }
 
 void uv_os_free_environ(uv_env_item_t *envitems, int count) {
-    (void) envitems;
-    (void) count;
+    for (int i = 0; i < count; i++) {
+        free(envitems[i].name);
+        free(envitems[i].value);
+    }
+    free(envitems);
 }
 
 int uv_os_tmpdir(char *buffer, size_t *size) {

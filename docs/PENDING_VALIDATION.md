@@ -1303,3 +1303,18 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
   - `host tools: the TUI advertises exactly bash and ask to its gateway` checks the sorted, unique tool names the TUI's stub gateway received, against `['ask','bash']`.
   - The existing approval (`approval: a bash tool call opens the approval panel…`) and ask (`ask: the question is shown…`) checks run in the same witness, unchanged. They still fail until the wasm carries `fx_terminal_initialize` (Phase B).
 - Not run: no build, no test, no witness in this round.
+
+## Phase A, round 3: reachable rows (not built, not pushed)
+
+- Implemented in `scripts/txiki/browser/uv-browser.c` with no new host import:
+  - `uv_os_setenv` and `uv_os_unsetenv` (`tjs.setenv`, `tjs.unsetenv`): a per-engine environment table in the wasm. `uv_os_getenv` and `uv_os_environ` (round 2) now read that table, so a set variable is visible to `tjs.getenv` and `tjs.environ`, and an unset one is removed. Rows removed from `stubs.tsv`. Witness: `uvos-set` step (`tjs.setenv` → `tjs.getenv` → `tjs.unsetenv`), check `uv_os_setenv and uv_os_unsetenv store and remove a variable that uv_os_getenv reads back` (expects `uvos-set 1 true`). The round-2 witness, `uvos-env`, still expects an empty environment before any set.
+- Checked for reachability from JS and found not reachable over the existing `tjs_fs_*` imports; each keeps its row in `stubs.tsv` with the exact cause (the JS entry and the missing data):
+  - `uv_os_gethostname` (`tjs.hostName`), `uv_os_getpid` (`tjs.pid`), `uv_os_getppid` (`tjs.ppid`): the page has no machine name, process id or parent process id to report. `location.hostname` names the Pages host, not the machine.
+  - `uv_os_get_passwd` and `uv_os_free_passwd` (`tjs.userInfo`): the browser has no user database.
+  - `uv_cpu_info` and `uv_free_cpu_info` (`tjs.cpuInfo`), `uv_interface_addresses` and `uv_free_interface_addresses` (`tjs.networkInterfaces`), `uv_uptime` (`tjs.uptime`): no host data source in the page; `navigator.hardwareConcurrency` is not CPU info, and no import provides interfaces or uptime.
+  - `uv_available_parallelism` (`tjs.availableParallelism`): the generator returns 1, correct for the single-threaded engine (the row is unchanged).
+  - `uv_cwd` (`tjs.cwd`) and `uv_chdir` (`tjs.chdir`): the engine's working directory is not kept in the wasm; the shell's cwd lives in bashkit.
+  - `uv_exepath`: used by the file-based bootstrap that the browser entry does not call.
+  - `uv_random` (`tjs.random`, webcrypto key generation): needs `crypto.getRandomValues`, which no existing `tjs_fs_*` import provides. Open: a new host import is the owner's decision.
+  - `uv_pipe_*`, `uv_tcp_*`, `uv_accept`, `uv_listen`, `uv_inet_pton`, `uv_ip4_name`, `uv_ip6_name`, `uv_signal_start`, `uv_thread_create`, `uv_thread_join`, the `tjs__channel_*`, `tjs__mod_*` and `tjs__lws_*` rows: the modules are excluded from the browser build or the page is single-threaded, so the symbols are not reachable from JS.
+- Witness round 3: `scripts/witness.mjs` steps and checks above; not run.
