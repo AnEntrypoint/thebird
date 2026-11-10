@@ -1,6 +1,6 @@
 # thebird
 
-A bash terminal that runs in the browser. Commands run in bashkit, a WebAssembly bash, inside a Web Worker, over files kept in the browser's OPFS storage. In-page builtins provide `git`, `sqlite3`, `python3`, `pip`, `curl` and `wget`. The only Node code is a static server that serves the page.
+A bash terminal that runs in the browser. Commands run in bashkit, a WebAssembly bash, inside a Web Worker, over files kept in the browser's OPFS storage. In-page builtins provide `git`, `sqlite3`, `python3`, `pip`, `curl`, `wget` and fx's WebAssembly core. The only Node code is a static server that serves the page.
 
 The earlier gm-backed CLI and library were removed.
 
@@ -15,7 +15,10 @@ After a fresh clone, generate the vendored runtime (needs network):
 
 ```bash
 node scripts/vendor-bashkit.mjs
+node scripts/vendor-fx.mjs
 ```
+
+`vendor-fx.mjs` reads the sibling `../fx/fx` checkout, or `FX_REPO`, and uses Zig 0.17.1 from `ZIG` or its local paths. The Pages workflow sets `FX_REPO` to the latest `main` checkout of `AnEntrypoint/gmfx` and rebuilds it on every deployment.
 
 ## Run
 
@@ -38,6 +41,7 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 - `python3 -c <code>` and `python3 <file>`, run by Pyodide.
 - `pip install <package>...` for pure-Python packages from PyPI.
 - `curl` and `wget`, for hosts that send CORS headers to the page.
+- `fx --version`, `fx --help` and `fx check` from fx's browser WebAssembly core. `fx ask <prompt>` needs `window.THEBIRD_FX = { apiKey, model }` and WebAssembly JSPI.
 - `which`, `type` and `command -v` give the same answer for each name.
 
 ## Limits
