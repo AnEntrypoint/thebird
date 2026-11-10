@@ -1160,3 +1160,39 @@ Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, an
 - Cleanup: `closeBrowserTrees()` SIGKILLs each recorded PID only when its current start time still matches the record, so a reused PID is not killed. It runs at the end of each `runTerminal` and on process exit (`exit`, SIGINT, SIGTERM, SIGHUP), in every process that imports the driver, including `scripts/lint-live.mjs`. The old group kill (`killGroup`), which signalled every process in the launched group, is removed. No cleanup matches by name or by cwd.
 - Cause of the run 14 leftovers, found in this pass: the twelve PIDs (928688 root, 928708, 928710 and their descendants) are from `scripts/lint-live.mjs`, the live probe of my `node scripts/lint-architecture.mjs` run killed by `timeout 110`. Their profile is `/tmp/lint-profile-Fnv4p5`, which `lint-live.mjs` creates. That process had no exit hook, so the Chromium it left was never recorded. They started at 17:36:27 local, six seconds after run 14 finished, not during it.
 - Witness needed: `npm test` (`test/browser-driver.test.mjs`) checks that cleanup closes exactly the recorded tree and leaves an unrecorded process running. Witness run needed later to confirm no leftovers after a full run.
+
+## Ranked open items (this pass, reachable first)
+
+Reachable this pass, taken in rank order:
+1. Witness wall-time table for runs 12–15 (recorded in the next section). Docs only.
+2. This ranked list. Docs only.
+
+Reachable, not taken this pass (needs a C change and a rebuild with its own witness, which this pass does not include):
+3. The txiki `uv_fs_*` rows still stubbed: chmod, chown, copyfile, fchmod, fchown, fdatasync, fsync, futime, lchown, link, lutime, mkdtemp, mkstemp, statfs, utime (`scripts/txiki/stubs.tsv`). Some have no browser operation (chmod, chown, utime, link). copyfile, mkdtemp and mkstemp could be built on `tjs_fs_*`, but each needs a C change and a rebuild.
+
+Not reachable from here:
+4. Approval and ask TUI checks. Need fx's host-tool input: `fx-term.wasm` has no channel for a tool list. Owner note: leave them as they are.
+5. Resize after the command palette. Needs fx: `src/ui/resize_runtime.zig` settle path.
+6. Palette header `Results 50` vs `Commands 49`. Needs fx: the source of the 50th result is unidentified.
+7. Sign-in choices for Codex and Grok absent. Needs fx: a wasm design decision.
+8. Vendored core is not libfx 0.0.16 npm (`fx_http_stream_retry_after`). Needs fx: a core build from the fx side.
+9. Transcript and ask surfaces with a real provider. Owner-held: needs a provider credential.
+10. browser-agent proxy against the owner's key. Owner-held: a credential and an exposure decision.
+11. Pages build: `AnEntrypoint/gmfx` is private to the workflow. Owner-held: a read token or visibility change.
+12. Live site through playwriter. Blocked by 11. Owner-held.
+13. Pyodide bundle licence. Owner-held: a licence fact.
+14. Licence notices for vendored bundles. Owner-held.
+15. Removal of `web/vendor/tte-js`. Owner-held: the owner decides removal.
+16. gm import handoff channel. Owner-held: the channel is a fact only the owner holds. gm reruns its own import witness.
+17. Stray processes on this machine (relay on port 8877, PID 3051450; Chromium trees under `/config`). Not project work. Owner-held: whether to stop them.
+
+Reachable count: 2 taken, 1 reachable but deferred. Not reachable: 14.
+
+## Witness wall times, runs 12–15 (this pass, docs only)
+
+| Run | HEAD | Wall (s) | Exit | PASS | FAIL | Failing checks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 12 | 2094f44 | 834 | 1 | 186 | 3 | resize (upstream fx), approval, ask (fx host-tool input) |
+| 13 | cd4fac5 | 843 | 1 | 186 | 3 | resize, approval, ask |
+| 14 | 9cc8efd | 875 | 1 | 186 | 4 | resize, approval, ask, architecture claim "no test suite" (fixed after the run) |
+| 15 | 2ac06b5 | 796 | 1 | 187 | 3 | resize, approval, ask. Cleanup closed its own 812 recorded PIDs. |
