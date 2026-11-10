@@ -1,0 +1,18 @@
+{
+  "generator": "scripts/vendor-gm.mjs",
+  "source": "gm native C++ core at 6b3ee4ddd078b29eddd15f066a407d1504571c49",
+  "wasm": {
+    "name": "gm-core.wasm",
+    "sha256": "6a1c46ef3ffd4387f0a92b635e33b37d01f7acd7a077c0816ea76cd9eaa7c3b4"
+  },
+  "modules": [
+    {
+      "name": "gm-core.js",
+      "sha256": "8f76b96d74776587c67f652944fd87b2ec8f20a539a36a6bfeff9de71e7d8662"
+    },
+    {
+      "name": "gm-in-page.js",
+      "sha256": "7559625e02ca213aee548d5e84c4160a898e28a9f5853dadc05153622612249d"
+    }
+  ]
+}
