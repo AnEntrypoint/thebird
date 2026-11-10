@@ -5,8 +5,9 @@ import { curlBuiltin } from './curl-in-page.js';
 import { qjsBuiltin } from './qjs-in-txiki.js';
 import { tjsBuiltin } from './txiki-in-page.js';
 import { nodeBuiltin } from './node-in-txiki.js';
+import { fxBuiltin } from './fx-in-page.js';
 
-export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget'];
+export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget', 'fx'];
 
 const RUNNERS = {
   git: ({ argv }) => gitBuiltin(argv),
@@ -18,6 +19,7 @@ const RUNNERS = {
   node: ({ argv, cwd, signal, timeoutMs }) => nodeBuiltin(argv, cwd, { signal, timeoutMs }),
   curl: ({ argv, cwd, signal }) => curlBuiltin('curl', argv, cwd, signal),
   wget: ({ argv, cwd, signal }) => curlBuiltin('wget', argv, cwd, signal),
+  fx: ({ argv, signal }) => fxBuiltin(argv, { signal }),
 };
 
 export const runBuiltin = (name, argv, { cwd, signal, timeoutMs } = {}) => RUNNERS[name]({ argv, cwd, signal, timeoutMs });

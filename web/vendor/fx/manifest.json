@@ -1,0 +1,51 @@
+{
+  "generator": "scripts/vendor-fx.mjs",
+  "source": "local fx checkout",
+  "sdkApiVersion": 2,
+  "wasm": {
+    "name": "fx-core.wasm",
+    "sha256": "1c894cb9b15f3db7a0eeacf51bc2e95ae09ce01274911cffd2d04bcec19f7c21"
+  },
+  "modules": [
+    {
+      "name": "core-output.js",
+      "sha256": "82c52a52a3d66ec4a456250e05bf240487e14c3cb81035db50b1c974e1d5f9fa"
+    },
+    {
+      "name": "chatgpt.js",
+      "sha256": "1c8d0287b3b5c52f8dfb4d28a92e687502b0032f803e6304427f2056c4766be0"
+    },
+    {
+      "name": "custom-provider.js",
+      "sha256": "dd89df20455c982cddff5b46845db0dcd368829f821ad321296c19855c3a6f58"
+    },
+    {
+      "name": "engine.js",
+      "sha256": "48ff3ea051dca7924c204cdd6677ed4165d89f55932baaa97bfeacd67fae7bbf"
+    },
+    {
+      "name": "fetch-cleanup.js",
+      "sha256": "616e19b7ec744eab05dfc6971212ef743b1b89b10188f4fab9b2a2aef2c6d8cf"
+    },
+    {
+      "name": "grok.js",
+      "sha256": "83af61e3daa0c91c483c2b550c63c948a61f783b549f00635886f87a96a9ec7b"
+    },
+    {
+      "name": "subscription.js",
+      "sha256": "1e1a791cb51bf2df053b94d7604b263a6734b67f1d8191fb643104e694916b6d"
+    },
+    {
+      "name": "tool-observation.js",
+      "sha256": "6388a291008f9fd3ee598c5a4deec7186237c00ce14b22444d139fc75e0efdac"
+    },
+    {
+      "name": "wasm-module.js",
+      "sha256": "f4ccea6ae3fac858ba3a11b50b1379afa6b1360d4cb65fb5430a38c482dfe89d"
+    },
+    {
+      "name": "wasm-runtime.js",
+      "sha256": "523afedbae89b73e55c93bf8e901b5a360226be1993d34b0f606079a617ea5bc"
+    }
+  ]
+}

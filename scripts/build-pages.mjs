@@ -3,11 +3,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { vendorBashkit } from './vendor-bashkit.mjs';
+import { vendorFx } from './vendor-fx.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export async function buildPages(out = join(root, '_site')) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
+  if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   cpSync(join(root, 'web'), join(out, 'web'), { recursive: true });

@@ -83,7 +83,12 @@ function commentsOf(file) {
 
 const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || C_SOURCE.test(file) || YAML.test(file) || basename(file) === DOTFILE_HASH || NO_COMMENT_SYNTAX.test(file);
 
+const FX_MANIFEST = 'web/vendor/fx/manifest.json';
+const isFx = (file) => file.startsWith('web/vendor/fx/');
+const fxModules = () => JSON.parse(readFileSync(join(root, FX_MANIFEST), 'utf8')).modules.map((module) => module.name);
+
 function provenanceProblem(file) {
+  if (isFx(file)) return fxModules().includes(basename(file)) ? null : `not listed in ${FX_MANIFEST}`;
   const upstream = PROVENANCE[file];
   if (!upstream) return 'no provenance entry';
   if (!readFileSync(join(root, file), 'utf8').toLowerCase().includes(upstream)) return `upstream name ${upstream} does not appear in the file`;
@@ -103,7 +108,7 @@ for (const file of tracked) {
   if (isVendored(file)) {
     const problem = provenanceProblem(file);
     vendoredReport.push(file);
-    findings.push(problem ? `FAIL ${file}  ${problem}` : `VENDORED ${file}: ${comments.length} comments kept; upstream ${PROVENANCE[file]} named (third-party, not edited)`);
+    findings.push(problem ? `FAIL ${file}  ${problem}` : `VENDORED ${file}: ${comments.length} comments kept; ${isFx(file) ? `listed in ${FX_MANIFEST}` : `upstream ${PROVENANCE[file]} named`} (third-party, not edited)`);
     continue;
   }
   const text = readFileSync(join(root, file), 'utf8');
