@@ -1,6 +1,28 @@
 // The fx terminal on WebAssembly.
 import { instantiate } from "./wasm-runtime.js";
 
+function beforeStartWithTools(options) {
+  if (options.tools === undefined) return options.beforeStart;
+  return async (instance) => {
+    initializeHostTools(instance, options.tools);
+    await options.beforeStart?.(instance);
+  };
+}
+
+function initializeHostTools(instance, tools) {
+  const bytes = new TextEncoder().encode(JSON.stringify({ tools }));
+  const pointer = instance.exports.fx_terminal_alloc(bytes.length);
+  if (!pointer) throw new Error("fx terminal could not allocate the host tools");
+  try {
+    new Uint8Array(instance.exports.memory.buffer, pointer, bytes.length).set(bytes);
+    if (instance.exports.fx_terminal_initialize(pointer, bytes.length) < 0) {
+      throw new TypeError("fx terminal rejected the host tools");
+    }
+  } finally {
+    instance.exports.fx_terminal_free(pointer, bytes.length);
+  }
+}
+
 export async function createFxTerminal(options) {
   if (!options?.terminal) throw new TypeError("terminal is required");
   const emit = (type, detail = {}) => {
@@ -27,7 +49,7 @@ export async function createFxTerminal(options) {
     });
   };
   emit("runtime.start", { surface: "terminal" });
-  const runtime = await instantiate({ ...options, emit, stdout, onTerminalPoll });
+  const runtime = await instantiate({ ...options, beforeStart: beforeStartWithTools(options), emit, stdout, onTerminalPoll });
   runtime.exited.then((code) => {
     if (!interactiveScheduled) rejectInteractive(new Error(`fx terminal exited with code ${code} before becoming interactive`));
   });

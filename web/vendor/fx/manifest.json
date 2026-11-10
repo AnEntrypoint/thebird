@@ -1,6 +1,6 @@
 {
   "generator": "scripts/vendor-fx.mjs",
-  "source": "fx b7b3cdd4 (term and SDK modules); fx-core.wasm kept from the previous build, because the core does not compile for wasm32-wasi at b7b3cdd4",
+  "source": "fx 1cf7602 (term and SDK modules, built from 5c8b64dc, which adds docs only over it); fx-core.wasm kept from the previous build, because the core does not compile for wasm32-wasi at 5c8b64dc",
   "sdkApiVersion": 2,
   "wasm": {
     "name": "fx-core.wasm",
@@ -9,7 +9,7 @@
   "term": {
     "name": "fx-term.wasm",
     "surface": "term",
-    "sha256": "5d5e26ba02258e8643d122e5985e3c27e37faa26f8ed7bcf2bf84a773988cb69"
+    "sha256": "b0d9849129d025e8eec473db61ae7416e98c527daeb965000528664982561fd5"
   },
   "modules": [
     {
@@ -54,7 +54,7 @@
     },
     {
       "name": "wasm-terminal.js",
-      "sha256": "b869405c2e3cdfc91341bca8deeded38d103079cf5de24aacd6922329f56e665"
+      "sha256": "e05eec92ed66ea264e138d17d58043dcb73ee7c727aa218eb6abb8894b4f8f92"
     },
     {
       "name": "xterm.js",
