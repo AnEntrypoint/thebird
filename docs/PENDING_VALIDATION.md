@@ -1359,3 +1359,37 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
   - `npm run lint:comments`: exit 0, wall 1 s. Output: `VENDORED web/vendor/xterm/xterm.mjs: 3 comments kept; upstream xterm.js named (third-party, not edited)` and `100 repo-owned files checked: 0 comments; 147 tracked files, 19 vendored files with comments`.
 - Defects found: none. No fix was needed, so no fix commit was made.
 - Not run in this turn: the wasm build, `npm run witness`, the witness steps, and `npm run lint:architecture`.
+
+## uvos rows on 0ac311c (local, not pushed)
+
+Commit 0ac311c (the amended 21ee96f) changes `scripts/witness.mjs` only: the uvos rows use the names this build exposes (`tjs.env`, `tjs.system`, `crypto.getRandomValues`) in place of `tjs.getenv`, `tjs.random`, `tjs.userInfo` and the other absent names. The engine bindings were already implemented; no binding changed.
+
+Witness output, from the full `npm run witness` on 0ac311c (headless Chromium, `WITNESS-EXIT 1`, wall 16m47.9s, `witness totals: PASS 208 FAIL 4`; the four FAILs are listed below):
+
+- `PASS uv_os_getenv and uv_os_environ report an empty environment, and uv_os_tmpdir reports /.thebird`
+- `PASS uv_os_setenv and uv_os_unsetenv store and remove a variable that uv_os_getenv reads back`
+- `PASS uv_random fills bytes from the browser entropy source (non-zero, differs between calls); uv_cwd reports the shell directory`
+- `PASS uv_os_getpid, uv_os_getppid, uv_os_get_passwd, uv_cpu_info, uv_interface_addresses, uv_uptime, uv_chdir and uv_exepath read the browser record; chdir to a missing path is rejected`
+
+Raw engine output for the same four commands, from a direct run of those commands (the witness does not print the `uvos-*` lines): `uvos-env true 0 /.thebird 0,0,0`, `uvos-set 1 true`, `uvos-rand true true /workspace true`, `uvos-info 1 0 thebird /.thebird true 0 true rejected /.thebird/tjs /workspace`.
+
+## Open rows waiting on fx (not passing, not changed)
+
+These four FAILs stay open on 0ac311c. None is a thebird defect that can be fixed here.
+
+- `FAIL approval: a bash tool call opens the approval panel with its options and its command row` - waits on fx's stretch 4a push (host tools advertised to the page). Detail: `{"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}] streaming=true"]}`.
+- `FAIL host tools: the TUI advertises exactly bash and ask to its gateway` - waits on fx's stretch 4a push. Detail: `[]`.
+- `FAIL ask: the question is shown, and the answer reaches the stub as a tool result` - waits on fx's stretch 4a push. Detail: `["","  0s (↑1 ↓16)","","┃","","auto · haiku 5.5"]`.
+- `FAIL a resize after the command palette keeps the welcome panel and the rules at 70 columns` - waits on fx's upstream palette fix in `src/ui/resize_runtime.zig`. Detail: `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`.
+
+Status at this entry: fx origin main is ddd17c74 (stretch 3). Stretch 4a is not on origin yet, so the three host-tools rows cannot be rerun against it.
+
+## fx TUI parity, Phase A (docs only, nothing built, not pushed)
+
+The queued memory (`thebird-fx-tui-parity`) says the TUI is missing and that the cause is unknown. Checked against the tree in this pass, that premise is out of date, and this Phase A changes no code.
+
+- The term build is vendored and wired (see the Phase A finding above): `runFxTui` runs `fx-term.wasm` for a bare `fx`.
+- The witness already has the parity checks the memory asks for: transcript (`transcript: the prompt and the stub answer appear in the TUI transcript`), negative control, approval panel, ask, full-transcript screen opened with Ctrl-O, and palette resize (the fx-owned FAIL).
+- The owner's ghostty-vt and WTerm references are not in this repo or the fx checkout. Still open: the owner has to name those artifacts, or confirm xterm.js as the VT surface.
+
+Changes in Phase A: this section only. No witness, build, or code change. The parity rows stay pending on fx's stretch 4a push and the palette fix, and are not run here.
