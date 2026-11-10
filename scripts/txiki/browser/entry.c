@@ -2,9 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <uv.h>
-#include "tjs.h"
+#include "private.h"
 
-uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
 int tjs_browser_timers_pending(const uv_loop_t *loop);
 void tjs_browser_stop_timers(uv_loop_t *loop);
 JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
@@ -138,12 +137,22 @@ void tjs_browser_set_deadline(double ms) {
     deadline_ms = ms;
 }
 
+static int engine_ready = 0;
+
+static void ensure_initialized(void) {
+    if (engine_ready) {
+        return;
+    }
+    char *argv[] = {"tjs", NULL};
+    TJS_Initialize(1, argv);
+    engine_ready = 1;
+}
+
 int tjs_browser_eval(const char *code) {
     tjs_browser_end();
     cancel_requested = 0;
     stop_status = 0;
-    char *argv[] = {"tjs", NULL};
-    TJS_Initialize(1, argv);
+    ensure_initialized();
     runtime = TJS_NewRuntime();
     if (!runtime) {
         return 1;
@@ -198,4 +207,40 @@ int tjs_browser_tick(void) {
     int pumped = pump(runtime);
     int checked = check_module(ctx);
     return first_set(pumped, checked, 0);
+}
+
+TJSRuntime *gm_txiki_new(void) {
+    ensure_initialized();
+    TJSRunOptions options;
+    TJS_DefaultOptions(&options);
+    TJSRuntime *engine = TJS_NewRuntimeOptions(&options);
+    if (engine != NULL) {
+        uv_unref((uv_handle_t *) &engine->stop);
+    }
+    return engine;
+}
+
+void gm_txiki_free(TJSRuntime *engine) {
+    TJS_FreeRuntime(engine);
+}
+
+JSContext *gm_txiki_context(TJSRuntime *engine) {
+    return TJS_GetJSContext(engine);
+}
+
+int gm_txiki_loop_alive(TJSRuntime *engine) {
+    return uv_loop_alive(TJS_GetLoop(engine));
+}
+
+void gm_txiki_loop_turn(TJSRuntime *engine) {
+    uv_run(TJS_GetLoop(engine), UV_RUN_NOWAIT);
+}
+
+JSModuleDef *gm_txiki_load_builtin(JSContext *ctx, const char *module_name) {
+    return tjs_module_loader(ctx, module_name, TJS_GetRuntime(ctx), JS_UNDEFINED);
+}
+
+JSValue gm_txiki_refresh_loop_time(JSContext *ctx, JSValueConst this_value, int argc, JSValueConst *argv) {
+    uv_update_time(TJS_GetLoop(TJS_GetRuntime(ctx)));
+    return JS_UNDEFINED;
 }
