@@ -136,6 +136,7 @@ if (existsSync(chrome)) {
     ['run', `tjs -e "tjs.link('/workspace/uvfs-link-src.txt', '/workspace/uvfs-nlink-x.txt').then(() => tjs.stat('/workspace/uvfs-link-src.txt')).then((s) => console.log('uvfs-nlink', s.nlink), (e) => console.log('uvfs-nlink-err', String(e)))"`],
     ['run', `tjs -e "console.log('uvos-env', tjs.getenv('PATH') === undefined, Object.keys(tjs.environ()).length, tjs.tmpDir, tjs.loadavg().join(','))"`],
     ['run', `tjs -e "tjs.setenv('UVOS_A', '1'); const a = tjs.getenv('UVOS_A'); tjs.unsetenv('UVOS_A'); console.log('uvos-set', a, tjs.getenv('UVOS_A') === undefined)"`],
+    ['run', `tjs -e "const b = new Uint8Array(32); tjs.random(b.buffer); const c = new Uint8Array(32); tjs.random(c.buffer); console.log('uvos-rand', b.some((x) => x !== 0), b.join(',') !== c.join(','), tjs.cwd, tjs.getenv('HOME') === undefined)"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
@@ -157,6 +158,7 @@ if (existsSync(chrome)) {
   check('uv_fs stat reports a hard link\'s real link count (three names after a third link)', uvFsLines.includes('uvfs-nlink 3'), uvFsSeen);
   check('uv_os_getenv and uv_os_environ report an empty environment, and uv_os_tmpdir reports /.thebird', uvFsLines.includes('uvos-env true 0 /.thebird 0,0,0'), uvFsSeen);
   check('uv_os_setenv and uv_os_unsetenv store and remove a variable that uv_os_getenv reads back', uvFsLines.includes('uvos-set 1 true'), uvFsSeen);
+  check('uv_random fills bytes from the browser entropy source (non-zero, differs between calls); uv_cwd reports the shell directory', uvFsLines.includes('uvos-rand true true /workspace true'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });

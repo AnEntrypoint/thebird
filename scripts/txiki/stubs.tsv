@@ -26,29 +26,27 @@ tjs__mod_udp_init	mod_udp: module excluded from the browser build
 tjs__mod_ws_init	mod_ws: module excluded from the browser build
 uv_accept	tcp: no sockets in the browser
 uv_available_parallelism	os: reachable as tjs.availableParallelism; the stub returns 1 because the page runs on one thread
-uv_chdir	fs: reachable as tjs.chdir; the stub returns UV_ENOSYS because the engine has no working directory, and the shell keeps its own in bashkit
-uv_cpu_info	os: reachable as tjs.cpuInfo; the stub returns UV_ENOSYS because the browser exposes no CPU table
-uv_cwd	fs: reachable as tjs.cwd; the stub returns UV_ENOSYS because the engine has no working directory, and the shell keeps its own in bashkit
-uv_exepath	fs: reachable from the engine loader only; the stub returns UV_ENOSYS because the page has no executable file
+uv_chdir	fs: reachable as tjs.chdir; the page keeps the working directory in its own state (slot.cwd) and no existing import sets it; the stub returns UV_ENOSYS
+uv_cpu_info	os: reachable as tjs.cpuInfo; no existing host import reports CPU data (navigator.hardwareConcurrency is not wired to an import); the stub returns UV_ENOSYS
+uv_exepath	fs: reachable from the engine loader only; a web page has no executable file for any import to name; the stub returns UV_ENOSYS
 uv_free_cpu_info	os: reachable as tjs.cpuInfo; the matching allocation is never made, so there is nothing to free
 uv_free_interface_addresses	os: reachable as tjs.networkInterfaces; the matching allocation is never made, so there is nothing to free
 uv_inet_pton	net: used by the excluded network modules only; the stub returns UV_ENOSYS
-uv_interface_addresses	os: reachable as tjs.networkInterfaces; the stub returns UV_ENOSYS because the page has no network interfaces to report
+uv_interface_addresses	os: reachable as tjs.networkInterfaces; no existing host import reports network interfaces; the stub returns UV_ENOSYS
 uv_ip4_name	net: used by the excluded network modules only; the stub returns UV_ENOSYS
 uv_ip6_name	net: used by the excluded network modules only; the stub returns UV_ENOSYS
 uv_listen	tcp: no sockets in the browser
 uv_os_free_passwd	os: reachable as tjs.userInfo; the matching allocation is never made, so there is nothing to free
-uv_os_gethostname	os: reachable as tjs.hostName; the stub returns UV_ENOSYS because the browser exposes no host name
-uv_os_get_passwd	os: reachable as tjs.userInfo; the stub returns UV_ENOSYS because the browser has no user database
-uv_os_getpid	os: reachable as tjs.pid; the stub returns UV_ENOSYS because the browser exposes no process id
-uv_os_getppid	os: reachable as tjs.ppid; the stub returns UV_ENOSYS because the browser exposes no parent process id
+uv_os_gethostname	os: reachable as tjs.hostName; no existing host import returns a machine name (tjs_fs_* and tjs_random, tjs_now_ms, tjs_bridge_send, tjs_cancel_requested); the stub returns UV_ENOSYS
+uv_os_get_passwd	os: reachable as tjs.userInfo; no existing host import reads a user database; the stub returns UV_ENOSYS
+uv_os_getpid	os: reachable as tjs.pid; no existing host import returns a process id; the stub returns UV_ENOSYS
+uv_os_getppid	os: reachable as tjs.ppid; no existing host import returns a parent process id; the stub returns UV_ENOSYS
 uv_pipe_bind2	pipe: no pipes or process handles in the browser
 uv_pipe_connect2	pipe: no pipes or process handles in the browser
 uv_pipe_getpeername	pipe: no pipes or process handles in the browser
 uv_pipe_getsockname	pipe: no pipes or process handles in the browser
 uv_pipe_init	pipe: no pipes or process handles in the browser
 uv_pipe_open	pipe: no pipes or process handles in the browser
-uv_random	random: reachable as tjs.random and from webcrypto key generation, which the stub fails with UV_ENOSYS; the browser entropy source (crypto.getRandomValues) needs a host import that the tjs_fs imports do not provide
 uv_signal_start	signal: no host signals in the browser
 uv_tcp_bind	tcp: no sockets in the browser
 uv_tcp_connect	tcp: no sockets in the browser
@@ -59,4 +57,4 @@ uv_tcp_keepalive	tcp: no sockets in the browser
 uv_tcp_nodelay	tcp: no sockets in the browser
 uv_thread_create	thread: the page is single-threaded
 uv_thread_join	thread: the page is single-threaded
-uv_uptime	os: reachable as tjs.uptime; the stub returns UV_ENOSYS because the browser exposes no system uptime
+uv_uptime	os: reachable as tjs.uptime; tjs_now_ms gives the wall clock but no import gives the system boot time, so uptime cannot be computed; the stub returns UV_ENOSYS

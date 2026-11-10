@@ -799,3 +799,38 @@ void uv_fs_req_cleanup(uv_fs_t *req) {
     if (req->fs_type == UV_FS_READLINK || req->fs_type == UV_FS_REALPATH || req->fs_type == UV_FS_MKDTEMP || req->fs_type == UV_FS_MKSTEMP || req->fs_type == UV_FS_STATFS) free(req->ptr);
     req->ptr = NULL;
 }
+
+HOST_IMPORT("tjs_random") void host_random(void *buf, int32_t len);
+
+int uv_random(uv_loop_t *loop, uv_random_t *req, void *buf, size_t buflen, unsigned flags, uv_random_cb cb) {
+    (void) loop;
+    (void) req;
+    (void) flags;
+    if (cb) return UV_ENOSYS;
+    uint8_t *out = buf;
+    size_t left = buflen;
+    while (left > 0) {
+        size_t chunk = left > 65536 ? 65536 : left;
+        host_random(out, (int32_t) chunk);
+        out += chunk;
+        left -= chunk;
+    }
+    return 0;
+}
+
+int uv_cwd(char *buffer, size_t *size) {
+    char scratch[4096];
+    int32_t len = host_fs_resolve(".", 1, scratch, (int32_t) sizeof(scratch));
+    if (len < 0) {
+        *size = sizeof(scratch);
+        return UV_ENOBUFS;
+    }
+    if (*size <= (size_t) len) {
+        *size = (size_t) len + 1;
+        return UV_ENOBUFS;
+    }
+    memcpy(buffer, scratch, (size_t) len);
+    buffer[len] = '\0';
+    *size = (size_t) len;
+    return 0;
+}

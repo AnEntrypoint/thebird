@@ -1318,3 +1318,20 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
   - `uv_random` (`tjs.random`, webcrypto key generation): needs `crypto.getRandomValues`, which no existing `tjs_fs_*` import provides. Open: a new host import is the owner's decision.
   - `uv_pipe_*`, `uv_tcp_*`, `uv_accept`, `uv_listen`, `uv_inet_pton`, `uv_ip4_name`, `uv_ip6_name`, `uv_signal_start`, `uv_thread_create`, `uv_thread_join`, the `tjs__channel_*`, `tjs__mod_*` and `tjs__lws_*` rows: the modules are excluded from the browser build or the page is single-threaded, so the symbols are not reachable from JS.
 - Witness round 3: `scripts/witness.mjs` steps and checks above; not run.
+
+## Phase A, round 4: the remaining reachable rows (not built, not pushed)
+
+- Imports used, all existing: `tjs_random` (`crypto.getRandomValues`), `tjs_fs_resolve` (the page's `absolute()` against `slot.cwd`), `tjs_now_ms`. No new import was added.
+- Implemented (rows removed from `scripts/txiki/stubs.tsv`), in `scripts/txiki/browser/fs-uv-browser.c`:
+  - `uv_random`: synchronous fill from `tjs_random` in 64 KiB chunks, which is the `getRandomValues` limit. The asynchronous form (a callback) returns `UV_ENOSYS`; every engine call site passes NULL for the loop, request and callback, so the engine never takes that path. Witness: `uvos-rand` step, check `uv_random fills bytes from the browser entropy source (non-zero, differs between calls); uv_cwd reports the shell directory` (expects `uvos-rand true true /workspace true`).
+  - `uv_cwd` (`tjs.cwd`): resolves `.` through `tjs_fs_resolve`, which is the page's current directory. A buffer that is too small returns `UV_ENOBUFS` with the size needed, as `mod_os.c` expects. Witness: the same `uvos-rand` check, which reads `tjs.cwd` and expects `/workspace`.
+- Causes recorded in `scripts/txiki/stubs.tsv`, not guessed, because no existing import holds the data:
+  - `uv_os_gethostname` (`tjs.hostName`): no import returns a machine name.
+  - `uv_os_getpid` (`tjs.pid`) and `uv_os_getppid` (`tjs.ppid`): no import returns a process id.
+  - `uv_os_get_passwd` (`tjs.userInfo`): no import reads a user database. `uv_os_free_passwd` has nothing to free.
+  - `uv_cpu_info` (`tjs.cpuInfo`): no import reports CPU data. `uv_free_cpu_info` has nothing to free.
+  - `uv_interface_addresses` (`tjs.networkInterfaces`): no import reports interfaces. `uv_free_interface_addresses` has nothing to free.
+  - `uv_uptime` (`tjs.uptime`): `tjs_now_ms` gives the wall clock, not the system boot time, so uptime is not computable.
+  - `uv_chdir` (`tjs.chdir`): the page keeps its directory in `slot.cwd` and no import sets it.
+  - `uv_exepath`: a web page has no executable file for an import to name.
+- Witness round 4: `uvos-rand` step and check above; not run.
