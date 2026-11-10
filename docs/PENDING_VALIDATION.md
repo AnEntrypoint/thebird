@@ -1075,3 +1075,27 @@ Change, in `scripts/witness.mjs`. The old check matched `echo approval` anywhere
 Witness it needs (Phase B, after fx's push and the go-ahead): the full `npm run witness`, reading the approval check's `options` and `commandRows` detail and the negative control's detail.
 
 Expected result, and why: with `tools: []` on this page, the stub now sends no tool call for `[tool:bash]` (`scripts/fx-stub-gateway.mjs`, `tool-not-advertised=bash` in the reply), so the panel will not open and the approval check is expected to FAIL on the same fx advertisement cause as the ask check. A PASS needs fx to advertise a tool that needs approval to this page. The negative control can pass on its own.
+
+## Phase B on the six local commits (6acfa44 … 8eee0f1), no fx push
+
+Build: `node scripts/build-pages.mjs`, exit 0, wall 0 s (`_site/` written; ignored by git).
+
+Witness run A, PID 604771, log `/tmp/witness-phaseB-final.log`, wall 733 s: `witness totals: PASS 184 FAIL 4`. Its Ctrl-O FAIL was my witness: `grab('fullClosed')` overwrote the boolean flag with the screen text. Fixed in `scripts/witness.mjs` (captures renamed `askReply` and `closedScreen`), committed as a Phase A fix.
+
+Witness run B, PID 628718, log `/tmp/witness-phaseB-final2.log`, wall 747 s: `witness totals: PASS 185 FAIL 3`, `WITNESS-EXIT 1`. `browser cleanup (exit): closed 73 Chromium tree(s) by pid 628734, 629202, 629379, 629852, …`.
+
+TUI results, run B:
+- Transcript: PASS. `{"shown":true,"stub":[{"streaming":true,"authorized":true,"prompt":"hello","tools":[]},…]}`.
+- Negative control (plain prompt, no approval panel): PASS. The transcript screen has no `Allow once` or `3. Deny`.
+- Ctrl-O full transcript and Escape close: PASS. `{"opened":true,"closed":true,"footer":["  esc close · pgup/pgdn scroll"]}`.
+- Palette resize: FAIL, fx (below).
+- Approval: FAIL, fx (below). `{"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}] streaming=true"]}`. No `1. Allow once` or `3. Deny` appears, so the panel did not open. The stub did not call a tool, because the request advertised none.
+- Ask: FAIL, fx (below). The screen shows `• Thinking`-era status, `0s (↑1 ↓16)` and `auto · haiku 5.5`, with no `tool-result=seen`.
+- Realpath: PASS, from `/workspace`: `realpath /workspace/import-probe/m.mjs`.
+- gm import checks: PASS `script-imports` `"script-imports 42 lib"`; `eval-import` `"script-imports 42 lib\neval-import 42"`; `missing-import` `"missing-import could not load 'import-probe/nope.mjs'"`.
+
+Open defects, all fx's, rows kept open (not worked around):
+1. Palette resize. Cause: `src/ui/resize_runtime.zig`, the resize observation does not settle after palette use. Output: `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`.
+2. Tool advertisement, which causes the approval and ask failures. The TUI request carries `"tools":[]` (witness `seen`), and the header reads `tools: 0 advertised`. The stub now only calls advertised tools (`tool-not-advertised=<name>` otherwise), so no approval panel opens and no tool result returns. The advertisement is built in fx (`src/acp/libfx_hooks.zig:206` counts `advertised_functions`, `additional_functions`, `selected_dynamic`). This page sets none, and whether that is fx's configuration or a missing source from the page is not settled. Owner: fx.
+
+Wall times recorded: build 0 s; witness A 733 s; witness B 747 s.
