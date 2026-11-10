@@ -7,8 +7,9 @@ import { tjsBuiltin } from './txiki-in-page.js';
 import { nodeBuiltin } from './node-in-txiki.js';
 import { fxBuiltin } from './fx-in-page.js';
 import { gmBuiltin } from './gm-in-page.js';
+import { playwriterBuiltin } from './playwriter-in-page.js';
 
-export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget', 'fx', 'gm'];
+export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'curl', 'wget', 'fx', 'gm', 'playwriter'];
 
 const RUNNERS = {
   git: ({ argv }) => gitBuiltin(argv),
@@ -22,6 +23,7 @@ const RUNNERS = {
   wget: ({ argv, cwd, signal }) => curlBuiltin('wget', argv, cwd, signal),
   fx: ({ argv, signal }) => fxBuiltin(argv, { signal }),
   gm: ({ argv, signal, cwd }) => gmBuiltin(argv, { signal, cwd }),
+  playwriter: ({ argv, signal }) => playwriterBuiltin(argv, { signal }),
 };
 
 export const runBuiltin = (name, argv, { cwd, signal, timeoutMs } = {}) => RUNNERS[name]({ argv, cwd, signal, timeoutMs });

@@ -1,0 +1,8 @@
+{
+  "generator": "scripts/vendor-birdman.mjs",
+  "source": "AnEntrypoint/birdman client/birdman.js",
+  "client": {
+    "name": "client.js",
+    "sha256": "08435ff1381c1822467122ab09dd9f4290467780bf7d48a8c3d5a804fb28f360"
+  }
+}

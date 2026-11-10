@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { gmCheck, gmClip, gmSha256Hex, gmVersion } from './vendor/gm/gm-core.js';
 import { GM_SKILLS } from './vendor/gm/skills.js';
 import { createBrowserStdio } from './vendor/floosie/browser.js';
+import { playwriterVerbs, playwriterHandle } from './playwriter-in-page.js';
 
 const USAGE = 'usage: gm --version | gm --help | gm check | gm serve | gm stdio \'<json-rpc>\' | gm tools | gm call <tool> \'<json>\' | gm attach';
 const HELP = `${USAGE}\n\ngm is gm's stdio MCP server in the page. Its three served tools are next_context, run_code and finish; every other verb is a function on gm inside a run_code body. gm stdio takes one single-quoted JSON-RPC line and answers one line. gm attach lists the apps on the floosie hub; an app joins with gmAttach(name, handler). The append-only run log is under /workspace/.gm/runs.`;
@@ -112,7 +113,7 @@ const verbs = {
   },
   run_code: async (args) => {
     if (typeof args?.body !== 'string' || args.body.trim() === '') return { ok: false, refused: true, error: 'run_code needs a non-empty body' };
-    const scope = Object.fromEntries(Object.entries(verbs).filter(([name]) => name !== 'run_code').map(([name, fn]) => [name, (input) => Promise.resolve(fn(input))]));
+    const scope = Object.fromEntries([...Object.entries(verbs), ...Object.entries(playwriterVerbs)].filter(([name]) => name !== 'run_code').map(([name, fn]) => [name, (input) => Promise.resolve(fn(input))]));
     const gm = { ...scope, try: async (fn) => { try { return await fn(); } catch (error) { return { ok: false, error: error?.message ?? String(error) }; } }, verbs: () => Object.keys(scope) };
     const body = args.format === 'cjs' ? args.body : `return (async () => { ${args.body} })();`;
     let value;
@@ -256,6 +257,7 @@ export const gmTools = TOOLS.map((tool) => tool.name);
 
 const hub = createBrowserStdio({ name: 'gm', inputType: 'rpc' });
 hub.attach('gm', handle);
+hub.attach('playwriter', playwriterHandle);
 hub.attach('*', handle);
 
 export const gmAttach = (name, handler) => hub.attach(name, handler);
