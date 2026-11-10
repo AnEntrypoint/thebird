@@ -834,3 +834,171 @@ int uv_cwd(char *buffer, size_t *size) {
     *size = (size_t) len;
     return 0;
 }
+
+HOST_IMPORT("tjs_os_info") int32_t host_os_info(char *out, int32_t cap);
+HOST_IMPORT("tjs_os_chdir") int32_t host_os_chdir(const char *path, int32_t len);
+
+static char os_record[2048];
+
+static int load_os_record(void) {
+    int32_t len = host_os_info(os_record, (int32_t) sizeof(os_record) - 1);
+    if (len < 0 || len >= (int32_t) sizeof(os_record)) return -1;
+    os_record[len] = '\0';
+    return 0;
+}
+
+static const char *json_value(const char *key) {
+    char needle[64];
+    size_t n = strlen(key);
+    if (n + 4 > sizeof(needle)) return NULL;
+    needle[0] = '"';
+    memcpy(needle + 1, key, n);
+    needle[n + 1] = '"';
+    needle[n + 2] = ':';
+    needle[n + 3] = '\0';
+    const char *at = strstr(os_record, needle);
+    if (!at) return NULL;
+    at += n + 3;
+    while (*at == ' ') at++;
+    return at;
+}
+
+static const char *json_text(const char *key, size_t *len) {
+    const char *value = json_value(key);
+    if (!value || *value != '"') return NULL;
+    value++;
+    const char *end = strchr(value, '"');
+    if (!end) return NULL;
+    *len = (size_t) (end - value);
+    return value;
+}
+
+static int json_number(const char *key, double *out) {
+    const char *value = json_value(key);
+    if (!value) return -1;
+    char *end = NULL;
+    *out = strtod(value, &end);
+    return end == value ? -1 : 0;
+}
+
+static char *copy_text(const char *text, size_t len) {
+    char *copy = malloc(len + 1);
+    if (!copy) return NULL;
+    memcpy(copy, text, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+static int os_text_into(const char *key, char *buffer, size_t *size) {
+    if (load_os_record()) return UV_EIO;
+    size_t len = 0;
+    const char *value = json_text(key, &len);
+    if (!value) return UV_EIO;
+    if (*size <= len) {
+        *size = len + 1;
+        return UV_ENOBUFS;
+    }
+    memcpy(buffer, value, len);
+    buffer[len] = '\0';
+    *size = len;
+    return 0;
+}
+
+int uv_os_gethostname(char *buffer, size_t *size) {
+    return os_text_into("hostname", buffer, size);
+}
+
+int uv_exepath(char *buffer, size_t *size) {
+    return os_text_into("exepath", buffer, size);
+}
+
+uv_pid_t uv_os_getpid(void) {
+    double pid = 0;
+    if (load_os_record() || json_number("pid", &pid)) return 0;
+    return (uv_pid_t) pid;
+}
+
+uv_pid_t uv_os_getppid(void) {
+    double ppid = 0;
+    if (load_os_record() || json_number("ppid", &ppid)) return 0;
+    return (uv_pid_t) ppid;
+}
+
+int uv_os_get_passwd(uv_passwd_t *pwd) {
+    if (load_os_record()) return UV_EIO;
+    size_t name_len = 0, home_len = 0, shell_len = 0;
+    const char *name = json_text("passwd_name", &name_len);
+    const char *home = json_text("passwd_home", &home_len);
+    const char *shell = json_text("passwd_shell", &shell_len);
+    double uid = 0, gid = 0;
+    if (!name || !home || !shell || json_number("passwd_uid", &uid) || json_number("passwd_gid", &gid)) return UV_EIO;
+    pwd->username = copy_text(name, name_len);
+    pwd->homedir = copy_text(home, home_len);
+    pwd->shell = copy_text(shell, shell_len);
+    if (!pwd->username || !pwd->homedir || !pwd->shell) {
+        uv_os_free_passwd(pwd);
+        return UV_ENOMEM;
+    }
+    pwd->uid = (unsigned long) uid;
+    pwd->gid = (unsigned long) gid;
+    return 0;
+}
+
+void uv_os_free_passwd(uv_passwd_t *pwd) {
+    free(pwd->username);
+    free(pwd->homedir);
+    free(pwd->shell);
+    pwd->username = NULL;
+    pwd->homedir = NULL;
+    pwd->shell = NULL;
+}
+
+int uv_cpu_info(uv_cpu_info_t **cpu_infos, int *count) {
+    if (load_os_record()) return UV_EIO;
+    double cpus = 0;
+    size_t model_len = 0;
+    const char *model = json_text("cpu_model", &model_len);
+    if (json_number("cpu_count", &cpus) || !model || cpus < 1) return UV_EIO;
+    int n = (int) cpus;
+    uv_cpu_info_t *infos = calloc((size_t) n, sizeof(*infos));
+    if (!infos) return UV_ENOMEM;
+    for (int i = 0; i < n; i++) {
+        infos[i].model = copy_text(model, model_len);
+        if (!infos[i].model) {
+            uv_free_cpu_info(infos, i);
+            return UV_ENOMEM;
+        }
+    }
+    *cpu_infos = infos;
+    *count = n;
+    return 0;
+}
+
+void uv_free_cpu_info(uv_cpu_info_t *cpu_infos, int count) {
+    for (int i = 0; i < count; i++) free((char *) cpu_infos[i].model);
+    free(cpu_infos);
+}
+
+int uv_interface_addresses(uv_interface_address_t **addresses, int *count) {
+    if (load_os_record()) return UV_EIO;
+    double interfaces = 0;
+    if (json_number("interfaces", &interfaces)) return UV_EIO;
+    if (interfaces > 0) return UV_ENOSYS;
+    *addresses = NULL;
+    *count = 0;
+    return 0;
+}
+
+void uv_free_interface_addresses(uv_interface_address_t *addresses, int count) {
+    (void) count;
+    free(addresses);
+}
+
+int uv_uptime(double *uptime) {
+    if (load_os_record()) return UV_EIO;
+    return json_number("uptime_s", uptime) == 0 ? 0 : UV_EIO;
+}
+
+int uv_chdir(const char *dir) {
+    return host_os_chdir(dir, (int32_t) strlen(dir)) == 0 ? 0 : UV_ENOENT;
+}

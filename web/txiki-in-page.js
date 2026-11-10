@@ -356,6 +356,34 @@ refreshStorage();
         return -1;
       }
     },
+    tjs_os_info(out, cap) {
+      const record = {
+        hostname: location.hostname,
+        pid: 1,
+        ppid: 0,
+        passwd_name: 'thebird',
+        passwd_home: '/.thebird',
+        passwd_shell: '',
+        passwd_uid: 0,
+        passwd_gid: 0,
+        cpu_count: navigator.hardwareConcurrency ?? 1,
+        cpu_model: 'browser',
+        interfaces: 0,
+        uptime_s: performance.now() / 1000,
+        exepath: '/.thebird/tjs',
+      };
+      const bytes = encoder.encode(JSON.stringify(record));
+      if (bytes.length >= cap) return -1;
+      bytesAt(out, cap).set(bytes);
+      return bytes.length;
+    },
+    tjs_os_chdir(ptr, len) {
+      const target = absolute(textAt(ptr, len));
+      const info = fs.statSync(target, { throwIfNoEntry: false });
+      if (!info || !info.isDirectory()) return -1;
+      slot.cwd = target;
+      return 0;
+    },
     tjs_random(ptr, len) {
       globalThis.crypto.getRandomValues(bytesAt(ptr, len));
     },

@@ -1335,3 +1335,18 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
   - `uv_chdir` (`tjs.chdir`): the page keeps its directory in `slot.cwd` and no import sets it.
   - `uv_exepath`: a web page has no executable file for an import to name.
 - Witness round 4: `uvos-rand` step and check above; not run.
+
+## Phase A, round 5: nine rows through the browser record (not built, not pushed)
+
+- Wasm import list changes: two new host imports, `tjs_os_info` (the record) and `tjs_os_chdir` (a setter). The import list changes, so the pin changes at Phase B. The request named one import; `uv_chdir` must set the page's directory, which no read-only import can do, so the setter is the second import.
+- JS, `web/txiki-in-page.js`, next to `tjs_random`:
+  - `tjs_os_info(out, cap)` writes a flat JSON record: `hostname` (`location.hostname`), `pid` 1, `ppid` 0, `passwd_name` `thebird`, `passwd_home` `/.thebird`, `passwd_shell` empty, `passwd_uid` 0, `passwd_gid` 0, `cpu_count` (`navigator.hardwareConcurrency`), `cpu_model` `browser`, `interfaces` 0, `uptime_s` (`performance.now()` in seconds), `exepath` `/.thebird/tjs`. It returns -1 when the record does not fit.
+  - `tjs_os_chdir(ptr, len)` resolves the path against the page's directory and sets it only when it is an existing directory; otherwise -1.
+  - Not in the record, on purpose: the request listed `cwd: "/"`. The engine's directory is `slot.cwd`, which `uv_cwd` already reads and which the shell sets per run, so a second cwd field would disagree with it. `cwd` is left out.
+- C, `scripts/txiki/browser/fs-uv-browser.c`: a flat-key reader over the record (`json_text`, `json_number`), with the implementations:
+  - `uv_os_gethostname` (`hostname`), `uv_exepath` (`exepath`), `uv_os_getpid` (`pid`), `uv_os_getppid` (`ppid`), `uv_os_get_passwd` (`passwd_*`, copies allocated and released by `uv_os_free_passwd`), `uv_cpu_info` (`cpu_count` entries with `cpu_model`, released by `uv_free_cpu_info`), `uv_interface_addresses` (`interfaces`, zero entries; a non-zero count returns `UV_ENOSYS`, released by `uv_free_interface_addresses`), `uv_uptime` (`uptime_s`), `uv_chdir` (the setter; `UV_ENOENT` when it fails).
+  - The three free functions (`uv_os_free_passwd`, `uv_free_cpu_info`, `uv_free_interface_addresses`) are implemented as well, because the functions above now return allocated memory; they were stub rows before.
+- `scripts/txiki/stubs.tsv`: twelve rows removed (the nine, and the three frees). `uv_available_parallelism` keeps its generator body (1).
+- Witness, `scripts/witness.mjs`: step `uvos-info` (reads `tjs.pid`, `tjs.ppid`, `tjs.userInfo.userName`, `tjs.userInfo.homeDir`, `tjs.cpuInfo()`, `tjs.networkInterfaces()`, `tjs.uptime()`, `tjs.chdir` to a missing path, `tjs.exePath`, `tjs.cwd`). Check: `uv_os_getpid, uv_os_getppid, uv_os_get_passwd, uv_cpu_info, uv_interface_addresses, uv_uptime, uv_chdir and uv_exepath read the browser record; chdir to a missing path is rejected` expects `uvos-info 1 0 thebird /.thebird true 0 true rejected /.thebird/tjs /workspace`.
+- Semantics to know: `tjs.chdir` changes the page's directory for the rest of that `tjs -e` run only, because `runTjs` sets `slot.cwd` from the calling shell's directory each time. The shell's own working directory (bashkit) is not changed.
+- Not run: no build, no test, no witness in this round.
