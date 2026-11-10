@@ -657,6 +657,27 @@ Found and open, not a code defect: the Pyodide bundle is 18.2 MB, and on this li
 
 Push: `origin main`, once, after this ledger commit.
 
+## Phase A: npm and npx as a vendored subset (queue pass 12)
+
+Code and docs only. Nothing was built, run or witnessed in this phase; the Phase B entry below records those.
+
+Choice: a vendored, pinned subset of npm, not the npm CLI. The npm CLI needs many Node built-ins (streams, child_process, http agents, zlib, os, a large module graph of its own), and the txiki engine has none of them. A subset covers what was asked: registry lookup, semver ranges and dist-tags, sha512 integrity, tar extraction, `dependencies` into `node_modules`, `package.json` saved, and `npx` for an installed or cached bin. Limits: no lockfile, no `.bin` links, no peer, optional or dev dependencies of installed packages, no config or auth, CommonJS bins only, `npm -v` and `npx -v` print the subset's own version `0.1.0`.
+
+Each change:
+- `scripts/esbuild-pin.mjs`: `ESBUILD_VERSION` (0.28.2) and `loadEsbuild`, shared by the floosie and npm vendor steps. This file was listed as untracked at the start of the session, and my Write replaced it. Its earlier content is not recoverable, because git never saw it. The file now holds the loader that `vendor-floosie.mjs` already had.
+- `scripts/vendor-floosie.mjs`: the loader moved to `esbuild-pin.mjs`. Bundling options and the manifest are unchanged. Phase B rebuilds the bundle and checks it against `588f159dd6ea…`.
+- `scripts/vendor-npm.mjs` (new): pins fflate 0.8.3 (MIT), @noble/hashes 2.4.0 (MIT) and semver 7.8.6 (ISC) by sha512 integrity, which was checked against the registry before the pins were written. It downloads each tarball, checks the integrity, extracts it, and bundles one iife entry (`thebirdNpmLibs`) with esbuild, minified and with no legal comments. It writes `licenses/<name>.md` with each package's LICENSE text and a `manifest.json` with the bundle SHA-256.
+- `web/vendor/npm/`: produced by `vendor-npm.mjs` in Phase B.
+- `web/npm-program.js` (new): the txiki program. It has the registry packument fetch, the version pick, the sha512 check, the tar reader, the install with reuse and nesting, `package.json` saving, and `npx` with the cache under `/.thebird/npx`. It also has the CommonJS loader for bins: relative and package requires, `.json`, `#!` stripped, and an `fs` shim.
+- `web/npm-in-txiki.js` (new): the builtin. It reads the bundle and the program as text, prepends them to `globalThis.__npmInput`, and runs them through `runTjs`.
+- `web/builtins.js`: `npm` and `npx` added to `BUILTIN_NAMES` and `RUNNERS`, so `which`, `command -v` and `type` agree.
+- `scripts/lint-comments.mjs`: `web/vendor/npm/` is listed in `GENERATED_MANIFESTS`.
+- `scripts/lint-architecture.mjs`: the two new browser files are in `BROWSER_FILES`, and claim records cover the ARCHITECTURE row, the AGENTS bullets and the vendor step.
+- `scripts/witness.mjs`: one terminal run of eight commands, and six checks on its output (`npm -v` and `npx -v`, `npm install debug`, the ms version through `node -e`, `npx semver` with a range, `which npm` and `type npx`, `type node` and `node` version).
+- `AGENTS.md` and `ARCHITECTURE.md`: the builtin lists, the vendored list, the scripts list, the subset's limits, and the table rows.
+
+Unknowns the Phase B run has to settle: whether the txiki `fetch` response has `arrayBuffer` and `text`; whether `__thebirdFs.readdir` on a file returns a non-array; whether the minified semver bundle loads under the engine; whether `console.error` reaches the output; and the output of `semver -r` (the witness expects `1.2.4` and `1.2.10`, and not `1.2.3`).
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).

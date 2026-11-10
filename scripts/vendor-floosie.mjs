@@ -1,27 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { ESBUILD_VERSION, loadEsbuild } from './esbuild-pin.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const floosieRepo = process.env.FLOOSIE_REPO ?? join(root, '..', 'floosie');
 const out = join(root, 'web', 'vendor', 'floosie');
-const ESBUILD_VERSION = '0.28.2';
-const esbuildDir = join(tmpdir(), `thebird-esbuild-${ESBUILD_VERSION}`);
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
-
-async function loadEsbuild() {
-  const installed = join(esbuildDir, 'node_modules', 'esbuild', 'package.json');
-  if (!existsSync(installed) || JSON.parse(readFileSync(installed, 'utf8')).version !== ESBUILD_VERSION) {
-    mkdirSync(esbuildDir, { recursive: true });
-    writeFileSync(join(esbuildDir, 'package.json'), '{ "private": true }\n');
-    execFileSync(npm, ['install', '--no-save', `esbuild@${ESBUILD_VERSION}`], { cwd: esbuildDir, stdio: 'inherit' });
-  }
-  return import(pathToFileURL(join(esbuildDir, 'node_modules', 'esbuild', 'lib', 'main.js')).href);
-}
 
 export async function vendorFloosie() {
   if (!existsSync(join(floosieRepo, 'src', 'browser.ts'))) {

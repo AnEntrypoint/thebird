@@ -83,7 +83,7 @@ function commentsOf(file) {
 
 const classified = (file) => CODE.test(file) || HTML.test(file) || MARKDOWN.test(file) || C_SOURCE.test(file) || YAML.test(file) || basename(file) === DOTFILE_HASH || NO_COMMENT_SYNTAX.test(file);
 
-const GENERATED_MANIFESTS = { 'web/vendor/fx/': 'web/vendor/fx/manifest.json', 'web/vendor/floosie/': 'web/vendor/floosie/manifest.json', 'web/vendor/birdman/': 'web/vendor/birdman/manifest.json' };
+const GENERATED_MANIFESTS = { 'web/vendor/fx/': 'web/vendor/fx/manifest.json', 'web/vendor/floosie/': 'web/vendor/floosie/manifest.json', 'web/vendor/birdman/': 'web/vendor/birdman/manifest.json', 'web/vendor/npm/': 'web/vendor/npm/manifest.json' };
 const manifestOf = (file) => Object.entries(GENERATED_MANIFESTS).find(([prefix]) => file.startsWith(prefix))?.[1];
 const listedNames = (manifest) => {
   const data = JSON.parse(readFileSync(join(root, manifest), 'utf8'));

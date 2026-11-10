@@ -331,6 +331,24 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
+  const npmRun = await terminal([
+    ['run', 'npm -v'],
+    ['run', 'npx -v'],
+    ['run', 'mkdir -p npm-check && cd npm-check && npm install debug'],
+    ['run', 'node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node_modules/ms/package.json\', \'utf8\')).version)"'],
+    ['run', 'npx semver -r ">=1.2.4" 1.2.3 1.2.4 1.2.10'],
+    ['run', 'which npm'],
+    ['run', 'type npx'],
+    ['run', 'type node'],
+    ['run', 'node -e "console.log(process.version)"'],
+  ]);
+  const npmOut = npmRun.out;
+  check('npm -v and npx -v both print the vendored subset version', (npmOut.match(/^0\.1\.0$/gm) ?? []).length >= 2, JSON.stringify(npmOut.slice(0, 300)));
+  check('npm install debug installs debug and its ms dependency into node_modules and says so', /^\+ debug@\d+\.\d+\.\d+$/m.test(npmOut) && /^\+ ms@2\.\d+\.\d+$/m.test(npmOut) && /^added 2 packages$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('the installed ms package.json reads back through node -e from the shell filesystem', /^2\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('npx semver runs the registry bin: the range filter prints 1.2.4 and 1.2.10 and not 1.2.3', /^1\.2\.4$/m.test(npmOut) && /^1\.2\.10$/m.test(npmOut) && !/^1\.2\.3$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('which npm names npm and type npx reports a shell builtin', /^npm$/m.test(npmOut) && /^npx is a shell builtin$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('node still resolves to txiki after npm and npx are added', /^node is a shell builtin$/m.test(npmOut) && /^v\d+\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
   const txikiPip = txikiShell.runs?.pipVersion ?? {};
   check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));
