@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
 import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
+import { vendorFx } from './vendor-fx.mjs';
 import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,7 @@ check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST'
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
+  if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: COLD_START_MS, ...options });
 
@@ -52,9 +54,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"']]).toString(), timeoutMs: COLD_START_MS });
+  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx']]).toString(), timeoutMs: COLD_START_MS });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
+  const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
   const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
   const siteBundle = join(pagesDir, 'web', 'terminal.bundle.js');
   const bundleText = existsSync(siteBundle) ? readFileSync(siteBundle, 'utf8') : '';
@@ -62,6 +65,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('the built page loads one bundled script that has no relative module imports, and runs', moduleScripts.length === 1 && moduleScripts[0].includes('web/terminal.bundle.js') && bundleText.length > 0 && !/^import\s.*from\s+['"]\.{1,2}\//m.test(bundleText), `${moduleScripts.join(' ')}; bundle ${bundleText.length} bytes`);
   rmSync(pagesDir, { recursive: true, force: true });
   check('the built site runs qjs -e through the txiki engine, and ships no quickjs artifact', quickjsArtifactGone && /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+  check('in-page fx reports its bundled WASM version and passes its offline check', site.engine === 'ready' && /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(site.out) && /^fx ready: JSPI (available|missing); core application\/wasm$/m.test(site.out) && /^fx$/m.test(site.out) && /^builtin$/m.test(site.out) && existsSync(fxArtifact), site.out.split('\n').slice(-8).join(' / ').slice(0, 220));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
@@ -857,9 +861,10 @@ const pinMismatches = (workflowText, agentsText) => {
   const pins = pinnedUses(workflowText);
   const rows = recordedPins(agentsText);
   const found = [];
-  if (pins.length === 0 || rows.length !== pins.length) found.push(`count pinned=${pins.length} recorded=${rows.length}`);
   for (const pin of pins) if (!rows.some((row) => row.action === pin.action && row.sha === pin.sha)) found.push(`${pin.action}@${pin.sha.slice(0, 7)} is not recorded in AGENTS.md`);
   for (const row of rows) if (!pins.some((pin) => pin.action === row.action && pin.sha === row.sha)) found.push(`${row.action} ${row.sha.slice(0, 7)} (${row.version}) is not used in pages.yml`);
+  const distinctPins = [...new Map(pins.map((pin) => [`${pin.action}@${pin.sha}`, pin])).values()];
+  if (rows.length !== distinctPins.length) found.push(`count pinned=${distinctPins.length} recorded=${rows.length}`);
   return found;
 };
 const localMismatches = pinMismatches(workflow, mappingUnderTest);
@@ -913,6 +918,7 @@ check('gh unavailable with every pin matching gives UNVERIFIED and no FAIL', Boo
 check('negative control: a tag that resolves to another SHA is a FAIL when gh is available', driftVerdict(workflow, agents, () => ({ resolved: flipped(firstRow.sha) })).status === 'FAIL', 'a moved tag is reported as drift');
 check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
+check('pages.yml builds fx core WASM from latest gmfx main before the page build', /repository: AnEntrypoint\/gmfx/.test(workflow) && /ref: main/.test(workflow) && /path: gmfx/.test(workflow) && /FX_REPO: \$\{\{ github\.workspace \}\}\/gmfx/.test(workflow) && workflow.indexOf('node scripts/vendor-fx.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/fx\/fx-core\.wasm/.test(workflow), 'gmfx checkout, FX_REPO, vendor script, asset check and build order');
 check('the desynced-mapping fixture is used only when THEBIRD_WITNESS_FIXTURE is set', desyncFixture ? mappingUnderTest !== agents : mappingUnderTest === agents, `fixture=${desyncFixture}`);
 const hungCall = await withTimeout(new Promise(() => {}), 50, 'Runtime.evaluate').then(() => 'answered', (err) => err.message);
 check('a DevTools call that never answers aborts with a timeout instead of stalling', hungCall === 'Runtime.evaluate did not answer within 50 ms', hungCall);

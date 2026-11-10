@@ -184,6 +184,12 @@ function architectureStatic() {
   record('`scripts/witness.mjs`', outcome(existsSync(repo('scripts/lint-architecture.mjs')) && existsSync(repo('scripts/lint-comments.mjs')) && existsSync(repo('scripts/witness.mjs')), 'the three scripts exist'));
   record('Its live checks need', outcome(fileHas('scripts/lint-architecture.mjs', 'liveChecks') && fileHas('scripts/lint-architecture.mjs', 'staticOnly'), 'lint-architecture.mjs runs live probes unless --static is passed'));
   record('Pyodide is not vendored or generated', pyodideNotVendored());
+  record('- Committed and generated: `web/vendor/fx/`', outcome(!isIgnored('web/vendor/fx/') && fileHas('scripts/vendor-fx.mjs', 'sha256') && fileHas('scripts/build-pages.mjs', 'vendorFx') && fileHas('.github/workflows/pages.yml', 'scripts/vendor-fx.mjs'), 'web/vendor/fx/ is tracked, its generator records SHA-256 values, and the page build and Pages workflow generate it'));
+  record('| `fx` | fx core WebAssembly', all(
+    outcome(fileHas('web/builtins.js', "'fx'") && fileHas('web/builtins.js', 'fxBuiltin'), 'builtins.js dispatches fx'),
+    outcome(fileHas('web/fx-in-page.js', 'createFxEngine') && fileHas('web/fx-in-page.js', 'fx-core.wasm'), 'fx-in-page.js loads the fx core WASM through the libfx engine'),
+    outcome(witness.includes('in-page fx reports its bundled WASM version and passes its offline check'), 'witness: fx version and check'),
+  ));
 }
 
 const NODE_BARE = ['fs', 'path', 'os', 'url', 'http', 'crypto', 'module', 'readline', 'child_process', 'process'];
@@ -199,7 +205,7 @@ function nodeReach(file, seen = new Set()) {
   });
 }
 
-const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-txiki.js', 'web/sqlite-program.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
+const BROWSER_FILES = ['web/terminal.js', 'web/pty-adapter.js', 'web/shell-client.js', 'web/shell-worker.js', 'web/bash-shell.js', 'web/shell-lookup.js', 'web/git-in-page.js', 'web/fx-in-page.js', 'web/commit-gate.js', 'web/sqlite-in-txiki.js', 'web/sqlite-program.js', 'web/python-in-page.js', 'web/python-worker.js', 'web/curl-in-page.js'];
 
 function agentsStatic() {
   record('Browser (page and worker)', outcome(BROWSER_FILES.every((file) => existsSync(repo(file)) && !nodeReach(repo(file))), 'none of the browser files reaches a Node module, directly or through a relative import'));
@@ -227,7 +233,7 @@ function agentsStatic() {
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
   cites('Ctrl-C ends a `curl`', ['in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on']);
-  cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers']);
+  cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers', 'pages.yml builds fx core WASM from latest gmfx main before the page build']);
   cites('The build job has `contents: read` only', ['pages.yml gives the build job contents read only, and the deploy job only pages and id-token write']);
   record('The actions in `pages.yml` are pinned', all(
     outcome(['11d5960a326750d5838078e36cf38b85af677262', '49933ea5288caeca8642d1e84afbd3f7d6820020', '56afc609e74202658d3ffba0e8f6dda462b719fa', 'd6db90164ac5ed86f2b6aed7e0febac5b3c0c03e'].every((sha) => fileHas('.github/workflows/pages.yml', sha) && docLines.join('\n').includes(sha)), 'each SHA in the AGENTS.md mapping is the one pages.yml uses'),
