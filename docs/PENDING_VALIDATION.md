@@ -492,6 +492,24 @@ Witness run 3 ran on the clean tracked tree: HEAD 6beb1d1, with no tracked code 
 
 Deviation kept: the witness drives its own Chromium through `scripts/browser-driver.mjs`. It does not attach to the project browser. The driver cannot attach, and restart checks would shut down the browser that other runs share.
 
+## Phase A: gm_txiki browser exports, and the floosie restore (queue pass 5)
+
+Phase A changes code, docs and vendored files only. Nothing here has been built, gated or witnessed yet. Phase B builds the new `tjs.wasm`, sets its pin, runs witness run 4 and pushes once.
+
+Two facts about the state at the start of this pass. The floosie restore was committed by another session as `ea62485` and already pushed to `origin/main` (its reflog entry is `update by push`), so this pass did not push it and did not witness it. The floosie bundle in that commit is the same file this pass vendored from floosie `main` at `5417a536…` (SHA-256 `588f159d…`, 92,828 bytes), and its manifest matches.
+
+| File | Row | Witness it needs |
+| --- | --- | --- |
+| `scripts/txiki/browser/entry.c` | Includes `private.h`. Initialises the engine once through `ensure_initialized`, which `tjs_browser_eval` now also uses. Exports the seven functions of gm's `txiki_shim.h`: `gm_txiki_new`, `gm_txiki_free`, `gm_txiki_context`, `gm_txiki_loop_alive`, `gm_txiki_loop_turn`, `gm_txiki_load_builtin`, `gm_txiki_refresh_loop_time`. `gm_txiki_new` unreferences the stop handle, as gm's native shim does. | Phase B: `vendor-txiki.mjs` compiles every listed file with zero undefined symbols, and the link check finds the seven exports. |
+| `scripts/vendor-txiki.mjs` | The seven names are in `BROWSER_EXPORTS`, so they are linked with `--export` and required by `REQUIRED_EXPORTS`. The pin `TXIKI_WASM_SHA256` is still `cc37307b…`. It can only be set from the built artifact, so Phase B sets it after the build. | Phase B: the new pin, the same hash in `pages.yml` and in AGENTS, and the vendor gate. |
+| `web/vendor/gm/manifest.json` | The `gm-in-page.js` entry is the file's SHA-256 after the floosie restore (`70c7dd2f…`, was `3c24eccf…`). The other six entries are unchanged, and the gm core was not rebuilt. | Phase B: the manifest check, or `vendor-gm.mjs` writing the same hashes. |
+| `scripts/lint-comments.mjs` | A vendored file with comments passes when its basename is listed in its generated manifest. The rule now covers `web/vendor/fx/` and `web/vendor/floosie/`, and the fx wording is unchanged. | Phase B: `npm run lint:comments` exits 0 with the floosie bundle present. |
+| `scripts/witness.mjs` | The provenance check accepts the fx or floosie manifest line. The rest of the witness is the floosie restore in `ea62485`. | Witness run 4: the provenance row passes. |
+| `AGENTS.md` | A bullet describes the gm exports and their link check. The comment rule names the floosie manifest as well as the fx manifest. | Phase B: `npm run lint:architecture` (claims) and `npm run lint:comments`. |
+| Floosie restore, `ea62485` | `web/gm-in-page.js` (hub, `gm attach`), `scripts/witness.mjs` (floosie checks), `scripts/build-pages.mjs` and `.github/workflows/pages.yml` (floosie vendor and build steps), `AGENTS.md`, `ARCHITECTURE.md`, `README.md`, `DESIGN.md` (floosie text), `web/vendor/floosie/`, `scripts/vendor-floosie.mjs`. | Witness run 4, and its pages.yml floosie check. |
+
+Upstream issue, not fixed here. floosie `main` at `5417a536…` runs `scripts/build-browser.mjs`, which imports `esbuild`, but `esbuild` is not in its `package.json`. A clean `npm ci` there fails the build. So the Pages floosie step (`npm ci`, then `vendor-floosie.mjs`) will fail until floosie declares `esbuild` as a dev dependency. The local vendor used `npm install --no-save esbuild` in the floosie checkout, which did not change floosie's files.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
