@@ -1393,3 +1393,21 @@ The queued memory (`thebird-fx-tui-parity`) says the TUI is missing and that the
 - The owner's ghostty-vt and WTerm references are not in this repo or the fx checkout. Still open: the owner has to name those artifacts, or confirm xterm.js as the VT surface.
 
 Changes in Phase A: this section only. No witness, build, or code change. The parity rows stay pending on fx's stretch 4a push and the palette fix, and are not run here.
+
+## Phase A: floosie in gm (queue pass 6, docs only, no build, test or witness)
+
+State found at the start of this pass, checked against the tree and history:
+- The floosie restore is already in place. `ea62485` (feat(floosie): wire many apps through the bare JS browser stream hub) re-added the floosie import in `web/gm-in-page.js`, the hub attach, the floosie witness checks, the floosie text in AGENTS, ARCHITECTURE, DESIGN and README, `scripts/vendor-floosie.mjs`, and the `web/vendor/floosie/` bundle. `ea62485` is an ancestor of `origin/main`. `ffe1f3b` (playwriter) sits on top of it and keeps the floosie import.
+- Decoupling hunks from `4686dce`, `79754fe` and `6beb1d1` that still differ from the pre-decoupling tree: none in `web/gm-in-page.js`, `scripts/witness.mjs` or the docs listed above, because `ea62485` replaced them. One removal from `4686dce` remains: the `gmHostTools` export (the host-tool JSON for the gm verbs). Nothing in the tree refers to it. It is not a floosie hunk, so it is not restored here; the owner decides whether it returns with the host-tool wiring.
+- `6beb1d1` is the record of the decoupling and says floosie is held for its owner. That is superseded by `ea62485`; its rows stay as history and are not edited.
+
+Changes in Phase A:
+| Change | File | Witness |
+| --- | --- | --- |
+| None to code. The floosie import, hub attach and docs are already at HEAD from `ea62485`; this section is the only change. | `docs/PENDING_VALIDATION.md` | Static: `git show HEAD:web/gm-in-page.js` line 5 is `import { createBrowserStdio } from './vendor/floosie/browser.js';`, and `git merge-base --is-ancestor ea62485 origin/main` succeeds. No build, test or witness run in Phase A. |
+
+Phase B (not run in this pass), in this order, once fx `origin/main` moved past `ddd17c74` (it is at `1cf7602`, "Send the terminal host tools in the interactive gateway request and expose a tools option"):
+1. `FLOOSIE_REPO=/workspace/floosie node scripts/vendor-floosie.mjs`, so `web/vendor/floosie/` is built from floosie main and not hand-copied. Record the commit and the `browser.js` SHA-256 it writes in `web/vendor/floosie/manifest.json`. The manifest at HEAD names `5417a536`.
+2. Rebuild `web/vendor/fx/fx-term.wasm` from the fx checkout at `/workspace/fx/fx`, which is at `5c8b64dc` (one docs commit above `origin/main`, clean tree). That is the commit that carries the host-tool wiring; the build reads its own commit.
+3. Run the approval, host-tools and ask rows and the palette resize row inside `npm run witness` (witness run 4), once, on the tracked tree.
+4. Fix each defect found, then push `origin/main` once with `0ac311c`, `62b0623` and any floosie commit.
