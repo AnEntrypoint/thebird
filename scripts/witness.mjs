@@ -181,7 +181,7 @@ if (existsSync(chrome)) {
   check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
   check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
   const stubTui = await startFxStubGateway();
-  const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url })};`;
+  const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
   const surfaces = {};
   await terminal([], {
     timeoutMs: COLD_START_MS,

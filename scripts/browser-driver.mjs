@@ -36,6 +36,7 @@ const startedTrees = new Map();
 export function closeBrowserTrees() {
   const closed = [];
   for (const [pid, child] of startedTrees) {
+    if (child.exitCode !== null || child.signalCode !== null) continue;
     killGroup(child);
     closed.push(pid);
   }
@@ -58,6 +59,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     'about:blank',
   ], { stdio: 'ignore', detached: true });
   startedTrees.set(child.pid, child);
+  child.once('exit', () => startedTrees.delete(child.pid));
 
   try {
     const portFile = join(profile, 'DevToolsActivePort');

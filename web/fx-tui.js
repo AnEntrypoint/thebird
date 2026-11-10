@@ -47,6 +47,7 @@ const memoryPromptHistoryStore = () => {
 const environmentFor = (fx) => ({
   ...(fx.apiKey === undefined ? {} : { AI_GATEWAY_API_KEY: fx.apiKey }),
   ...(fx.model === undefined ? {} : { FX_MODEL: fx.model }),
+  ...(fx.permissionMode === undefined ? {} : { FX_PERMISSION_MODE: fx.permissionMode }),
   ...(fx.gatewayChatUrl === undefined ? {} : { FX_GATEWAY_CHAT_URL: fx.gatewayChatUrl }),
 });
 
