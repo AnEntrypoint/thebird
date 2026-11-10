@@ -61,6 +61,8 @@ bashkit's default is 30 s, which was too short. In one of seven recorded witness
 
 The witness checks the expiry through the component's own window: the terminal page takes a `commandTimeoutMs` URL parameter, the shell worker passes it to `createShell`, and one-second sleeps are cut at a 10 s window with `execution timeout (10s)`. The shipped window stays 900 s, and the witness checks that value in `web/bash-shell.js`. The expiry check takes a few seconds, so it fits in one foreground call.
 
+Decision: the live 900 s cut is not witnessed. A single browser session would need about 935 s for the seventeen 55 s sleeps that pass the limit, and a witness call is capped at 600000 ms. Nothing can carry the session across calls without a process that outlives the call, and the owner ruled that out. The accepted witness is the static check of the shipped 900 s value in `web/bash-shell.js`, plus the 10 s window through the same expiry path.
+
 ## In-page builtins
 
 | Builtin | Backing | Scope and limits |
