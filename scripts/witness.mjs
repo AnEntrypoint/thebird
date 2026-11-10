@@ -39,9 +39,12 @@ if (existsSync(chrome)) {
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: COLD_START_MS, ...options });
 
-  const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40']]);
+  const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40'], ['run', 'playwriter --version'], ['run', 'which playwriter; command -v playwriter; type playwriter'], ['run', "playwriter frobnicate; echo after-frobnicate"]]);
   check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
   check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+  const helloLines = hello.out.split('\n');
+  check('playwriter answers --version, and which, command -v and type agree that it is a shell builtin', helloLines.includes('birdman playwriter 0.1.0') && helloLines.filter((line) => line === 'playwriter').length >= 2 && helloLines.includes('playwriter is a shell builtin'), helloLines.filter((line) => /playwriter/.test(line)).join(' / ').slice(0, 140));
+  check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {
@@ -932,6 +935,9 @@ check('pages.yml builds floosie browser bundle from latest floosie main before t
 check('pages.yml builds gm core WASM from latest gm main before the page build', /repository: AnEntrypoint\/gm\b/.test(workflow) && /path: gm\b/.test(workflow) && /GM_REPO: \$\{\{ github\.workspace \}\}\/gm\b/.test(workflow) && workflow.indexOf('node scripts/vendor-gm.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/gm\/gm-core\.wasm/.test(workflow), 'gm checkout, GM_REPO, vendor script, asset check and build order');
 check('pages.yml builds fx core WASM from latest gmfx main before the page build', /repository: AnEntrypoint\/gmfx/.test(workflow) && /ref: main/.test(workflow) && /path: gmfx/.test(workflow) && /FX_REPO: \$\{\{ github\.workspace \}\}\/gmfx/.test(workflow) && workflow.indexOf('node scripts/vendor-fx.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/fx\/fx-core\.wasm/.test(workflow), 'gmfx checkout, FX_REPO, vendor script, asset check and build order');
 check('the desynced-mapping fixture is used only when THEBIRD_WITNESS_FIXTURE is set', desyncFixture ? mappingUnderTest !== agents : mappingUnderTest === agents, `fixture=${desyncFixture}`);
+const birdmanManifest = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'birdman', 'manifest.json'), 'utf8'));
+const birdmanDigest = createHash('sha256').update(readFileSync(join(root, 'web', 'vendor', 'birdman', 'client.js'))).digest('hex');
+check('the vendored birdman client matches its manifest sha256, and the playwriter builtin imports that client', birdmanDigest === birdmanManifest.client.sha256 && readFileSync(join(root, 'web', 'playwriter-in-page.js'), 'utf8').includes("from './vendor/birdman/client.js'"), `sha256=${birdmanDigest.slice(0, 12)}`);
 const hungCall = await withTimeout(new Promise(() => {}), 50, 'Runtime.evaluate').then(() => 'answered', (err) => err.message);
 check('a DevTools call that never answers aborts with a timeout instead of stalling', hungCall === 'Runtime.evaluate did not answer within 50 ms', hungCall);
 const promptCall = await withTimeout(Promise.resolve('answered'), 50, 'Runtime.evaluate');
