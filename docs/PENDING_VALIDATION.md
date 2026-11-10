@@ -553,6 +553,24 @@ Validation: `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 com
 
 Outcome: open. Nothing was pushed. The next step is one full witness run that is not limited by the 10-minute foreground call.
 
+## Phase A: floosie vendor step pins esbuild (queue pass 8)
+
+`scripts/vendor-floosie.mjs` no longer runs floosie's `build:browser` script, which imports `esbuild` without declaring it in floosie's `package.json`. The vendor step now installs `esbuild@0.28.2` (`ESBUILD_VERSION`) into `os.tmpdir()/thebird-esbuild-0.28.2` with `npm install --no-save`, and bundles `src/browser.ts` with the same options as floosie's `scripts/build-browser.mjs`. The bundle is written straight to `web/vendor/floosie/browser.js`. The manifest gains `builder.esbuild`. The step fails early when floosie has no `node_modules`; `pages.yml` already runs `npm ci` in the floosie checkout before the step.
+
+Result: `node scripts/vendor-floosie.mjs` exits 0. The bundle SHA-256 is `588f159dd6ea35184516001f68d8010b8b34341d9584f1fb97e9a95b7ab801f9`, the same as before, so the bundle is byte-identical; only the manifest changed. npm reports that esbuild's postinstall script is blocked by its allow-scripts setting. Bundling works without it.
+
+Validation: `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 comments in 86 repo-owned files. `node scripts/lint-architecture.mjs --static` reports 299 claims pass, 0 fail, 0 unverified.
+
+Not done in this phase: the checkpoint runner. See the next section for why it cannot finish the witness.
+
+## Phase B: witness is not runnable as sequential foreground calls (queue pass 8, open)
+
+The witness has a command-expiry check (`scripts/witness.mjs`, the `expiry` terminal run) that runs one command, `for i in 1 … 17; do sleep 55; echo tick$i; done`, in one browser session. It needs to run past the 900 s `COMMAND_TIMEOUT_MS` to show the cut, so it takes about 935 s. A foreground Bash call is capped at 600000 ms, and a browser session cannot continue across calls. So no sequence of foreground calls with a checkpoint can finish this check, and the witness cannot be green under the foreground rule. The checkpoint runner was not built, because it could not finish this group.
+
+Options for the owner, none taken: (a) run only the expiry check as a separate process that is not backgrounded by this session; (b) witness the expiry in a different way, which needs an owner decision because AGENTS.md forbids lowering the timeout; (c) accept a witness run that excludes the expiry check, and say so in the ledger.
+
+Nothing was pushed in this phase.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
