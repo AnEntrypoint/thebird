@@ -1411,3 +1411,29 @@ Phase B (not run in this pass), in this order, once fx `origin/main` moved past 
 2. Rebuild `web/vendor/fx/fx-term.wasm` from the fx checkout at `/workspace/fx/fx`, which is at `5c8b64dc` (one docs commit above `origin/main`, clean tree). That is the commit that carries the host-tool wiring; the build reads its own commit.
 3. Run the approval, host-tools and ask rows and the palette resize row inside `npm run witness` (witness run 4), once, on the tracked tree.
 4. Fix each defect found, then push `origin/main` once with `0ac311c`, `62b0623` and any floosie commit.
+
+## Phase B: floosie vendor, fx host-tool term build, approval mode (queue pass 6)
+
+Trigger: fx `origin/main` moved past `ddd17c74` to `1cf7602` (host tools in the interactive gateway request).
+
+Changes and their witness:
+| Change | Commit | Witness |
+| --- | --- | --- |
+| `FLOOSIE_REPO=/workspace/floosie node scripts/vendor-floosie.mjs` run from floosie `5417a53`. The output is byte-identical to the committed bundle (`browser.js` SHA-256 `588f159d…`), so nothing changed. | none | Vendor script output: `floosie vendor written to …/web/vendor/floosie: 5417a536a3bc 588f159dd6ea`. |
+| fx term wasm rebuilt from the fx checkout (`zig build fx-term-wasm -Dwasm-surface=term`, Zig 0.17.1, from `/tmp/qjs-zigcopy/zig-x86_64-linux-0.17.1/zig`). Term SHA-256 `b0d98491…`, and `wasm-terminal.js` changed to `e05eec92…`. The core is not rebuilt: `zig build` for `fx-core` fails at fx `5c8b64dc` in `src/core/hooks/external_run.zig` (`expected type 'i32', found 'void'`). The committed core is kept. | fd04a2a | Witness run 4 (below). |
+| `scripts/witness.mjs`: the approval step sends `/permissions ask` first, because fx starts in `auto` (a safety review, no approval panel). | b101dda | Witness run 5 (below): approval still FAILs. |
+
+Witness run 4 (`npm run witness`, 13m14.8s, `WITNESS-EXIT 1`, `witness totals: PASS 210 FAIL 2`). The host-tools and ask rows pass:
+- `PASS host tools: fx_terminal_initialize accepted the page host tools before the TUI started (count 2) — 2`
+- `PASS host tools: the TUI advertises exactly bash and ask to its gateway — ["ask","bash"]`
+- `PASS ask: the question is shown, and the answer reaches the stub as a tool result — ["","• Thinking      ","","┃","","auto · haiku 5.5"]`
+- `FAIL approval: a bash tool call opens the approval panel with its options and its command row — {"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}] streaming=true"]}`
+- `FAIL a resize after the command palette keeps the welcome panel and the rules at 70 columns — {"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`
+
+Witness run 5 (after b101dda, `npm run witness`, 20m53.6s, `WITNESS-EXIT 1`, `witness totals: PASS 205 FAIL 7`):
+- `FAIL approval: … — {"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}]"]}`. The transcript shows the `<fx-context-update>` for the mode change, so `/permissions ask` was sent. The stub still answers with text, not a tool call. Cause not found: `streamPlan` emits the `bash` tool call when called directly with one text part, so the difference is in the request the TUI sends after the mode change. Open.
+- `FAIL a resize after the command palette …` — the fx-owned defect, as before.
+- `FAIL the built GitHub Pages site runs bash and python3 without COOP/COEP headers` — the page's `pages` run reports `{"ok":true,"finished":true,"actionSeq":3}` for the gm call. Its check reads the gm stdio lines from run 4's order. Not diagnosed.
+- `FAIL npm install debug …` (two rows) and `FAIL the txiki shell answers pip --version …` (`pip: Failed to fetch`) and `FAIL the txiki shell serves git, node, qjs and python3 …` (`shell engine exited with status 124`). These passed in run 4; the registry and PyPI fetches and the nested-engine timeout look environmental. Not confirmed by a rerun.
+
+Host-tools and ask rows: PASS in run 4 and run 5. Approval and the palette resize: FAIL. Nothing is pushed. The push waits for the approval row to pass, or for the owner to accept it open.
