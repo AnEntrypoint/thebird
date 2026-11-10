@@ -37,7 +37,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins: generate a module that calls txiki.js `fetch`, run through `web/txiki-in-page.js`. |
 | `web/fx-in-page.js` | `fx` builtin over `web/vendor/fx/fx-core.wasm`. |
-| `web/gm-in-page.js` | `gm` builtin: an in-page MCP server over `web/vendor/gm/gm-core.wasm`. It answers initialize, the tools list, tool calls, resource reads and server discovery; `gm stdio` takes one JSON-RPC line and answers one line. Its append-only run log is under `/workspace/.gm/runs`. |
+| `web/gm-in-page.js` | `gm` builtin: gm's stdio MCP server over `web/vendor/gm/gm-core.wasm`. Three served tools (`next_context`, `run_code`, `finish`); other verbs are `gm.<name>` inside a `run_code` body. `gm stdio` takes one JSON-RPC line and answers one line. Its append-only run log resumes under `/workspace/.gm/runs`. |
 | `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
 | `web/shims/fs-promises.js` | Promise wrappers over `fs.js`. |
 | `web/shims/path.js` | `posix` path functions. |
@@ -108,7 +108,7 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 - Committed bundles: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs` and the libfx modules in `web/vendor/fx/`. They keep their upstream comments and are not edited.
 - Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). Pyodide is not vendored or generated: the page fetches the stripped bundle at run time, and the witness reads the Pyodide 314.0.7 lock from its pinned jsDelivr URL (`https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json`) and checks its SHA-256 before it reads micropip from it.
 - Committed and generated: `web/vendor/fx/` from `scripts/vendor-fx.mjs` (the libfx SDK modules and `fx-core.wasm`, from the sibling fx checkout or `FX_REPO`; Pages sets it to the latest gmfx `main`; `manifest.json` records each file's SHA-256). The WASM is rebuilt with Zig 0.17.1 only when it is missing or `FX_REBUILD=1`.
-- Committed and generated: `web/vendor/gm/` from `scripts/vendor-gm.mjs`. `gm-core.wasm` is a Zig `wasm32-wasi` build of gm's portable C++ `json.cpp`, `sha256.cpp` and `compact.cpp`, with `scripts/gm/bridge.cpp` exposing JSON normalization, SHA-256 and the core ABI version. `gm-core.js` instantiates it through `web/shims/wasi-preview1.js`. Pages rebuilds it from gm `main` on each deploy.
+- Committed and generated: `web/vendor/gm/` from `scripts/vendor-gm.mjs`. `gm-core.wasm` is a Zig `wasm32-wasi` build of gm's portable C++ `json.cpp`, `sha256.cpp` and `compact.cpp`, with `scripts/gm/bridge.cpp` exposing JSON normalization, SHA-256, output clipping and digests, and the core ABI version. Built with `-Oz`, the artifact is about 400 KB. `gm-core.js` instantiates it through `web/shims/wasi-preview1.js`; `skills.js` embeds gm's three served skills. Pages rebuilds it from gm `main` on each deploy.
 - The bashkit generator needs network. The page builder runs each generator when its files are missing.
 - Committed third-party, unmodified: `web/vendor/brotli/` holds `brotli-dec-wasm` 2.3.2 from npm (`brotli_dec_wasm.js` and `brotli_dec_wasm_bg.wasm`, byte-identical to the package's pkg directory). `web/vendor/tte-js/` is the tte-js project from github.com/flaviocopes at commit `9b120c2f65d48f996a027ef061712bb87ad467bb`. The `laseretch` effect is defined in `web/vendor/tte-js/src/builtin-effects.js`.
 - pip fetches micropip at run time from the CDN. Nothing is vendored beyond the Pyodide core. Wheels are not added to `web/vendor/` without owner approval.
@@ -141,4 +141,4 @@ sqlite is built into the same wasm. `scripts/vendor-txiki.mjs` compiles the sqli
 
 `tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects reports `Uncaught ...` and exits non-zero.
 
-The earlier gm-backed CLI and library were removed at `0538b2c`; the gm builtin added here is an in-page MCP server over a C++ WebAssembly core, not a return of that CLI.
+The earlier gm-backed CLI and library were removed at `0538b2c`; the gm builtin added here is gm's stdio MCP server in the page over a C++ WebAssembly core, not a return of that CLI.
