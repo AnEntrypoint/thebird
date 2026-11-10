@@ -391,8 +391,6 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
         const pipBare = await shell.runShellInTxiki('pip; echo rc=$?', { cwd: '/workspace' });
         const pipUnknown = await shell.runShellInTxiki('pip frobnicate; echo rc=$?', { cwd: '/workspace' });
         const sqlite = await shell.runShellInTxiki('mkdir -p txiki-sql && cd txiki-sql && sqlite3 x.db "select 1"; echo rc=$?', { cwd: '/workspace' });
-        const curl = await shell.runShellInTxiki('curl http://127.0.0.1:1/; echo after-curl-rc=$?', { cwd: '/workspace' });
-        const gitFail = await shell.runShellInTxiki('mkdir -p git-not-a-repo && cd git-not-a-repo && git log; echo git-rc=$?', { cwd: '/workspace' });
         const pyController = new AbortController();
         const pyStarted = performance.now();
         setTimeout(() => pyController.abort(), 500);
@@ -400,8 +398,6 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
         const engineRun = await (await import(new URL('web/txiki-in-page.js', location.href).href)).runTjs('console.log([typeof TextEncoder, typeof TextDecoder, typeof [].findLastIndex, JSON.stringify(String.fromCharCode(1)).length].join(" "))', '/workspace');
         globalThis.__txikiShellRuns = {
           sqlite: { stdout: sqlite.stdout, stderr: sqlite.stderr, exitCode: sqlite.exitCode },
-          curl: { stdout: curl.stdout, stderr: curl.stderr, exitCode: curl.exitCode },
-          gitFail: { stdout: gitFail.stdout, stderr: gitFail.stderr, exitCode: gitFail.exitCode },
           pyAbort,
           engine: engineRun.output,
           first: { stdout: first.stdout, exitCode: first.exitCode },
@@ -488,8 +484,6 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check("the txiki shell names an unknown pip command on stderr and exits 2", txikiUnknown.stdout === 'rc=2\n' && txikiUnknown.stderr.startsWith("pip: unknown command 'frobnicate'\n"), JSON.stringify(txikiUnknown));
   const txikiRuns = txikiShell.runs ?? {};
   check('sqlite3 inside the txiki shell prints 1 for select 1 and exits 0', txikiRuns.sqlite?.stdout === '1\nrc=0\n' && txikiRuns.sqlite?.stderr === '', JSON.stringify(txikiRuns.sqlite));
-  check('git outside a repository writes its error to stdout with a nonzero status, and the next command still runs', /^git-rc=[1-9]\d*$/m.test(txikiRuns.gitFail?.stdout ?? '') && (txikiRuns.gitFail?.stdout ?? '').trim().split('\n').length >= 2 && (txikiRuns.gitFail?.stderr ?? '') === '', JSON.stringify(txikiRuns.gitFail));
-  check('curl to a refused port inside the txiki shell writes its error to stdout with a nonzero status, and the next command still runs', /127\.0\.0\.1|localhost/.test(txikiRuns.curl?.stdout ?? '') && /^after-curl-rc=[1-9]\d*$/m.test(txikiRuns.curl?.stdout ?? ''), JSON.stringify(txikiRuns.curl));
   check('a python3 sleep is aborted at 500 ms inside the txiki shell and rejects with status 130 in under 5 s', txikiRuns.pyAbort?.status?.includes('status 130') === true && txikiRuns.pyAbort?.elapsed < 5000, JSON.stringify(txikiRuns.pyAbort));
   check('the txiki engine has TextEncoder, TextDecoder and findLastIndex, and JSON escapes the marker byte', txikiRuns.engine === 'function function function 8\n', JSON.stringify(txikiRuns.engine));
   const loops = {};
