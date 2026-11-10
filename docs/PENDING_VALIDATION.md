@@ -537,6 +537,22 @@ Hunk attribution. Both groups were committed in this pass, path-limited, after t
 
 Validation on the same tree. `npm run check` exits 0. `npm run lint:comments` exits 0, and its 17 vendored bundles are each named or listed. `node scripts/lint-architecture.mjs --static` reports 299 claims pass, 0 fail, 0 unverified. The full live architecture lint was not run in this pass.
 
+## Live architecture lint and the playwriter and birdman witness checks (queue pass 7, open)
+
+Live architecture lint, in the foreground: `CHROME_BIN=/usr/bin/chromium npm run lint:architecture`, which spawns `scripts/lint-live.mjs` with a 900000 ms limit. The first call omitted the Bash timeout, so the harness moved it to the background, and it was then blocked on its PID. Output: `310 claims: 310 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`, exit 0. All 15 live probes finished. The live terminal ran from 03:48:03.889 to 03:52:10.840 UTC, 246.9 s.
+
+Witness checks added to `scripts/witness.mjs`:
+- In the first terminal run: `playwriter --version`, `which`, `command -v` and `type` on `playwriter` (it must name a shell builtin), and `playwriter frobnicate; echo after-frobnicate`, which must report the unknown command and let the shell go on.
+- Node side, near the end: the vendored `web/vendor/birdman/client.js` matches its manifest `client.sha256`, and `web/playwriter-in-page.js` imports that client.
+
+The witness ran once in the foreground: `CHROME_BIN=/usr/bin/chromium timeout 590 npm run witness`, started 03:53:08 UTC. The timeout cut it at 04:02:58 UTC (590 s, exit 124), before it finished. Counts at the cut: `PASS 120 FAIL 0 UNVERIFIED 0`. The three playwriter checks passed in that run. The birdman check is near the end, so the run never reached it. Run on its own, it passes (sha256 `08435ff1381c…`, matching the manifest).
+
+Why the run did not finish: the witness takes about 19 minutes (18 min 53 s in queue pass 6), and a foreground tool call is limited to 10 minutes. The run was not split and was not backgrounded, so the witness is not validated as a whole. The cut run's Chromium tree (profile `thebird-profile-LLXUTH`) was stopped by PID after the cut. Other actors' Chromium processes were left running.
+
+Validation: `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 comments in 86 repo-owned files.
+
+Outcome: open. Nothing was pushed. The next step is one full witness run that is not limited by the 10-minute foreground call.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
