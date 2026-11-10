@@ -1116,3 +1116,11 @@ Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, an
 - The launcher from the earlier pass is removed (bin/fx.mjs, test/, package.json and README entries). No native binary is run.
 - `fx` is already a registered in-page builtin (web/builtins.js, BUILTIN_NAMES). Bare `fx` starts the vendored fx-term through takeover (web/fx-in-page.js, web/fx-tui.js). The TUI takes no arguments on the page: `runFxTui` receives only the env and stores. The other subcommands (`--version`, `check`, `ask`) take arguments.
 - Witness added: `which fx; command -v fx; type fx` must print `fx`, `fx`, and `fx is a shell builtin`. The existing TUI block still checks that `fx` opens the TUI and that `/exit` returns to the prompt.
+
+## Phase B: witness run 12 (fx builtin check, HEAD 2094f44)
+
+- Wall 834 s, `WITNESS-EXIT 1`, PASS 186, FAIL 3.
+- New check PASS: `fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin`. Output includes `fx`, `fx` and `fx is a shell builtin`.
+- PASS: `fx with no arguments opens the TUI`, `/exit ends the TUI and the shell runs the next command` (`{"exited":true,"shellAfter":true,"tui":null}`).
+- FAIL, known upstream: resize after the command palette (fx resize defect, see above).
+- FAIL, known upstream: `approval` and `ask` (the page sends `tools: []`, so fx advertises no tool and the approval panel does not open). Causes recorded above in this file.
