@@ -36,19 +36,21 @@ try {
 }
 `;
 
+const failure = (message, exitCode = 1) => Object.assign(new Error(message), { exitCode, stdout: `${message}\n` });
+
 export async function curlBuiltin(name, argv, cwd, signal) {
   const opts = parse(name, argv);
   const host = new URL(opts.url).host;
   const { output, status } = await runTjs(fetchModule(opts.url), cwd, { signal });
-  if (status !== 0) throw new Error(output.trimEnd());
+  if (status !== 0) throw failure(output.trimEnd());
   const line = output.split('\n').find((text) => text.startsWith(MARKER));
-  if (line === undefined) throw new Error(output.trimEnd());
+  if (line === undefined) throw failure(output.trimEnd());
   const result = JSON.parse(line.slice(MARKER.length));
   if (result.error) {
-    if (result.message.startsWith('Network request failed')) throw new Error(`could not fetch from ${host}: ${CORS_NOTE}`);
-    throw new Error(result.message);
+    if (result.message.startsWith('Network request failed')) throw failure(`could not fetch from ${host}: ${CORS_NOTE}`);
+    throw failure(result.message);
   }
-  if (opts.fail && !result.ok) throw new Error(`HTTP ${result.status} from ${host}`);
+  if (opts.fail && !result.ok) throw failure(`HTTP ${result.status} from ${host}`, 22);
   const bytes = bytesFromBase64(result.body);
   if (opts.output === undefined) return new TextDecoder().decode(bytes);
   if (opts.output === '/dev/null') return '';

@@ -58,6 +58,9 @@ export async function gitBuiltin(argv) {
   const [sub] = argv;
   if (REMOTE_VERBS.has(sub)) throw new Error(`git ${sub}: remote access is refused in the in-page shell before any request is made`);
   const { output, status } = await runTjs(programFor(await loadSources(), argv), DIR);
-  if (status !== 0) throw new Error(failureText(output));
+  if (status !== 0) {
+    const text = failureText(output);
+    throw Object.assign(new Error(text), { exitCode: status, stdout: `${text}\n` });
+  }
   return output.trimEnd();
 }

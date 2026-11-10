@@ -976,3 +976,24 @@ Each runs through `runTerminal` with `interact` and `THEBIRD_FX` set to the stub
 5. Resize, palette then 70×24: unchanged; the FAIL stays until fx's `src/ui/resize_runtime.zig` fix is pushed, then rerun with no thebird workaround.
 
 Stub check: after each run, `seen` in the stub holds `streaming: true`, `authorized: true` and the expected `prompt`, and the witness asserts that before reading the screen.
+
+## Phase A: open-ledger pass (no build, no witness, not pushed)
+
+Ranking of the open ledger items reachable without a build and without a push:
+1. npm defect 9, curl and wget error text went to stderr, where bashkit redacts a slash-prefixed token (`https:<path>`). Done: `web/curl-in-page.js` now throws `failure(message, exitCode)`, which carries the text on `stdout` and the status, the same route as npm (`web/bash-shell.js` already prints `err.stdout` and sets the status). A failed `-f` exits 22, curl's own status for an HTTP error. The message texts are unchanged.
+2. The same redaction in git. Done: `web/git-in-page.js` `gitBuiltin` throws the failure text with `stdout` and `exitCode: status`. The remote-verb refusal has no path token and is unchanged.
+3. Ledger closure, npm defect 8, `node file.mjs` with a relative import. Closed by evidence already in the Phase B run: the witness passes `a node script imports a sibling and a nested module through the txiki loader` (`"script-imports 42 lib"`), which runs `node main.mjs` in `import-probe`, and `a dynamic import from node -e resolves against the shell directory`. The uv_fs bridge (854c9a8) made the loader read page files, so the defect as written is stale.
+4. Ledger closure, npm defect 2, `node process.exit` output loss. Closed by the Phase B fix to `runTjs` (defect 1) and the witness passes `console.log output written before process.exit(0) is kept` (`"x"`) and `… process.exit(3) is kept and the status is 3` (`"y\nrc=3"`). The wasm exit flush (Stretch 1) is in the same pin.
+5. Ledger closure, npm defects 4, 5 and 6 (ESM bins, util and assert shims, 404 text on stdout) are closed by the Phase B items above; their witness is the npm checks in `scripts/witness.mjs`.
+
+Witness each change needs (Phase B, one full `npm run witness` after the go-ahead; none run here):
+- curl: `curl to a refused port inside the txiki shell writes its error to stdout with a nonzero status, and the next command still runs`. Expects `127.0.0.1` in stdout (the message names the host) and `after-curl-rc=` with a nonzero status. The earlier stderr check was replaced.
+- git: `git outside a repository writes its error to stdout with a nonzero status, and the next command still runs`. Runs `mkdir -p git-not-a-repo && cd git-not-a-repo && git log; echo git-rc=$?` in `/workspace`. It assumes `/workspace` is not itself a git repository, and that in-page git reports `git log` outside a repo as a nonzero status with at least two stdout lines; the Phase B run confirms both. If git finds an enclosing repository, this check must move to a directory outside it.
+- Lint: the architecture lint has no record for these files; `npm run lint:comments` must still report 0 comments (none were added).
+
+Not reachable without the owner, recorded and not changed here:
+- `.npmrc` `_authToken` through the browser (npm defect 7): the registry's CORS preflight refuses the `Authorization` header. The owner chooses a registry that allows it, or a same-origin proxy (the relay serves GET and HEAD only).
+- Ctrl-C on the Pages site without cross-origin isolation (Blocked table): the owner chooses between accepting the restart and isolating the site with a service worker.
+- The esbuild-pin content (`scripts/esbuild-pin.mjs`, item 5 of the npm section): the earlier content is unrecoverable, and the file as it stands is the one to keep.
+- The `web/stream-hub.js` removal, the Pyodide bundle licence and the older vendored notices: owner decisions already recorded above.
+- Top-level `await` and live ESM bindings (npm defect 10): engine-side limits of the transform, documented in AGENTS.md and ARCHITECTURE.md.
