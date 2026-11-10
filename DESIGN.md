@@ -12,14 +12,15 @@ thebird is a bash terminal that runs in the browser. The page does the work, and
 - No external execution engine. The earlier CLI, library, REPL, verb passthrough and relay POST endpoints are gone, so the page runs every command itself.
 - No library API and no CLI. The package exports nothing; the product is the page.
 - Browser code uses the modules in `web/shims/` in place of `node:` imports.
-- Third-party bundles are committed unmodified. Generated runtimes (bashkit, Pyodide) are gitignored and pinned by SHA-256.
+- Third-party bundles are committed unmodified. Generated runtimes (bashkit, fx, gm) are built from their upstream sources and pinned by SHA-256 in a manifest.
+- gm is an in-page MCP server. Its wasm core carries gm's C++ JSON parser, SHA-256 and event compaction; the MCP methods, tool verbs and append-only run log run in browser JavaScript over the OPFS shim. `gm stdio` takes one single-quoted JSON-RPC line and answers one line; it is the line-oriented channel the page owns instead of a host stdio pipe.
 
 ## Layers
 
 1. Page: `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`. xterm.js draws the screen and handles escape sequences; the adapter keeps the input line, history, Tab and the run queue, and passes keys and paste in and output bytes out.
 2. Worker: `web/shell-worker.js`. Hydrates OPFS, creates `/workspace`, answers run, complete, cwd and cancel messages, and flushes OPFS after each message.
 3. Shell: `web/bash-shell.js` over bashkit, with the lookup prologue from `web/shell-lookup.js`.
-4. Builtins: `web/git-in-page.js`, `web/sqlite-in-txiki.js`, `web/python-in-page.js`, `web/curl-in-page.js`, and the commit gate `web/commit-gate.js`.
+4. Builtins: `web/git-in-page.js`, `web/sqlite-in-txiki.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/fx-in-page.js`, `web/gm-in-page.js`, and the commit gate `web/commit-gate.js`.
 5. Storage and shims: `web/shims/`, with the OPFS-backed filesystem in `web/shims/fs.js`.
 6. Static server: `src/relay.js`, started by `bin/thebird-relay.js`.
 

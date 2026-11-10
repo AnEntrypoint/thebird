@@ -26,8 +26,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/pty-adapter.js` | PTY-style adapter: keystrokes and paste in, output bytes out. Keeps the input line, cursor, history, Tab, the Ctrl keys and the run queue; `resize` sends the column and row count to the shell as the COLUMNS and LINES shell variables. |
 | `web/shell-client.js` | Page-side client for the worker: `run`, `complete`, `cwd`, `cancel`, `onOutput`, `ready`. Its `cancel` sets the shared cancel word on an isolated page and replaces the worker if a cancelled run does not answer within 1.5 s. |
 | `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
-| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the nine custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
-| `web/builtins.js` | `BUILTIN_NAMES` and `runBuiltin`: the one dispatch for `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl` and `wget`. The bash page and the txiki shell's bridge both call it. |
+| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the eleven custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
+| `web/builtins.js` | `BUILTIN_NAMES` and `runBuiltin`: the one dispatch for `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`, `fx` and `gm`. The bash page and the txiki shell's bridge both call it. |
 | `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
 | `web/git-in-page.js` | `git` builtin: refuses remote verbs, then builds the git program from the texts below and runs it in the txiki engine with `runTjs`. |
 | `web/git-program.js` | Git program that runs inside the txiki engine: the fs adapter over `__thebirdFs`, and each git command. |
@@ -36,6 +36,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/python-in-page.js` | `python3` and `pip` builtins: they forward to the Python worker, sync `/workspace` with it, and terminate it on cancel. |
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins: generate a module that calls txiki.js `fetch`, run through `web/txiki-in-page.js`. |
+| `web/fx-in-page.js` | `fx` builtin over `web/vendor/fx/fx-core.wasm`. |
+| `web/gm-in-page.js` | `gm` builtin: an in-page MCP server over `web/vendor/gm/gm-core.wasm`. It answers initialize, the tools list, tool calls, resource reads and server discovery; `gm stdio` takes one JSON-RPC line and answers one line. Its append-only run log is under `/workspace/.gm/runs`. |
 | `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
 | `web/shims/fs-promises.js` | Promise wrappers over `fs.js`. |
 | `web/shims/path.js` | `posix` path functions. |
@@ -106,7 +108,8 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 - Committed bundles: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs` and the libfx modules in `web/vendor/fx/`. They keep their upstream comments and are not edited.
 - Generated and gitignored: `web/vendor/bashkit/` from `scripts/vendor-bashkit.mjs` (`@everruns/bashkit-wasm` 0.20.3; the wasm SHA-256 is checked against `build-info.json`). Pyodide is not vendored or generated: the page fetches the stripped bundle at run time, and the witness reads the Pyodide 314.0.7 lock from its pinned jsDelivr URL (`https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json`) and checks its SHA-256 before it reads micropip from it.
 - Committed and generated: `web/vendor/fx/` from `scripts/vendor-fx.mjs` (the libfx SDK modules and `fx-core.wasm`, from the sibling fx checkout or `FX_REPO`; Pages sets it to the latest gmfx `main`; `manifest.json` records each file's SHA-256). The WASM is rebuilt with Zig 0.17.1 only when it is missing or `FX_REBUILD=1`.
-- The bashkit generator needs network. The page builder runs both generators when their files are missing.
+- Committed and generated: `web/vendor/gm/` from `scripts/vendor-gm.mjs`. `gm-core.wasm` is a Zig `wasm32-wasi` build of gm's portable C++ `json.cpp`, `sha256.cpp` and `compact.cpp`, with `scripts/gm/bridge.cpp` exposing JSON normalization, SHA-256 and the core ABI version. `gm-core.js` instantiates it through `web/shims/wasi-preview1.js`. Pages rebuilds it from gm `main` on each deploy.
+- The bashkit generator needs network. The page builder runs each generator when its files are missing.
 - Committed third-party, unmodified: `web/vendor/brotli/` holds `brotli-dec-wasm` 2.3.2 from npm (`brotli_dec_wasm.js` and `brotli_dec_wasm_bg.wasm`, byte-identical to the package's pkg directory). `web/vendor/tte-js/` is the tte-js project from github.com/flaviocopes at commit `9b120c2f65d48f996a027ef061712bb87ad467bb`. The `laseretch` effect is defined in `web/vendor/tte-js/src/builtin-effects.js`.
 - pip fetches micropip at run time from the CDN. Nothing is vendored beyond the Pyodide core. Wheels are not added to `web/vendor/` without owner approval.
 
@@ -138,4 +141,4 @@ sqlite is built into the same wasm. `scripts/vendor-txiki.mjs` compiles the sqli
 
 `tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects reports `Uncaught ...` and exits non-zero.
 
-The before-state of the gm removal is commit `6b060f7`. `git diff --name-status 6b060f7 0538b2c` lists the 29 paths of that change.
+The earlier gm-backed CLI and library were removed at `0538b2c`; the gm builtin added here is an in-page MCP server over a C++ WebAssembly core, not a return of that CLI.
