@@ -1,4 +1,4 @@
-import { createWasi } from './shims/wasi-preview1.js';
+import { createWasi, WasiExit } from './shims/wasi-preview1.js';
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
 
@@ -370,6 +370,9 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, bu
         status = exports.tjs_browser_tick();
       } else status = resumeWith(exports, await nextEvent(current, signal));
     }
+  } catch (err) {
+    if (!(err instanceof WasiExit)) throw err;
+    status = err.code;
   } finally {
     signal?.removeEventListener('abort', cancel);
     exports.tjs_browser_set_deadline(0);
@@ -389,6 +392,6 @@ export async function tjsBuiltin(argv, dir, options) {
   const { output, status } = await runTjs(argv[1], dir, options);
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
-  if (status !== 0) throw new Error([output.trimEnd(), `tjs exited with status ${status}`].filter(Boolean).join('\n'));
+  if (status !== 0) throw Object.assign(new Error(`tjs exited with status ${status}`), { exitCode: status, stdout: output.trimEnd() });
   return output.trimEnd();
 }

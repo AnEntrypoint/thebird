@@ -2,7 +2,7 @@ const NPM_VERSION = '0.2.0';
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const NPX_CACHE = '/.thebird/npx';
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'];
-const { gunzipSync, sha512, semver } = thebirdNpmLibs;
+const { gunzipSync, sha512, semver, acorn } = thebirdNpmLibs;
 const { name, argv, cwd } = globalThis.__npmInput;
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -60,7 +60,11 @@ const dirname = (path) => {
 };
 const basename = (path) => path.split('/').pop();
 const join = (...parts) => normalize(parts.join('/'));
-const absolute = (path) => normalize(path.startsWith('/') ? path : `${cwd}/${path}`);
+const pathText = (path) => (typeof path === 'string' ? path : decodeURIComponent(path.pathname));
+const absolute = (path) => {
+  const text = pathText(path);
+  return normalize(text.startsWith('/') ? text : `${cwd}/${text}`);
+};
 
 const isDir = (path) => {
   try {
@@ -189,7 +193,9 @@ const request = async (url, accept) => {
   try {
     response = await fetch(url, { headers: { accept, ...headersFor(url) } });
   } catch (err) {
-    throw new NpmError(`request to ${url} failed: ${err.message}`);
+    const headers = headersFor(url);
+    const blocked = headers.authorization ? ' (the browser blocks an Authorization header on this cross-origin request unless the registry allows it in its CORS preflight)' : '';
+    throw new NpmError(`request to ${url} failed: ${err.message}${blocked}`);
   }
   if (!response.ok) {
     const reason = response.status === 404 ? 'Not Found' : response.statusText || 'request failed';
@@ -560,9 +566,21 @@ const runCommand = (args) => {
 };
 
 const fileIn = (base) => [base, `${base}.js`, `${base}.json`, `${base}/index.js`].find(isFile) ?? null;
+const exportTarget = (entry) => {
+  if (typeof entry === 'string') return entry;
+  if (!entry || typeof entry !== 'object') return null;
+  for (const condition of ['require', 'default', 'import']) {
+    const target = exportTarget(entry[condition]);
+    if (target) return target;
+  }
+  return null;
+};
 const resolvePackage = (dir) => {
-  const main = readJson(`${dir}/package.json`)?.main;
-  return (main ? fileIn(join(dir, main)) : null) ?? fileIn(join(dir, 'index'));
+  const manifest = readJson(`${dir}/package.json`) ?? {};
+  const exported = exportTarget(manifest.exports?.['.'] ?? manifest.exports);
+  return (exported ? fileIn(join(dir, exported)) : null)
+    ?? (manifest.main ? fileIn(join(dir, manifest.main)) : null)
+    ?? fileIn(join(dir, 'index'));
 };
 const resolveModule = (base) => fileIn(base) ?? (isDir(base) ? resolvePackage(base) : null);
 
@@ -574,7 +592,7 @@ const fsModule = {
     const bytes = readBytes(absolute(path));
     if (bytes === undefined) throw Object.assign(new Error(`ENOENT: no such file or directory, open '${path}'`), { code: 'ENOENT' });
     const encoding = typeof options === 'string' ? options : options?.encoding;
-    return encoding ? decoder.decode(bytes) : new Uint8Array(bytes);
+    return encoding ? decoder.decode(bytes) : Object.assign(new Uint8Array(bytes), { toString: () => decoder.decode(bytes) });
   },
   writeFileSync: (path, data) => writeBytes(absolute(path), typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data)),
   readdirSync: (path) => __thebirdFs.readdir(absolute(path)),
@@ -597,9 +615,32 @@ const pathModule = {
   resolve: (...parts) => normalize(parts.reduce((acc, part) => (part.startsWith('/') ? part : `${acc}/${part}`), cwd)),
 };
 
+const utilModule = {
+  inspect: Object.assign((value) => (typeof value === 'string' ? value : JSON.stringify(value)), { custom: Symbol.for('nodejs.util.inspect.custom') }),
+  format: (...parts) => parts.map(String).join(' '),
+};
+const assertFailure = (message, fallback) => {
+  throw Object.assign(new Error(message ?? fallback), { code: 'ERR_ASSERTION' });
+};
+const assertModule = Object.assign((value, message) => {
+  if (!value) assertFailure(message, 'The expression evaluated to a falsy value');
+}, {
+  ok: (value, message) => {
+    if (!value) assertFailure(message, 'The expression evaluated to a falsy value');
+  },
+  strictEqual: (actual, expected, message) => {
+    if (actual !== expected) assertFailure(message, 'Expected values to be strictly equal');
+  },
+  deepStrictEqual: (actual, expected, message) => {
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) assertFailure(message, 'Expected values to be strictly deep-equal');
+  },
+});
+
 const requireFrom = (dir, request, cache) => {
   if (request === 'fs' || request === 'node:fs') return fsModule;
   if (request === 'path' || request === 'node:path') return pathModule;
+  if (request === 'util' || request === 'node:util') return utilModule;
+  if (request === 'assert' || request === 'node:assert') return assertModule;
   if (request === 'process' || request === 'node:process') return globalThis.process;
   if (request.startsWith('.') || request.startsWith('/')) {
     const file = resolveModule(normalize(request.startsWith('/') ? request : `${dir}/${request}`));
@@ -615,6 +656,98 @@ const requireFrom = (dir, request, cache) => {
   throw moduleNotFound(request);
 };
 
+const ESM_PRELUDE = "Object.defineProperty(exports, '__esModule', { value: true });\nconst __importDefault = (m) => (m && m.__esModule ? m.default : m);\nconst __importStar = (m) => (m && m.__esModule ? m : Object.assign(Object.create(null), m, { default: m }));\nconst __importMeta = { url: 'file://' + __filename, filename: __filename, dirname: __dirname };\nconst __dynamicImport = (request) => new Promise((resolve) => resolve(__importStar(require(request))));\n";
+
+const parseModule = (source) => {
+  try {
+    return acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  } catch {
+    return null;
+  }
+};
+
+const isModuleStatement = (node) => node.type.startsWith('Import') || node.type.startsWith('Export');
+
+const nameOf = (node) => (node.type === 'Identifier' ? node.name : node.value);
+
+const patternNames = (pattern) => {
+  switch (pattern.type) {
+    case 'Identifier': return [pattern.name];
+    case 'ObjectPattern': return pattern.properties.flatMap((property) => patternNames(property.type === 'RestElement' ? property.argument : property.value));
+    case 'ArrayPattern': return pattern.elements.filter(Boolean).flatMap(patternNames);
+    case 'AssignmentPattern': return patternNames(pattern.left);
+    case 'RestElement': return patternNames(pattern.argument);
+    default: return [];
+  }
+};
+
+const walkNodes = (node, visit) => {
+  visit(node);
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) value.forEach((child) => child?.type && walkNodes(child, visit));
+    else if (value?.type) walkNodes(value, visit);
+  }
+};
+
+const esmToCjs = (source, program) => {
+  const edits = [];
+  let temp = 0;
+  const load = (request) => `require(${JSON.stringify(request)})`;
+  const alias = () => `__esm${temp++}`;
+  for (const node of program.body) {
+    if (node.type === 'ImportDeclaration') {
+      const mod = alias();
+      const lines = [`const ${mod} = ${load(node.source.value)};`];
+      for (const spec of node.specifiers) {
+        if (spec.type === 'ImportDefaultSpecifier') lines.push(`const ${spec.local.name} = __importDefault(${mod});`);
+        else if (spec.type === 'ImportNamespaceSpecifier') lines.push(`const ${spec.local.name} = __importStar(${mod});`);
+        else lines.push(`const ${spec.local.name} = ${mod}[${JSON.stringify(nameOf(spec.imported))}];`);
+      }
+      edits.push([node.start, node.end, lines.join(' ')]);
+    } else if (node.type === 'ExportAllDeclaration') {
+      if (node.exported) edits.push([node.start, node.end, `exports[${JSON.stringify(nameOf(node.exported))}] = __importStar(${load(node.source.value)});`]);
+      else {
+        const mod = alias();
+        edits.push([node.start, node.end, `const ${mod} = ${load(node.source.value)}; for (const key of Object.keys(${mod})) if (key !== 'default') exports[key] = ${mod}[key];`]);
+      }
+    } else if (node.type === 'ExportNamedDeclaration') {
+      if (node.declaration) {
+        const declaration = node.declaration;
+        const names = declaration.type === 'VariableDeclaration' ? declaration.declarations.flatMap((item) => patternNames(item.id)) : [declaration.id.name];
+        edits.push([node.start, node.start + 'export'.length, '']);
+        edits.push([node.end, node.end, names.map((name) => `\nexports[${JSON.stringify(name)}] = ${name};`).join('')]);
+      } else if (node.source) {
+        const mod = alias();
+        const assigns = node.specifiers.map((spec) => `exports[${JSON.stringify(nameOf(spec.exported))}] = ${mod}[${JSON.stringify(nameOf(spec.local))}];`);
+        edits.push([node.start, node.end, `const ${mod} = ${load(node.source.value)}; ${assigns.join(' ')}`]);
+      } else {
+        const assigns = node.specifiers.map((spec) => `exports[${JSON.stringify(nameOf(spec.exported))}] = ${spec.local.name};`);
+        edits.push([node.start, node.end, assigns.join(' ')]);
+      }
+    } else if (node.type === 'ExportDefaultDeclaration') {
+      const declaration = node.declaration;
+      const keywordEnd = source.indexOf('default', node.start) + 'default'.length;
+      if ((declaration.type === 'FunctionDeclaration' || declaration.type === 'ClassDeclaration') && declaration.id) {
+        edits.push([node.start, keywordEnd, '']);
+        edits.push([node.end, node.end, `\nexports.default = ${declaration.id.name};`]);
+      } else {
+        edits.push([node.start, keywordEnd, 'exports.default =']);
+        edits.push([node.end, node.end, ';']);
+      }
+    }
+  }
+  for (const node of program.body) {
+    walkNodes(node, (inner) => {
+      if (inner.type === 'MetaProperty' && inner.meta.name === 'import') edits.push([inner.start, inner.end, '__importMeta']);
+      if (inner.type === 'ImportExpression') edits.push([inner.start, inner.start + 'import'.length, '__dynamicImport']);
+    });
+  }
+  const body = edits
+    .sort((a, b) => b[0] - a[0] || b[1] - a[1])
+    .reduce((text, [start, end, replacement]) => text.slice(0, start) + replacement + text.slice(end), source);
+  return ESM_PRELUDE + body;
+};
+
 const loadFile = (file, cache) => {
   if (file.endsWith('.json')) return JSON.parse(readText(file));
   if (cache.has(file)) return cache.get(file).exports;
@@ -622,7 +755,11 @@ const loadFile = (file, cache) => {
   cache.set(file, module);
   const dir = dirname(file);
   const source = readText(file).replace(/^#!.*/, '');
-  const wrapper = new Function('module', 'exports', 'require', '__filename', '__dirname', source);
+  const program = parseModule(source);
+  const esm = file.endsWith('.mjs') || (program !== null && program.body.some(isModuleStatement));
+  if (esm && program === null) throw new NpmError(`${file}: not parseable as an ES module`);
+  const body = esm ? esmToCjs(source, program) : source;
+  const wrapper = new Function('module', 'exports', 'require', '__filename', '__dirname', body);
   wrapper(module, module.exports, (request) => requireFrom(dir, request, cache), file, dir);
   return module.exports;
 };

@@ -12,7 +12,7 @@ function installNodeGlobals(cwd, argv) {
       const bytes = __thebirdFs.readFile(absolute(path));
       if (bytes === undefined) throw enoent(path);
       const encoding = typeof options === 'string' ? options : options?.encoding;
-      return encoding ? new TextDecoder().decode(bytes) : new Uint8Array(bytes);
+      return encoding ? new TextDecoder().decode(bytes) : Object.assign(new Uint8Array(bytes), { toString: () => new TextDecoder().decode(bytes) });
     },
     writeFileSync(path, data) {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
@@ -61,6 +61,6 @@ export async function nodeBuiltin(argv, dir, options) {
   const { output, status } = await runTjs(prelude + source, dir, options);
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
-  if (status !== 0) throw new Error([output.trimEnd(), `node exited with status ${status}`].filter(Boolean).join('\n'));
+  if (status !== 0) throw Object.assign(new Error(`node exited with status ${status}`), { exitCode: status, stdout: output.trimEnd() });
   return output.trimEnd();
 }

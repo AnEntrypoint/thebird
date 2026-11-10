@@ -13,8 +13,9 @@ const PACKAGES = [
   { name: 'fflate', version: '0.8.3', license: 'MIT', integrity: 'sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==' },
   { name: '@noble/hashes', version: '2.4.0', license: 'MIT', integrity: 'sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==' },
   { name: 'semver', version: '7.8.6', license: 'ISC', integrity: 'sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==' },
+  { name: 'acorn', version: '8.18.0', license: 'MIT', integrity: 'sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==' },
 ];
-const ENTRY = "import { gunzipSync } from 'fflate';\nimport { sha512 } from '@noble/hashes/sha2.js';\nimport semver from 'semver';\nexport { gunzipSync, sha512, semver };\n";
+const ENTRY = "import { gunzipSync } from 'fflate';\nimport { sha512 } from '@noble/hashes/sha2.js';\nimport semver from 'semver';\nimport * as acorn from 'acorn';\nexport { gunzipSync, sha512, semver, acorn };\n";
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const sha512 = (bytes) => `sha512-${createHash('sha512').update(bytes).digest('base64')}`;

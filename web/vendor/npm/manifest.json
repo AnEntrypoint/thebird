@@ -5,7 +5,7 @@
   },
   "bundle": {
     "name": "npm-libs.js",
-    "sha256": "fd3879b89439dc09678ecf5c2bfb9cab7c5653fe6068c79fdd1439b5f800020a"
+    "sha256": "9fa12953416ed75053a419bb4bc5490516a747243d36e153edcb4b7dbd13565a"
   },
   "packages": [
     {
@@ -31,6 +31,14 @@
       "integrity": "sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==",
       "tarball": "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz",
       "notice": "licenses/semver.md"
+    },
+    {
+      "name": "acorn",
+      "version": "8.18.0",
+      "license": "MIT",
+      "integrity": "sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==",
+      "tarball": "https://registry.npmjs.org/acorn/-/acorn-8.18.0.tgz",
+      "notice": "licenses/acorn.md"
     }
   ]
 }

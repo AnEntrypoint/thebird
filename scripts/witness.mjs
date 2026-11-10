@@ -275,7 +275,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
   const PROMPT = 'thebird /workspace> ';
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
-  const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello', 'node -e "console.log(\'x\'); process.exit(0)"', 'node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?'];
+  const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello', 'node -e "console.log(\'x\'); process.exit(0)"', 'node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?', 'echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"'];
   const nodeOutputs = [];
   const txikiShell = {};
   await terminal([], {
@@ -333,6 +333,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
   check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
   check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
+  check('readFileSync without an encoding returns bytes whose toString is the text, so JSON.parse reads it', nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"') === 'thebird-json', JSON.stringify(nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"')));
   const npmRun = await terminal([
     ['run', 'npm -v'],
     ['run', 'npx -v'],
@@ -358,28 +359,30 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const npmProjects = await terminal([
     ['run', 'mkdir -p yaml-project && cd yaml-project && npm install js-yaml'],
     ['run', 'readlink node_modules/.bin/js-yaml'],
-    ['run', "printf 'a: 1\\n' > x.yaml && npx js-yaml x.yaml"],
+    ['run', "printf 'a: 1\\n' > x.yaml && npx js-yaml x.yaml | sed 's/^/npx:/'; echo npx-rc=$?"],
     ['run', 'npm ls'],
-    ['run', `echo '{"scripts":{"yaml":"js-yaml x.yaml"}}' > package.json && npm run yaml`],
-    ['run', 'npm uninstall js-yaml'],
-    ['run', 'node -e "console.log(require(\'fs\').existsSync(\'node_modules/argparse\'))"'],
-    ['run', 'cd .. && mkdir -p dev-project && cd dev-project && echo \'{"devDependencies":{"semver":"7.8.6"}}\' > package.json && npm install && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'package-lock.json\', \'utf8\')).packages[\'node_modules/semver\'].dev)"'],
-    ['run', 'rm -rf node_modules && npm ci'],
-    ['run', 'cd .. && mkdir -p peer-project && cd peer-project && npm install react-dom && node -e "console.log(require(\'fs\').existsSync(\'node_modules/react/package.json\'))"'],
+    ['run', `echo '{"scripts":{"yaml":"js-yaml x.yaml"}}' > package.json && npm run yaml | sed 's/^/run:/'`],
+    ['run', 'npm uninstall js-yaml | sed \'s/^/uninstall:/\''],
+    ['run', 'node -e "console.log(\'argparse-present\', require(\'fs\').existsSync(\'node_modules/argparse\'))"'],
+    ['run', 'cd .. && mkdir -p dev-project && cd dev-project && echo \'{"devDependencies":{"semver":"7.8.6"}}\' > package.json && npm install && node -e "console.log(\'dev-flag\', JSON.parse(require(\'fs\').readFileSync(\'package-lock.json\', \'utf8\')).packages[\'node_modules/semver\'].dev)"'],
+    ['run', 'rm -rf node_modules && npm ci | sed \'s/^/ci:/\''],
+    ['run', 'cd .. && mkdir -p peer-project && cd peer-project && npm install react-dom && node -e "console.log(\'react-installed\', require(\'fs\').existsSync(\'node_modules/react/package.json\'))"'],
     ['run', 'cd .. && mkdir -p scoped-project && cd scoped-project && npm install @noble/hashes && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node_modules/@noble/hashes/package.json\', \'utf8\')).name)"'],
-    ['run', 'cd .. && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
+    ['run', 'mkdir -p /workspace/esmp/node_modules/tool/bin /workspace/esmp/node_modules/tool/lib && cd /workspace/esmp && echo \'{"name":"tool","version":"1.0.0","bin":{"tool":"bin/tool.mjs"}}\' > node_modules/tool/package.json && echo \'export const greet = (n) => `hi ${n}`; export default { kind: "default" };\' > node_modules/tool/lib/greet.mjs && echo \'import def, { greet } from "../lib/greet.mjs"; import * as ns from "../lib/greet.mjs"; console.log(greet(process.argv[2]), def.kind, typeof ns.greet, import.meta.url.slice(0, 7));\' > node_modules/tool/bin/tool.mjs && npx tool world; echo rc=$?'],
+    ['run', 'cd /workspace && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
   ]);
   const projectOut = npmProjects.out;
-  check('npm install js-yaml installs its argparse dependency, and the bin link points into the package', /^\+ js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^\+ argparse@\d+\.\d+\.\d+$/m.test(projectOut) && /^added 2 packages$/m.test(projectOut) && /^\.\.\/js-yaml\/bin\/js-yaml$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
-  check('npx js-yaml runs the installed bin on a file and prints the parsed JSON', /^  "a": 1$/m.test(projectOut) || /"a": 1/.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
+  check('npm install js-yaml installs its argparse dependency, and the bin link points into the package', /^\+ js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^\+ argparse@\d+\.\d+\.\d+$/m.test(projectOut) && /^added 2 packages$/m.test(projectOut) && /^\.\.\/js-yaml\/bin\/js-yaml\.mjs$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
+  check('an ESM bin with a relative import, a default import, a namespace import and import.meta runs under npx', /^hi world default function file:\/\/$/m.test(projectOut) && /^rc=0$/m.test(projectOut), JSON.stringify(projectOut.slice(-900)));
+  check('npx js-yaml runs the installed bin on a file and prints the parsed JSON with status 0', /^npx:  "a": 1$/m.test(projectOut) && /^npx-rc=0$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 900)));
   check('npm ls prints the js-yaml tree with argparse under it', /^└── js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^    └── argparse@\d+\.\d+\.\d+$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 900)));
-  check('npm run runs a package.json script that calls an installed bin', (projectOut.match(/"a": 1/g) ?? []).length >= 2, JSON.stringify(projectOut.slice(0, 900)));
-  check('npm uninstall removes js-yaml and prunes argparse', /^removed 2 packages$/m.test(projectOut) && /^false$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 900)));
-  check('a devDependency is recorded with dev true in package-lock.json', /^true$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
-  check('npm ci rebuilds node_modules exactly from package-lock.json', /^added 1 package$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
-  check('a peer dependency is installed automatically (react-dom needs react)', /^true$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1400)));
+  check('npm run runs a package.json script that calls an installed bin', /^run:  "a": 1$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
+  check('npm uninstall removes js-yaml and prunes argparse', /^uninstall:removed 2 packages$/m.test(projectOut) && /^argparse-present false$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
+  check('a devDependency is recorded with dev true in package-lock.json', /^dev-flag true$/m.test(projectOut), JSON.stringify(projectOut.slice(-1200)));
+  check('npm ci rebuilds node_modules exactly from package-lock.json', /^ci:added 1 package$/m.test(projectOut), JSON.stringify(projectOut.slice(-1400)));
+  check('a peer dependency is installed automatically (react-dom needs react)', /^\+ react@\d+\.\d+\.\d+$/m.test(projectOut) && /^react-installed true$/m.test(projectOut), JSON.stringify(projectOut.slice(-1400)));
   check('a scoped package installs under node_modules/@scope/name', /^@noble\/hashes$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1400)));
-  check('.npmrc _authToken is sent to the registry: the 401 names the URL, or the install succeeds', /npm: 401 Unauthorized - GET https:\/\/registry\.npmjs\.org\/debug/.test(projectOut) || /^rc=0$/m.test(projectOut), JSON.stringify(projectOut.slice(-600)));
+  check('.npmrc _authToken failure names the registry URL and says why the browser refused it', /npm: request to https:\/\/registry\.npmjs\.org\/debug failed: .*Authorization header/.test(projectOut) && /^rc=1$/m.test(projectOut), JSON.stringify(projectOut.slice(-600)));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
   const txikiPip = txikiShell.runs?.pipVersion ?? {};
   check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));

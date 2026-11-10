@@ -34,7 +34,7 @@ export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicod
 export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
 export const EXIT_FLUSH_TARGET = 'src/mod_os.c';
 export const EXIT_FLUSH_HEADER = 'scripts/txiki/browser/exit-flush.h';
-export const TXIKI_WASM_SHA256 = 'dcd3a4342705967bfd4188aea39a4c7d368cfd7c90a42918e6fc72f83da656c1';
+export const TXIKI_WASM_SHA256 = '137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28';
 const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 

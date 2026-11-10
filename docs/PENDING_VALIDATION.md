@@ -734,6 +734,38 @@ Item 5, `scripts/esbuild-pin.mjs`. The file was untracked at the start of this s
 
 Witness, to run in Phase B: the npm checks in `scripts/witness.mjs` now expect `0.2.0`, the 404 URL on stdout, `added N packages`, and a project block (`js-yaml` with `argparse`, `npx`, `npm ls`, `npm run`, `npm uninstall`, a devDependency with `dev: true`, `npm ci`, a peer install of `react`, a scoped `@noble/hashes`, and the `.npmrc` token). Two `node` checks cover `process.exit` output with status 0 and status 3.
 
+## Phase B: npm proper, exit flush, error routing (final tree, build and witness)
+
+Build and vendor, with wall times:
+- txiki wasm, first attempt: `ZIG=/workspace/tools/zig-x86_64-linux-0.17.1/zig node scripts/vendor-txiki.mjs`, 181 s. The compile gate passed (39 of 39 files) and the link left 0 undefined symbols. The script stopped at the pin check, because the pin still held the old hash: the new wasm is `137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28`, and the pin was `dcd3a434…`.
+- The pin was then changed in `scripts/vendor-txiki.mjs` (`TXIKI_WASM_SHA256`), `AGENTS.md` (the wasm pin line) and `.github/workflows/pages.yml` (the `sha256sum -c` line). Second build, 261 s, exit 0, the same sha256 `137c08f6…`. Two builds from one checkout gave the same bytes. Reproducibility across checkout paths is still the claim the script makes; this pass did not test a second checkout path.
+- The export table of `web/vendor/txiki/tjs.wasm` has 162 exports, which is the count the ledger recorded before. All seven `gm_txiki_*` exports are present. The pins are unchanged: txiki `v26.11.0`, libuv `dd9f081cc55a4d83e2a976848d074f28ee5f34eb`, quickjs-ng `7b5f588e0f9b643e2996f291bfc861abeaceddc2`.
+- The sha256 for gm is `137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28`. gm's own repository must take this artifact; it was not run from gm's side in this pass.
+- npm bundle, `node scripts/vendor-npm.mjs`, 8 s. acorn 8.18.0 was added as a pinned package (`integrity sha512-lGq+9yr1…`) so the program can rewrite ES modules. The bundle is now `9fa12953416ed75053a419bb4bc5490516a747243d36e153edcb4b7dbd13565a`, with `web/vendor/npm/licenses/acorn.md`.
+
+Route decision for item 2, recorded: grown subset, not the npm CLI. The CLI needs a long list of Node built-ins (streams, `child_process`, `http`/`https` with TLS, `zlib`, `crypto`, `os`, `events`), and `web/node-in-txiki.js` gives only the txiki surface. The subset already installs real packages, so each feature added is a bounded change. The grown subset now covers: `package-lock.json` read and write (lock v3), `.bin` links, peer, dev and optional flags, pruning, `npm ci`, `npm uninstall`, `npm ls`, `npm run`, scoped packages, `.npmrc` `_authToken`, and ESM files.
+
+Defects found in this phase, and what fixed each:
+1. Output was lost on exit. The engine flush from Phase A worked (`console.log` before `process.exit` is kept), but the page dropped it: `proc_exit` throws `WasiExit` out of `callInput`, and `runTjs` in `web/txiki-in-page.js` had no catch, so the captured output was never returned. `runTjs` now catches `WasiExit` and takes its code as the status.
+2. `node` and `tjs` failed with status 1 for any nonzero exit, and their text went to stderr, where bashkit redacts it. Both throw `exitCode` and `stdout` now, as npm does. `process.exit(3)` gives rc 3.
+3. `readFileSync(path)` with no encoding returned a bare `Uint8Array`, so `JSON.parse(readFileSync(url))` read `1,34,…`. That broke js-yaml's CLI (`unexpected data at the end`). The no-encoding result now has a `toString` that decodes, in both the npm program and `web/node-in-txiki.js`.
+4. ESM bins did not run. Probe result: the engine's module loader cannot read page files (`could not load 'm.mjs'`), so the engine cannot load ESM from the page filesystem. Fix: `esmToCjs` in `web/npm-program.js` rewrites an ES module to CommonJS with acorn before the `new Function` wrapper. It covers imports, exports, re-exports, dynamic `import()` and `import.meta.url`.
+5. The `npx js-yaml` bin (js-yaml 5.5.0) needs `util`, `assert` and the package by its own name. Shims for `util` and `assert` were added; the self-import resolves through `exports`, which `resolvePackage` now reads before `main`.
+6. `npm install` 404 now prints `npm: 404 Not Found - GET https://registry.npmjs.org/<name>` on stdout with status 1. The earlier `Uncaught npm:` text is gone.
+7. Open, not fixed: `.npmrc` `_authToken`. The token goes out as an `Authorization` header, and the browser refuses that on a cross-origin request unless the registry's CORS preflight allows it. `curl -X OPTIONS https://registry.npmjs.org/debug` with `Access-Control-Request-Headers: authorization` returns 404 and no CORS headers. A GET with an invalid bearer returned 200 with `Access-Control-Allow-Origin: *`, so public reads work. With a token configured, every npmjs request fails, and the error now says so. The fix is either a registry that allows the header, or a same-origin proxy, which the relay does not provide (it serves GET and HEAD only). That is the owner's decision.
+8. Open, not fixed: `node file.mjs` with a relative import fails, because the engine loader cannot read page files. The npm path has the transform; `node` does not use it yet.
+9. Open, not fixed: `curl`, `wget` and `git` still put their error text on stderr, which bashkit redacts, so a URL in their errors prints as `https:<path>`. The npm route (stdout with the status) is the same mechanism and would fix them; not done here.
+10. Open limits of the ESM transform: top-level `await` does not work, and imports are copied rather than live bindings.
+
+Witness, final tree (commit of Phase B plus this section), on headless Chromium through `scripts/browser-driver.mjs` and `scripts/witness.mjs`. Reason for headless Chromium: the live site is not deployed from this tree until the push, so the local relay is the only build of this tree. Playwriter is the live-site route, and it is in the item-3 entry below.
+- `npm run check`: exit 0. `npm run lint:comments`: 92 repo-owned files, 0 comments, exit 0.
+- Focused npm runner (`/tmp/npm-focus/focused3.mjs`, 24 terminal commands plus the ESM setup): WALL 98.5 s, every line as expected.
+- Full witness, final tree, `CHROME_BIN=/usr/bin/chromium node scripts/witness.mjs`: `witness totals: PASS 166 FAIL 0`, exit 0, 318 s. An earlier full run on the same code before the check tightening took 516 s and also gave PASS 166 FAIL 0. Of the 166, 22 are npm, node and ESM checks, including the process.exit output, the readFileSync toString, the js-yaml install, the bin link, `npx`, `npm ls`, `npm run`, `npm uninstall`, the devDependency flag, `npm ci`, the peer install, the scoped package, the ESM bin and the auth failure message.
+- `npm run witness:shell`: `RESULT PASS=108 FAIL=0`, exit 0, 1 s.
+- `CHROME_BIN=/usr/bin/chromium npm run lint:architecture` (live): `331 claims: 331 pass, 0 fail, 0 unverified`, exit 0, 68 s.
+
+Witness checks I tightened in this phase, so they cannot pass on another line: the dev and peer checks print labels (`dev-flag true`, `react-installed true`), and the npx, `npm run`, uninstall and `npm ci` lines carry a `npx:`, `run:`, `uninstall:` or `ci:` prefix from `sed`, so each matches only its own command.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).
