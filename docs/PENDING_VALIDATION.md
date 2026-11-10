@@ -1453,3 +1453,15 @@ Check: the same four paths re-run on the same code in one browser session pass: 
 Left out of this push, with the change each needs:
 - Approval row: `/permissions ask` now switches the TUI to ask mode (`b101dda`), and the approval panel still does not open: the stub answers the `[tool:bash]` prompt with text, not a tool call, in the request after the mode change. The cause is in what fx sends after `/permissions ask`, or in how the TUI handles the tool call in ask mode. It needs an fx change to the tool-call handling in ask mode, or a witness change once fx confirms the flow. fx-owned; not fixed here.
 - Palette resize row: fx's `src/ui/resize_runtime.zig` never settles after the command palette is opened and closed. Needs the fx fix named in the Phase A notes above, then a rerun with no thebird workaround.
+
+## fx 8c5e581f: term rebuild blocked (queue pass 8)
+
+Goal: rebuild `web/vendor/fx/fx-term.wasm` from fx `8c5e581f` (palette-then-resize fix and approval fix) and rerun the witness.
+
+Result: blocked in fx, not in thebird. `zig build fx-term-wasm -Dwasm-surface=term` (Zig 0.17.1) at fx `8c5e581f`, clean tree, fails with 2 errors, both in `src/core/hooks/external_run.zig`, which fx commit `ddad463f` introduced:
+- line 67: `.pid = pid,` — `expected type 'i32', found 'void'`. On wasm32-wasi `child.id` is `void`, so the watchdog's pid is not an integer.
+- line 140: `.handler = .{ .handler = std.posix.SIG.IGN },` — `type 'void' does not support struct initialization syntax`. The POSIX signal table does not exist on wasm32-wasi.
+
+The same file built for the term at fx `5c8b64dc` (before `ddad463f`), which is why the earlier term rebuild succeeded. The fix is in fx's repo: guard the process-watchdog and signal-ignore code behind the target OS (or provide a wasm stub) in `src/core/hooks/external_run.zig`. Not edited here: fx's checkout is owned by fx, and this turn works only in thebird.
+
+Until that lands: `web/vendor/fx/fx-term.wasm` is unchanged (the `5c8b64dc` build from `fd04a2a`), so the approval and palette-then-resize rows are not witnessed on the fixed term. No Phase B witness run and no push in this pass.
