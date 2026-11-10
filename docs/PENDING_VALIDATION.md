@@ -1054,3 +1054,13 @@ Run 3 result: `witness totals: PASS 184 FAIL 3`, `WITNESS-EXIT 1`, `browser clea
 - Palette resize: FAIL, the known fx defect (`src/ui/resize_runtime.zig`), not worked around.
 
 Decision: nothing in this section is pushed. The fixes are thebird's (the env wiring in `web/fx-tui.js`, the explicit realpath cwd). The ask and Ctrl-O failures stay open until the tool-advertisement question is answered from fx's source: which code path sets the TUI's advertised tools, and whether this page's TUI has a source for them.
+
+## Run 3 decisions (PID 554463, /tmp/witness-tui3.log): ask and Ctrl-O
+
+Run 3 totals, quoted from the log: `witness totals: PASS 184 FAIL 3`, `WITNESS-EXIT 1`. The failures are the palette resize (fx, `src/ui/resize_runtime.zig`, not worked around), ask, and Ctrl-O.
+
+(2) Ask. Owner: the stub, per the log. Evidence: the stub's requests carry `"tools":[]` (run 3's `seen`), and the TUI header shows `tools: 0 advertised`. The stub called a tool it had not been offered, so fx dropped the call and the turn stayed on `• Thinking`. A gateway may only call tools the request advertised, so the stub was wrong to emit the call. Fixed in `scripts/fx-stub-gateway.mjs`: `streamPlan` now takes the request's `tools` and emits a tool call only when the name is advertised. An unadvertised name gets a text reply with `tool-not-advertised=<name>`, so the screen shows the answer and not a stall. The ask check still fails until fx advertises a tool to this page, because no tool can run without an advertised one. The advertisement is fx's: fx builds `tools` for the request (`src/acp/libfx_hooks.zig:206` counts `advertised_functions`, `additional_functions` and `selected_dynamic`), and this page's TUI sets none of them. Whether the empty list is fx's configuration or a missing source from thebird's page is not settled from this log. Open.
+
+(3) Ctrl-O. The check was wrong, not the screen. The run 3 log shows the full-transcript footer `esc close · pgup/pgdn scroll`, so the full view opened. The check required `line 1` and `line 60` on one screen, but the viewer is windowed and pages with pgup/pgdn, so the two ends are never on screen together. The `closed` capture is the main transcript tail (lines 37 to 53), which is the view after Escape. Fixed in `scripts/witness.mjs`: the check now reads the footer. It passes when `esc close` is on screen after Ctrl-O, and fails when it is gone after Escape.
+
+Not pushed. Commit as lanmower with no trailer. The ask check and the approval check (which matched the input echo, not a panel) remain open until fx advertises a tool to this page.

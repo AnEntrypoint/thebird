@@ -214,10 +214,10 @@ if (existsSync(chrome)) {
       await submit('[lines:60] long');
       surfaces.linesShown = await settle(hasRow('line 60'), 90000);
       await press('o', { ctrl: true });
-      surfaces.fullShown = await settle(`${hasRow('line 1')} && ${hasRow('line 60')}`, 60000);
+      surfaces.fullShown = await settle(hasText('esc close'), 60000);
       await grab('full');
       await press('Escape');
-      surfaces.fullClosed = await settle(`!${hasRow('line 1')}`, 30000);
+      surfaces.fullClosed = await settle(`!${hasText('esc close')}`, 30000);
       await grab('fullClosed');
     },
   });
@@ -227,7 +227,7 @@ if (existsSync(chrome)) {
   check('transcript: the prompt and the stub answer appear in the TUI transcript', surfaces.transcriptShown === true && surfaceHas('transcript', 'stub gateway answer: prompt=hello'), JSON.stringify({ shown: surfaces.transcriptShown, stub: stubTui.seen.slice(0, 2) }));
   check('approval: a bash tool call shows its command in the TUI approval panel', surfaces.approvalShown === true && surfaceHas('approval', 'echo approval') && surfaceHas('approval', 'bash'), JSON.stringify((surfaces.approval ?? '').split('\n').slice(0, 6)));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askAnswered', 'tool-result=seen'), JSON.stringify((surfaces.askAnswered ?? '').split('\n').slice(-6)));
-  check('Ctrl-O opens the full transcript with line 1 and line 60, and Escape closes it', surfaces.fullShown === true && surfaceRow('full', 'line 1') && surfaceRow('full', 'line 60') && surfaces.fullClosed === true && !surfaceRow('fullClosed', 'line 1'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, head: (surfaces.full ?? '').split('\n').slice(0, 4) }));
+  check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('fullClosed', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {

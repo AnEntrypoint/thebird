@@ -21,13 +21,14 @@ const directive = (text, pattern) => text.match(pattern)?.[1];
 
 export const sseEvent = (event) => `data: ${JSON.stringify(event)}\n\n`;
 
-export function streamPlan({ prompt }) {
+export function streamPlan({ prompt, tools = [] }) {
   const text = lastUserText(prompt);
   const toolName = directive(text, /\[tool:([\w.-]+)\]/);
   const toolInput = directive(text, /\[input:(\{.*?\})\]/);
   const lines = Number(directive(text, /\[lines:(\d+)\]/) ?? 0);
   const answered = hasToolResult(prompt);
-  if (toolName && !answered) {
+  const advertised = tools.some((tool) => tool?.name === toolName);
+  if (toolName && !answered && advertised) {
     let input = {};
     try { input = toolInput ? JSON.parse(toolInput) : {}; } catch { input = {}; }
     return {
@@ -45,8 +46,9 @@ export function streamPlan({ prompt }) {
     return { events: [{ type: 'text-delta', id: 't', delta: body }], finish: 'stop' };
   }
   const suffix = answered ? ' tool-result=seen' : '';
+  const refused = toolName && !advertised ? ` tool-not-advertised=${toolName}` : '';
   return {
-    events: [{ type: 'text-delta', id: 't', delta: `stub gateway answer: prompt=${text} streaming=true authorized=true${suffix}` }],
+    events: [{ type: 'text-delta', id: 't', delta: `stub gateway answer: prompt=${text} streaming=true authorized=true${suffix}${refused}` }],
     finish: 'stop',
   };
 }
