@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -31,17 +32,79 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
-const startedTrees = new Map();
+const runDir = process.env.THEBIRD_BROWSER_RUN_DIR ?? join(tmpdir(), `thebird-browser-${process.pid}`);
+const recordFile = join(runDir, 'chromium-trees.json');
+const recorded = new Map();
+
+const processTable = () => {
+  const table = new Map();
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      table.set(Number(entry), { ppid: Number(fields[1]), start: fields[19] });
+    } catch {
+      continue;
+    }
+  }
+  return table;
+};
+
+const persist = () => {
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(recordFile, JSON.stringify([...recorded].map(([pid, start]) => ({ pid, start })), null, 1));
+};
+
+const refresh = (seed) => {
+  const table = processTable();
+  const children = new Map();
+  for (const [pid, { ppid }] of table) children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+  let changed = false;
+  const queue = [];
+  if (seed !== undefined) {
+    if (table.has(seed) && !recorded.has(seed)) {
+      recorded.set(seed, table.get(seed).start);
+      changed = true;
+    }
+    queue.push(seed);
+  } else {
+    for (const [pid, start] of recorded) if (table.get(pid)?.start === start) queue.push(pid);
+  }
+  for (let index = 0; index < queue.length; index++) {
+    for (const child of children.get(queue[index]) ?? []) {
+      if (!recorded.has(child)) {
+        recorded.set(child, table.get(child).start);
+        changed = true;
+      }
+      queue.push(child);
+    }
+  }
+  if (changed) persist();
+};
+
+export function recordBrowserTree(pid) {
+  refresh(pid);
+}
 
 export function closeBrowserTrees() {
   const closed = [];
-  for (const [pid, child] of startedTrees) {
-    if (child.exitCode !== null || child.signalCode !== null) continue;
-    killGroup(child);
-    closed.push(pid);
+  const table = processTable();
+  for (const [pid, start] of recorded) {
+    if (table.get(pid)?.start !== start) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+      closed.push(pid);
+    } catch {
+      continue;
+    }
   }
-  startedTrees.clear();
   return closed;
+}
+
+process.on('exit', () => closeBrowserTrees());
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+  process.on(signal, () => process.exit(code));
 }
 
 export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay, initScript }) {
@@ -58,8 +121,8 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     `--user-data-dir=${profile}`,
     'about:blank',
   ], { stdio: 'ignore', detached: true });
-  startedTrees.set(child.pid, child);
-  child.once('exit', () => startedTrees.delete(child.pid));
+  recordBrowserTree(child.pid);
+  const poller = setInterval(() => refresh(), 500);
 
   try {
     const portFile = join(profile, 'DevToolsActivePort');
@@ -166,11 +229,13 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     await Promise.race([once(child, 'exit'), sleep(10000)]);
     return state;
   } finally {
+    clearInterval(poller);
+    refresh();
     if (child.exitCode === null && child.signalCode === null) {
-      killGroup(child);
+      closeBrowserTrees();
       await Promise.race([once(child, 'exit'), sleep(10000)]);
     }
-    killGroup(child);
+    closeBrowserTrees();
   }
 }
 
@@ -208,12 +273,4 @@ async function replayTerminal({ replay, interact, timeoutMs }) {
     limit: timeoutMs,
   }));
   if (step !== replay.trace.length) throw new Error(`checkpoint replay left ${replay.trace.length - step} steps unused`);
-}
-
-function killGroup(child) {
-  try {
-    process.kill(-child.pid, 'SIGKILL');
-  } catch {
-    child.kill('SIGKILL');
-  }
 }
