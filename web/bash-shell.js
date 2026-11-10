@@ -33,9 +33,13 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
   let abort = new AbortController();
   let engineCancelled = false;
   let builtinStatus = 1;
-  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: commandTimeoutMs }).then(withNewline, (err) => {
+  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: commandTimeoutMs }).then((text) => {
+    builtinStatus = 0;
+    return withNewline(text);
+  }, (err) => {
     engineCancelled ||= err?.message === 'cancelled';
     builtinStatus = err?.message === 'cancelled' ? 130 : (err?.exitCode ?? 1);
+    if (err?.stdout !== undefined) return withNewline(err.stdout);
     throw err;
   })]));
   customBuiltins.thebird_status = () => String(builtinStatus);

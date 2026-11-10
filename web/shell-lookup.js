@@ -35,5 +35,5 @@ type() {
   return $rc
 }
 `
-  + inPageNames.map((name) => `${name}() {\n  command ${name} "$@" || return "$(thebird_status)"\n}\n`).join('');
+  + inPageNames.map((name) => `${name}() {\n  command ${name} "$@"\n  return "$(thebird_status)"\n}\n`).join('');
 }

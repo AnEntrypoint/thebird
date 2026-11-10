@@ -26,8 +26,9 @@ const runNpmProgram = async (name, argv, cwd, options) => {
   const { output, status } = await runTjs(`globalThis.__npmInput = ${input};\n${await sourceText()}`, cwd, options);
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
-  if (status !== 0) throw new Error(output.trimEnd());
-  return output.trimEnd();
+  const text = output.trimEnd();
+  if (status !== 0) throw Object.assign(new Error(text), { exitCode: status, stdout: text });
+  return text;
 };
 
 export const npmBuiltin = (argv, cwd, options) => runNpmProgram('npm', argv, cwd, options);

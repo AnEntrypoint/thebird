@@ -275,7 +275,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
   const PROMPT = 'thebird /workspace> ';
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
-  const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello'];
+  const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello', 'node -e "console.log(\'x\'); process.exit(0)"', 'node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?'];
   const nodeOutputs = [];
   const txikiShell = {};
   await terminal([], {
@@ -331,6 +331,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
+  check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
+  check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
   const npmRun = await terminal([
     ['run', 'npm -v'],
     ['run', 'npx -v'],
@@ -345,14 +347,39 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', 'npm install --save-exact debug; echo rc=$?'],
   ]);
   const npmOut = npmRun.out;
-  check('npm -v and npx -v both print the vendored subset version', (npmOut.match(/^0\.1\.0$/gm) ?? []).length >= 2, JSON.stringify(npmOut.slice(0, 300)));
+  check('npm -v and npx -v both print the npm-compatible version', (npmOut.match(/^0\.2\.0$/gm) ?? []).length >= 2, JSON.stringify(npmOut.slice(0, 300)));
   check('npm install debug installs debug and its ms dependency into node_modules and says so', /^\+ debug@\d+\.\d+\.\d+$/m.test(npmOut) && /^\+ ms@2\.\d+\.\d+$/m.test(npmOut) && /^added 2 packages$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('the installed ms package.json reads back through node -e from the shell filesystem', /^2\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('npx semver runs the registry bin: the range filter prints 1.2.4 and 1.2.10 and not 1.2.3', /^1\.2\.4$/m.test(npmOut) && /^1\.2\.10$/m.test(npmOut) && !/^1\.2\.3$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('which npm names npm and type npx reports a shell builtin', /^npm$/m.test(npmOut) && /^npx is a shell builtin$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('node still resolves to txiki after npm and npx are added', /^node is a shell builtin$/m.test(npmOut) && /^v\d+\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
-  check('npm install of a package the registry does not have fails with status 1 and names the package', /Uncaught npm: 404 Not Found - thebird-no-such-package-404/.test(npmOut) && /^rc=1$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
-  check('npm rejects an option it does not implement, with status 1 and the option named', /Uncaught npm: unsupported option: --save-exact/.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(npmOut) && /^rc=1$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('npm rejects an option it does not implement, with status 1 and the option named', /npm: unsupported option: --save-exact/.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  const npmProjects = await terminal([
+    ['run', 'mkdir -p yaml-project && cd yaml-project && npm install js-yaml'],
+    ['run', 'readlink node_modules/.bin/js-yaml'],
+    ['run', "printf 'a: 1\\n' > x.yaml && npx js-yaml x.yaml"],
+    ['run', 'npm ls'],
+    ['run', `echo '{"scripts":{"yaml":"js-yaml x.yaml"}}' > package.json && npm run yaml`],
+    ['run', 'npm uninstall js-yaml'],
+    ['run', 'node -e "console.log(require(\'fs\').existsSync(\'node_modules/argparse\'))"'],
+    ['run', 'cd .. && mkdir -p dev-project && cd dev-project && echo \'{"devDependencies":{"semver":"7.8.6"}}\' > package.json && npm install && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'package-lock.json\', \'utf8\')).packages[\'node_modules/semver\'].dev)"'],
+    ['run', 'rm -rf node_modules && npm ci'],
+    ['run', 'cd .. && mkdir -p peer-project && cd peer-project && npm install react-dom && node -e "console.log(require(\'fs\').existsSync(\'node_modules/react/package.json\'))"'],
+    ['run', 'cd .. && mkdir -p scoped-project && cd scoped-project && npm install @noble/hashes && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node_modules/@noble/hashes/package.json\', \'utf8\')).name)"'],
+    ['run', 'cd .. && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
+  ]);
+  const projectOut = npmProjects.out;
+  check('npm install js-yaml installs its argparse dependency, and the bin link points into the package', /^\+ js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^\+ argparse@\d+\.\d+\.\d+$/m.test(projectOut) && /^added 2 packages$/m.test(projectOut) && /^\.\.\/js-yaml\/bin\/js-yaml$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
+  check('npx js-yaml runs the installed bin on a file and prints the parsed JSON', /^  "a": 1$/m.test(projectOut) || /"a": 1/.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
+  check('npm ls prints the js-yaml tree with argparse under it', /^└── js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^    └── argparse@\d+\.\d+\.\d+$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 900)));
+  check('npm run runs a package.json script that calls an installed bin', (projectOut.match(/"a": 1/g) ?? []).length >= 2, JSON.stringify(projectOut.slice(0, 900)));
+  check('npm uninstall removes js-yaml and prunes argparse', /^removed 2 packages$/m.test(projectOut) && /^false$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 900)));
+  check('a devDependency is recorded with dev true in package-lock.json', /^true$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
+  check('npm ci rebuilds node_modules exactly from package-lock.json', /^added 1 package$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1200)));
+  check('a peer dependency is installed automatically (react-dom needs react)', /^true$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1400)));
+  check('a scoped package installs under node_modules/@scope/name', /^@noble\/hashes$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1400)));
+  check('.npmrc _authToken is sent to the registry: the 401 names the URL, or the install succeeds', /npm: 401 Unauthorized - GET https:\/\/registry\.npmjs\.org\/debug/.test(projectOut) || /^rc=0$/m.test(projectOut), JSON.stringify(projectOut.slice(-600)));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
   const txikiPip = txikiShell.runs?.pipVersion ?? {};
   check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));

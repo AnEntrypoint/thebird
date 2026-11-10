@@ -1,10 +1,12 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <uv.h>
 #include "private.h"
 
 int tjs_browser_timers_pending(const uv_loop_t *loop);
+void tjs_browser_flush_writes(uv_loop_t *loop);
 void tjs_browser_stop_timers(uv_loop_t *loop);
 JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
 void tjs_browser_http_release(JSContext *ctx);
@@ -17,6 +19,7 @@ static int has_module = 0;
 static volatile int cancel_requested = 0;
 static double deadline_ms = 0;
 static int stop_status = 0;
+static uv_loop_t *current_loop = NULL;
 
 #define HOST_IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 HOST_IMPORT("tjs_now_ms") double host_now_ms(void);
@@ -157,6 +160,7 @@ int tjs_browser_eval(const char *code) {
     if (!runtime) {
         return 1;
     }
+    current_loop = TJS_GetLoop(runtime);
     JSContext *ctx = TJS_GetJSContext(runtime);
     JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupted, NULL);
     tjs_browser_fs_install(ctx);
@@ -197,6 +201,13 @@ int tjs_browser_resume(const char *text, int32_t len) {
 
 void tjs_browser_cancel(void) {
     cancel_requested = 1;
+}
+
+void tjs_browser_exit(int status) {
+    if (current_loop) {
+        tjs_browser_flush_writes(current_loop);
+    }
+    exit(status);
 }
 
 int tjs_browser_tick(void) {

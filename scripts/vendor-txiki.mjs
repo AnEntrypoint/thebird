@@ -32,6 +32,8 @@ export const SQLITE_DEFINES = [
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
 export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
+export const EXIT_FLUSH_TARGET = 'src/mod_os.c';
+export const EXIT_FLUSH_HEADER = 'scripts/txiki/browser/exit-flush.h';
 export const TXIKI_WASM_SHA256 = 'dcd3a4342705967bfd4188aea39a4c7d368cfd7c90a42918e6fc72f83da656c1';
 const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
@@ -149,7 +151,7 @@ export function compileAll({ tree, build }, zig = process.env.ZIG || 'zig') {
   const results = [];
   compile(zig, flags, tree, 'deps/ada/ada.cpp', 'c++', ['-std=c++20', '-fno-exceptions', '-fno-rtti'], objects, results);
   compile(zig, flags, tree, SQLITE_SOURCE, 'cc', SQLITE_DEFINES.map((define) => `-D${define}`), objects, results);
-  for (const file of CORE_SOURCES) compile(zig, flags, tree, file, 'cc', [], objects, results);
+  for (const file of CORE_SOURCES) compile(zig, flags, tree, file, 'cc', file === EXIT_FLUSH_TARGET ? ['-include', join(root, EXIT_FLUSH_HEADER)] : [], objects, results);
   for (const file of CORE_BUNDLES) compile(zig, flags, tree, file, 'cc', [], objects, results);
   for (const file of QUICKJS_SOURCES) compile(zig, flags, tree, join('deps', 'quickjs', file), 'cc', [], objects, results);
   writeBootstrap({ build });
