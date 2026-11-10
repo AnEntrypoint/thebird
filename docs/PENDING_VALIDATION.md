@@ -632,6 +632,31 @@ Not reachable in this pass, and why:
 
 Changes in this phase: `ARCHITECTURE.md` (decision paragraph), `docs/PENDING_VALIDATION.md` (this section, and the two stale pyodide lines).
 
+## Phase B: ranked ledger items, each witness and its wall time (queue pass 11)
+
+Run on HEAD `d7494ba` (the Phase A commits), with no code change in this phase. Every witness below is a foreground call under the 600000 ms limit.
+
+Full witness, `THEBIRD_WITNESS_CHECKPOINT=/tmp/p29-witness CHROME_BIN=/usr/bin/chromium timeout 590 node scripts/witness.mjs`, in three calls. Each call stops before a new browser run after 330 s.
+- Call 1: `CALL 1 PAUSED before terminal 2: checks this call PASS 13 FAIL 1`, exit 75, wall 05:23:11 to 05:32:15 UTC (544 s). The FAIL was `the built GitHub Pages site runs bash and python3 without COOP/COEP headers`. The site's `python3 -c "print(6*7)"` printed `python3: Failed to fetch`, so the 42 line was missing. The cause is the network path to the Pyodide bundle, not the code: the bundle is 18216757 bytes (it was about 5 MB in earlier notes, and its `last-modified` is 2026-11-08). A 120 s curl fetched 10 MB, and a foreground curl then completed the full bundle in 288 s at 63 KB/s. The recorded failing run was moved to `/tmp/p29/discarded/terminal-001.failed-python-fetch.json`. The checkpoint was rewound to nine checks and one run, so that run is not replayed.
+- Call 2 (after the rewind): the site run passed, and checks 10 to 14 PASS. `CALL 2 PAUSED before terminal 3: checks this call PASS 5 FAIL 0`, exit 75, wall 05:40:18 to 05:47:20 UTC (422 s).
+- Call 3: `checkpoint /tmp/p29-witness: call 3, 71 browser runs recorded`, `witness totals: PASS 144 FAIL 0`, `all checks passed`, exit 0, wall 05:47:28 to 05:51:11 UTC (223 s). Replay diverged zero times.
+- Total wall for the full witness: 1189 s across the three calls, 544 + 422 + 223, including the discarded run.
+
+Node-side shell witness, `npm run witness:shell`, which is ranked item 3 (the process model): `RESULT PASS=108 FAIL=0`, exit 0. Its process group (`$!`, `ps`, `kill -TERM`, `kill` of an unknown PID, `wait`) PASSES. Wall 05:51:15 UTC, under a second by the shell clock.
+
+Live architecture lint, `CHROME_BIN=/usr/bin/chromium npm run lint:architecture`: `314 claims: 314 pass, 0 fail, 0 unverified; 40 prose lines with NO_CLAIM`, exit 0. The live terminal ran 05:51:19 to 05:52:49 UTC (90 s, 15 probes). The prose count rose from 39 to 40 with the new decision paragraph in ARCHITECTURE.md.
+
+Other validation on this HEAD. `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 comments in 87 repo-owned files.
+
+Ranked items, status:
+1. Expiry decision: recorded in ARCHITECTURE.md and here. Witnessed by the full witness's static 900 s check and its 10 s window check, both PASS.
+2. Stale pyodide entries: corrected. The lint's check that `scripts/vendor-pyodide.mjs` is gone PASSES in the live lint.
+3. Process model: confirmed by `witness:shell`, 108 PASS.
+
+Found and open, not a code defect: the Pyodide bundle is 18.2 MB, and on this link a cold `python3` on the Pages site must download it, which takes about 290 s. One Pages python3 fetch failed in call 1 and passed on the rerun. The 900 s command limit still covers the download. If the bundle or the link gets slower, the Pages python3 check will fail again. The fix would be on the bundle side, or in the page's fetch retry. That needs an owner decision, so it is recorded here and not changed.
+
+Push: `origin main`, once, after this ledger commit.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).
