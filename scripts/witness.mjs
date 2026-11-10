@@ -252,6 +252,8 @@ if (existsSync(chrome)) {
       await submit('hello');
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
+      await submit('/permissions ask');
+      await new Promise((ok) => setTimeout(ok, 2000));
       await submit('[tool:bash] [input:{"command":"echo approval"}]');
       surfaces.approvalShown = await settle(hasText('Allow once'), 90000);
       await grab('approval');
