@@ -50,7 +50,7 @@ jobs:
           TMPDIR: /tmp
         run: node scripts/vendor-txiki.mjs
       - name: Check tjs.wasm against the pin
-        run: echo "137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28  web/vendor/txiki/tjs.wasm" | sha256sum -c -
+        run: echo "$(node -p "JSON.parse(require('fs').readFileSync('scripts/txiki/pin.json', 'utf8')).tjsWasmSha256")  web/vendor/txiki/tjs.wasm" | sha256sum -c -
       - name: Build fx core WASM from latest gmfx
         env:
           ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig

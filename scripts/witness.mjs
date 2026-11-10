@@ -6,8 +6,23 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
-import { runTerminal, withTimeout } from './browser-driver.mjs';
+import { closeBrowserTrees, runTerminal, withTimeout } from './browser-driver.mjs';
 import { digest, openCheckpoint, PAUSED } from './witness-checkpoint.mjs';
+
+const reapBrowserTrees = (reason) => {
+  const closed = closeBrowserTrees();
+  console.log(`browser cleanup (${reason}): closed ${closed.length} Chromium tree(s)${closed.length ? ' by pid ' + closed.join(', ') : ''}`);
+};
+process.on('exit', () => reapBrowserTrees('exit'));
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(128 + (signal === 'SIGINT' ? 2 : signal === 'SIGTERM' ? 15 : 1)));
+process.on('uncaughtException', (error) => {
+  console.error(error);
+  process.exit(1);
+});
+process.on('unhandledRejection', (error) => {
+  console.error(error);
+  process.exit(1);
+});
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorFx } from './vendor-fx.mjs';
 import { startFxStubGateway, FX_STUB_KEY } from './fx-stub-gateway.mjs';

@@ -30,6 +30,18 @@ export function withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+const startedTrees = new Map();
+
+export function closeBrowserTrees() {
+  const closed = [];
+  for (const [pid, child] of startedTrees) {
+    killGroup(child);
+    closed.push(pid);
+  }
+  startedTrees.clear();
+  return closed;
+}
+
 export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay, initScript }) {
   if (replay) {
     await replayTerminal({ replay, interact, timeoutMs });
@@ -44,6 +56,7 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
     `--user-data-dir=${profile}`,
     'about:blank',
   ], { stdio: 'ignore', detached: true });
+  startedTrees.set(child.pid, child);
 
   try {
     const portFile = join(profile, 'DevToolsActivePort');
