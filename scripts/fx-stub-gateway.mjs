@@ -16,7 +16,11 @@ const lastUserText = (prompt) => {
   return typeof part?.text === 'string' ? part.text : '';
 };
 
-const hasToolResult = (prompt) => (Array.isArray(prompt) ? prompt : []).some((item) => item?.role === 'tool');
+const hasToolResult = (prompt) => {
+  const items = Array.isArray(prompt) ? prompt : [];
+  const lastUser = items.reduce((at, item, index) => (item?.role === 'user' ? index : at), -1);
+  return items.slice(lastUser + 1).some((item) => item?.role === 'tool');
+};
 
 const directive = (text, pattern) => text.match(pattern)?.[1];
 
