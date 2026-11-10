@@ -510,6 +510,16 @@ Two facts about the state at the start of this pass. The floosie restore was com
 
 Upstream issue, not fixed here. floosie `main` at `5417a536…` runs `scripts/build-browser.mjs`, which imports `esbuild`, but `esbuild` is not in its `package.json`. A clean `npm ci` there fails the build. So the Pages floosie step (`npm ci`, then `vendor-floosie.mjs`) will fail until floosie declares `esbuild` as a dev dependency. The local vendor used `npm install --no-save esbuild` in the floosie checkout, which did not change floosie's files.
 
+## Phase B: txiki build and pin, and witness run 4 (queue pass 5)
+
+The txiki gate ran on the working tree in this pass: `ZIG=/workspace/tools/zig-x86_64-linux-0.17.1/zig node scripts/vendor-txiki.mjs`. It compiled 39 of 39 files for wasm32-wasi, and the link left 0 undefined symbols and all required exports, including the seven `gm_txiki_*` functions. The wasm is 14,177,014 bytes with SHA-256 `dcd3a434…`. The first run stopped at the old pin, which is why the pin was set from that digest in `scripts/vendor-txiki.mjs`, `.github/workflows/pages.yml` and AGENTS.md. Two later runs failed on a connect timeout to `codeload.github.com` before the pass succeeded. The pass that succeeded used a foreground run with a 500 s timeout.
+
+`npm run check` exits 0. `npm run lint:comments` exits 0 and lists the floosie bundle as `listed in web/vendor/floosie/manifest.json`.
+
+Witness run 4 has not run. The tracked tree was not clean at that point: another session had uncommitted edits to `web/builtins.js` (a `playwriter` builtin) and `web/gm-in-page.js` (an import of `playwriter-in-page.js`), and it had untracked `web/playwriter-in-page.js` and `web/vendor/birdman/`. Those edits are not part of this request, so the witness was not run against them. It is still to run once the tree is clean, and the push is still to do.
+
+Upstream issue, still open: the Pages floosie step needs floosie `main` to declare `esbuild`, as noted in the Phase A section.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
