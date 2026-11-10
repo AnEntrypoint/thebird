@@ -579,6 +579,22 @@ Expiry experiment, outside the repo (`/tmp/p27/vt3.mjs`). The expiry command was
 
 The expiry group therefore has to keep one browser session alive for about 935 s, and a foreground call is capped at 600000 ms. Nothing can carry that session across calls without a process that outlives the call, which is the backgrounding the owner ruled out. The witness is not green, and nothing was pushed in this pass.
 
+## Phase A: expiry through the component's own window, and a checkpointed witness (queue pass 10)
+
+Code and tests only. Nothing was pushed.
+
+The component change. `createShell` takes `commandTimeoutMs`, and defaults to `COMMAND_TIMEOUT_MS = 900000`. The page reads a `commandTimeoutMs` URL parameter (`web/terminal.js`), `web/shell-client.js` puts it on the worker URL, and `web/shell-worker.js` passes it to `createShell`. The same value goes to the bashkit `Bash` constructor and to the builtins, so the real expiry code path runs; only the window length changes. The production default is unchanged.
+
+The witness. The expiry check runs `for i in $(seq 1 30); do sleep 1; echo tick$i; done` with `commandTimeoutMs=10000`. It passes when the output has `execution timeout (10s)`, has 5 to 29 tick lines, and has no `late-finish` line. A new check reads `web/bash-shell.js` and `web/shell-worker.js` and requires the shipped `COMMAND_TIMEOUT_MS = 900000` and the URL path to it.
+
+The checkpoint, `scripts/witness-checkpoint.mjs`, with `THEBIRD_WITNESS_CHECKPOINT=<dir>`. Every browser run is recorded to `terminal-NNN.json`, with its interact trace and its state. A later call replays a recorded run without a browser: the same interact code runs against the trace, and every page step is checked against the recorded step, so a divergence fails. Node-side values the interact code reads (the hold server's request count, and the time of the cancel) go through `note`, so they are recorded too. Relay, pages and host ports are kept in the state file, so each page keeps the same origin between calls. The Chromium profile lives in the checkpoint directory, so OPFS and local storage survive. Each call stops before a new browser run once it passes 330 s (exit 75), and the next call resumes. The state file holds the check list, and the tree key (HEAD, the diff and the status) resets the checkpoint when the tree changes. Each call prints only the checks it adds.
+
+Witness of this phase, the focused run (`/tmp/p28/focused.mjs`, the same `runTerminal` and page code, outside the repo):
+- `EXPIRY timeout-line: true`, `EXPIRY ticks: 9`, `late-finish present: false`, `EXPIRY wall s: 11.0`. The output ends `error: resource limit exceeded: execution timeout (10s)`.
+- `REPLAY steps: 6 kinds: type,press,eval,note`, `REPLAY observed equal: true {"note":42,"text":true}`, `REPLAY state equal: true`.
+
+Other validation. `npm run check` exits 0. `npm run lint:comments` exits 0, with 0 comments in 86 repo-owned files. `node scripts/lint-architecture.mjs --static` reports `303 claims: 303 pass, 0 fail, 0 unverified`. The lint's expected strings and the ARCHITECTURE.md expiry paragraph are updated for the window change. The full witness has not run in this phase; that is Phase B.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
