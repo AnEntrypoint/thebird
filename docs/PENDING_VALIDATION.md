@@ -484,6 +484,14 @@ Floosie is held for its owner. `web/gm-in-page.js` no longer imports `web/vendor
 
 `web/stream-hub.js` has been tracked since a383315 and nothing imports it. Its chunk codec (`rpc`, `ndjson`, `json`, `text`) looks like the floosie hub's, so whether it leaves is the owner's decision. It is not removed in this pass.
 
+## Phase B: gm witness run 3 on clean HEAD 6beb1d1, and the architecture lint after it
+
+Witness run 3 ran on the clean tracked tree: HEAD 6beb1d1, with no tracked code change. The only tracked change at the start was another agent's uncommitted section at the end of this file. The run was `CHROME_BIN=/usr/bin/chromium npm run witness`, started 04:26:24 and ended 04:45:44 (19 min 20 s). It printed 139 PASS lines and 0 FAIL, then `all checks passed` and `WITNESS-EXIT 0`. The gm rows that passed are "in-page gm reports its bundled WASM version, passes its offline check and serves MCP methods", "the built GitHub Pages site runs bash and python3 without COOP/COEP headers" and "pages.yml builds gm core WASM from latest gm main before the page build". The witness used the untracked `web/vendor/floosie/` that is on disk. Nothing tracked imports it.
+
+`npm run lint:architecture` ran after the witness, not under load, from 04:46:00 to 04:47:34. Its live probes started 15 and finished 15. The result was 286 claims pass, 0 fail, 0 unverified, exit 0.
+
+Deviation kept: the witness drives its own Chromium through `scripts/browser-driver.mjs`. It does not attach to the project browser. The driver cannot attach, and restart checks would shut down the browser that other runs share.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
