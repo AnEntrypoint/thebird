@@ -1041,3 +1041,16 @@ So none of the three new failures is fx's. They are the same wiring fault in the
 Realpath reconciliation. `tjs.realPath` resolves against the process cwd. The witness shell starts in `/workspace`, so its command now starts with `cd /workspace &&`, and the expected value is named for that directory: `realpath /workspace/import-probe/m.mjs`. gm reports `/import-probe/m.mjs` from its own project root, which is the same file resolved from a different cwd. I cannot check gm's cwd from this repo, so this is recorded as a reconciliation by cwd and not as verified against gm's run. The check's name says so.
 
 Run 3 (PID 554463, log /tmp/witness-tui3.log, started after the env and realpath fixes): still running when this section was written. Its result is not recorded here. The third run has to be read before the TUI checks are reported as passing.
+
+## TUI surface checks: run 3 (PID 554463, log /tmp/witness-tui3.log)
+
+Run 3 result: `witness totals: PASS 184 FAIL 3`, `WITNESS-EXIT 1`, `browser cleanup (exit): closed 73 Chromium tree(s)`.
+- Transcript: PASS. `{"shown":true,"stub":[{"streaming":true,"authorized":true,"prompt":"hello","tools":[]},…]}`. The env fix (`web/fx-tui.js`) works: the stub now receives the TUI's requests.
+- Approval: PASS, but the evidence is weak. The screen matched `echo approval` in the typed prompt echo, not in an approval panel. Treat this check as not yet proof of the approval surface. Tightening it needs the real panel text, which needs a tool call that fx runs.
+- Ask: FAIL. The screen stays at `• Thinking` with the input box. The stub's requests carry `"tools":[]`, and the TUI's session header in run 2 read `tools: 0 advertised`. The stub emits a tool call for a name fx did not advertise, and fx does not run it, so the turn does not finish. Cause: not yet settled. It is either fx's TUI advertising no tools in this page, or thebird not supplying a tool source. The stub cannot cause a tool to be advertised. Recorded as open, not as fx's.
+- Ctrl-O: FAIL, `{"opened":false}`. The screen shows the main transcript tail (lines 37–53…), not the full view. The likely cause is the stuck ask turn ahead of it, because the `[lines:60]` prompt was typed while the turn was busy. Not verified. Open.
+- Realpath: PASS, `realpath /workspace/import-probe/m.mjs`, from the cwd `/workspace` (explicit in the command).
+- gm import checks, run 3: `script-imports` PASS `"script-imports 42 lib"`; `eval-import` PASS `"script-imports 42 lib\neval-import 42"`; `missing-import` PASS `"missing-import could not load 'import-probe/nope.mjs'"`.
+- Palette resize: FAIL, the known fx defect (`src/ui/resize_runtime.zig`), not worked around.
+
+Decision: nothing in this section is pushed. The fixes are thebird's (the env wiring in `web/fx-tui.js`, the explicit realpath cwd). The ask and Ctrl-O failures stay open until the tool-advertisement question is answered from fx's source: which code path sets the TUI's advertised tools, and whether this page's TUI has a source for them.
