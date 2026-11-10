@@ -431,6 +431,19 @@ Item 3 (the witness through the project browser): not run that way. scripts/brow
 
 Item 5 (lint:architecture): run after the witness, not under its load.
 
+## Phase B: fx witness run 1 on clean HEAD 0134617, and the witness fix 48749d8
+
+| Step | Command | Result | Wall time |
+| --- | --- | --- | --- |
+| Full witness, run 1 | `CHROME_BIN=/usr/bin/chromium npm run witness` on clean HEAD 0134617 | PASS=135, FAIL=2, WITNESS-EXIT 1 | 2026-11-10T01:12:31Z to 01:31:20Z, 18 min 49 s (1129 s) |
+
+Both FAILs were witness defects. The product ran: the page printed `fx-core.wasm 1c894cb9b15f libfx SDK 2`, `fx ready: JSPI available; core application/wasm`, `builtin`.
+
+- `in-page fx reports its bundled WASM version and passes its offline check`: the check read `existsSync(fxArtifact)` after `rmSync(pagesDir)` had removed the built site, so it was false by construction. Fixed in 48749d8 by reading it before the removal.
+- `every vendored bundle with comments has a provenance witness (upstream name)`: the witness required `named (third-party, not edited)` on every vendored line, but the fx modules print `listed in web/vendor/fx/manifest.json`. Fixed in 48749d8 to accept either.
+
+Run 2 on a clean HEAD after 48749d8 is not yet run. The shared checkout holds another peer's uncommitted gm work (web/gm-in-page.js, scripts/vendor-gm.mjs, scripts/gm/, web/vendor/gm/, DESIGN.md, and edits to .github/workflows/pages.yml, AGENTS.md, ARCHITECTURE.md, README.md, scripts/build-pages.mjs, web/builtins.js, web/fx-in-page.js). A witness on a clean tree needs that work committed or removed by its owner. This pass does not commit or revert it, and nothing is pushed.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
