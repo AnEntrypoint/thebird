@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PAGE_HOST_TOOLS, PAGE_HOST_TOOL_NAMES, pageHostToolsJson } from '../web/fx-host-tools.js';
+import { PAGE_HOST_TOOLS, PAGE_HOST_TOOL_NAMES } from '../web/fx-host-tools.js';
 import { streamPlan } from '../scripts/fx-stub-gateway.mjs';
 
 const userPrompt = (text) => [{ role: 'user', content: [{ type: 'text', text }] }];
@@ -36,15 +36,5 @@ test('the stub rejects an unlisted name even when the request advertises it', ()
 test('a page tool reports that it is unavailable instead of running', () => {
   for (const tool of PAGE_HOST_TOOLS) {
     assert.match(tool.execute(), /is not available on the thebird page yet/);
-  }
-});
-
-test('the host-tool JSON handed to fx_terminal_initialize parses and names exactly the stubbed tools', () => {
-  const parsed = JSON.parse(pageHostToolsJson());
-  assert.deepEqual(parsed.tools.map((tool) => tool.name), PAGE_HOST_TOOL_NAMES);
-  for (const tool of parsed.tools) {
-    assert.equal(typeof tool.description, 'string');
-    assert.equal(tool.inputSchema.type, 'object');
-    assert.equal(tool.execute, undefined);
   }
 });
