@@ -444,6 +444,19 @@ Both FAILs were witness defects. The product ran: the page printed `fx-core.wasm
 
 Run 2 on a clean HEAD after 48749d8 is not yet run. The shared checkout holds another peer's uncommitted gm work (web/gm-in-page.js, scripts/vendor-gm.mjs, scripts/gm/, web/vendor/gm/, DESIGN.md, and edits to .github/workflows/pages.yml, AGENTS.md, ARCHITECTURE.md, README.md, scripts/build-pages.mjs, web/builtins.js, web/fx-in-page.js). A witness on a clean tree needs that work committed or removed by its owner. This pass does not commit or revert it, and nothing is pushed.
 
+## Phase A: gm addition accepted (queue pass 3)
+
+| Commit | File | Row | Witness that must pass in Phase B |
+| --- | --- | --- | --- |
+| feat(gm) | scripts/gm/ (json.cpp, sha256.cpp, compact.cpp, internal.hpp, include/gm/json.hpp, include/deoxidene/result.hpp, generated include/gm/mcp.hpp, bridge.cpp) | The C++ sources of the gm wasm core. Each copy is byte-identical to /workspace/gm at HEAD 6b3ee4d (sha256 checked for each one). The one comment in bridge.cpp is removed, because scripts/ is repo-owned. | `npm run lint:comments` (82 repo-owned files, 0 comments); the in-page gm check in scripts/witness.mjs |
+| feat(gm) | scripts/vendor-gm.mjs | The generator takes GM_REPO or ../gm and Zig from ZIG. The /tmp/verify Zig candidate and the unused `skills` list are removed. The manifest records the gm commit (6b3ee4d). | Two builds in a row gave the same gm-core.wasm, 6a1c46ef3ffd4387f0a92b635e33b37d01f7acd7a077c0816ea76cd9eaa7c3b4 (deterministic on this path). |
+| feat(gm) | web/vendor/gm/ (gm-core.wasm, gm-core.js, manifest.json) | The vendored core is rebuilt, because the manifest's hash for web/gm-in-page.js was stale (f5613b8c, now 7559625e). web/vendor/gm/skills/ held copies that no code reads, so it is removed. | the in-page gm check in scripts/witness.mjs |
+| feat(gm) | web/gm-in-page.js, web/stream-hub.js, web/builtins.js, scripts/build-pages.mjs, .github/workflows/pages.yml | gm is a builtin (--version, check, serve, tools, call, stdio). The pages build vendors gm. The pages workflow checks out AnEntrypoint/gm on main and builds gm-core.wasm with the pinned Zig. web/stream-hub.js has no importer yet. | the in-page gm check in scripts/witness.mjs; `lint:architecture` (269 claims, 0 fail) |
+| fix(lint) | scripts/lint-comments.mjs | .cpp and .hpp get the C comment rule. Before, a tracked C++ file failed with "no comment rule for this file type". | `npm run lint:comments` exits 0 |
+| docs(agents) | AGENTS.md, ARCHITECTURE.md, README.md, DESIGN.md | The gm mapping, the gm builtin and the gm build. | `npm run lint:architecture` (269 claims, 0 fail) |
+
+Known: commit 48749d8 (the fx witness fix) also committed the other agent's gm check lines in scripts/witness.mjs, because it staged the whole file. Those lines are in HEAD with that commit. Nothing was pushed, so the history was not rewritten.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
