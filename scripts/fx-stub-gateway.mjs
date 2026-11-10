@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { PAGE_HOST_TOOL_NAMES } from '../web/fx-host-tools.js';
 
 export const FX_STUB_KEY = 'thebird-stub-key';
 export const FX_STUB_PORT = Number(process.env.THEBIRD_FX_STUB_PORT ?? 18931);
@@ -27,7 +28,7 @@ export function streamPlan({ prompt, tools = [] }) {
   const toolInput = directive(text, /\[input:(\{.*?\})\]/);
   const lines = Number(directive(text, /\[lines:(\d+)\]/) ?? 0);
   const answered = hasToolResult(prompt);
-  const advertised = tools.some((tool) => tool?.name === toolName);
+  const advertised = PAGE_HOST_TOOL_NAMES.includes(toolName) && tools.some((tool) => tool?.name === toolName);
   if (toolName && !answered && advertised) {
     let input = {};
     try { input = toolInput ? JSON.parse(toolInput) : {}; } catch { input = {}; }

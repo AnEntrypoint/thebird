@@ -1134,3 +1134,12 @@ Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, an
 - Capability: thebird's TUI cannot send `clientCapabilities.libfx.tools`. Its initialize is built inside `fx-term.wasm`, and `createFxTerminal` takes no tools option. The `fx ask` initialize (`web/vendor/fx/engine.js:1794`) sends `libfx.tools` only when host tools are passed, and thebird passes none. The fx accept path (`src/acp/server.zig` `parseInitializeRequest`, allow_libfx) is sound, so this is a thebird API gap, not an fx defect. Giving the page a tool list is a product decision and was not made here.
 - `/config/.local/bin/fx` is a symlink to `/workspace/fx/fx/zig-out/bin/fx`. The in-page `fx` path does not use it.
 - Stopped relay PID 4140198 (named by /tmp/relay.pid, cwd /workspace/thebird). Not stopped: chromium and relay processes not named by my pid files (listed in the report).
+
+## Phase A: page tool list for fx ask, stub refusal (this pass, not witnessed yet)
+
+- `web/fx-host-tools.js` (new): `PAGE_HOST_TOOLS` is the one list, bash and ask, each with an object input schema and an execute that reports "not available on the thebird page yet". `PAGE_HOST_TOOL_NAMES` is derived from it.
+- `web/fx-in-page.js`: the `fx ask` engine gets `tools: PAGE_HOST_TOOLS`, so its initialize sends `clientCapabilities.libfx.tools` (engine.js:1794–1796). Native builtins stay off on the page.
+- `scripts/fx-stub-gateway.mjs`: a tool call is emitted only for a name in `PAGE_HOST_TOOL_NAMES` that the request also advertises. Any other name gets the `tool-not-advertised=<name>` reply.
+- Tests: `test/fx-stub-tools.test.mjs` (`npm test`), five cases: list is bash and ask; listed tool emits a call; unlisted name is refused; unlisted name refused even when advertised; page tools report unavailable.
+- Witness needed: `fx ask advertises exactly the page tools bash and ask to the gateway` (added to scripts/witness.mjs), plus the approval and ask TUI surfaces.
+- Limit: the TUI (`fx-term.wasm`) builds its own request and has no channel for a host tool list (no FX_ env key, no option in `createFxTerminal`). Its requests keep `tools: []` unless fx changes. The approval and ask TUI surfaces depend on that, so they are expected to keep failing; that is an fx defect, and fx is not changed here.

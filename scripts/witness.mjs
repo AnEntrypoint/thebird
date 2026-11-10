@@ -116,7 +116,9 @@ if (existsSync(chrome)) {
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
+  const askTools = [...new Set(fxStub.seen.flatMap((request) => request.tools))];
   await fxStub.close();
+  check('fx ask advertises exactly the page tools bash and ask to the gateway', JSON.stringify(askTools) === JSON.stringify(['bash', 'ask']), JSON.stringify(askTools));
   check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
   const fxLines = fxAsk.out.split('\n');
   check('fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin', fxLines.filter((line) => line === 'fx').length >= 2 && fxLines.includes('fx is a shell builtin'), JSON.stringify(fxLines.filter((line) => /fx/.test(line)).slice(0, 6)));

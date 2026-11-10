@@ -15,7 +15,8 @@
     "lint:comments": "node scripts/lint-comments.mjs",
     "start": "node bin/thebird-relay.js",
     "witness": "node scripts/witness.mjs",
-    "witness:shell": "node scripts/witness-shell.mjs"
+    "witness:shell": "node scripts/witness-shell.mjs",
+    "test": "node --test test/fx-stub-tools.test.mjs"
   },
   "repository": "https://github.com/AnEntrypoint/thebird.git",
   "devDependencies": {

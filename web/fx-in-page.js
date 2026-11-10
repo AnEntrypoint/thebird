@@ -1,6 +1,7 @@
 import { createFxEngine, supportsJspi } from './vendor/fx/engine.js';
 import { wasmRuntimeFactory } from './vendor/fx/wasm-runtime.js';
 import { requestTakeover } from './takeover.js';
+import { PAGE_HOST_TOOLS } from './fx-host-tools.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-core.wasm', import.meta.url).href;
 const MANIFEST_URL = new URL('./vendor/fx/manifest.json', import.meta.url).href;
@@ -46,6 +47,7 @@ const ask = async (argv, signal) => {
     apiKey: options.apiKey,
     model: options.model ?? DEFAULT_MODEL,
     gatewayChatUrl: options.gatewayChatUrl,
+    tools: PAGE_HOST_TOOLS,
   }, wasmRuntimeFactory());
   if (signal.aborted) {
     await engine.close().catch(() => {});
