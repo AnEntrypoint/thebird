@@ -32,7 +32,7 @@ export const SQLITE_DEFINES = [
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
 export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
-export const TXIKI_WASM_SHA256 = 'cc37307b9130d2d2fcfb98ca833527d4e2d29028c67b393f27634e938bacd1b7';
+export const TXIKI_WASM_SHA256 = 'dcd3a4342705967bfd4188aea39a4c7d368cfd7c90a42918e6fc72f83da656c1';
 const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 
