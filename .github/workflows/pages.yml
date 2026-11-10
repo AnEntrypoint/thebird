@@ -19,6 +19,11 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: AnEntrypoint/gmfx
+          ref: main
+          path: gmfx
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -36,6 +41,16 @@ jobs:
         run: node scripts/vendor-txiki.mjs
       - name: Check tjs.wasm against the pin
         run: echo "cc37307b9130d2d2fcfb98ca833527d4e2d29028c67b393f27634e938bacd1b7  web/vendor/txiki/tjs.wasm" | sha256sum -c -
+      - name: Build fx core WASM from latest gmfx
+        env:
+          ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
+          FX_REPO: ${{ github.workspace }}/gmfx
+          FX_REBUILD: '1'
+          TMPDIR: /tmp
+        run: |
+          node scripts/vendor-fx.mjs
+          test -s web/vendor/fx/fx-core.wasm
+          node -e "const m=require('./web/vendor/fx/manifest.json'); if (m.wasm.name !== 'fx-core.wasm' || !/^[0-9a-f]{64}$/.test(m.wasm.sha256)) process.exit(1)"
       - run: npm ci
       - run: node scripts/build-pages.mjs
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
