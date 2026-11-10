@@ -100,7 +100,7 @@ static int fs_finish(uv_fs_t *req, uv_loop_t *loop, uv_fs_cb cb, int64_t result)
 static int64_t stat_into(uv_fs_t *req, int32_t status, const double *slots) {
     if (status != 0) return UV_ENOENT;
     req->statbuf.st_mode = (uint64_t) slots[3];
-    req->statbuf.st_nlink = 1;
+    req->statbuf.st_nlink = slots[7] > 0 ? (uint64_t) slots[7] : 1;
     req->statbuf.st_size = (uint64_t) slots[1];
     req->statbuf.st_mtim.tv_sec = (long) (slots[2] / 1000);
     req->statbuf.st_mtim.tv_nsec = (long) ((int64_t) slots[2] % 1000) * 1000000;
@@ -163,7 +163,7 @@ int uv_fs_fstat(uv_loop_t *loop, uv_fs_t *req, uv_file file, uv_fs_cb cb) {
     req->ptr = NULL;
     struct fd_position *slot = position_find(file);
     if (!slot) return fs_finish(req, loop, cb, UV_EBADF);
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_stat(slot->path, (int32_t) strlen(slot->path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -233,7 +233,7 @@ int uv_fs_stat(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
     req->fs_type = UV_FS_STAT;
     req->path = path;
     req->ptr = NULL;
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_stat(path, (int32_t) strlen(path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -242,7 +242,7 @@ int uv_fs_lstat(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
     req->fs_type = UV_FS_LSTAT;
     req->path = path;
     req->ptr = NULL;
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_lstat(path, (int32_t) strlen(path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -599,7 +599,7 @@ static uv_dirent_type_t dirent_type(const char *dir, const char *name) {
     memcpy(full, dir, dir_len);
     full[dir_len] = '/';
     memcpy(full + dir_len + 1, name, name_len + 1);
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int32_t status = host_fs_lstat(full, (int32_t) (dir_len + 1 + name_len), slots);
     free(full);
     if (status != 0) return UV_DIRENT_UNKNOWN;
@@ -615,7 +615,7 @@ int uv_fs_opendir(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) 
     char *resolved = absolute_path(path);
     if (!resolved) return fs_finish(req, loop, cb, UV_ENAMETOOLONG);
     int32_t len = (int32_t) strlen(resolved);
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     if (host_fs_stat(resolved, len, slots) != 0) {
         free(resolved);
         return fs_finish(req, loop, cb, UV_ENOENT);
@@ -710,6 +710,19 @@ int tjs_fs_flushes_pending(void) {
 }
 static int32_t next_flush_id = 1;
 
+void tjs_fs_release_loop(uv_loop_t *loop) {
+    for (struct fs_wait **link = &waiting_flushes; *link;) {
+        struct fs_wait *wait = *link;
+        if (wait->loop != loop) {
+            link = &wait->next;
+            continue;
+        }
+        *link = wait->next;
+        free(wait);
+        flushes_waiting--;
+    }
+}
+
 static int fs_flush(uv_fs_t *req, uv_loop_t *loop, uv_fs_cb cb) {
     if (!cb) return UV_ENOSYS;
     struct fs_wait *wait = malloc(sizeof(*wait));
@@ -767,7 +780,7 @@ int uv_fs_statfs(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
     req->fs_type = UV_FS_STATFS;
     req->path = path;
     req->ptr = NULL;
-    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    double slots[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     if (host_fs_stat(path, (int32_t) strlen(path), slots) != 0) return fs_finish(req, loop, cb, UV_ENOENT);
     double quota[2] = {0, 0};
     if (host_fs_quota(quota) != 0) return fs_finish(req, loop, cb, UV_ENOSYS);

@@ -133,6 +133,7 @@ if (existsSync(chrome)) {
     ['run', "printf 'written-via-dst' > /workspace/uvfs-link-dst.txt && cat /workspace/uvfs-link-src.txt && echo link-write-done"],
     ['run', `tjs -e "tjs.statFs('/workspace').then((s) => console.log('uvfs-statfs', s.bsize, s.blocks > 0, s.bfree <= s.blocks, s.bavail <= s.bfree), (e) => console.log('uvfs-statfs-err', String(e)))"`],
     ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.sync().then(() => console.log('uvfs-fsync ok')).then(() => f.datasync()).then(() => console.log('uvfs-fdatasync ok')).then(() => f.close()), (e) => console.log('uvfs-sync-err', String(e)))"`],
+    ['run', `tjs -e "tjs.link('/workspace/uvfs-link-src.txt', '/workspace/uvfs-nlink-x.txt').then(() => tjs.stat('/workspace/uvfs-link-src.txt')).then((s) => console.log('uvfs-nlink', s.nlink), (e) => console.log('uvfs-nlink-err', String(e)))"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
@@ -151,6 +152,7 @@ if (existsSync(chrome)) {
   check('uv_fs_statfs (tjs.statFs) reports a 4096-byte block size and block counts from the storage quota', uvFsLines.includes('uvfs-statfs 4096 true true true'), uvFsSeen);
   check('uv_fs_fsync (File.sync) completes after the OPFS flush', uvFsLines.includes('uvfs-fsync ok'), uvFsSeen);
   check('uv_fs_fdatasync (File.datasync) completes after the OPFS flush', uvFsLines.includes('uvfs-fdatasync ok'), uvFsSeen);
+  check('uv_fs stat reports a hard link\'s real link count (three names after a third link)', uvFsLines.includes('uvfs-nlink 3'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });

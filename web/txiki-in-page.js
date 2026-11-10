@@ -228,7 +228,7 @@ refreshStorage();
     tjs_fs_stat(ptr, len, out) {
       const info = fs.statSync(absolute(textAt(ptr, len)), { throwIfNoEntry: false });
       if (!info) return -1;
-      const slots = new Float64Array(slot.memory.buffer, out, 7);
+      const slots = new Float64Array(slot.memory.buffer, out, 8);
       slots[0] = info.isDirectory() ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
@@ -236,6 +236,7 @@ refreshStorage();
       slots[4] = info.uid;
       slots[5] = info.gid;
       slots[6] = info.atimeMs;
+      slots[7] = info.nlink;
       return 0;
     },
     tjs_fs_link(tptr, tlen, pptr, plen) {
@@ -300,7 +301,7 @@ refreshStorage();
       if (!info) return -1;
       const link = info.isSymbolicLink();
       const dir = !link && info.isDirectory();
-      const slots = new Float64Array(slot.memory.buffer, out, 7);
+      const slots = new Float64Array(slot.memory.buffer, out, 8);
       slots[0] = link ? 3 : dir ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
@@ -308,6 +309,7 @@ refreshStorage();
       slots[4] = info.uid;
       slots[5] = info.gid;
       slots[6] = info.atimeMs;
+      slots[7] = info.nlink;
       return 0;
     },
     tjs_fs_symlink(tptr, tlen, pptr, plen) {

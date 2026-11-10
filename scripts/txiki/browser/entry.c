@@ -122,6 +122,8 @@ static int check_module(JSContext *ctx) {
     return status;
 }
 
+void tjs_fs_release_loop(uv_loop_t *loop);
+
 void tjs_browser_end(void) {
     if (!runtime) {
         return;
@@ -132,6 +134,7 @@ void tjs_browser_end(void) {
         JS_FreeValue(ctx, module_promise);
         has_module = 0;
     }
+    tjs_fs_release_loop(TJS_GetLoop(runtime));
     TJS_FreeRuntime(runtime);
     runtime = NULL;
 }
@@ -232,6 +235,7 @@ TJSRuntime *gm_txiki_new(void) {
 }
 
 void gm_txiki_free(TJSRuntime *engine) {
+    tjs_fs_release_loop(TJS_GetLoop(engine));
     TJS_FreeRuntime(engine);
 }
 
