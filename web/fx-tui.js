@@ -44,13 +44,17 @@ const memoryPromptHistoryStore = () => {
   };
 };
 
+const environmentFor = (fx) => ({
+  ...(fx.apiKey === undefined ? {} : { AI_GATEWAY_API_KEY: fx.apiKey }),
+  ...(fx.model === undefined ? {} : { FX_MODEL: fx.model }),
+  ...(fx.gatewayChatUrl === undefined ? {} : { FX_GATEWAY_CHAT_URL: fx.gatewayChatUrl }),
+});
+
 export async function runFxTui(term, fx = {}) {
   const app = await createFxTerminal({
     terminal: xtermAdapter(term),
     wasm: WASM_URL,
-    apiKey: fx.apiKey,
-    model: fx.model,
-    gatewayChatUrl: fx.gatewayChatUrl,
+    env: environmentFor(fx),
     oauthSessionStore: memoryOauthSessionStore(),
     promptHistoryStore: memoryPromptHistoryStore(),
   });

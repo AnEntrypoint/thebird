@@ -411,7 +411,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     `mkdir -p import-probe/lib && echo 'export const answer = 42;' > import-probe/m.mjs && echo "export const v = 'lib';" > import-probe/lib/x.mjs && echo "import { answer } from './m.mjs'; import { v } from './lib/x.mjs'; console.log('script-imports', answer, v);" > import-probe/main.mjs && node import-probe/main.mjs`,
     `(cd import-probe && node main.mjs && node -e "import('./m.mjs').then((m) => console.log('eval-import', m.answer))")`,
     `node -e "import('./import-probe/nope.mjs').catch((e) => console.log('missing-import', e.message))"`,
-    `node -e "tjs.realPath('import-probe/lib/../m.mjs').then((p) => console.log('realpath', p))"`,
+    `cd /workspace && node -e "tjs.realPath('import-probe/lib/../m.mjs').then((p) => console.log('realpath', p))"`,
   ];
   const nodeOutputs = [];
   const txikiShell = {};
@@ -470,7 +470,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('a node script imports a sibling and a nested module through the txiki loader', nodeOutput(IMPORT_COMMANDS[0]) === 'script-imports 42 lib', JSON.stringify(nodeOutput(IMPORT_COMMANDS[0])));
   check('a dynamic import from node -e resolves against the shell directory', (nodeOutput(IMPORT_COMMANDS[1]) ?? '').split('\n').includes('eval-import 42'), JSON.stringify(nodeOutput(IMPORT_COMMANDS[1])));
   check('a missing module reports the loader error and the shell goes on', /^missing-import could not load/m.test(nodeOutput(IMPORT_COMMANDS[2]) ?? ''), JSON.stringify(nodeOutput(IMPORT_COMMANDS[2])));
-  check('tjs.realPath resolves a dotted path to the absolute file', nodeOutput(IMPORT_COMMANDS[3]) === 'realpath /workspace/import-probe/m.mjs', JSON.stringify(nodeOutput(IMPORT_COMMANDS[3])));
+  const REALPATH_FROM_WORKSPACE = 'realpath /workspace/import-probe/m.mjs';
+  check('tjs.realPath resolves a dotted path to the absolute file, from the cwd /workspace (gm reports /import-probe/m.mjs from its own project root; that is the same file, resolved from a different cwd)', nodeOutput(IMPORT_COMMANDS[3]) === REALPATH_FROM_WORKSPACE, JSON.stringify(nodeOutput(IMPORT_COMMANDS[3])));
   check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
   check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
   check('readFileSync without an encoding returns bytes whose toString is the text, so JSON.parse reads it', nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"') === 'thebird-json', JSON.stringify(nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"')));
