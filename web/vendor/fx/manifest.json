@@ -1,6 +1,6 @@
 {
   "generator": "scripts/vendor-fx.mjs",
-  "source": "fx 1cf7602 (term and SDK modules, built from 5c8b64dc, which adds docs only over it); fx-core.wasm kept from the previous build, because the core does not compile for wasm32-wasi at 5c8b64dc",
+  "source": "fx fae75200 (term and SDK modules); fx-core.wasm kept from the previous build, not rebuilt in this step",
   "sdkApiVersion": 2,
   "wasm": {
     "name": "fx-core.wasm",
@@ -9,7 +9,7 @@
   "term": {
     "name": "fx-term.wasm",
     "surface": "term",
-    "sha256": "b0d9849129d025e8eec473db61ae7416e98c527daeb965000528664982561fd5"
+    "sha256": "79660073d5c4d2ec342cc34f3e2b466f91586bff627bdd4557f524c71266cf22"
   },
   "modules": [
     {
