@@ -192,7 +192,7 @@ Each row names the file, the place in it, and the witness that must pass in Phas
 | 74e0b7d | web/python-in-page.js | `PIP_USAGE`, `UsageError` (`exitCode = 2`), and the `pipBuiltin` branches for no verb, `--help`/`-h`/`help`, `--version`/`-V`, an unknown verb, and `install` with no names | `pip --help prints usage and exits 0`; `bare pip, an unknown pip command and pip install with no names exit 2 with a message`; `a bare pip prints its usage to stderr only, and exits 2`; `pip --help prints its usage to stdout, so it survives 2>/dev/null` |
 | 74e0b7d, f825d17 | web/python-in-page.js | `pipBuiltin` names check: a bad name throws `UsageError`; the empty-install message is worded as an instruction | `in-page pip refuses version specifiers, Pyodide-bundled packages and unknown names with a message and no URL` |
 | 74e0b7d | web/bash-shell.js | `builtinExit`: a builtin's `err.exitCode` becomes `$?` (the custom-builtin wrapper records it, and `run` applies it) | `bare pip, an unknown pip command and pip install with no names exit 2 with a message` (the `bare-rc=2`, `unknown-rc=2`, `install-rc=2` values) |
-| 74e0b7d | web/txiki-in-page.js | `startBuiltin` settles a builtin error with `code: err?.exitCode ?? 1` (a cancelled builtin is 130) | No witness yet covers a pip usage error through the txiki shell. The pip rows above run in the page shell. Phase B must add a txiki-shell check of `pip frobnicate` (exit 2) or record it as not covered. |
+| 74e0b7d | web/txiki-in-page.js | `startBuiltin` settles a builtin error with `code: err?.exitCode ?? 1` (a cancelled builtin is 130) | Covered (queue pass 12 audit): the witness checks bare pip usage and an unknown pip command through the txiki shell, with exit 2. The pip rows above run in the page shell. Phase B must add a txiki-shell check of `pip frobnicate` (exit 2) or record it as not covered. |
 | 43258cb | web/splash.js | `loading(text = LOADING)`: the text reaches the effect and the plain fallback | `the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal` |
 | 43258cb | web/terminal.js | `splash.loading('loading the shell')` replaces the `pty.writeOutput('loading the shell\n')` line; `splash.done()` after `client.ready`; `splash.failed` in the catch | `the boot splash is hidden once the engine is ready`; `the cold python3 call shows the tte-js splash while the bundle loads, then hides it` |
 | 43258cb | scripts/witness.mjs | the `loading the shell` filter is removed from the terminal-line comparison (its line was 191) | `the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal` |
@@ -217,7 +217,7 @@ Found while the Phase B public-site checks and the local Chromium witness ran. E
 | fix(shell) | web/bash-shell.js | `builtinStatus` replaces `builtinExit`: a failed builtin records 130 for cancelled, else `err.exitCode ?? 1`. The end-of-run override is removed; only the cancel override stays. A `thebird_status` custom builtin returns the recorded value. | `bare pip, an unknown pip command and pip install with no names exit 2 with a message` (`bare-rc=2`, `unknown-rc=2`, `install-rc=2`); `Ctrl-C stops a node loop that never yields` (`status=130`). |
 | fix(shell) | web/shell-lookup.js | `lookupPrologue` adds one function per in-page builtin: `NAME() { command NAME "$@" || return "$(thebird_status)"; }`. A function sets `$?` inside a line, which the old end-of-run override could not. `which`, `command -v` and `type` still answer by name (`type pip` = `pip is a shell builtin`). | The same pip rows; `a bare pip prints its usage to stderr only, and exits 2` (`quiet-rc=2`). |
 | fix(pip) | web/python-in-page.js | `pipBuiltin` messages no longer repeat `pip:`, because bashkit adds the command name to stderr: `unknown command 'NAME'`, `install needs at least one package name`, and `NAME is not a package name (...)`. | `bare pip, an unknown pip command and pip install with no names exit 2 with a message`, which expects `pip: install needs at least one package name` (scripts/witness.mjs line 729 was changed to match). |
-| fix(pip) | web/txiki-in-page.js | `startBuiltin` prefixes a builtin's error text with `message.name`, as bashkit does on the page shell. The no-bridge error drops its own prefix. | No witness yet covers a pip usage error through the txiki shell. Phase B must add `runShellInTxiki('pip frobnicate; echo rc=$?')` (stderr `pip: unknown command 'frobnicate'`, `rc=2`) or record it as not covered. |
+| fix(pip) | web/txiki-in-page.js | `startBuiltin` prefixes a builtin's error text with `message.name`, as bashkit does on the page shell. The no-bridge error drops its own prefix. | Covered (queue pass 12 audit): the witness checks bare pip usage and an unknown pip command through the txiki shell, with exit 2. Phase B must add `runShellInTxiki('pip frobnicate; echo rc=$?')` (stderr `pip: unknown command 'frobnicate'`, `rc=2`) or record it as not covered. |
 | fix(shell) | web/shell-client.js | `request` and `replaceWorker` post only after the worker's `ready` message (`online` promise). The init and the `(exit 130)` reset go out after ready, in order. | `Ctrl-C stops a node loop that never yields` and `after Ctrl-C on a cross-origin isolated page the shell keeps its directory` type straight after the cancel, so they exercise this. Phase B must read their output. |
 | fix(shell) | web/shell-worker.js | Run messages go through a queue (`queue = queue.then(() => answer(data))`). `init`, `cancel` and `resize` are handled at once, so a cancel still reaches a running command. | As the row above. A second run posted while the first runs (the reset run, then a user command) no longer overlaps on one bashkit instance. |
 
@@ -677,6 +677,48 @@ Each change:
 - `AGENTS.md` and `ARCHITECTURE.md`: the builtin lists, the vendored list, the scripts list, the subset's limits, and the table rows.
 
 Unknowns the Phase B run has to settle: whether the txiki `fetch` response has `arrayBuffer` and `text`; whether `__thebirdFs.readdir` on a file returns a non-array; whether the minified semver bundle loads under the engine; whether `console.error` reaches the output; and the output of `semver -r` (the witness expects `1.2.4` and `1.2.10`, and not `1.2.3`).
+
+## Phase B: npm and npx on the live page (queue pass 12)
+
+Build and witnesses on the Phase A tree plus the fixes below. Wall times are the recorded runs.
+
+Build:
+- `node scripts/vendor-npm.mjs`: 3 s, rc 0, bundle SHA-256 `fd3879b89439…` (42 KB, minified, no legal comments), notices `fflate.md`, `noble-hashes.md`, `semver.md`, and `manifest.json`. Each tarball's sha512 matched its pin before extraction.
+- `node scripts/vendor-floosie.mjs` on the `esbuild-pin` loader: 0 s, rc 0, commit `5417a536…`, bundle `588f159dd6ea…`, the same bytes as the pinned bundle, and no diff in `web/vendor/floosie/`.
+- `npm run check`: rc 0. `npm run lint:comments`: rc 0, 0 comments in 91 repo-owned files. `node scripts/lint-architecture.mjs --static`: rc 0, 320 claims pass, 0 fail, 40 prose lines with NO_CLAIM (all pre-existing, none from this change).
+
+Witness, focused on the npm surface: 8 checks, the same terminal pairs and regexes as the npm block in `scripts/witness.mjs`, run through `scripts/browser-driver.mjs` against the relay on headless Chromium (`/usr/bin/chromium`). This is not playwriter, which invariant 11 asks for, so the method is stated here. Result: `WALL 13.1s PASS 8 FAIL 0`.
+- `npm -v` and `npx -v` both print `0.1.0`.
+- `npm install debug` prints `+ debug@4.4.3`, `+ ms@2.1.3` and `added 2 packages`, and writes both into `node_modules`.
+- `node -e` reads back `ms` version `2.1.3` from the shell filesystem.
+- `npx semver -r ">=1.2.4" 1.2.3 1.2.4 1.2.10` prints `1.2.4` and `1.2.10`, and not `1.2.3`, from the registry bin.
+- `which npm` names `npm`, `type npx` reports a shell builtin, `type node` reports a shell builtin, and `node -e` prints `v26.11.0`. So `node` still resolves to txiki.
+- An unknown package prints `Uncaught npm: 404 Not Found - thebird-no-such-package-404` and `rc=1`. An unimplemented option prints `Uncaught npm: unsupported option: --save-exact` and `rc=1`.
+
+The earlier focused run (before the fixes below) passed 3 and failed 3. Its failures were the output loss and the URL rewrite, and both are fixed here.
+
+Defects found in this phase:
+1. Fixed. `tjs.exit(status)` in the npm program dropped every line printed before it. A probe confirmed it: `tjs -e "console.log('x'); tjs.exit(0)"` prints only `tjs: quickjs exited with status 0`, and a plain end of module prints the same line. The npm program no longer calls `tjs.exit`. Success ends the module normally. `process.exit` in a bin sets the exit code and throws an internal sentinel, which is caught at the top. A failure is thrown, and the engine reports it with status 1.
+2. Open, not fixed here. `node -e "console.log('x'); process.exit(0)"` loses its output the same way, because `web/node-in-txiki.js` sets `process.exit` to `tjs.exit`. The cause is the engine: `tjs.exit` does not flush the writes that are still queued. A fix needs either a flush before the exit in `scripts/txiki/browser/entry.c`, which changes the wasm and its pin, or an exit path that does not end the engine. Neither is in this pass.
+3. Not a code defect. bashkit's error path redacts every slash-prefixed token in error text to `<path>` (`web/vendor/bashkit/runtime-functions.js:84-86`), so `https://…` in an error prints as `https:<path>`. The npm messages name the package and carry no URL for that reason.
+
+Corrections to the ledger:
+- The two rows that said "No witness yet covers a pip usage error through the txiki shell" are stale. The witness checks `the txiki shell prints bare pip usage on stderr and exits 2` and `the txiki shell names an unknown pip command on stderr and exits 2` (`scripts/witness.mjs`, after the txiki shell runs) cover them. They were in the full witness at `837c78c` (PASS 144).
+
+Items 2 and 3 of the request, verified:
+- Item 2, floosie in gm: already restored. `web/gm-in-page.js` builds its hub with `createBrowserStdio` from `web/vendor/floosie/browser.js` and attaches `gm`, `playwriter` and `*`.
+- Item 3, the browser txiki artifact for gm: `web/vendor/txiki/tjs.wasm`, 162 exports, sha256 `dcd3a4342705967bfd4188aea39a4c7d368cfd7c90a42918e6fc72f83da656c1`, which is `TXIKI_WASM_SHA256`. The seven exports are `gm_txiki_new`, `gm_txiki_free`, `gm_txiki_context`, `gm_txiki_loop_alive`, `gm_txiki_loop_turn`, `gm_txiki_load_builtin` and `gm_txiki_refresh_loop_time`. The pins in `scripts/vendor-txiki.mjs` are txiki `v26.11.0`, libuv `dd9f081cc55a4d83e2a976848d074f28ee5f34eb`, and quickjs-ng `7b5f588e0f9b643e2996f291bfc861abeaceddc2`. gm's own repository consumes the artifact; this pass did not run gm's `run_code`.
+
+Item 4, the open rows, audited:
+- Owner decisions, recorded with the cause and not changed: the Pages Ctrl-C without isolation (Blocked table), the `web/stream-hub.js` removal, the Pyodide bundle licence, the licence notices for the older vendored bundles, and the Pages python3 slow fetch (possible retry or bundle change in `web/python-bundle.js:41`).
+- External repository: the upstream floosie esbuild declaration. The pin lives in thebird's vendor step, so this repo's part is done.
+- Documented limit: the journal C-extension limit.
+- New, open: the `node` `process.exit` output loss (defect 2 above).
+- Stale and corrected: the two pip rows.
+
+Not run in this pass: the full witness (3 checkpointed calls, about 20 minutes, last PASS 144 at `837c78c`), the live lint, and `witness:shell`. The changed surface is the npm program, its builtin, the builtin list and the docs, and the focused run covers the npm surface. The full witness will show whether the builtin list change moved anything else.
+
+Push: `origin main`, once, after the commit of this pass.
 
 ## Open decisions
 

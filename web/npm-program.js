@@ -6,7 +6,14 @@ const { name, argv, cwd } = globalThis.__npmInput;
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
-class NpmError extends Error {}
+class NpmError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = name;
+  }
+}
+
+class ProcessExit extends Error {}
 
 globalThis.process = {
   argv: [name],
@@ -16,7 +23,10 @@ globalThis.process = {
   versions: { txiki: tjs.version },
   cwd: () => cwd,
   exitCode: 0,
-  exit: (code = 0) => tjs.exit(code),
+  exit(code = 0) {
+    this.exitCode = code;
+    throw new ProcessExit();
+  },
 };
 
 const normalize = (path) => {
@@ -118,7 +128,8 @@ const packuments = new Map();
 const fetchPackument = async (pkg) => {
   const url = `${REGISTRY}/${pkg.replace('/', '%2f')}`;
   const response = await fetch(url, { headers: { accept: 'application/json' } });
-  if (!response.ok) throw new NpmError(`${response.status} ${url}`);
+  if (response.status === 404) throw new NpmError(`404 Not Found - ${pkg}`);
+  if (!response.ok) throw new NpmError(`registry answered ${response.status} for ${pkg}`);
   return JSON.parse(await response.text());
 };
 const packument = (pkg) => {
@@ -142,7 +153,7 @@ const versionOf = async (pkg, range) => {
 
 const fetchInto = async (meta, dest) => {
   const response = await fetch(meta.dist.tarball);
-  if (!response.ok) throw new NpmError(`${response.status} ${meta.dist.tarball}`);
+  if (!response.ok) throw new NpmError(`registry answered ${response.status} for ${meta.name}@${meta.version}`);
   const compressed = new Uint8Array(await response.arrayBuffer());
   if (integrityOf(compressed) !== meta.dist.integrity) throw new NpmError(`integrity check failed for ${meta.name}@${meta.version}`);
   extractTar(gunzipSync(compressed), dest);
@@ -328,13 +339,10 @@ const runNpx = async ([command, ...args]) => {
   runBin(file, args);
 };
 
-let status = 0;
 try {
   if (name === 'npx') await runNpx(argv);
   else await runNpm(argv);
-  status = process.exitCode;
 } catch (err) {
-  console.error(`${name}: ${err.message}`);
-  status = 1;
+  if (!(err instanceof ProcessExit)) throw new NpmError(err.message);
 }
-tjs.exit(status);
+if (process.exitCode !== 0) throw new NpmError(`exited with status ${process.exitCode}`);

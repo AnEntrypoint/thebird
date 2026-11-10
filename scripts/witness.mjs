@@ -341,6 +341,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', 'type npx'],
     ['run', 'type node'],
     ['run', 'node -e "console.log(process.version)"'],
+    ['run', 'npm install thebird-no-such-package-404; echo rc=$?'],
+    ['run', 'npm install --save-exact debug; echo rc=$?'],
   ]);
   const npmOut = npmRun.out;
   check('npm -v and npx -v both print the vendored subset version', (npmOut.match(/^0\.1\.0$/gm) ?? []).length >= 2, JSON.stringify(npmOut.slice(0, 300)));
@@ -349,6 +351,8 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('npx semver runs the registry bin: the range filter prints 1.2.4 and 1.2.10 and not 1.2.3', /^1\.2\.4$/m.test(npmOut) && /^1\.2\.10$/m.test(npmOut) && !/^1\.2\.3$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('which npm names npm and type npx reports a shell builtin', /^npm$/m.test(npmOut) && /^npx is a shell builtin$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('node still resolves to txiki after npm and npx are added', /^node is a shell builtin$/m.test(npmOut) && /^v\d+\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('npm install of a package the registry does not have fails with status 1 and names the package', /Uncaught npm: 404 Not Found - thebird-no-such-package-404/.test(npmOut) && /^rc=1$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
+  check('npm rejects an option it does not implement, with status 1 and the option named', /Uncaught npm: unsupported option: --save-exact/.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
   const txikiPip = txikiShell.runs?.pipVersion ?? {};
   check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));
