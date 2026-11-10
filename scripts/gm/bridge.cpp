@@ -6,6 +6,38 @@
 
 #include "gm/json.hpp"
 #include "gm/mcp.hpp"
+#include "internal.hpp"
+
+namespace gm::mcp::detail {
+
+std::size_t js_length(std::string_view text) {
+    std::size_t units = 0;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        ++units;
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        if (c >= 0xf0 && i + 3 < text.size()) i += 3;
+        else if (c >= 0xe0 && i + 2 < text.size()) i += 2;
+        else if (c >= 0xc0 && i + 1 < text.size()) i += 1;
+    }
+    return units;
+}
+
+std::string js_prefix(std::string_view text, std::size_t units) {
+    std::size_t seen = 0;
+    std::size_t bytes = 0;
+    while (bytes < text.size() && seen < units) {
+        const unsigned char c = static_cast<unsigned char>(text[bytes]);
+        std::size_t width = 1;
+        if (c >= 0xf0 && bytes + 3 < text.size()) width = 4;
+        else if (c >= 0xe0 && bytes + 2 < text.size()) width = 3;
+        else if (c >= 0xc0 && bytes + 1 < text.size()) width = 2;
+        bytes += width;
+        ++seen;
+    }
+    return std::string(text.substr(0, bytes));
+}
+
+}
 
 namespace {
 
@@ -67,9 +99,21 @@ std::int32_t gm_sha256_hex(const char* ptr, std::int32_t len) {
     return 0;
 }
 
+__attribute__((export_name("gm_clip")))
+std::int32_t gm_clip(const char* ptr, std::int32_t len, std::int32_t cap) {
+    set_out(gm::mcp::detail::clip(std::string(in_at(ptr, len)), static_cast<std::size_t>(cap < 0 ? 0 : cap)));
+    return 0;
+}
+
+__attribute__((export_name("gm_output_digest")))
+std::int32_t gm_output_digest(const char* ptr, std::int32_t len, std::int32_t failed) {
+    set_out(gm::json::dump(gm::mcp::detail::output_digest(std::string(in_at(ptr, len)), failed != 0)));
+    return 0;
+}
+
 __attribute__((export_name("gm_core_version")))
 std::int32_t gm_core_version() {
-    return 1;
+    return 2;
 }
 
 }

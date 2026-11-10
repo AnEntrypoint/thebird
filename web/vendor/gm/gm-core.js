@@ -35,13 +35,13 @@ const core = () => {
   return corePromise;
 };
 
-const call = (instance, name, text) => {
+const call = (instance, name, text, ...extra) => {
   const input = encoder.encode(text);
   const ptr = instance.exports.gm_alloc(input.length);
   if (!ptr) throw new Error('gm wasm core could not allocate input');
   try {
     new Uint8Array(instance.exports.memory.buffer).set(input, ptr);
-    const rc = instance.exports[name](ptr, input.length);
+    const rc = instance.exports[name](ptr, input.length, ...extra);
     const length = instance.exports.gm_json_len();
     const out = decoder.decode(new Uint8Array(instance.exports.memory.buffer, instance.exports.gm_json_out(), length));
     return { rc, out };
@@ -70,6 +70,20 @@ export async function gmJsonNormalize(text) {
   const { rc, out } = call(instance, 'gm_json_normalize', text);
   if (rc !== 0) throw new Error(out);
   return out;
+}
+
+export async function gmClip(text, cap = 400) {
+  const { instance } = await core();
+  const { rc, out } = call(instance, 'gm_clip', text, cap);
+  if (rc !== 0) throw new Error(out);
+  return out;
+}
+
+export async function gmOutputDigest(text, failed = false) {
+  const { instance } = await core();
+  const { rc, out } = call(instance, 'gm_output_digest', text, failed ? 1 : 0);
+  if (rc !== 0) throw new Error(out);
+  return JSON.parse(out);
 }
 
 export async function gmSha256Hex(text) {
