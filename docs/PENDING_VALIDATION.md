@@ -801,9 +801,118 @@ Witness added to `scripts/witness.mjs` (the browser block, after the playwriter 
 
 Focused run before the witness, through `scripts/browser-driver.mjs` on `/usr/bin/chromium` (no playwriter, since it is the same local relay and the playwriter run above already covered the browser): `WALL 1.7s`, output as above, and `stub saw [{"streaming":true,"authorized":true,"prompt":"hello"}]`.
 
+## Phase A: txiki project imports through the browser fs bridge (stretch 2, built locally, witnessed in the full run)
+
+Problem, reproduced on the local relay before the change: `node main.mjs` with a static `import './m.mjs'` failed with `could not load 'm.mjs'`, and `node -e "import('./m.mjs')"` failed the same way. The txiki engine's loader reads module source through `uv_fs_*`, and the browser build stubbed every `uv_fs_*` call, so no project file could be read.
+
+Change:
+- `scripts/txiki/browser/fs-uv-browser.c` (new) implements the `uv_fs_*` calls the loader and the `tjs.*` file APIs use, over the `tjs_fs_*` host imports that `web/txiki-in-page.js` already provides: open, close, read, write, fstat, stat, lstat, mkdir, rmdir, unlink, symlink, readlink, realpath, rename, ftruncate, opendir, readdir, closedir, and req_cleanup. Synchronous when the callback is NULL; otherwise the result is deferred through the loop's pending queue (`tjs_browser_defer`).
+- `scripts/txiki/browser/uv-browser.c`: `uv_queue_work` runs the work and then the after-callback as a pending job; `tjs_browser_work_pending` (renamed from `tjs_browser_timers_pending`) reports timers or queued callbacks, so a chain of async fs calls keeps the turn loop running.
+- `scripts/txiki/browser/entry.c`: `tjs_browser_eval(code, name)` evaluates the code as a module named by the caller, so a relative import resolves from the script's directory. `node <script>` names the module by its absolute path; `node -e` and `tjs -e` name it `<tjs -e>` and resolve from the shell directory.
+- `web/txiki-in-page.js`: `tjs_fs_realpath` (follows symlinks, -1 when missing) and `tjs_fs_rename`.
+- `web/node-in-txiki.js` passes the script path through as the module name.
+- `scripts/txiki/stubs.tsv`: the rows for the implemented calls are removed (the overlap check reports none). Still stubbed, because the browser has no host operation for them: `uv_fs_chmod`, `chown`, `copyfile`, `fchmod`, `fchown`, `fdatasync`, `fsync`, `futime`, `lchown`, `link`, `lutime`, `mkdtemp`, `mkstemp`, `statfs`, `utime`.
+
+Probe, run through the local relay with `scripts/browser-driver.mjs` (`/tmp/txiki-probe/probe12.mjs`): static import (`answer 42`), nested import (`lib/x.mjs`), `node -e "import('./m.mjs')"` and `tjs -e` dynamic import, a missing module (`could not load 'nope.mjs'`, shell goes on), `tjs.rename`, `tjs.stat` size, `tjs.realPath` through `..` and through a symlink, `tjs.realPath` on a missing file (ENOENT), `truncate(6)`, `readFile` (26 bytes), `readDir` names, `node main.mjs` after rename gives the expected missing-file error.
+
+Witness: four checks added to `scripts/witness.mjs` after the `node <script>` block: a script imports a sibling and a nested module (`script-imports 42 lib`), a dynamic import from `node -e` resolves against the shell directory (`eval-import 42`), a missing module reports the loader error (`missing-import could not load 'import-probe/nope.mjs'`), and `tjs.realPath` resolves a dotted path (`realpath /workspace/import-probe/m.mjs`).
+
+Pin history for `web/vendor/txiki/tjs.wasm` (each a local build; the gate passed with 0 undefined symbols and 162 exports, the seven `gm_txiki_*` among them): `8d4b2b17…` (eval-name and realpath fix), `5855a1b3…` (eval naming), `ca7bcceb…` (fstat and opendir), `14679147…` (pending-work turn), `f716451387bd721e1b0cede84cc5ab44b10c6087e16dde78e206e12e70b1f296` (realpath and rename, current, `TXIKI_WASM_SHA256` in `scripts/vendor-txiki.mjs`).
+
+Conflict, not changed here (owner said to leave `pages.yml`): `.github/workflows/pages.yml` line 53 still checks `137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28  web/vendor/txiki/tjs.wasm`. The current wasm is `f716451…`, so the Pages build's pin check fails until the owner updates that line or the pin is reverted. Owner decision needed.
+
+gm handoff, not done from here: gm must rerun its import witness against this txiki build. The channel to gm is not identified in this session, so this note is the handoff record. Its reason: the `uv_fs_*` bridge changes which imports succeed on the browser txiki path.
+
+## Reference check: fx browser-agent example against thebird's fx ask (read only)
+
+Source: `/workspace/fx/fx/examples/browser-agent` (vercel-labs fx checkout, HEAD `b063e41a`), compared with `web/fx-in-page.js` and `web/vendor/fx/engine.js`.
+
+Differences that matter in the browser:
+- The example routes a visitor without a key through a server proxy (`api/gateway.js`, two paths: `/coding-agent/v1/models` and `/v4/ai/language-model`). The proxy adds the server's `AI_GATEWAY_API_KEY` and drops the client's Authorization, so no key is in the browser. Thebird has no proxy: it sends the owner's key from `window.THEBIRD_FX.apiKey` straight to the gateway, and any script on the page can read it. Owner decision needed on whether thebird should move to a proxy.
+- The example passes a custom `fetch` to `createFxEngine`. Thebird uses `globalThis.fetch` (`engine.js:1458`).
+- The example reads the key from a password input and does not store it. Thebird reads it from the page global set by the shell client.
+- Streaming (`text_delta` loop), JSPI gating and session close are the same in substance.
+- Direct CORS to the gateway applies to both designs on the direct path. Not tested live here.
+
+Version check against libfx 0.0.16:
+- `src/main.zig:11` declares `0.0.16` in HEAD and in the working tree. The fx working tree has uncommitted changes under `src/` (`builtins/tools.zig`, `core/app/app_callbacks.zig`, `core/app/app_worker_runtime.zig`, `core/superagent/app_host.zig`, `core/superagent/runtime.zig`, `main.zig`); `sdk/` is clean.
+- The vendored `web/vendor/fx/fx-core.wasm` (`1c894cb9b15f…`) is byte-identical to `/workspace/fx/fx/zig-out/bin/fx-core.wasm`, which was written before the last `src/` edits.
+- All 12 modules in the manifest are byte-identical to `/workspace/fx/fx/sdk`.
+- npm `libfx@0.0.16`: `fx-core.wasm` `c2b17c90d1c4ce76f72d322bb7bd210e3d066eb1db05aaae053a4e4371cabb69` (2260477 bytes). Against it, `engine.js` and 10 other modules match; `fetch-cleanup.js` and `wasm-runtime.js` differ. The vendored `wasm-runtime.js` imports `fx_http_stream_retry_after`, which npm 0.0.16 lacks.
+- Verdict: mismatch. The vendored core is a newer build that still reports `0.0.16`, and `sdkApiVersion` 2 agrees in both. `scripts/vendor-fx.mjs` hardcodes `sdkApiVersion: 2` rather than reading it from the SDK.
+- Not checked: whether a rebuild from HEAD reproduces the vendored wasm, live CORS and streaming, and `libfxApiVersion` 3 in the example's `browser-agent.js` against `fxSdkApiVersion` 2 in `engine.js`.
+
+## Phase A: fx TUI in the page (diagnosis by comparison, fx-term with an xterm VT)
+
+Diagnosis. Before the change, `fx` in thebird printed only its usage line; native `fx` opens the TUI. Native and thebird were compared surface by surface on the same keys, native in tmux (`/workspace/fx/fx/zig-out/bin/fx`, `FX_HOME=/tmp/fx-native-home`, session `fxnative2`) and thebird in headless Chromium through `scripts/browser-driver.mjs`.
+
+Gap causes found:
+- `fx` with no arguments had no TUI path: `web/fx-in-page.js` returned the help text. Fix: a bare `fx` posts a takeover request (`web/takeover.js`); the page runs the TUI (`web/fx-tui.js`) and returns the exit status.
+- The vendored bundle had only `fx-core.wasm`. Fix: `scripts/vendor-fx.mjs` builds `zig build fx-term-wasm -Dwasm-surface=term` and vendors `fx-term.wasm` (sha256 `074e0e09b3707e876ec0671b1525f6dca38cf627fff88f7ac7de06ca9a864bfb`), with `wasm-terminal.js` and `xterm.js`. The core stays `fx-core.wasm` for `--version`, `check` and `ask`.
+- Credential and prompt-history warnings on start (`Saved credential storage is unavailable`, `durable prompt history unavailable`): the runtime's `oauthSessionStore` and `promptHistoryStore` hooks were not passed. Fix: in-memory stores in `web/fx-tui.js`. Decision for the owner: nothing is persisted, so a reload clears the sign-in and the prompt history.
+- Sign-in choices: native shows `Sign in with Codex` and `Sign in with Grok`; the wasm build does not. Cause in the fx core, not thebird: `src/core/auth/auth_runtime.zig` removes both on `host_target.is_wasm`, and `chatgpt_oauth.zig` and `grok_oauth.zig` return `ChatGptOAuthUnavailable` and `GrokOAuthUnavailable` on wasm. Not fixed here; upstream.
+- Palette header: native `Results 50 · type to filter`, thebird `Commands 49 · type to filter`. Both show the same 49 command rows when paged one row at a time. The header label comes from `picker_presentation.zig:1232` (`Commands` when the command count equals the result count). The source of native's extra result is not identified. Open.
+
+Surfaces compared (native first, then thebird):
+- Welcome, input box, footer: same text, same rule width at the same size. Thebird lacks the two wasm-gated sign-in rows, so the blank rows after `Add an API key` differ accordingly.
+- Input cursor: native (2,2) after the input marker; thebird (2,2).
+- Colour: title `𝒇x` palette 255 bold, version text palette 245 in both (`ESC[38;5;255m`, `ESC[38;5;245m` natively; xterm reports palette 255 and 245).
+- Alternate screen: native `alternate_on 0` on the welcome screen; thebird buffer `normal`. Same.
+- Typed text, Escape, Backspace: same behaviour (`┃ /hello`, the palette closes on Escape with the slash left in the input).
+- Ctrl-C: native and thebird both keep the TUI running on a single Ctrl-C.
+- `/exit`: ends the TUI; the page's shell runs the next command (`after-fx`).
+- Resize with no palette: native and thebird both keep the welcome panel and two 70-column rules at 70x24.
+- Resize after the palette: native and thebird both lose the welcome panel and the rules (see the defect below).
+
+Defect, upstream in fx, reproduced natively: after the command palette is opened and closed (`/`, Escape, Backspace), a resize to 70x24 redraws only the input line and footer, and the welcome panel and rules stay blank. Native reproduction: `tmux resize-window` after the same keys (screen: `┃`, a blank line, the footer). The thebird reproduction in the witness and in `/tmp/fx-tui/resize-timing.mjs` (with `STEPS=palette`): the light redraw is 474 characters with no `Welcome`, and no settled pass follows in 12 s. Without the palette steps the same resize writes 1220 characters with the full panel. The wasm host gives the TUI a 16 ms idle poll (`main.zig:195`), so the wait is not a sleep. The cause is in fx's resize observation state after palette use (`src/ui/resize_runtime.zig`, `settlePendingResize`, `queuedObservationMatchesDeadline`), which is the same code on native and wasm. thebird cannot fix it from the page: a second wake does not move the settle, and Ctrl-L does not repaint. Fix belongs in fx, which is outside this repo. Owner decision: whether to change the fx checkout (`/workspace/fx/fx`) and rebuild `fx-term.wasm`.
+
+Split of the palette-then-resize defect, as the owner asked:
+- thebird's part, checked and found clean: the page sends the new size (`term.resize` → `onResize` → `fx_term_size` reads 70 and 24, which the TUI reports back through its own frame), the wake reaches the TUI, and the TUI redraws. Resize with no palette works in thebird and in native. The thebird-side cause of the palette case was not found, because the native binary fails the same way.
+- Upstream part, for fx (`/workspace/fx/fx`, outside this repo, not edited here): after the palette opens and closes, the resize observation never settles, so `src/ui/resize_runtime.zig` (`settlePendingResize`, `queuedObservationMatchesDeadline`) never runs the replay that repaints the welcome panel and rules. Evidence: native `tmux` run (palette, Escape, Backspace, then `resize-window` to 70x24: no `Welcome to fx`, no rules); wasm timing probe with `STEPS=palette` (the 70x24 redraw is 474 characters with no `Welcome`, no second write in 12 s); the same resize without the palette writes 1220 characters including the panel.
+- Owner decision needed: whether to change the sibling fx checkout and rebuild `fx-term.wasm`, or accept the check as a known upstream failure.
+
+Not reached in this pass: transcript, full transcript screen, approval screen and ask presentation. Native and thebird both show the welcome gate (`run /login`) and refuse a prompt with no provider credential, so a model reply needs a sign-in. The page holds no credential source for the TUI, and the stub gateway cannot stand in for the provider's fixed host. These four surfaces are not covered by the witness. Open.
+
+Witness: `scripts/witness.mjs` runs the TUI through `runTerminal` with `interact`. Checks: welcome, input box and footer (`Welcome to fx`, `Sign in with Vercel`, `Add an API key`, `auto · grok-4.7`, cursor (2,2)), title colour (palette 255 bold, version palette 245), typed text, the palette header and `/help` row, Escape, resize with no palette (70x24 with the welcome and two rules), resize after the palette (expected to fail until fx is fixed, named as upstream), Ctrl-C, `/exit` then `echo after-fx`. Driver keys added: `Escape` and `Backspace` in `scripts/browser-driver.mjs`.
+
+Bridge status for gm's import row: the `uv_fs_*` bridge is described in the stretch 2 section above. It is built and witnessed in witness run 4 (`script-imports`, `eval-import`, `missing-import`, `realpath` all PASS).
+
 ## Open decisions
 
 - Pages build: `AnEntrypoint/gmfx` is private and the workflow cannot check it out (see Item 3). Owner decision: make it readable to the workflow, or add a read token secret.
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` has been removed (see the queue pass entry that records its deletion).
 - Pyodide bundle licence: held by the owner, and not confirmed. The stripped bundle at `https://anentrypoint.github.io/pyodide-minimal/pyodide-minimal.br` is not changed by this pass. The licence notice file `web/vendor/PYODIDE-NOTICE.md` was removed in the licence removal above, so this question is recorded only here.
 - Licence notices for the vendored bundles: removed in the licence removal above. Whether they return in another form is the owner's decision.
+
+## Phase B: witness run table (wall times, this pass)
+
+| Run | Wall (s) | Result |
+| --- | --- | --- |
+| 3 | 433 | finished |
+| 4 | 691 | finished; uv_fs bridge checks PASS |
+| 5 | 466 | crashed (Chromium orphan) |
+| 6 | 512 | crashed (Chromium orphan) |
+| 7 | 502 | five failures: resize after palette, splash probe, frames, centring, done cleanup |
+| 8 | 475 | finished |
+| 9 | 155 | partial, crash-free, 155 PASS |
+| 10 | 395 | finished |
+| 11 | 549 | WITNESS-EXIT 1: PASS 183, FAIL 1 (upstream fx resize) |
+
+Defect recorded: the witness does not close Chromium when it crashes; orphan trees (143025, 3474121) were stopped by PID.
+
+## Phase B: splash witness, run 11 (ASCII thebird, web/splash.js)
+
+- Cold python3 shows `{"mode":"ascii","rows":6,"canvases":0,"phase":"loading the shell","phaseBelowLogo":true,"boot":false}`.
+- Frames differ: first `####@ #`, second `##### #` with the `@` moved, six rows each.
+- Centring: offset x -0.0078125, y 0; box 217.2–562.8 x 196.1–296.9 in 780x493.
+- Done cleanup: `{"children":0,"hidden":true,"mode":null,"timers":0,"timersLater":0}`.
+
+## Phase B: remaining FAIL (upstream fx, not thebird)
+
+"a resize after the command palette keeps the welcome panel and the rules at 70 columns" fails with `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`. Native fx fails the same way. The cause is in fx `src/ui/resize_runtime.zig` (settle path). The thebird side (page size and wake path) was checked and is not the cause. Needs an owner decision on changing the sibling fx checkout and rebuilding fx-term.wasm before this check can pass; the push is held until then.
+
+## Gates on this pass
+
+- `npm run check`: exit 0.
+- `npm run lint:comments`: 93 repo-owned files, 0 comments.
+- gm import handoff: no channel confirmed; gm must rerun its own import witness.

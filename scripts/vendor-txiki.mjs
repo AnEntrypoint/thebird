@@ -31,10 +31,10 @@ export const SQLITE_DEFINES = [
 ];
 export const CORE_BUNDLES = ['core', 'polyfills', 'run-main', 'run-repl', 'worker-bootstrap'].map((name) => `src/bundles/c/core/${name}.c`);
 export const QUICKJS_SOURCES = ['quickjs.c', 'dtoa.c', 'libregexp.c', 'libunicode.c'];
-export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c'];
+export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/txiki/browser/entry.c', 'scripts/txiki/browser/webcrypto-browser.c', 'scripts/txiki/browser/sqlite-vfs.c', 'scripts/txiki/browser/httpclient-browser.c', 'scripts/txiki/browser/fs-browser.c', 'scripts/txiki/browser/fs-uv-browser.c'];
 export const EXIT_FLUSH_TARGET = 'src/mod_os.c';
 export const EXIT_FLUSH_HEADER = 'scripts/txiki/browser/exit-flush.h';
-export const TXIKI_WASM_SHA256 = '137c08f6db9969194c917384172794173a31642b7d51d2aac6c598d1c4475a28';
+export const TXIKI_WASM_SHA256 = 'f716451387bd721e1b0cede84cc5ab44b10c6087e16dde78e206e12e70b1f296';
 const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 

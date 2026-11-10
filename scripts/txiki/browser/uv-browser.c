@@ -372,6 +372,20 @@ static void shutdown_done(void *arg) {
     if (req->cb) req->cb(req, 0);
 }
 
+static void work_run(void *arg) {
+    uv_work_t *req = arg;
+    if (req->work_cb) req->work_cb(req);
+    if (req->after_work_cb) req->after_work_cb(req, 0);
+}
+
+int uv_queue_work(uv_loop_t *loop, uv_work_t *req, uv_work_cb work_cb, uv_after_work_cb after_work_cb) {
+    req->loop = loop;
+    req->work_cb = work_cb;
+    req->after_work_cb = after_work_cb;
+    pending_push(loop, work_run, req);
+    return 0;
+}
+
 static size_t write_bufs(uv_stream_t *stream, const uv_buf_t bufs[], unsigned int nbufs) {
     size_t total = 0;
     for (unsigned int i = 0; i < nbufs; i++) {
@@ -546,8 +560,12 @@ int uv_os_homedir(char *buffer, size_t *size) {
     return 0;
 }
 
-int tjs_browser_timers_pending(const uv_loop_t *loop) {
-    return loop->timers != NULL;
+int tjs_browser_work_pending(const uv_loop_t *loop) {
+    return loop->timers != NULL || loop->pending_head != NULL;
+}
+
+void tjs_browser_defer(uv_loop_t *loop, void (*fn)(void *arg), void *arg) {
+    pending_push(loop, fn, arg);
 }
 
 void tjs_browser_flush_writes(uv_loop_t *loop) {

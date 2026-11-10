@@ -5,7 +5,7 @@
 #include <uv.h>
 #include "private.h"
 
-int tjs_browser_timers_pending(const uv_loop_t *loop);
+int tjs_browser_work_pending(const uv_loop_t *loop);
 void tjs_browser_flush_writes(uv_loop_t *loop);
 void tjs_browser_stop_timers(uv_loop_t *loop);
 JSValue tjs_browser_http_deliver(JSContext *ctx, const char *text, size_t len);
@@ -96,7 +96,7 @@ static int pump(TJSRuntime *qrt) {
     if (status) {
         return status;
     }
-    return tjs_browser_timers_pending(loop) ? TJS_BROWSER_WAITING : 0;
+    return tjs_browser_work_pending(loop) ? TJS_BROWSER_WAITING : 0;
 }
 
 static int first_set(int first, int second, int third) {
@@ -151,7 +151,7 @@ static void ensure_initialized(void) {
     engine_ready = 1;
 }
 
-int tjs_browser_eval(const char *code) {
+int tjs_browser_eval(const char *code, const char *name) {
     tjs_browser_end();
     cancel_requested = 0;
     stop_status = 0;
@@ -167,7 +167,7 @@ int tjs_browser_eval(const char *code) {
     tjs_browser_bridge_install(ctx);
     int status = 0;
 
-    JSValue result = JS_Eval(ctx, code, strlen(code), "<tjs -e>", JS_EVAL_TYPE_MODULE);
+    JSValue result = JS_Eval(ctx, code, strlen(code), name, JS_EVAL_TYPE_MODULE);
     if (JS_IsException(result)) {
         status = report_exception(ctx);
     } else {

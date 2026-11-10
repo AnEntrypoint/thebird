@@ -6,6 +6,11 @@
     "name": "fx-core.wasm",
     "sha256": "1c894cb9b15f3db7a0eeacf51bc2e95ae09ce01274911cffd2d04bcec19f7c21"
   },
+  "term": {
+    "name": "fx-term.wasm",
+    "surface": "term",
+    "sha256": "074e0e09b3707e876ec0671b1525f6dca38cf627fff88f7ac7de06ca9a864bfb"
+  },
   "modules": [
     {
       "name": "core-output.js",
@@ -46,6 +51,14 @@
     {
       "name": "wasm-runtime.js",
       "sha256": "523afedbae89b73e55c93bf8e901b5a360226be1993d34b0f606079a617ea5bc"
+    },
+    {
+      "name": "wasm-terminal.js",
+      "sha256": "b869405c2e3cdfc91341bca8deeded38d103079cf5de24aacd6922329f56e665"
+    },
+    {
+      "name": "xterm.js",
+      "sha256": "2228d44edc757c98f7aeed06ec825605a4b4f52ad6ddeeffbcd7ba5404d0350e"
     }
   ]
 }

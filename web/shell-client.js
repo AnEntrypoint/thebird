@@ -25,10 +25,15 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
 
   let outputSink = () => {};
   let phaseSink = () => {};
+  let takeoverSink = () => {};
 
   function onMessage({ data }) {
     if (data.output !== undefined) {
       outputSink(data.output);
+      return;
+    }
+    if (data.takeover !== undefined) {
+      takeoverSink(data.takeover);
       return;
     }
     if (data.phase !== undefined) {
@@ -113,6 +118,12 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     },
     onPhase(sink) {
       phaseSink = sink;
+    },
+    onTakeover(sink) {
+      takeoverSink = sink;
+    },
+    finishTakeover(id, code) {
+      worker.postMessage({ takeoverDone: { id, code } });
     },
     close() {
       clearTimeout(grace);

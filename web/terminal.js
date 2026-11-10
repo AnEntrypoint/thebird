@@ -5,6 +5,7 @@ import { Unicode11Addon } from './vendor/xterm/addon-unicode11.mjs';
 import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
 import { createSplash } from './splash.js';
+import { runFxTui } from './fx-tui.js';
 
 const params = new URLSearchParams(location.search);
 const term = new Terminal({
@@ -59,7 +60,24 @@ client.onPhase((phase, detail) => {
   else if (phase === 'failed') splash.failed(detail);
   else splash.done();
 });
-term.onData((data) => pty.onData(data));
+let takingOver = false;
+client.onTakeover(async ({ id, fx }) => {
+  takingOver = true;
+  document.body.dataset.tui = 'fx';
+  let code = 0;
+  try {
+    code = await runFxTui(term, fx);
+  } catch (error) {
+    term.write(`fx: ${error.message}\r\n`);
+    code = 1;
+  }
+  takingOver = false;
+  delete document.body.dataset.tui;
+  client.finishTakeover(id, code);
+});
+term.onData((data) => {
+  if (!takingOver) pty.onData(data);
+});
 term.onResize(({ cols }) => pty.resize(cols));
 const terminalBox = document.getElementById('terminal');
 new ResizeObserver(() => fit.fit()).observe(terminalBox);

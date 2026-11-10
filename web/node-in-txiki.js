@@ -45,6 +45,7 @@ function installNodeGlobals(cwd, argv) {
 
 export async function nodeBuiltin(argv, dir, options) {
   let source;
+  let name = '<tjs -e>';
   let scriptArgv = ['node'];
   if (argv.length === 2 && argv[0] === '-e') source = argv[1];
   else if (argv.length === 1 && (argv[0] === '-v' || argv[0] === '--version')) source = 'console.log(process.version);';
@@ -56,9 +57,10 @@ export async function nodeBuiltin(argv, dir, options) {
       throw new Error(`Cannot find module '${path}'`);
     }
     scriptArgv = ['node', path, ...argv.slice(1)];
+    name = path;
   } else throw new Error(USAGE);
   const prelude = `(${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
-  const { output, status } = await runTjs(prelude + source, dir, options);
+  const { output, status } = await runTjs(prelude + source, dir, { ...options, name });
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
   if (status !== 0) throw Object.assign(new Error(`node exited with status ${status}`), { exitCode: status, stdout: output.trimEnd() });

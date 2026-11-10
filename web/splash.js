@@ -1,12 +1,33 @@
 const LOADING = 'loading Python...';
+const FRAME_MS = 90;
+const GLYPHS = {
+  t: ['  #  ', '#####', '  #  ', '  #  ', '  #  ', '  ## '],
+  h: ['#    ', '#    ', '#### ', '#   #', '#   #', '#   #'],
+  e: [' ### ', '#   #', '#####', '#    ', '#   #', ' ### '],
+  b: ['#    ', '#    ', '#### ', '#   #', '#   #', '#### '],
+  i: ['  #  ', '     ', '  #  ', '  #  ', '  #  ', '  #  '],
+  r: ['#### ', '#   #', '#    ', '#    ', '#    ', '#    '],
+  d: ['    #', '    #', ' ####', '#   #', '#   #', ' ####'],
+};
+const LOGO = Array.from({ length: 6 }, (_, row) => [...'thebird'].map((letter) => GLYPHS[letter][row]).join(' '));
+const WIDTH = LOGO[0].length;
+
+export function frameAt(tick) {
+  const column = tick % WIDTH;
+  return LOGO.map((line) => [...line].map((cell, index) => (cell === '#' && index === column ? '@' : cell)).join('')).join('\n');
+}
 
 export function createSplash(root) {
-  let effect = null;
-  let run = 0;
+  let timer = null;
+  let tick = 0;
+  let pre = null;
 
   const stop = () => {
-    effect?.destroy();
-    effect = null;
+    clearInterval(timer);
+    timer = null;
+  };
+  const draw = () => {
+    pre.textContent = frameAt(tick++);
   };
   const plain = (text) => {
     stop();
@@ -16,33 +37,28 @@ export function createSplash(root) {
   };
 
   return {
-    async loading(text = LOADING) {
-      const current = ++run;
+    loading(text = LOADING) {
       stop();
-      const canvas = document.createElement('canvas');
-      canvas.style.width = '240px';
-      canvas.style.height = '20px';
-      root.replaceChildren(canvas);
-      root.dataset.mode = 'pending';
+      pre = document.createElement('pre');
+      const phase = document.createElement('span');
+      phase.className = 'phase';
+      phase.textContent = text;
+      const logo = document.createElement('div');
+      logo.className = 'logo';
+      logo.append(pre, phase);
+      root.replaceChildren(logo);
+      root.dataset.mode = 'ascii';
       root.hidden = false;
-      try {
-        const { createTextEffect } = await import('./vendor/tte-js/src/index.js');
-        if (current !== run) return;
-        effect = createTextEffect(canvas, { text, effect: 'laseretch', loop: true });
-        root.dataset.mode = 'effect';
-      } catch {
-        if (current === run) plain(text);
-      }
+      draw();
+      timer = setInterval(draw, FRAME_MS);
     },
     done() {
-      run++;
       stop();
       root.replaceChildren();
       root.hidden = true;
       delete root.dataset.mode;
     },
     failed(message) {
-      run++;
       plain(message);
     },
   };

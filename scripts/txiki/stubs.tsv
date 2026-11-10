@@ -34,38 +34,19 @@ uv_free_cpu_info	os: no host process, network or CPU information in the browser
 uv_free_interface_addresses	os: no host process, network or CPU information in the browser
 uv_fs_chmod	fs: no host file access yet (OPFS bridge pending)
 uv_fs_chown	fs: no host file access yet (OPFS bridge pending)
-uv_fs_close	fs: no host file access yet (OPFS bridge pending)
-uv_fs_closedir	fs: no host file access yet (OPFS bridge pending)
 uv_fs_copyfile	fs: no host file access yet (OPFS bridge pending)
 uv_fs_fchmod	fs: no host file access yet (OPFS bridge pending)
 uv_fs_fchown	fs: no host file access yet (OPFS bridge pending)
 uv_fs_fdatasync	fs: no host file access yet (OPFS bridge pending)
-uv_fs_fstat	fs: no host file access yet (OPFS bridge pending)
 uv_fs_fsync	fs: no host file access yet (OPFS bridge pending)
-uv_fs_ftruncate	fs: no host file access yet (OPFS bridge pending)
 uv_fs_futime	fs: no host file access yet (OPFS bridge pending)
 uv_fs_lchown	fs: no host file access yet (OPFS bridge pending)
 uv_fs_link	fs: no host file access yet (OPFS bridge pending)
-uv_fs_lstat	fs: no host file access yet (OPFS bridge pending)
 uv_fs_lutime	fs: no host file access yet (OPFS bridge pending)
-uv_fs_mkdir	fs: no host file access yet (OPFS bridge pending)
 uv_fs_mkdtemp	fs: no host file access yet (OPFS bridge pending)
 uv_fs_mkstemp	fs: no host file access yet (OPFS bridge pending)
-uv_fs_open	fs: no host file access yet (OPFS bridge pending)
-uv_fs_opendir	fs: no host file access yet (OPFS bridge pending)
-uv_fs_read	fs: no host file access yet (OPFS bridge pending)
-uv_fs_readdir	fs: no host file access yet (OPFS bridge pending)
-uv_fs_readlink	fs: no host file access yet (OPFS bridge pending)
-uv_fs_realpath	fs: no host file access yet (OPFS bridge pending)
-uv_fs_rename	fs: no host file access yet (OPFS bridge pending)
-uv_fs_req_cleanup	fs: no host file access yet (OPFS bridge pending)
-uv_fs_rmdir	fs: no host file access yet (OPFS bridge pending)
-uv_fs_stat	fs: no host file access yet (OPFS bridge pending)
 uv_fs_statfs	fs: no host file access yet (OPFS bridge pending)
-uv_fs_symlink	fs: no host file access yet (OPFS bridge pending)
-uv_fs_unlink	fs: no host file access yet (OPFS bridge pending)
 uv_fs_utime	fs: no host file access yet (OPFS bridge pending)
-uv_fs_write	fs: no host file access yet (OPFS bridge pending)
 uv_inet_pton	os: no host process, network or CPU information in the browser
 uv_interface_addresses	os: no host process, network or CPU information in the browser
 uv_ip4_name	os: no host process, network or CPU information in the browser
@@ -89,7 +70,6 @@ uv_pipe_getpeername	pipe: no pipes or process handles in the browser
 uv_pipe_getsockname	pipe: no pipes or process handles in the browser
 uv_pipe_init	pipe: no pipes or process handles in the browser
 uv_pipe_open	pipe: no pipes or process handles in the browser
-uv_queue_work	thread: the page is single-threaded
 uv_random	random: no entropy source wired into the browser build yet
 uv_signal_start	signal: no host signals in the browser
 uv_tcp_bind	tcp: no sockets in the browser

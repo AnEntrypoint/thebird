@@ -292,6 +292,25 @@ async function instantiate() {
       bytesAt(out, cap).set(bytes);
       return bytes.length;
     },
+    tjs_fs_realpath(ptr, len, out, cap) {
+      let target;
+      try {
+        target = fs.realpathSync(absolute(textAt(ptr, len)));
+      } catch {
+        return -1;
+      }
+      const bytes = encoder.encode(target);
+      if (bytes.length <= cap) bytesAt(out, bytes.length).set(bytes);
+      return bytes.length;
+    },
+    tjs_fs_rename(fromPtr, fromLen, toPtr, toLen) {
+      try {
+        fs.renameSync(absolute(textAt(fromPtr, fromLen)), absolute(textAt(toPtr, toLen)));
+        return 0;
+      } catch {
+        return -1;
+      }
+    },
     tjs_random(ptr, len) {
       globalThis.crypto.getRandomValues(bytesAt(ptr, len));
     },
@@ -329,11 +348,15 @@ function nextEvent(current, signal) {
   });
 }
 
-function callInput(exports, call, text) {
-  const input = encoder.encode(`${text}\0`);
+function callEval(exports, code, name) {
+  const input = encoder.encode(`${code}\0`);
+  const label = encoder.encode(`${name}\0`);
   const ptr = exports.malloc(input.length);
+  const labelPtr = exports.malloc(label.length);
   new Uint8Array(exports.memory.buffer, ptr, input.length).set(input);
-  const status = call(ptr);
+  new Uint8Array(exports.memory.buffer, labelPtr, label.length).set(label);
+  const status = exports.tjs_browser_eval(ptr, labelPtr);
+  exports.free(labelPtr);
   exports.free(ptr);
   return status;
 }
@@ -347,7 +370,7 @@ function resumeWith(exports, event) {
   return status;
 }
 
-export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, builtin } = {}) {
+export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, builtin, name = '<tjs -e>' } = {}) {
   if (signal?.aborted) return { output: '', status: TJS_CANCELLED };
   await fs.hydrate();
   const slot = await acquire();
@@ -362,7 +385,7 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, bu
   let status;
   try {
     exports.tjs_browser_set_deadline(timeoutMs ? Date.now() + timeoutMs : 0);
-    status = callInput(exports, exports.tjs_browser_eval, source);
+    status = callEval(exports, source, name);
     while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.calls.size > 0 || current.events.length > 0))) {
       if (current.events.length) status = resumeWith(exports, current.events.shift());
       else if (status === TJS_WAITING) {

@@ -1,9 +1,10 @@
 import { createFxEngine, supportsJspi } from './vendor/fx/engine.js';
 import { wasmRuntimeFactory } from './vendor/fx/wasm-runtime.js';
+import { requestTakeover } from './takeover.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-core.wasm', import.meta.url).href;
 const MANIFEST_URL = new URL('./vendor/fx/manifest.json', import.meta.url).href;
-const USAGE = 'usage: fx --version | fx --help | fx check | fx ask <prompt>';
+const USAGE = 'usage: fx | fx --version | fx --help | fx check | fx ask <prompt>';
 const HELP = `${USAGE}\n\nfx runs libfx's WebAssembly core in this browser. Set window.THEBIRD_FX to { apiKey, model, gatewayChatUrl } before fx ask. The key stays in this page and is never written to the workspace.`;
 const DEFAULT_MODEL = 'anthropic/claude-haiku-5.5';
 let manifest = null;
@@ -68,11 +69,16 @@ const ask = async (argv, signal) => {
 
 export async function fxBuiltin(argv, { signal } = {}) {
   const [command, ...rest] = argv;
+  if (argv.length === 0) {
+    const code = await requestTakeover('fx', { fx: globalThis.THEBIRD_FX ?? {} });
+    if (code !== 0) throw new Error(`fx exited with status ${code}`);
+    return '';
+  }
   if (command === '--version' || command === '-V' || command === 'version') {
     const info = await loadManifest();
     return `fx-core.wasm ${info.wasm.sha256.slice(0, 12)} libfx SDK ${info.sdkApiVersion}`;
   }
-  if (command === '--help' || command === '-h' || command === 'help' || argv.length === 0) return HELP;
+  if (command === '--help' || command === '-h' || command === 'help') return HELP;
   if (command === 'check') {
     await loadManifest();
     const wasm = await fetch(WASM_URL, { method: 'HEAD' }).catch(() => null);

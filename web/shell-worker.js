@@ -4,6 +4,7 @@ import { posix } from './shims/path.js';
 import { createShell, hasBackgroundOperator } from './bash-shell.js';
 import { onPythonPhase } from './python-in-page.js';
 import { clearCancel, setCancelWord } from './txiki-in-page.js';
+import { settleTakeover } from './takeover.js';
 
 const WORKSPACE = '/workspace';
 const windowFromUrl = (search) => {
@@ -62,6 +63,10 @@ try {
   self.onmessage = ({ data }) => {
     if (data.init) {
       setCancelWord(data.init.flag ? new Int32Array(data.init.flag) : null);
+      return;
+    }
+    if (data.takeoverDone) {
+      settleTakeover(data.takeoverDone);
       return;
     }
     if (data.cancel) {

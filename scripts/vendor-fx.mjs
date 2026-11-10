@@ -18,6 +18,8 @@ const modules = [
   'tool-observation.js',
   'wasm-module.js',
   'wasm-runtime.js',
+  'wasm-terminal.js',
+  'xterm.js',
 ];
 
 const zig = () => {
@@ -34,15 +36,20 @@ export async function vendorFx() {
   const wasm = join(fxRepo, 'zig-out', 'bin', 'fx-core.wasm');
   if (!existsSync(wasm) || process.env.FX_REBUILD === '1') run(zig(), ['build', '-Dwasm-surface=core']);
   if (!existsSync(wasm)) throw new Error(`fx-core.wasm is missing after the build: ${wasm}`);
+  const termWasm = join(fxRepo, 'zig-out', 'bin', 'fx-term.wasm');
+  if (!existsSync(termWasm) || process.env.FX_REBUILD === '1') run(zig(), ['build', 'fx-term-wasm', '-Dwasm-surface=term']);
+  if (!existsSync(termWasm)) throw new Error(`fx-term.wasm is missing after the build: ${termWasm}`);
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  const names = ['fx-core.wasm', ...modules];
-  for (const name of names) copyFileSync(name === 'fx-core.wasm' ? wasm : join(fxRepo, 'sdk', name), join(out, name));
+  copyFileSync(wasm, join(out, 'fx-core.wasm'));
+  copyFileSync(termWasm, join(out, 'fx-term.wasm'));
+  for (const name of modules) copyFileSync(join(fxRepo, 'sdk', name), join(out, name));
   const manifest = {
     generator: 'scripts/vendor-fx.mjs',
     source: 'local fx checkout',
     sdkApiVersion: 2,
     wasm: { name: 'fx-core.wasm', sha256: sha256(join(out, 'fx-core.wasm')) },
+    term: { name: 'fx-term.wasm', surface: 'term', sha256: sha256(join(out, 'fx-term.wasm')) },
     modules: modules.map((name) => ({ name, sha256: sha256(join(out, name)) })),
   };
   writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);

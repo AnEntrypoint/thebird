@@ -104,6 +104,67 @@ if (existsSync(chrome)) {
   await fxStub.close();
   check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
   check('fx --version and fx check report the bundled wasm and JSPI from the shell worker', /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(fxAsk.out) && /^fx ready: JSPI available; core application\/wasm$/m.test(fxAsk.out), JSON.stringify(fxAsk.out.slice(0, 300)));
+  const TUI_SCREEN = `(() => { const b = globalThis.thebird.term.buffer.active; const rows = []; for (let i = 0; i < b.length; i++) rows.push(b.getLine(i).translateToString(true)); return rows.join('\\n'); })()`;
+  const TUI_STATE = `JSON.stringify((() => { const t = globalThis.thebird.term; const b = t.buffer.active; return { cols: t.cols, rows: t.rows, alt: b.type, cursorX: b.cursorX, cursorY: b.cursorY, tui: document.body.dataset.tui ?? null }; })())`;
+  const TUI_TITLE = `JSON.stringify((() => { const b = globalThis.thebird.term.buffer.active; for (let y = 0; y < b.length; y++) { const line = b.getLine(y); if (line.translateToString(true).includes('v0.0.16')) return [0, 2].map((x) => { const c = line.getCell(x); return { x, fg: c.getFgColor(), palette: c.isFgPalette(), bold: !!c.isBold() }; }); } return null; })())`;
+  const tui = {};
+  const TUI_RESIZE_SETTLED = `globalThis.thebird.term.cols === 70 && globalThis.thebird.term.rows === 24 && globalThis.thebird.text().split('\\n').some((line) => /^─{70}$/.test(line))`;
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      const read = async (name) => {
+        tui[name] = { text: await evaluate(TUI_SCREEN), state: JSON.parse(await evaluate(TUI_STATE)), title: JSON.parse(await evaluate(TUI_TITLE)) };
+      };
+      const backspaces = async (count) => { for (let i = 0; i < count; i++) await press('Backspace'); };
+      await type('fx');
+      await press('Enter');
+      tui.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      await read('welcome');
+      await evaluate(`globalThis.thebird.term.resize(70, 24)`);
+      tui.resizeSettled = await settle(TUI_RESIZE_SETTLED, 30000);
+      await read('resized');
+      await evaluate(`globalThis.thebird.term.resize(93, 29)`);
+      await new Promise((ok) => setTimeout(ok, 1500));
+      await type('hello');
+      tui.typedShown = await settle(`globalThis.thebird.text().split('\\n').some((line) => line.startsWith('┃ hello'))`, 30000);
+      await read('typed');
+      await backspaces(5);
+      await type('/');
+      tui.paletteShown = await settle(`globalThis.thebird.text().includes('type to filter')`, 30000);
+      await read('palette');
+      await press('Escape');
+      tui.paletteClosed = await settle(`!globalThis.thebird.text().includes('type to filter')`, 30000);
+      await read('escaped');
+      await backspaces(1);
+      await evaluate(`globalThis.thebird.term.resize(70, 24)`);
+      tui.paletteResizeSettled = await settle(TUI_RESIZE_SETTLED, 30000);
+      await read('paletteResized');
+      await press('c', { ctrl: true });
+      await new Promise((ok) => setTimeout(ok, 3000));
+      await read('ctrl-c');
+      await type('/exit');
+      await press('Enter');
+      tui.exited = await settle(`!document.body.dataset.tui`, 60000);
+      await settle(`globalThis.thebird.text().split('\\n').some((line) => line.startsWith('thebird /workspace>'))`, 60000);
+      await type('echo after-fx');
+      await press('Enter');
+      tui.shellAfter = await settle(`globalThis.thebird.text().split('\\n').includes('after-fx')`, 60000);
+      await read('after-exit');
+    },
+  });
+  const screenRows = (name) => tui[name]?.text.split('\n') ?? [];
+  const welcome = tui.welcome ?? { state: {}, title: null };
+  check('fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page', tui.welcomeShown && screenRows('welcome').some((line) => line.includes('Welcome to fx')) && screenRows('welcome').some((line) => line.includes('› Sign in with Vercel')) && screenRows('welcome').some((line) => line.includes('Add an API key')) && screenRows('welcome').some((line) => line.startsWith('┃')) && screenRows('welcome').some((line) => line.includes('auto · grok-4.7')) && welcome.state.tui === 'fx', JSON.stringify(screenRows('welcome').slice(0, 6)));
+  check('the TUI cursor sits on the input line after the input box marker', welcome.state.cursorY === 2 && welcome.state.cursorX === 2 && screenRows('welcome')[2]?.startsWith('┃'), JSON.stringify({ x: welcome.state.cursorX, y: welcome.state.cursorY }));
+  check('the TUI draws the title in bold 256-colour palette 255 and the version in palette 245', welcome.title?.[0]?.bold === true && welcome.title[0].palette === true && welcome.title[0].fg === 255 && welcome.title[1]?.fg === 245 && welcome.title[1].palette === true, JSON.stringify(welcome.title));
+  check('typed text lands in the TUI input box', tui.typedShown && screenRows('typed').some((line) => line.startsWith('┃ hello')), JSON.stringify(screenRows('typed').slice(0, 3)));
+  check('a slash opens the TUI command palette with a filter header and the command rows', tui.paletteShown && screenRows('palette').some((line) => line.includes('type to filter')) && screenRows('palette').some((line) => /^ {2}\/help\b/.test(line)), JSON.stringify(screenRows('palette').slice(0, 4)));
+  check('escape closes the command palette and leaves the typed slash in the input', tui.paletteClosed && screenRows('escaped').some((line) => line.startsWith('┃ /')) && !tui.escaped.text.includes('type to filter'), JSON.stringify(screenRows('escaped').slice(0, 3)));
+  check('resizing the page reflows the TUI to 70 by 24 and keeps the welcome panel and the rules at 70 columns', tui.resizeSettled === true && tui.resized.state.cols === 70 && tui.resized.state.rows === 24 && screenRows('resized').some((line) => line.includes('Welcome to fx')) && screenRows('resized').filter((line) => /^─{70}$/.test(line)).length === 2, JSON.stringify({ settled: tui.resizeSettled, cols: tui.resized?.state.cols, rows: tui.resized?.state.rows, screen: screenRows('resized').slice(0, 4) }));
+  check('a resize after the command palette keeps the welcome panel and the rules at 70 columns (native fx fails the same way: upstream fx TUI defect)', tui.paletteResizeSettled === true && screenRows('paletteResized').some((line) => line.includes('Welcome to fx')) && screenRows('paletteResized').filter((line) => /^─{70}$/.test(line)).length === 2, JSON.stringify({ settled: tui.paletteResizeSettled, screen: screenRows('paletteResized').slice(0, 4) }));
+  check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
+  check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
   const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
   const pagesServer = createServer((req, res) => {
@@ -283,6 +344,12 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const PROMPT = 'thebird /workspace> ';
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
   const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello', 'node -e "console.log(\'x\'); process.exit(0)"', 'node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?', 'echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"'];
+  const IMPORT_COMMANDS = [
+    `mkdir -p import-probe/lib && echo 'export const answer = 42;' > import-probe/m.mjs && echo "export const v = 'lib';" > import-probe/lib/x.mjs && echo "import { answer } from './m.mjs'; import { v } from './lib/x.mjs'; console.log('script-imports', answer, v);" > import-probe/main.mjs && node import-probe/main.mjs`,
+    `(cd import-probe && node main.mjs && node -e "import('./m.mjs').then((m) => console.log('eval-import', m.answer))")`,
+    `node -e "import('./import-probe/nope.mjs').catch((e) => console.log('missing-import', e.message))"`,
+    `node -e "tjs.realPath('import-probe/lib/../m.mjs').then((p) => console.log('realpath', p))"`,
+  ];
   const nodeOutputs = [];
   const txikiShell = {};
   await terminal([], {
@@ -300,6 +367,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       await run(`echo 'console.log("txiki-runtime", tjs.version)' > node-marker.js`);
       await run(`echo 'const fs = require("fs"); console.log("args", process.argv.slice(2).join(" ")); console.log("read", fs.readFileSync("node-check.js", "utf8").includes("readFileSync"));' > node-check.js`);
       for (const command of NODE_COMMANDS) await run(command);
+      for (const command of IMPORT_COMMANDS) await run(command);
       await evaluate(`(async () => {
         const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
         const first = await shell.runShellInTxiki('mkdir -p notes/txiki && cd notes/txiki && x=7 && echo first-$x', { cwd: '/workspace' });
@@ -338,6 +406,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('node <script> runs through the txiki engine and prints its marker', /^txiki-runtime \d+\.\d+\.\d+$/.test(nodeOutput('node node-marker.js') ?? ''), JSON.stringify(nodeOutput('node node-marker.js')));
   check('node -e exposes typeof process and process.version', /^object v\d+\.\d+\.\d+$/.test(nodeOutput('node -e "console.log(typeof process, process.version)"') ?? ''), JSON.stringify(nodeOutput('node -e "console.log(typeof process, process.version)"')));
   check('a node script reads process.argv and fs.readFileSync', nodeOutput('node node-check.js hello') === 'args hello\nread true', JSON.stringify(nodeOutput('node node-check.js hello')));
+  check('a node script imports a sibling and a nested module through the txiki loader', nodeOutput(IMPORT_COMMANDS[0]) === 'script-imports 42 lib', JSON.stringify(nodeOutput(IMPORT_COMMANDS[0])));
+  check('a dynamic import from node -e resolves against the shell directory', (nodeOutput(IMPORT_COMMANDS[1]) ?? '').split('\n').includes('eval-import 42'), JSON.stringify(nodeOutput(IMPORT_COMMANDS[1])));
+  check('a missing module reports the loader error and the shell goes on', /^missing-import could not load/m.test(nodeOutput(IMPORT_COMMANDS[2]) ?? ''), JSON.stringify(nodeOutput(IMPORT_COMMANDS[2])));
+  check('tjs.realPath resolves a dotted path to the absolute file', nodeOutput(IMPORT_COMMANDS[3]) === 'realpath /workspace/import-probe/m.mjs', JSON.stringify(nodeOutput(IMPORT_COMMANDS[3])));
   check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
   check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
   check('readFileSync without an encoding returns bytes whose toString is the text, so JSON.parse reads it', nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"') === 'thebird-json', JSON.stringify(nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"')));
@@ -851,7 +923,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       splashRun.hidden = await evaluate("document.getElementById('splash').hidden");
     },
   });
-  check('the cold python3 call shows the tte-js splash while the bundle loads, then hides it', splashRun.modes?.includes('effect') && !splashRun.modes.includes('text') && splashRun.hidden === true, JSON.stringify(splashRun));
+  check('the cold python3 call shows the ASCII thebird splash while the bundle loads, then hides it', splashRun.modes?.includes('ascii') && !splashRun.modes.includes('text') && splashRun.hidden === true, JSON.stringify(splashRun));
   const bundleFailed = {};
   await terminal([], {
     blockUrls: ['https://anentrypoint.github.io/pyodide-minimal/*'],
@@ -901,25 +973,63 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   await terminal([], {
     interact: async ({ evaluate, waitFor }) => {
       await evaluate(`(async () => {
+        globalThis.__progress = ['start'];
         const { createSplash } = await import(new URL('web/splash.js', location.href).href);
-        const el = document.createElement('div');
-        document.body.append(el);
+        globalThis.__progress.push('imported');
+        const el = document.getElementById('splash');
+        const live = new Set();
+        const setIntervalOriginal = globalThis.setInterval;
+        const clearIntervalOriginal = globalThis.clearInterval;
+        globalThis.setInterval = (fn, ms) => { const id = setIntervalOriginal(fn, ms); if (fn.name === 'draw') live.add(id); return id; };
+        globalThis.clearInterval = (id) => { live.delete(id); return clearIntervalOriginal(id); };
         const splash = createSplash(el);
         splash.loading('loading the shell');
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-        const probe = { mode: el.dataset.mode, text: el.textContent, canvases: el.querySelectorAll('canvas').length };
+        globalThis.__progress.push('loading');
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        globalThis.__progress.push('slept');
+        const pre = el.querySelector('pre');
+        const first = pre.textContent;
+        const timersWhileLoading = live.size;
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        const second = pre.textContent;
+        const box = el.getBoundingClientRect();
+        const logo = pre.getBoundingClientRect();
+        const phase = el.querySelector('.phase').getBoundingClientRect();
+        const rows = first.split('\\n');
+        const probe = {
+          mode: el.dataset.mode,
+          rows: rows.length,
+          width: Math.max(...rows.map((row) => [...row].length)),
+          frames: [first, second],
+          distinct: first !== second,
+          canvases: el.querySelectorAll('canvas').length,
+          phase: el.querySelector('.phase').textContent,
+          phaseBelowLogo: phase.top >= logo.bottom - 1,
+          centreOffset: { x: logo.left + logo.width / 2 - (box.left + box.width / 2), y: logo.top + logo.height / 2 - (box.top + box.height / 2) },
+          logoBox: { left: logo.left, top: logo.top, right: logo.right, bottom: logo.bottom },
+          viewport: { width: innerWidth, height: innerHeight },
+          timersWhileLoading,
+        };
         splash.done();
-        el.remove();
+        probe.afterDone = { children: el.childElementCount, hidden: el.hidden, mode: el.dataset.mode ?? null, timers: live.size };
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        probe.afterDone.timersLater = live.size;
+        globalThis.setInterval = setIntervalOriginal;
+        globalThis.clearInterval = clearIntervalOriginal;
         globalThis.__splashProbe = probe;
-      })().catch((err) => { globalThis.__splashProbe = { error: String(err.message ?? err) }; })`);
-      await waitFor('globalThis.__splashProbe !== undefined', 60000);
-      splashProbe.probe = JSON.parse(await evaluate('JSON.stringify(globalThis.__splashProbe)'));
+      })().catch((err) => { globalThis.__splashProbe = { error: String(err.message ?? err), stack: String(err.stack ?? '') }; })`);
+      const splashFinished = await waitFor('globalThis.__splashProbe !== undefined', 60000).then(() => true, () => false);
+      splashProbe.probe = splashFinished ? JSON.parse(await evaluate('JSON.stringify(globalThis.__splashProbe)')) : { error: 'the splash probe did not finish within 60 s', progress: await evaluate('JSON.stringify(globalThis.__progress ?? null)'), href: await evaluate('location.href'), ready: await evaluate('document.readyState') };
       splashProbe.boot = await evaluate("globalThis.thebird.text().includes('loading the shell')");
       splashProbe.hidden = await evaluate("document.getElementById('splash').hidden");
     },
   });
-  check('the boot splash is a tte-js effect on a canvas, and the loading text is never printed to the terminal', splashProbe.probe?.mode === 'effect' && splashProbe.probe.text === '' && splashProbe.probe.canvases === 1 && splashProbe.boot === false, JSON.stringify(splashProbe));
-  check('the boot splash is hidden once the engine is ready', splashProbe.hidden === true, JSON.stringify(splashProbe.hidden));
+  const splashFrames = splashProbe.probe?.frames ?? [];
+  const splashCentred = Boolean(splashProbe.probe?.centreOffset) && Math.abs(splashProbe.probe.centreOffset.x) <= 1 && Math.abs(splashProbe.probe.centreOffset.y) <= 1;
+  check('the boot splash is an ASCII thebird in a centred pre with the phase text beneath it, and no canvas', splashProbe.probe?.mode === 'ascii' && splashProbe.probe.rows === 6 && splashProbe.probe.canvases === 0 && splashProbe.probe.phase === 'loading the shell' && splashProbe.probe.phaseBelowLogo && splashProbe.boot === false, JSON.stringify({ error: splashProbe.probe?.error, progress: splashProbe.probe?.progress, href: splashProbe.probe?.href, ready: splashProbe.probe?.ready, stack: splashProbe.probe?.stack?.slice(0, 300), mode: splashProbe.probe?.mode, rows: splashProbe.probe?.rows, canvases: splashProbe.probe?.canvases, phase: splashProbe.probe?.phase, phaseBelowLogo: splashProbe.probe?.phaseBelowLogo, boot: splashProbe.boot }));
+  check('the boot splash frames animate: two samples 450 ms apart differ, and each is six rows of the same width', splashProbe.probe?.distinct === true && splashFrames.length === 2 && splashFrames.every((frame) => frame.split('\n').length === 6 && frame.split('\n').every((row) => [...row].length === splashProbe.probe.width)), JSON.stringify({ first: splashFrames[0], second: splashFrames[1] }));
+  check('the splash logo is centred in the viewport and sits inside it', splashCentred && splashProbe.probe.logoBox.left >= 0 && splashProbe.probe.logoBox.top >= 0 && splashProbe.probe.logoBox.right <= splashProbe.probe.viewport.width && splashProbe.probe.logoBox.bottom <= splashProbe.probe.viewport.height, JSON.stringify({ box: splashProbe.probe?.logoBox, viewport: splashProbe.probe?.viewport, offset: splashProbe.probe?.centreOffset }));
+  check('done() removes the logo, hides the splash and clears its frame timer', splashProbe.probe?.timersWhileLoading === 1 && splashProbe.probe.afterDone.children === 0 && splashProbe.probe.afterDone.hidden === true && splashProbe.probe.afterDone.mode === null && splashProbe.probe.afterDone.timersLater === 0 && splashProbe.hidden === true, JSON.stringify(splashProbe.probe?.afterDone));
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]]);
   check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
