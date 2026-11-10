@@ -1,6 +1,6 @@
 {
   "generator": "scripts/vendor-fx.mjs",
-  "source": "local fx checkout",
+  "source": "fx b7b3cdd4 (term and SDK modules); fx-core.wasm kept from the previous build, because the core does not compile for wasm32-wasi at b7b3cdd4",
   "sdkApiVersion": 2,
   "wasm": {
     "name": "fx-core.wasm",
@@ -9,7 +9,7 @@
   "term": {
     "name": "fx-term.wasm",
     "surface": "term",
-    "sha256": "074e0e09b3707e876ec0671b1525f6dca38cf627fff88f7ac7de06ca9a864bfb"
+    "sha256": "5d5e26ba02258e8643d122e5985e3c27e37faa26f8ed7bcf2bf84a773988cb69"
   },
   "modules": [
     {
