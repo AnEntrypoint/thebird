@@ -571,6 +571,14 @@ Options for the owner, none taken: (a) run only the expiry check as a separate p
 
 Nothing was pushed in this phase.
 
+## Queue pass 9: live architecture lint passes; the expiry group is still blocked
+
+Live architecture lint, in the foreground: `CHROME_BIN=/usr/bin/chromium npm run lint:architecture`, exit 0. Output: `310 claims: 310 pass, 0 fail, 0 unverified; 39 prose lines with NO_CLAIM`. The live terminal ran from 04:34:13 to 04:39:25 UTC, 312 s, with 15 probes.
+
+Expiry experiment, outside the repo (`/tmp/p27/vt3.mjs`). The expiry command was typed after the page loaded, with CDP `Emulation.setVirtualTimePolicy` set to `advance`, to see whether the page clock could run the 900 s limit in a short real time. Result: the page clock moved forward by 5000 s, but the shell's `sleep 55` never completed in 400 s of real time, so there was no `tick1`. Virtual time pauses the worker timers the shell sleeps on. The approach is not usable.
+
+The expiry group therefore has to keep one browser session alive for about 935 s, and a foreground call is capped at 600000 ms. Nothing can carry that session across calls without a process that outlives the call, which is the backgrounding the owner ruled out. The witness is not green, and nothing was pushed in this pass.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
