@@ -1124,3 +1124,13 @@ Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, an
 - PASS: `fx with no arguments opens the TUI`, `/exit ends the TUI and the shell runs the next command` (`{"exited":true,"shellAfter":true,"tui":null}`).
 - FAIL, known upstream: resize after the command palette (fx resize defect, see above).
 - FAIL, known upstream: `approval` and `ask` (the page sends `tools: []`, so fx advertises no tool and the approval panel does not open). Causes recorded above in this file.
+
+## Phase B: approval and ask witness, run 13 (no code change, HEAD e4b44f6 plus this entry)
+
+- Wall 843 s, `WITNESS-EXIT 1`, PASS 186, FAIL 3 (same three as run 12).
+- Approval: `FAIL approval: a bash tool call opens the approval panel with its options and its command row` `{"options":[],"commandRows":["  stub gateway answer: prompt=[tool:bash] [input:{\"command\":\"echo approval\"}] streaming=true"]}`.
+- Ask: `FAIL ask: the question is shown, and the answer reaches the stub as a tool result` `["","  0s (↑1 ↓16)","","┃","","auto · haiku 5.5"]`.
+- Negative control: `PASS negative control: a plain prompt with no approval-requiring tool shows no approval panel`.
+- Capability: thebird's TUI cannot send `clientCapabilities.libfx.tools`. Its initialize is built inside `fx-term.wasm`, and `createFxTerminal` takes no tools option. The `fx ask` initialize (`web/vendor/fx/engine.js:1794`) sends `libfx.tools` only when host tools are passed, and thebird passes none. The fx accept path (`src/acp/server.zig` `parseInitializeRequest`, allow_libfx) is sound, so this is a thebird API gap, not an fx defect. Giving the page a tool list is a product decision and was not made here.
+- `/config/.local/bin/fx` is a symlink to `/workspace/fx/fx/zig-out/bin/fx`. The in-page `fx` path does not use it.
+- Stopped relay PID 4140198 (named by /tmp/relay.pid, cwd /workspace/thebird). Not stopped: chromium and relay processes not named by my pid files (listed in the report).
