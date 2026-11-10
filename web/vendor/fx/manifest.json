@@ -50,7 +50,7 @@
     },
     {
       "name": "wasm-runtime.js",
-      "sha256": "523afedbae89b73e55c93bf8e901b5a360226be1993d34b0f606079a617ea5bc"
+      "sha256": "87b9b002d7f50df0d1109f8b946aa2e7eb4b55f60d790793c34c8de31139c11a"
     },
     {
       "name": "wasm-terminal.js",

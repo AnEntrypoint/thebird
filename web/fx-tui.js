@@ -1,4 +1,5 @@
 import { createFxTerminal } from './vendor/fx/wasm-terminal.js';
+import { initializeHostTools } from './fx-host-tools.js';
 import { xtermAdapter } from './vendor/fx/xterm.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-term.wasm', import.meta.url).href;
@@ -58,6 +59,7 @@ export async function runFxTui(term, fx = {}) {
     env: environmentFor(fx),
     oauthSessionStore: memoryOauthSessionStore(),
     promptHistoryStore: memoryPromptHistoryStore(),
+    beforeStart: initializeHostTools,
   });
   app.interactive.catch(() => {});
   try {

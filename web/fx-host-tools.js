@@ -28,6 +28,17 @@ export const PAGE_HOST_TOOLS = [
 
 export const PAGE_HOST_TOOL_NAMES = PAGE_HOST_TOOLS.map((tool) => tool.name);
 
+export function initializeHostTools(instance) {
+  const bytes = new TextEncoder().encode(pageHostToolsJson());
+  const memory = instance.exports.memory;
+  const ptr = memory.buffer.byteLength;
+  memory.grow(Math.ceil(bytes.byteLength / 65536));
+  new Uint8Array(memory.buffer, ptr, bytes.byteLength).set(bytes);
+  const count = instance.exports.fx_terminal_initialize(ptr, bytes.byteLength);
+  if (count < 0) throw new Error('fx_terminal_initialize rejected the host tools');
+  return count;
+}
+
 export function pageHostToolsJson() {
   return JSON.stringify({
     tools: PAGE_HOST_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),

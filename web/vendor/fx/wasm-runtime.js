@@ -1027,6 +1027,7 @@ export async function instantiate(options) {
   const module = await loadModule(options.wasm);
   const instance = await WebAssembly.instantiate(module, runtime.imports);
   runtime.setInstance(instance);
+  await options.beforeStart?.(instance);
   const start = WebAssembly.promising(instance.exports._start);
   start().then(
     () => {
