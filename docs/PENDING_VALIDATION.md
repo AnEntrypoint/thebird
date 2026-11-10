@@ -1223,3 +1223,13 @@ Expected in Phase B: the wasm changes, so `scripts/txiki/pin.json` must move to 
   - mkdtemp, mkstemp and copy-big FAIL. The cause is in the witness, not in the C: it called `tjs.statSync` and `tjs.mkstemp`, which are not on the global `tjs` (`typeof tjs.statSync` is `undefined`, and `tjs.mkstemp` throws "not a function"). The engine's names are `tjs.stat` (async, `size`, `isFile`, `isDirectory`) and `tjs.makeTempFile`.
 - Probe of the live page (`/tmp/fx-tui/uvprobe/probe2.out`) with the correct names: `F 22 true`, `SIZE 32 false`, `D 22 true`. makeTempDir alone had already returned `D /workspace/uvfs-z01n6h`.
 - Witness fix: the three checks now use `tjs.stat` and `tjs.makeTempFile`. The witness is rerun once more in full, so the uv_fs lines come from a run with the corrected code.
+- Witness run 20 (full witness, HEAD 5064967): wall 1115 s, `WITNESS-EXIT 1`, PASS 193, FAIL 3. All three FAILs are fx (resize after the palette, approval, ask), and the approval and ask causes are unchanged.
+  - `PASS uv_fs_mkdtemp makes a unique directory under a 6-character suffix, and the path is reported to JavaScript` (`uvfs-mkdtemp true 22 true true`)
+  - `PASS uv_fs_mkstemp creates a regular file under a 6-character suffix` (`uvfs-mkstemp true 22 true`)
+  - `PASS uv_fs_mkdtemp rejects a template without XXXXXX` (`uvfs-bad-template rejected`)
+  - `PASS uv_fs_copyfile replaces the destination: a shorter source leaves exactly the source bytes` (`uvfs-copy-truncate short`)
+  - `PASS uv_fs_copyfile copies a 131072-byte file across more than one 64 KiB chunk` (`uvfs-copy-big 131072`)
+  - `PASS uv_fs_copyfile rejects a missing source` (`uvfs-copy-missing rejected`)
+- Gates on this pass: `npm run check` exit 0; `npm run lint:comments` 0 comments in 100 repo-owned files; `npm test` 6 pass, 0 fail; `node scripts/lint-architecture.mjs` (live probes) 349 claims, 349 pass, 0 fail, 0 unverified, wall 684 s.
+- Build wall: the second `vendor-txiki.mjs` run 195 s. Witness wall: run 19 872 s (before the witness fix), run 20 1115 s.
+- Still stubbed, with reasons in `scripts/txiki/stubs.tsv`: chmod, chown, fchmod, fchown, lchown, futime, utime, lutime, link, statfs (no OPFS operation), fsync and fdatasync (the host write is buffered until `flushFs`, and the host call is synchronous).
