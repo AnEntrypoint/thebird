@@ -1196,3 +1196,21 @@ Reachable count: 2 taken, 1 reachable but deferred. Not reachable: 14.
 | 13 | cd4fac5 | 843 | 1 | 186 | 3 | resize, approval, ask |
 | 14 | 9cc8efd | 875 | 1 | 186 | 4 | resize, approval, ask, architecture claim "no test suite" (fixed after the run) |
 | 15 | 2ac06b5 | 796 | 1 | 187 | 3 | resize, approval, ask. Cleanup closed its own 812 recorded PIDs. |
+
+## Phase A: uv_fs_* rows made real (copyfile, mkdtemp, mkstemp), the rest stay stubbed (no build, no witness yet)
+
+Changes:
+- `scripts/txiki/browser/fs-uv-browser.c`:
+  - `uv_fs_copyfile`: opens the source (`tjs_fs_open`, no create), honours `UV_FS_COPYFILE_EXCL` (EEXIST when the destination exists), opens the destination with create, truncates it to 0 through `tjs_fs_truncate`, then copies in 64 KiB chunks with `tjs_fs_read` and `tjs_fs_write`. A missing source gives ENOENT, and a directory gives EISDIR.
+  - `uv_fs_mkdtemp` and `uv_fs_mkstemp`: the template must end in `XXXXXX` (EINVAL otherwise). The suffix comes from a counter, not an entropy source (uv_random is still a stub), and each candidate is checked with `tjs_fs_access` and retried up to 64 times (EEXIST when all collide). mkdtemp makes the directory with `tjs_fs_mkdir`. mkstemp creates the file with `tjs_fs_open` (create) and registers its position. A failed mkdir or open gives ENOENT. The name is owned by the request and freed in `uv_fs_req_cleanup`, which now covers MKDTEMP and MKSTEMP.
+- `scripts/txiki/stubs.tsv`: copyfile, mkdtemp and mkstemp rows removed (a row and a real function would be a duplicate symbol). The reasons on the remaining rows now say why each one stays a stub: no OPFS operation for modes, owners, settable times, hard links or statistics; fsync and fdatasync need a synchronous flush, and the host write is buffered until `flushFs`.
+- `scripts/witness.mjs`: a `uv_fs_*` block with six checks, run through the engine's `tjs -e`:
+  - `uv_fs_mkdtemp makes a unique directory under a 6-character suffix…` (`uvfs-mkdtemp true 22 true true`)
+  - `uv_fs_mkstemp creates a regular file under a 6-character suffix` (`uvfs-mkstemp true 22 true`)
+  - `uv_fs_mkdtemp rejects a template without XXXXXX` (`uvfs-bad-template rejected`)
+  - `uv_fs_copyfile replaces the destination…` (`uvfs-copy-truncate short`)
+  - `uv_fs_copyfile copies a 131072-byte file across more than one 64 KiB chunk` (`uvfs-copy-big 131072`)
+  - `uv_fs_copyfile rejects a missing source` (`uvfs-copy-missing rejected`)
+- `AGENTS.md`: the list of still-stubbed rows now matches `stubs.tsv`, with the reason.
+
+Expected in Phase B: the wasm changes, so `scripts/txiki/pin.json` must move to the new digest. That is the consequence of the C change, and it is recorded when the build runs.

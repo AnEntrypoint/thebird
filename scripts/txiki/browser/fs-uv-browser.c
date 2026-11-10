@@ -340,6 +340,123 @@ int uv_fs_rename(uv_loop_t *loop, uv_fs_t *req, const char *path, const char *ne
     return fs_finish(req, loop, cb, result);
 }
 
+#define COPY_CHUNK 65536
+#define TEMP_ATTEMPTS 64
+
+static const char TEMP_ALPHABET[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+static uint64_t temp_counter;
+
+static int64_t copy_file(const char *path, const char *new_path, int flags) {
+    int32_t path_len = (int32_t) strlen(path);
+    int32_t new_len = (int32_t) strlen(new_path);
+    int32_t src = host_fs_open(path, path_len, 0);
+    if (src < 0) return host_fs_access(path, path_len) ? UV_EISDIR : UV_ENOENT;
+    if ((flags & UV_FS_COPYFILE_EXCL) && host_fs_access(new_path, new_len)) {
+        host_fs_close(src);
+        return UV_EEXIST;
+    }
+    int32_t dst = host_fs_open(new_path, new_len, 1);
+    if (dst < 0) {
+        host_fs_close(src);
+        return UV_ENOENT;
+    }
+    int64_t result = 0;
+    char *chunk = malloc(COPY_CHUNK);
+    if (!chunk || host_fs_truncate(dst, 0) != 0) {
+        result = UV_EIO;
+    } else {
+        int32_t offset = 0;
+        for (;;) {
+            int32_t got = host_fs_read(src, chunk, COPY_CHUNK, offset);
+            if (got < 0) {
+                result = UV_EIO;
+                break;
+            }
+            if (got == 0) break;
+            if (host_fs_write(dst, chunk, got, offset) != got) {
+                result = UV_EIO;
+                break;
+            }
+            offset += got;
+        }
+    }
+    free(chunk);
+    host_fs_close(src);
+    host_fs_close(dst);
+    return result;
+}
+
+int uv_fs_copyfile(uv_loop_t *loop, uv_fs_t *req, const char *path, const char *new_path, int flags, uv_fs_cb cb) {
+    req->fs_type = UV_FS_COPYFILE;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, copy_file(path, new_path, flags));
+}
+
+static char *temp_template(const char *tpl) {
+    size_t len = strlen(tpl);
+    if (len < 6 || strcmp(tpl + len - 6, "XXXXXX") != 0) return NULL;
+    char *name = malloc(len + 1);
+    if (name) memcpy(name, tpl, len + 1);
+    return name;
+}
+
+static void temp_fill(char *name) {
+    size_t len = strlen(name);
+    uint64_t value = ++temp_counter * 2654435761ULL;
+    for (size_t i = 0; i < 6; i++) {
+        name[len - 6 + i] = TEMP_ALPHABET[value % 36];
+        value /= 36;
+    }
+}
+
+static int64_t make_temp(uv_fs_t *req, const char *tpl, int directory) {
+    char *name = temp_template(tpl);
+    if (!name) return UV_EINVAL;
+    int64_t failure = UV_EEXIST;
+    for (int attempt = 0; attempt < TEMP_ATTEMPTS; attempt++) {
+        temp_fill(name);
+        int32_t len = (int32_t) strlen(name);
+        if (host_fs_access(name, len)) continue;
+        if (directory) {
+            if (host_fs_mkdir(name, len) != 0) {
+                failure = UV_ENOENT;
+                break;
+            }
+            req->ptr = name;
+            req->path = name;
+            return 0;
+        }
+        char *resolved = absolute_path(name);
+        int32_t handle = resolved ? host_fs_open(name, len, 1) : -1;
+        if (handle < 0) {
+            free(resolved);
+            failure = UV_ENOENT;
+            break;
+        }
+        position_set(handle, resolved);
+        req->ptr = name;
+        req->path = name;
+        return handle;
+    }
+    free(name);
+    return failure;
+}
+
+int uv_fs_mkdtemp(uv_loop_t *loop, uv_fs_t *req, const char *tpl, uv_fs_cb cb) {
+    req->fs_type = UV_FS_MKDTEMP;
+    req->path = tpl;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, make_temp(req, tpl, 1));
+}
+
+int uv_fs_mkstemp(uv_loop_t *loop, uv_fs_t *req, const char *tpl, uv_fs_cb cb) {
+    req->fs_type = UV_FS_MKSTEMP;
+    req->path = tpl;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, make_temp(req, tpl, 0));
+}
+
 int uv_fs_ftruncate(uv_loop_t *loop, uv_fs_t *req, uv_file file, int64_t offset, uv_fs_cb cb) {
     req->fs_type = UV_FS_FTRUNCATE;
     req->ptr = NULL;
@@ -461,6 +578,6 @@ int uv_fs_closedir(uv_loop_t *loop, uv_fs_t *req, uv_dir_t *dir, uv_fs_cb cb) {
 }
 
 void uv_fs_req_cleanup(uv_fs_t *req) {
-    if (req->fs_type == UV_FS_READLINK || req->fs_type == UV_FS_REALPATH) free(req->ptr);
+    if (req->fs_type == UV_FS_READLINK || req->fs_type == UV_FS_REALPATH || req->fs_type == UV_FS_MKDTEMP || req->fs_type == UV_FS_MKSTEMP) free(req->ptr);
     req->ptr = NULL;
 }

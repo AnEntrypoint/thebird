@@ -113,6 +113,25 @@ if (existsSync(chrome)) {
   const helloLines = hello.out.split('\n');
   check('playwriter answers --version, and which, command -v and type agree that it is a shell builtin', helloLines.includes('birdman playwriter 0.1.0') && helloLines.filter((line) => line === 'playwriter').length >= 2 && helloLines.includes('playwriter is a shell builtin'), helloLines.filter((line) => /playwriter/.test(line)).join(' / ').slice(0, 140));
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
+  const uvSeed = "printf 'abcdefghijklmnop' > /workspace/uvfs-c0";
+  const uvDoubling = Array.from({ length: 13 }, (_, i) => `cat /workspace/uvfs-c${i} /workspace/uvfs-c${i} > /workspace/uvfs-c${i + 1}`).join(' && ');
+  const uvFs = await terminal([
+    ['run', `${uvSeed} && ${uvDoubling} && printf 'short' > /workspace/uvfs-src.txt && printf 'long-content-to-truncate' > /workspace/uvfs-dst.txt && echo seeded`],
+    ['run', `tjs -e "tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((d) => tjs.makeTempDir('/workspace/uvfs-XXXXXX').then((e) => console.log('uvfs-mkdtemp', d.startsWith('/workspace/uvfs-'), d.length, tjs.statSync(d).isDirectory, d !== e)))"`],
+    ['run', `tjs -e "tjs.mkstemp('/workspace/uvfs-XXXXXX').then((f) => console.log('uvfs-mkstemp', f.path.startsWith('/workspace/uvfs-'), f.path.length, tjs.statSync(f.path).isFile))"`],
+    ['run', `tjs -e "tjs.makeTempDir('/workspace/uvfs-nope').then(() => console.log('uvfs-bad-template ok'), () => console.log('uvfs-bad-template rejected'))"`],
+    ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-src.txt', '/workspace/uvfs-dst.txt').then(() => tjs.readFile('/workspace/uvfs-dst.txt')).then((b) => console.log('uvfs-copy-truncate', new TextDecoder().decode(b)))"`],
+    ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-c13', '/workspace/uvfs-big-copy.bin').then(() => console.log('uvfs-copy-big', tjs.statSync('/workspace/uvfs-big-copy.bin').size))"`],
+    ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-none.txt', '/workspace/uvfs-x.txt').then(() => console.log('uvfs-copy-missing ok'), () => console.log('uvfs-copy-missing rejected'))"`],
+  ]);
+  const uvFsLines = uvFs.out.split('\n');
+  const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
+  check('uv_fs_mkdtemp makes a unique directory under a 6-character suffix, and the path is reported to JavaScript', uvFsLines.includes('uvfs-mkdtemp true 22 true true'), uvFsSeen);
+  check('uv_fs_mkstemp creates a regular file under a 6-character suffix', uvFsLines.includes('uvfs-mkstemp true 22 true'), uvFsSeen);
+  check('uv_fs_mkdtemp rejects a template without XXXXXX', uvFsLines.includes('uvfs-bad-template rejected'), uvFsSeen);
+  check('uv_fs_copyfile replaces the destination: a shorter source leaves exactly the source bytes', uvFsLines.includes('uvfs-copy-truncate short'), uvFsSeen);
+  check('uv_fs_copyfile copies a 131072-byte file across more than one 64 KiB chunk', uvFsLines.includes('uvfs-copy-big 131072'), uvFsSeen);
+  check('uv_fs_copyfile rejects a missing source', uvFsLines.includes('uvfs-copy-missing rejected'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
