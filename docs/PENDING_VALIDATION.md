@@ -1026,3 +1026,18 @@ Run 2, PID 501587, after the revert and the two checks removed: `witness totals:
 Not run, and not yet written into the witness: the TUI screen checks for transcript, approval, ask and the full-transcript screen opened with Ctrl-O (byte `\x0f`), which Phase A planned and which the stub now serves (`[lines:N]`, `[tool:NAME]`). They need the check code in `scripts/witness.mjs`, and a run. They are open. The Ctrl-O key and the close key are settled in fx source (`escape_parser.zig:250`, `input_full_transcript_runtime.zig:165`).
 
 Lint, this pass: `npm run lint:comments` 97 repo-owned files, 0 comments. `node scripts/lint-architecture.mjs`, 346 claims, 0 fail, 0 unverified.
+
+## TUI surface checks: decisions from run 2 (PID 531158, log /tmp/witness-tui2.log)
+
+Run 2 result: `witness totals: PASS 183 FAIL 4`, `WITNESS-EXIT 1`, `browser cleanup (exit): closed 73 Chromium tree(s)`.
+
+- Palette resize, `a resize after the command palette …`: FAIL. Cause is fx: `src/ui/resize_runtime.zig`, as recorded above. Not worked around.
+- Transcript, `transcript: the prompt and the stub answer appear …`: FAIL, `{"shown":false,"stub":[]}`. Cause is thebird, in `web/fx-tui.js`, not fx and not the stub. The TUI screen shows `Error · auth: fx needs access to Vercel AI Gateway. Run /login …, or set AI_GATEWAY_API_KEY.` and the stub's `seen` is empty, so the stub never received a request. `web/fx-tui.js` passed `apiKey`, `model` and `gatewayChatUrl` as top-level options, but the terminal runtime reads only `options.env` (`web/vendor/fx/wasm-runtime.js:171`). `web/vendor/fx/engine.js:530-540` shows how the same values reach the WASM: `AI_GATEWAY_API_KEY`, `FX_MODEL`, `FX_GATEWAY_CHAT_URL`. Fixed in `web/fx-tui.js` (`environmentFor`), committed as lanmower.
+- Ask, `ask: the question is shown …`: FAIL. Same cause as the transcript: the ask request never reached the stub, so no tool result came back. The approval check, `approval: a bash tool call shows its command …`, passed in run 2: the TUI showed `┃ [tool:bash] [input:{"command":"echo approval"}]` and the approval wording, so the stub's directive path is not the problem. Cause is thebird's `web/fx-tui.js`, fixed with the transcript.
+- Ctrl-O, `Ctrl-O opens the full transcript …`: FAIL, `{"opened":false}`. Same cause: there was no `[lines:60]` reply in the transcript to open. Fixed with the transcript. The Escape close is not yet shown, because the screen never reached the full view.
+
+So none of the three new failures is fx's. They are the same wiring fault in thebird.
+
+Realpath reconciliation. `tjs.realPath` resolves against the process cwd. The witness shell starts in `/workspace`, so its command now starts with `cd /workspace &&`, and the expected value is named for that directory: `realpath /workspace/import-probe/m.mjs`. gm reports `/import-probe/m.mjs` from its own project root, which is the same file resolved from a different cwd. I cannot check gm's cwd from this repo, so this is recorded as a reconciliation by cwd and not as verified against gm's run. The check's name says so.
+
+Run 3 (PID 554463, log /tmp/witness-tui3.log, started after the env and realpath fixes): still running when this section was written. Its result is not recorded here. The third run has to be read before the TUI checks are reported as passing.
