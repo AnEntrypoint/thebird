@@ -997,3 +997,32 @@ Not reachable without the owner, recorded and not changed here:
 - The esbuild-pin content (`scripts/esbuild-pin.mjs`, item 5 of the npm section): the earlier content is unrecoverable, and the file as it stands is the one to keep.
 - The `web/stream-hub.js` removal, the Pyodide bundle licence and the older vendored notices: owner decisions already recorded above.
 - Top-level `await` and live ESM bindings (npm defect 10): engine-side limits of the transform, documented in AGENTS.md and ARCHITECTURE.md.
+
+## Phase B, go-ahead pass (fx b7b3cdd4; two witness runs)
+
+fx term build. fx's checkout is at `0597c045` and is not an ancestor of origin's `b7b3cdd4` (checked with `git merge-base --is-ancestor`), and its tree is clean, so the checkout was not moved. The export `git archive b7b3cdd4` went to `/tmp/fx-b7b3cdd4` (outside both repos) and was built from there.
+- `zig build fx-term-wasm -Dwasm-surface=term` at `b7b3cdd4` exits 0. `fx-term.wasm` sha256 `5d5e26ba02258e8643d122e5985e3c27e37faa26f8ed7bcf2bf84a773988cb69`. It is in `web/vendor/fx/`, and the SDK modules copied from the export are byte-identical to the vendored ones.
+- `zig build -Dwasm-surface=core` at `b7b3cdd4` FAILS: `src/core/hooks/external_run.zig:67` (`expected type 'i32', found 'void'`, `.pid = pid`) and `:140` (`type 'void' does not support struct initialization syntax`, `std.posix.SIG.IGN`), reached from `src/builtins/hooks/command.zig`. The file is identical at `b7b3cdd4` and at the checkout, so the break is in fx's commits `4ffe6c3d` and `f35ada16`, not in the export. Cause: POSIX-only process code in a wasm32-wasi build. This is fx's to fix. The core WASM was not rebuilt: `web/vendor/fx/fx-core.wasm` stays at `1c894cb9…`, and `manifest.json` `source` now says so. `scripts/vendor-fx.mjs` cannot run to completion until the core builds, so the term and module update was copied in by hand, and that is recorded here.
+- Resize, with this term build: the palette resize still fails in both runs. Cause: fx, not thebird. Output: `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`. Not worked around.
+
+Witness runs (PID 475164 is the first; PID 501587 is the second, after the fixes below):
+
+Run 1, PID 475164, after the term re-vendor: `witness totals: PASS 181 FAIL 4`, `WITNESS-EXIT 1`.
+- Failures, all four read against run 1:
+  1. resize after the palette: fx, as above.
+  2. `git outside a repository writes its error to stdout …`: my check, and wrong. `runShellInTxiki` routes builtin errors to stderr by design (`web/shell-core.js` `sink.err`), so the check read the wrong path. Its output was `{"stdout":"git-rc=1\n","stderr":"git: no commits yet\n"}`, which also showed `/workspace` is inside a repository. Check removed.
+  3. `curl to a refused port … writes its error to stdout …`: the same mistake, the txiki path. Output `{"stdout":"after-curl-rc=1\n","stderr":"curl: could not fetch from 127.0.0.1:1: …"}`. Check removed. The bashkit route is covered by `in-page curl refuses a host that sends no CORS headers, and the shell goes on`, which passes in both runs.
+  4. `in-page git checkout refuses an unknown branch and leaves HEAD where it was`: mine, from `b6238f1`. The refusal text was not on the screen at all. The bashkit `err.stdout` route works for npm (the 404 check passes), so the cause for git is not established from the capture. Reverted `web/git-in-page.js` to the plain `throw new Error(failureText(output))`, which passed in the earlier run.
+- Browser cleanup, run 1: `browser cleanup (exit): closed 72 Chromium tree(s) by pid 475182, 476107, 476299, …`.
+- gm import checks, run 1, all PASS: `script-imports` `"script-imports 42 lib"`; `eval-import` `"script-imports 42 lib\neval-import 42"`; `missing-import` `"missing-import could not load 'import-probe/nope.mjs'"`; `realpath` `"realpath /workspace/import-probe/m.mjs"`.
+
+Run 2, PID 501587, after the revert and the two checks removed: `witness totals: PASS 182 FAIL 1`, `WITNESS-EXIT 1`.
+- Only FAIL: the palette resize (fx, as above).
+- `in-page git checkout refuses an unknown branch and leaves HEAD where it was`: PASS (the revert worked).
+- Browser cleanup, run 2: `browser cleanup (exit): closed 72 Chromium tree(s) by pid 501599, 502513, 502696, …`.
+- gm import checks, run 2, all PASS (same strings as run 1).
+- TUI, run 2: PASS `fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page`; PASS `escape closes the command palette and leaves the typed slash in the input`; PASS `resizing the page reflows the TUI to 70 by 24 and keeps the welcome panel and the rules at 70 columns` (no palette); FAIL `a resize after the command palette …` (fx).
+
+Not run, and not yet written into the witness: the TUI screen checks for transcript, approval, ask and the full-transcript screen opened with Ctrl-O (byte `\x0f`), which Phase A planned and which the stub now serves (`[lines:N]`, `[tool:NAME]`). They need the check code in `scripts/witness.mjs`, and a run. They are open. The Ctrl-O key and the close key are settled in fx source (`escape_parser.zig:250`, `input_full_transcript_runtime.zig:165`).
+
+Lint, this pass: `npm run lint:comments` 97 repo-owned files, 0 comments. `node scripts/lint-architecture.mjs`, 346 claims, 0 fail, 0 unverified.
