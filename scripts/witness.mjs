@@ -10,6 +10,7 @@ import { runTerminal, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorFx } from './vendor-fx.mjs';
 import { vendorGm } from './vendor-gm.mjs';
+import { vendorFloosie } from './vendor-floosie.mjs';
 import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,6 +35,7 @@ if (existsSync(chrome)) {
   if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
   if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
   if (!existsSync(join(root, 'web', 'vendor', 'gm', 'gm-core.wasm'))) await vendorGm();
+  if (!existsSync(join(root, 'web', 'vendor', 'floosie', 'browser.js'))) await vendorFloosie();
   const profile = mkdtempSync(join(tmpdir(), 'thebird-profile-'));
   const terminal = (pairs, options = {}) => runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: COLD_START_MS, ...options });
 
@@ -56,13 +58,15 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'gm --version'], ['run', 'gm check'], ['run', 'gm serve'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString(), timeoutMs: COLD_START_MS });
+  const site = await runTerminal({ chrome, profile, url: pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'gm --version'], ['run', 'gm check'], ['run', 'gm serve'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', 'gm attach'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString(), timeoutMs: COLD_START_MS });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
   const fxArtifactShipped = existsSync(fxArtifact);
   const gmArtifact = join(pagesDir, 'web', 'vendor', 'gm', 'gm-core.wasm');
   const gmArtifactShipped = existsSync(gmArtifact);
+  const floosieArtifact = join(pagesDir, 'web', 'vendor', 'floosie', 'browser.js');
+  const floosieArtifactShipped = existsSync(floosieArtifact);
   const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
   const siteBundle = join(pagesDir, 'web', 'terminal.bundle.js');
   const bundleText = existsSync(siteBundle) ? readFileSync(siteBundle, 'utf8') : '';
@@ -71,7 +75,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   rmSync(pagesDir, { recursive: true, force: true });
   check('the built site runs qjs -e through the txiki engine, and ships no quickjs artifact', quickjsArtifactGone && /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('in-page fx reports its bundled WASM version and passes its offline check', site.engine === 'ready' && /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(site.out) && /^fx ready: JSPI (available|missing); core application\/wasm$/m.test(site.out) && /^fx$/m.test(site.out) && /^builtin$/m.test(site.out) && fxArtifactShipped, site.out.split('\n').slice(-8).join(' / ').slice(0, 220));
-  check('in-page gm reports its bundled WASM version, passes its offline check and serves MCP methods', site.engine === 'ready' && /^gm-core\.wasm [0-9a-f]{12} C\+\+ core ABI 2$/m.test(site.out) && /^gm ready: core [0-9a-f]{12}; JSON and sha256 answered$/m.test(site.out) && /^gm MCP 2025-11-25: initialize, ping, tools\/list/m.test(site.out) && /"protocolVersion":"2025-11-25"/.test(site.out) && /value\\":42/.test(site.out) && /finished\\":true/.test(site.out) && /^gm$/m.test(site.out) && /^builtin$/m.test(site.out) && gmArtifactShipped, site.out.split('\n').slice(-12).join(' / ').slice(0, 260));
+  check('in-page gm reports its bundled WASM version, passes its offline check and serves MCP methods', site.engine === 'ready' && /^gm-core\.wasm [0-9a-f]{12} C\+\+ core ABI 2$/m.test(site.out) && /^gm ready: core [0-9a-f]{12}; JSON and sha256 answered$/m.test(site.out) && /^gm MCP 2025-11-25: initialize, ping, tools\/list/m.test(site.out) && /"protocolVersion":"2025-11-25"/.test(site.out) && /value\\":42/.test(site.out) && /finished\\":true/.test(site.out) && /floosie hub: gm/.test(site.out) && floosieArtifactShipped && /^gm$/m.test(site.out) && /^builtin$/m.test(site.out) && gmArtifactShipped, site.out.split('\n').slice(-12).join(' / ').slice(0, 260));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
@@ -924,6 +928,7 @@ check('gh unavailable with every pin matching gives UNVERIFIED and no FAIL', Boo
 check('negative control: a tag that resolves to another SHA is a FAIL when gh is available', driftVerdict(workflow, agents, () => ({ resolved: flipped(firstRow.sha) })).status === 'FAIL', 'a moved tag is reported as drift');
 check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
+check('pages.yml builds floosie browser bundle from latest floosie main before the page build', /repository: AnEntrypoint\/floosie/.test(workflow) && /path: floosie/.test(workflow) && /FLOOSIE_REPO: \$\{\{ github\.workspace \}\}\/floosie/.test(workflow) && workflow.indexOf('node scripts/vendor-floosie.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/floosie\/browser\.js/.test(workflow), 'floosie checkout, FLOOSIE_REPO, vendor script, asset check and build order');
 check('pages.yml builds gm core WASM from latest gm main before the page build', /repository: AnEntrypoint\/gm\b/.test(workflow) && /path: gm\b/.test(workflow) && /GM_REPO: \$\{\{ github\.workspace \}\}\/gm\b/.test(workflow) && workflow.indexOf('node scripts/vendor-gm.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/gm\/gm-core\.wasm/.test(workflow), 'gm checkout, GM_REPO, vendor script, asset check and build order');
 check('pages.yml builds fx core WASM from latest gmfx main before the page build', /repository: AnEntrypoint\/gmfx/.test(workflow) && /ref: main/.test(workflow) && /path: gmfx/.test(workflow) && /FX_REPO: \$\{\{ github\.workspace \}\}\/gmfx/.test(workflow) && workflow.indexOf('node scripts/vendor-fx.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/fx\/fx-core\.wasm/.test(workflow), 'gmfx checkout, FX_REPO, vendor script, asset check and build order');
 check('the desynced-mapping fixture is used only when THEBIRD_WITNESS_FIXTURE is set', desyncFixture ? mappingUnderTest !== agents : mappingUnderTest === agents, `fixture=${desyncFixture}`);

@@ -1,0 +1,9 @@
+{
+  "generator": "scripts/vendor-floosie.mjs",
+  "source": "AnEntrypoint/floosie",
+  "commit": "5417a536a3bca4c455fd0a0dd405de12aa05c38c",
+  "browser": {
+    "name": "browser.js",
+    "sha256": "588f159dd6ea35184516001f68d8010b8b34341d9584f1fb97e9a95b7ab801f9"
+  }
+}

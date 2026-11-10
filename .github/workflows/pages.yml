@@ -29,6 +29,11 @@ jobs:
           repository: AnEntrypoint/gm
           ref: main
           path: gm
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: AnEntrypoint/floosie
+          ref: main
+          path: floosie
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -65,6 +70,13 @@ jobs:
           node scripts/vendor-gm.mjs
           test -s web/vendor/gm/gm-core.wasm
           node -e "const m=require('./web/vendor/gm/manifest.json'); if (m.wasm.name !== 'gm-core.wasm' || !/^[0-9a-f]{64}$/.test(m.wasm.sha256)) process.exit(1)"
+      - name: Build floosie browser bundle from latest floosie main
+        env:
+          FLOOSIE_REPO: ${{ github.workspace }}/floosie
+        run: |
+          cd "$FLOOSIE_REPO" && npm ci
+          cd ${{ github.workspace }} && node scripts/vendor-floosie.mjs
+          test -s web/vendor/floosie/browser.js
       - run: npm ci
       - run: node scripts/build-pages.mjs
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa

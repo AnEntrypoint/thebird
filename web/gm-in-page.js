@@ -2,9 +2,10 @@ import { posix } from './shims/path.js';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from './shims/fs.js';
 import { gmCheck, gmClip, gmSha256Hex, gmVersion } from './vendor/gm/gm-core.js';
 import { GM_SKILLS } from './vendor/gm/skills.js';
+import { createBrowserStdio } from './vendor/floosie/browser.js';
 
-const USAGE = 'usage: gm --version | gm --help | gm check | gm serve | gm stdio \'<json-rpc>\' | gm tools | gm call <tool> \'<json>\'';
-const HELP = `${USAGE}\n\ngm is gm's stdio MCP server in the page. Its three served tools are next_context, run_code and finish; every other verb is a function on gm inside a run_code body. gm stdio takes one single-quoted JSON-RPC line and answers one line. The append-only run log is under /workspace/.gm/runs.`;
+const USAGE = 'usage: gm --version | gm --help | gm check | gm serve | gm stdio \'<json-rpc>\' | gm tools | gm call <tool> \'<json>\' | gm attach';
+const HELP = `${USAGE}\n\ngm is gm's stdio MCP server in the page. Its three served tools are next_context, run_code and finish; every other verb is a function on gm inside a run_code body. gm stdio takes one single-quoted JSON-RPC line and answers one line. gm attach lists the apps on the floosie hub; an app joins with gmAttach(name, handler). The append-only run log is under /workspace/.gm/runs.`;
 const PROTOCOL = '2025-11-25';
 const SERVER_INFO = { name: 'gm', title: 'gm in-page worker', version: '0.1.0' };
 const RUN_ROOT = '/workspace/.gm/runs';
@@ -253,13 +254,16 @@ const looseJson = (text) => {
 export const gmMethods = METHODS;
 export const gmTools = TOOLS.map((tool) => tool.name);
 
+const hub = createBrowserStdio({ name: 'gm', inputType: 'rpc' });
+hub.attach('gm', handle);
+hub.attach('*', handle);
+
+export const gmAttach = (name, handler) => hub.attach(name, handler);
+export const gmHubEndpoints = () => [...hub.endpoints.keys()];
+
 export async function gmRpc(line) {
   if (runDir === null) openRun();
-  const message = looseJson(line);
-  const messages = Array.isArray(message) ? message : [message];
-  const answers = await Promise.all(messages.map(handle));
-  const batch = answers.filter((answer) => answer.id !== null || answer.error !== undefined);
-  return json(Array.isArray(message) ? batch : batch[0] ?? {});
+  return hub.input(line);
 }
 
 export async function gmBuiltin(argv, { signal, cwd } = {}) {
@@ -270,6 +274,7 @@ export async function gmBuiltin(argv, { signal, cwd } = {}) {
   if (command === 'check') return await gmCheck();
   if (command === 'serve') return `gm MCP ${PROTOCOL}: ${METHODS.join(', ')}`;
   if (command === 'tools') return gmTools.join('\n');
+  if (command === 'attach') return `floosie hub: ${gmHubEndpoints().join(', ') || 'unavailable'}`;
   if (command === 'stdio' || command === 'rpc') return gmRpc(rest.join(' '));
   if (command === 'call') {
     const [name, ...args] = rest;
