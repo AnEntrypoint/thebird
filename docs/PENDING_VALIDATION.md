@@ -1454,14 +1454,10 @@ Left out of this push, with the change each needs:
 - Approval row: `/permissions ask` now switches the TUI to ask mode (`b101dda`), and the approval panel still does not open: the stub answers the `[tool:bash]` prompt with text, not a tool call, in the request after the mode change. The cause is in what fx sends after `/permissions ask`, or in how the TUI handles the tool call in ask mode. It needs an fx change to the tool-call handling in ask mode, or a witness change once fx confirms the flow. fx-owned; not fixed here.
 - Palette resize row: fx's `src/ui/resize_runtime.zig` never settles after the command palette is opened and closed. Needs the fx fix named in the Phase A notes above, then a rerun with no thebird workaround.
 
-## fx 8c5e581f: term rebuild blocked (queue pass 8)
+## fx term rebuild: blocker resolved by fae75200 (queue pass 8 and 9)
 
-Goal: rebuild `web/vendor/fx/fx-term.wasm` from fx `8c5e581f` (palette-then-resize fix and approval fix) and rerun the witness.
+Goal: rebuild `web/vendor/fx/fx-term.wasm` from fx `8c5e581f` and witness the palette-then-resize and approval rows.
 
-Result: blocked in fx, not in thebird. `zig build fx-term-wasm -Dwasm-surface=term` (Zig 0.17.1) at fx `8c5e581f`, clean tree, fails with 2 errors, both in `src/core/hooks/external_run.zig`, which fx commit `ddad463f` introduced:
-- line 67: `.pid = pid,` — `expected type 'i32', found 'void'`. On wasm32-wasi `child.id` is `void`, so the watchdog's pid is not an integer.
-- line 140: `.handler = .{ .handler = std.posix.SIG.IGN },` — `type 'void' does not support struct initialization syntax`. The POSIX signal table does not exist on wasm32-wasi.
+Resolution: the blocker recorded at `7efcba9` (`src/core/hooks/external_run.zig` did not compile for wasm32-wasi at `8c5e581f`: `.pid = pid` with pid `void`, and `std.posix.SIG.IGN` in the wasm target) is resolved on fx origin `main` by `fae75200`, which contains the palette-then-resize and approval fixes. `zig build fx-term-wasm -Dwasm-surface=term` (Zig 0.17.1) at `fae75200`: exit 0, 4826113 bytes.
 
-The same file built for the term at fx `5c8b64dc` (before `ddad463f`), which is why the earlier term rebuild succeeded. The fix is in fx's repo: guard the process-watchdog and signal-ignore code behind the target OS (or provide a wasm stub) in `src/core/hooks/external_run.zig`. Not edited here: fx's checkout is owned by fx, and this turn works only in thebird.
-
-Until that lands: `web/vendor/fx/fx-term.wasm` is unchanged (the `5c8b64dc` build from `fd04a2a`), so the approval and palette-then-resize rows are not witnessed on the fixed term. No Phase B witness run and no push in this pass.
+Vendored: `web/vendor/fx/fx-term.wasm` from `fae75200`, SHA-256 `79660073d5c4d2ec342cc34f3e2b466f91586bff627bdd4557f524c71266cf22`. `wasm-terminal.js` and the SDK modules come from the same checkout (`scripts/vendor-fx.mjs`). `fx-core.wasm` is unchanged (SHA-256 `1c894cb9…`).
