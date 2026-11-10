@@ -3,11 +3,28 @@ const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
 const INDEX_URL = 'https://pyodide.invalid/v314.0.7/';
 const MICROPIP_WHEEL = 'micropip-0.11.1-py3-none-any.whl';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
+const JOURNAL = `import os, sys
+_thebird_touched = set()
+_thebird_write = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
+def _thebird_journal(event, args):
+    if event == 'open' and isinstance(args[0], str):
+        writes = (isinstance(args[1], str) and any(c in args[1] for c in 'wax+')) or (isinstance(args[2], int) and args[2] & _thebird_write)
+        if writes:
+            _thebird_touched.add(os.path.abspath(args[0]))
+    elif event in ('os.remove', 'os.rmdir', 'os.rename', 'os.replace', 'sqlite3.connect') and isinstance(args[0], str):
+        _thebird_touched.add(os.path.abspath(args[0]))
+        if len(args) > 1 and isinstance(args[1], str):
+            _thebird_touched.add(os.path.abspath(args[1]))
+sys.addaudithook(_thebird_journal)
+def _thebird_drain():
+    paths = sorted(_thebird_touched)
+    _thebird_touched.clear()
+    return paths
+`;
 
 let runtime = null;
 let captured = null;
 let mirror = new Map();
-let lastCollect = 0;
 let micropipLoaded = null;
 let bundle = null;
 let bundledNames = new Set();
@@ -45,7 +62,7 @@ const pythonRuntime = () => {
     serveBundle();
     const { loadPyodide } = await importBytes(bundle.files.get('pyodide.mjs'));
     const { default: createPyodideModule } = await importBytes(bundle.files.get('pyodide.asm.mjs'));
-    return loadPyodide({
+    const py = await loadPyodide({
       indexURL: INDEX_URL,
       packageBaseUrl: INDEX_URL,
       lockFileContents: bundle.lock,
@@ -53,6 +70,8 @@ const pythonRuntime = () => {
       stdout: (text) => captured?.push(text),
       stderr: (text) => captured?.push(text),
     });
+    py.runPython(JOURNAL);
+    return py;
   })().catch((err) => {
     runtime = null;
     throw err;
@@ -60,55 +79,55 @@ const pythonRuntime = () => {
   return runtime;
 };
 
-function scanStats(py, dir = WORKSPACE, out = new Map()) {
-  for (const name of py.FS.readdir(dir)) {
-    if (name === '.' || name === '..') continue;
-    const path = `${dir}/${name}`;
-    if (SKIPPED.test(path)) continue;
-    const stat = py.FS.stat(path);
-    if (py.FS.isDir(stat.mode)) scanStats(py, path, out);
-    else if (py.FS.isFile(stat.mode)) out.set(path, { size: stat.size, mtime: +stat.mtime });
+const isFile = (py, path) => {
+  try {
+    return py.FS.isFile(py.FS.stat(path).mode);
+  } catch {
+    return false;
   }
-  return out;
+};
+
+function drainJournal(py) {
+  const drained = py.globals.get('_thebird_drain')();
+  const paths = drained.toJs();
+  drained.destroy();
+  return paths;
 }
 
-function signature(py, path) {
-  const stat = py.FS.stat(path);
-  return { size: stat.size, mtime: +stat.mtime };
-}
-
-function reconcile(py, paths, put) {
+function reconcile(py, put, drops, keep) {
   for (const [path, bytes] of put) {
     py.FS.mkdirTree(parentOf(path));
     py.FS.writeFile(path, bytes);
-    mirror.set(path, { bytes, ...signature(py, path) });
+    mirror.set(path, { bytes });
   }
-  const wanted = new Set(paths);
+  for (const path of drops) {
+    if (isFile(py, path)) py.FS.unlink(path);
+    mirror.delete(path);
+  }
+  if (!keep) return;
+  const wanted = new Set(keep);
   for (const path of [...mirror.keys()]) {
     if (wanted.has(path)) continue;
-    py.FS.unlink(path);
+    if (isFile(py, path)) py.FS.unlink(path);
     mirror.delete(path);
   }
 }
 
-function collect(py) {
-  const started = Date.now();
-  const after = scanStats(py);
+function collect(py, touched) {
   const writes = [];
-  for (const [path, { size, mtime }] of after) {
+  const drops = [];
+  for (const path of touched) {
+    if (!path.startsWith(`${WORKSPACE}/`) || SKIPPED.test(path)) continue;
     const known = mirror.get(path);
-    if (known && known.size === size && known.mtime === mtime && mtime < lastCollect) continue;
+    if (!isFile(py, path)) {
+      if (known) drops.push(path);
+      mirror.delete(path);
+      continue;
+    }
     const bytes = py.FS.readFile(path);
     if (!known || !sameBytes(known.bytes, bytes)) writes.push([path, bytes]);
-    mirror.set(path, { bytes, size, mtime });
+    mirror.set(path, { bytes });
   }
-  const drops = [];
-  for (const path of [...mirror.keys()]) {
-    if (after.has(path)) continue;
-    drops.push(path);
-    mirror.delete(path);
-  }
-  lastCollect = started;
   return { writes, drops };
 }
 
@@ -154,16 +173,17 @@ const handlers = {
     bundledNames = new Set(Object.keys(JSON.parse(lock).packages));
     return null;
   },
-  async run({ paths, put, source, filename }) {
+  async run({ put, drops, keep, source, filename }) {
     const py = await pythonRuntime();
     py.FS.mkdirTree(WORKSPACE);
     py.FS.chdir(WORKSPACE);
-    reconcile(py, paths, put);
+    reconcile(py, put, drops, keep);
+    drainJournal(py);
     const result = await capture(async () => {
       await py.loadPackagesFromImports(source, { messageCallback: () => {}, errorCallback: (text) => captured?.push(text) });
       py.runPython(source, { filename });
     });
-    return { ...result, ...collect(py) };
+    return { ...result, ...collect(py, drainJournal(py)) };
   },
   async install({ names }) {
     const py = await pythonRuntime();

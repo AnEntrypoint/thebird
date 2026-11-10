@@ -17,6 +17,8 @@ let phaseSink = () => {};
 
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/'));
 const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+const inWorkspace = (path) => path.startsWith(`${WORKSPACE}/`) && !SKIPPED.test(path);
+const isFile = (path) => fs.lstatSync(path, { throwIfNoEntry: false })?.isFile() === true;
 
 export function onPythonPhase(sink) {
   phaseSink = sink;
@@ -77,20 +79,21 @@ async function request(op, payload, signal) {
 }
 
 function outbound() {
-  const paths = fs.listFiles().filter((path) => path.startsWith(`${WORKSPACE}/`) && !SKIPPED.test(path));
-  const current = new Set(paths);
+  const full = synced === 0;
+  const candidates = (full ? fs.listFiles() : fs.changedSince(synced)).filter(inWorkspace);
   const put = [];
-  for (const path of fs.changedSince(synced)) {
-    if (!current.has(path)) {
-      known.delete(path);
-      continue;
+  const drops = [];
+  for (const path of candidates) {
+    if (isFile(path)) {
+      const bytes = fs.readFileSync(path);
+      if (!known.has(path) || !sameBytes(known.get(path), bytes)) put.push([path, bytes]);
+      known.set(path, bytes);
+    } else if (known.delete(path)) {
+      drops.push(path);
     }
-    const bytes = fs.readFileSync(path);
-    if (!known.has(path) || !sameBytes(known.get(path), bytes)) put.push([path, bytes]);
-    known.set(path, bytes);
   }
   synced = fs.currentRevision();
-  return { paths, put };
+  return { put, drops, keep: full ? candidates : null };
 }
 
 function inbound(writes, drops) {
@@ -108,10 +111,10 @@ function inbound(writes, drops) {
 }
 
 async function runPython(payload, signal) {
-  const { paths, put } = outbound();
+  const { put, drops, keep } = outbound();
   let reply;
   try {
-    reply = await request('run', { ...payload, paths, put }, signal);
+    reply = await request('run', { ...payload, put, drops, keep }, signal);
   } catch (err) {
     known.clear();
     synced = 0;
