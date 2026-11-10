@@ -115,9 +115,11 @@ if (existsSync(chrome)) {
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
-  const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello']], { initScript: fxInit });
+  const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
   await fxStub.close();
   check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
+  const fxLines = fxAsk.out.split('\n');
+  check('fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin', fxLines.filter((line) => line === 'fx').length >= 2 && fxLines.includes('fx is a shell builtin'), JSON.stringify(fxLines.filter((line) => /fx/.test(line)).slice(0, 6)));
   check('fx --version and fx check report the bundled wasm and JSPI from the shell worker', /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(fxAsk.out) && /^fx ready: JSPI available; core application\/wasm$/m.test(fxAsk.out), JSON.stringify(fxAsk.out.slice(0, 300)));
   const TUI_SCREEN = `(() => { const b = globalThis.thebird.term.buffer.active; const rows = []; for (let i = 0; i < b.length; i++) rows.push(b.getLine(i).translateToString(true)); return rows.join('\\n'); })()`;
   const TUI_STATE = `JSON.stringify((() => { const t = globalThis.thebird.term; const b = t.buffer.active; return { cols: t.cols, rows: t.rows, alt: b.type, cursorX: b.cursorX, cursorY: b.cursorY, tui: document.body.dataset.tui ?? null }; })())`;

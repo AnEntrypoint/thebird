@@ -1110,3 +1110,9 @@ Witness totals: `witness totals: PASS 185 FAIL 3`, `WITNESS-EXIT 1`. Cleanup: `b
 4. Browser cleanup. The earlier runs (run A, B and the 73-tree lines) listed the PIDs of every Chromium spawn that the same witness made, including those that had already exited. Each PID was spawned by that run; none was another project's browser, and no other project's PID appears in those lists. Killing an exited PID's group could hit a reused PID, which is a real risk even though it did not show here. The driver now drops a tree when its leader exits and signals only live leaders this run started. Run C closed 0, which is correct because each run already closes its own browsers. Ledger answer: the earlier runs did not close other projects' browsers, as far as the recorded PIDs show; the fix removes the reuse risk.
 
 Commits this pass, local, lanmower, no trailer: the Phase A fix commit above, and this record. Pushed once after this record.
+
+## Phase A: fx as a shell command in thebird (bare fx opens the TUI)
+
+- The launcher from the earlier pass is removed (bin/fx.mjs, test/, package.json and README entries). No native binary is run.
+- `fx` is already a registered in-page builtin (web/builtins.js, BUILTIN_NAMES). Bare `fx` starts the vendored fx-term through takeover (web/fx-in-page.js, web/fx-tui.js). The TUI takes no arguments on the page: `runFxTui` receives only the env and stores. The other subcommands (`--version`, `check`, `ask`) take arguments.
+- Witness added: `which fx; command -v fx; type fx` must print `fx`, `fx`, and `fx is a shell builtin`. The existing TUI block still checks that `fx` opens the TUI and that `/exit` returns to the prompt.
