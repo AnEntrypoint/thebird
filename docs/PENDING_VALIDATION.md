@@ -467,6 +467,23 @@ The one FAIL was `in-page gm reports its bundled WASM version, passes its offlin
 
 Caveat for run 2: the other agent's uncommitted floosie and gm changes (web/gm-in-page.js, web/vendor/floosie/, scripts/vendor-floosie.mjs, scripts/witness.mjs) appeared in the working tree during the run, between about 03:40 and 03:55 local. The pages-site check reads the copy built at the start of the run. The in-page checks read live files. A clean-tree run 3 has not been done.
 
+## Phase A: gm decoupled from floosie, gm vendor regenerated (queue pass 4)
+
+Floosie is held for its owner. `web/gm-in-page.js` no longer imports `web/vendor/floosie/browser.js`, so the gm builtin loads without floosie. `web/builtins.js` still imports `gmBuiltin` unchanged. `scripts/vendor-floosie.mjs` and `web/vendor/floosie/` stay untracked and unstaged. The floosie rows are in the uncommitted section at the end of this file, which is not committed here.
+
+| File | Row | Witness |
+| --- | --- | --- |
+| `web/gm-in-page.js` | Decoupled from floosie. The hub, `gmHub`, the `gm attach` command and the `hub` field of server/discover are removed. `gmRpc` answers each `rpc` line itself, one message or a batch, through `handle`. HELP and USAGE no longer name floosie. | `node --check web/gm-in-page.js` passes. `git grep -i floosie` finds nothing in tracked code. Browser behaviour is witness run 3 below. |
+| `scripts/vendor-gm.mjs` | The `/tmp/verify` zig candidate is removed again. The generator writes `skills.js`, copies the three served skills and records them in the manifest. | `node --check scripts/vendor-gm.mjs` passes. The regeneration row below. |
+| `scripts/gm/bridge.cpp`, `web/vendor/gm/gm-core.js`, `gm-core.wasm`, `manifest.json`, `skills.js`, `skills/` | Regenerated with `GM_REPO=/workspace/gm ZIG=/workspace/tools/zig-x86_64-linux-0.17.1/zig node scripts/vendor-gm.mjs`. `gm-core.wasm` is 399.1 KB with C ABI 2 and starts `b8ff314844e3`. | Every manifest entry (wasm, modules, skills, skillsModule) matches its file's SHA-256: 7 of 7 MATCH. |
+| `scripts/witness.mjs` | The floosie import, the floosie vendor call, the floosie artifact check, the `gm attach` run, the floosie clauses of the gm check and the pages.yml floosie check are removed. The gm checks stay. | `node --check scripts/witness.mjs` passes. Witness run 3 below. |
+| `AGENTS.md`, `ARCHITECTURE.md`, `README.md`, `DESIGN.md` | Floosie text is removed and gm text stays. The AGENTS browser list keeps `web/stream-hub.js` as in HEAD. | `node scripts/lint-architecture.mjs --static`: 275 claims pass, 0 fail. |
+| `.github/workflows/pages.yml`, `scripts/build-pages.mjs` | Restored to HEAD, so the floosie checkout and build steps are not committed. | `git diff HEAD` on both files is empty. |
+
+`npm run check` exits 0. `npm run lint:comments` reports 0 repo-owned comments and exits 0 (the untracked floosie bundle is not in `git ls-files`, so it is not checked).
+
+`web/stream-hub.js` has been tracked since a383315 and nothing imports it. Its chunk codec (`rpc`, `ndjson`, `json`, `text`) looks like the floosie hub's, so whether it leaves is the owner's decision. It is not removed in this pass.
+
 ## Open decisions
 
 - `scripts/vendor-pyodide.mjs`: retired in 18403ed, with its references in ARCHITECTURE.md, AGENTS.md, README.md and `scripts/lint-architecture.mjs` changed in the same commit. The stale local directory `web/vendor/pyodide/` is untracked and was not deleted; remove it by hand when convenient.
