@@ -32,10 +32,6 @@ uv_cwd	fs: no host working directory
 uv_exepath	fs: no host working directory
 uv_free_cpu_info	os: no host process, network or CPU information in the browser
 uv_free_interface_addresses	os: no host process, network or CPU information in the browser
-uv_fs_fdatasync	fs: File.datasync is reachable from JS and returns UV_ENOSYS; host writes are buffered in the dirty map and flushed by the async flushFs, and the synchronous host call cannot wait for that flush
-uv_fs_fsync	fs: File.sync is reachable from JS and returns UV_ENOSYS; host writes are buffered in the dirty map and flushed by the async flushFs, and the synchronous host call cannot wait for that flush
-uv_fs_link	fs: tjs.link is reachable from JS and returns UV_ENOSYS; OPFS files have no inode identity, so a second name cannot share the first name's bytes, and a copy would diverge on the next write
-uv_fs_statfs	fs: tjs.statFs is reachable from JS and returns UV_ENOSYS; OPFS exposes usage only through navigator.storage.estimate(), which is async, and the host call is synchronous
 uv_inet_pton	os: no host process, network or CPU information in the browser
 uv_interface_addresses	os: no host process, network or CPU information in the browser
 uv_ip4_name	os: no host process, network or CPU information in the browser

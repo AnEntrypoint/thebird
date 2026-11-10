@@ -1251,3 +1251,24 @@ Phase A is code, tests and docs only. No build, gate or witness has run for thes
   - Witness attr block, JS-reachable rows only: `tjs.chmod` (expects `uvfs-chmod 384`), `File.chmod` (`uvfs-fchmod 416`), `File.chown` (`uvfs-fchown 1234 5678`), `File.utime` (`uvfs-futime 1700000000000 1600000000000`). There is no global `chown`, `lchown`, `utime` or `lutime` in txiki's `mod_fs.c`, so those four have no JS entry to witness; their C path is a real implementation with no JS call site.
   - `AGENTS.md`: the stubbed-row sentence lists the four remaining rows and the attribute storage.
 - Witness wall time: not run in Phase A.
+
+## Stretch 1: uv_fs rows, Phase B (build and witness)
+
+- Builds (`scripts/vendor-txiki.mjs`, zig 0.17.1). Each build passed both gates (compile 40 of 40, link 0 undefined symbols). A C change moves the digest, the pin check stops the run before the wasm is written, so each change took a pin move and a second run:
+  - B1 (Phase A C, 2b05905): stopped at the pin check, wall 127 s. Pin moved to `c4e55f46…`, rebuilt, exit 0, wall 175 s.
+  - B2 (git fs stat buffers widened to seven slots): stopped, wall 100 s. Pin moved to `63463286…`, rebuilt, exit 0, wall 106 s.
+  - B3 (link, statfs, fsync, fdatasync): stopped, wall 84 s. Pin moved to `fb1337e8…`, rebuilt, exit 0, wall 131 s.
+  - B4 (flush completion counted by the page's work-pending check): stopped, wall 119 s. Pin moved to `af3ab91e…`, rebuilt, exit 0, wall 138 s. This is the pin in `scripts/txiki/pin.json` and AGENTS.md.
+- Witness run 21 (on B1 wasm, before the recursion fix): wall 867 s, `WITNESS-EXIT 1`. Defect: `touch` called itself (the bulk rewrite of `meta.set` into `touch` also rewrote the line inside `touch` and in `saveAttrs`), so every OPFS write overflowed the stack. This took the OPFS, symlink and gm checks with it.
+- Witness run 22 (after the recursion fix): wall 1099 s, `WITNESS-EXIT 1`, PASS 196, FAIL 4. The uv_fs `futime` FAIL was in the witness: it read `s.atime` and `s.mtime`, which the txiki stat object does not have (it has `atim`, `mtim`, `ctim`, `birthtim`), so the check threw silently. Verified by a live probe (`uvfs-futime 1700000000000 1600000000000` after the witness fix). The git binding `scripts/txiki/browser/fs-browser.c` still declared four-slot stat buffers that the host now fills with seven, so it was widened.
+- Witness run 23 (final state, B4 wasm): wall 1064 s, `WITNESS-EXIT 1`, PASS 202, FAIL 3. All 15 uv_fs checks PASS:
+  - `PASS uv_fs_mkdtemp makes a unique directory…`, `PASS uv_fs_mkstemp creates a regular file…`, `PASS uv_fs_mkdtemp rejects a template without XXXXXX`, `PASS uv_fs_copyfile replaces the destination…`, `PASS uv_fs_copyfile copies a 131072-byte file…`, `PASS uv_fs_copyfile rejects a missing source`
+  - `PASS uv_fs_chmod (tjs.chmod) sets the mode bits that stat reports`, `PASS uv_fs_fchmod (File.chmod)…`, `PASS uv_fs_fchown (File.chown)…`, `PASS uv_fs_futime (File.utime)…`
+  - `PASS uv_fs_link (tjs.link) makes a second name that reads the same bytes`, `PASS uv_fs_link: a write through the new name is seen through the old name`, `PASS uv_fs_statfs (tjs.statFs)…`, `PASS uv_fs_fsync (File.sync)…`, `PASS uv_fs_fdatasync (File.datasync)…`
+  - The 3 FAILs are outside uv_fs. `FAIL a resize after the command palette…` is the upstream fx TUI defect (native fx fails the same way). `FAIL approval: a bash tool call opens the approval panel…` (options `[]`) and `FAIL ask: the question is shown…` are blocked on the fx SDK pre-start hook (stretch 2).
+- Four rows now implemented (none left in `stubs.tsv`):
+  - link: hard-link group in the attrs file (`hard` id); every write goes through `storeBytes`, which copies to all members; attribute changes apply to all members; rename and unlink carry membership. stat nlink stays 1.
+  - statfs: `tjs_fs_quota` reads a cached `navigator.storage.estimate()`; 4096-byte blocks; `f_files` and `f_ffree` are 0 because OPFS has no inode table; ENOSYS when no estimate is available.
+  - fsync and fdatasync: `tjs_fs_flush` runs `flushFs` and calls the exported `tjs_fs_flush_done(id, status)`; the C side keeps a count of outstanding flushes that the browser work-pending check reads, so the page keeps ticking until the flush completes.
+- Gates after the last change: `npm test` 7 pass, 0 fail (exit 0); `npm run check` exit 0; `npm run lint:comments` exit 0, 0 comments in 100 repo-owned files.
+- Witness wall times: run 21 867 s, run 22 1099 s, run 23 1064 s.

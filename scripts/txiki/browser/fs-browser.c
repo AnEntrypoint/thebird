@@ -39,7 +39,7 @@ static JSValue fs_stat(JSContext *ctx, JSValue this_val, int argc, JSValue *argv
     if (!path) {
         return JS_EXCEPTION;
     }
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int32_t status = host_fs_stat(path, (int32_t) len, slots);
     JS_FreeCString(ctx, path);
     return stat_object(ctx, status, slots);
@@ -51,7 +51,7 @@ static JSValue fs_lstat(JSContext *ctx, JSValue this_val, int argc, JSValue *arg
     if (!path) {
         return JS_EXCEPTION;
     }
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int32_t status = host_fs_lstat(path, (int32_t) len, slots);
     JS_FreeCString(ctx, path);
     return stat_object(ctx, status, slots);

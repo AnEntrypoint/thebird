@@ -127,7 +127,12 @@ if (existsSync(chrome)) {
     ['run', `tjs -e "tjs.chmod('/workspace/uvfs-attr.txt', 0o600).then(() => tjs.stat('/workspace/uvfs-attr.txt')).then((s) => console.log('uvfs-chmod', s.mode & 0o777))"`],
     ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.chmod(0o640).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-fchmod', s.mode & 0o777))"`],
     ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.chown(1234, 5678).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-fchown', s.uid, s.gid))"`],
-    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.utime(1700000000000, 1600000000000).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-futime', s.atime.getTime(), s.mtime.getTime()))"`],
+    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.utime(1700000000000, 1600000000000).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-futime', s.atim.getTime(), s.mtim.getTime()))"`],
+    ['run', "printf 'linksrc' > /workspace/uvfs-link-src.txt && echo link-seeded"],
+    ['run', `tjs -e "tjs.link('/workspace/uvfs-link-src.txt', '/workspace/uvfs-link-dst.txt').then(() => tjs.readFile('/workspace/uvfs-link-dst.txt')).then((b) => console.log('uvfs-link', new TextDecoder().decode(b)), (e) => console.log('uvfs-link-err', String(e)))"`],
+    ['run', "printf 'written-via-dst' > /workspace/uvfs-link-dst.txt && cat /workspace/uvfs-link-src.txt && echo link-write-done"],
+    ['run', `tjs -e "tjs.statFs('/workspace').then((s) => console.log('uvfs-statfs', s.bsize, s.blocks > 0, s.bfree <= s.blocks, s.bavail <= s.bfree), (e) => console.log('uvfs-statfs-err', String(e)))"`],
+    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.sync().then(() => console.log('uvfs-fsync ok')).then(() => f.datasync()).then(() => console.log('uvfs-fdatasync ok')).then(() => f.close()), (e) => console.log('uvfs-sync-err', String(e)))"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
@@ -141,6 +146,11 @@ if (existsSync(chrome)) {
   check('uv_fs_fchmod (File.chmod) sets the mode bits that stat reports', uvFsLines.includes('uvfs-fchmod 416'), uvFsSeen);
   check('uv_fs_fchown (File.chown) sets the owner and group that stat reports', uvFsLines.includes('uvfs-fchown 1234 5678'), uvFsSeen);
   check('uv_fs_futime (File.utime) sets the access and modification times that stat reports', uvFsLines.includes('uvfs-futime 1700000000000 1600000000000'), uvFsSeen);
+  check('uv_fs_link (tjs.link) makes a second name that reads the same bytes', uvFsLines.includes('uvfs-link linksrc'), uvFsSeen);
+  check('uv_fs_link: a write through the new name is seen through the old name', uvFsLines.some((line) => line.includes('written-via-dst')), uvFsSeen);
+  check('uv_fs_statfs (tjs.statFs) reports a 4096-byte block size and block counts from the storage quota', uvFsLines.includes('uvfs-statfs 4096 true true true'), uvFsSeen);
+  check('uv_fs_fsync (File.sync) completes after the OPFS flush', uvFsLines.includes('uvfs-fsync ok'), uvFsSeen);
+  check('uv_fs_fdatasync (File.datasync) completes after the OPFS flush', uvFsLines.includes('uvfs-fdatasync ok'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });

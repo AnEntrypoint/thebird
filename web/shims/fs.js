@@ -106,12 +106,12 @@ function saveAttrs() {
     mark('/.thebird', 'write');
   }
   files.set(ATTR_FILE, Buffer.from(JSON.stringify([...attrs])));
-  touch(ATTR_FILE);
+  meta.set(ATTR_FILE, { mtimeMs: Date.now() });
   mark(ATTR_FILE, 'write');
 }
 
 function touch(path) {
-  touch(path);
+  meta.set(path, { mtimeMs: Date.now() });
   const attr = attrs.get(path);
   if (attr?.mtimeMs !== undefined) {
     delete attr.mtimeMs;
@@ -129,6 +129,22 @@ function forgetAttrs(path) {
     }
   }
   if (removed) saveAttrs();
+}
+
+function hardMembers(path) {
+  const id = attrs.get(path)?.hard;
+  if (id === undefined) return [path];
+  return [...attrs].filter(([, value]) => value.hard === id).map(([member]) => member);
+}
+
+function storeBytes(path, bytes) {
+  for (const member of hardMembers(path)) {
+    files.set(member, bytes);
+    if (member !== path) {
+      mark(member, 'write');
+      touch(member);
+    }
+  }
 }
 
 function replaceAttrs(source, target) {
@@ -259,7 +275,7 @@ export function writeFileSync(path, data, options) {
   if (dirs.has(target)) throw fail('EISDIR', 'open', target, 'illegal operation on a directory');
   if (flag.includes('x') && files.has(target)) throw fail('EEXIST', 'open', target, 'file already exists');
   ensureParent(target, 'open');
-  files.set(target, bytesFrom(data, encoding));
+  storeBytes(target, bytesFrom(data, encoding));
   touch(target);
   mark(target, 'write');
 }
@@ -270,7 +286,7 @@ export function appendFileSync(path, data, options) {
   const previous = files.get(target) ?? Buffer.alloc(0);
   const next = Buffer.concat([previous, bytesFrom(data, encoding)]);
   ensureParent(target, 'open');
-  files.set(target, next);
+  storeBytes(target, next);
   touch(target);
   mark(target, 'write');
 }
@@ -329,18 +345,36 @@ export function setAttrSync(path, follow, attr, value) {
   const target = resolvePath(path, follow);
   if (!files.has(target) && !dirs.has(target) && !links.has(target)) return -1;
   if (!['mode', 'uid', 'gid', 'atime', 'mtime'].includes(attr)) return -1;
-  const next = { ...(attrs.get(target) ?? {}) };
-  if (attr === 'mode') next.mode = value & 0o7777;
-  if (attr === 'uid') next.uid = value;
-  if (attr === 'gid') next.gid = value;
-  if (attr === 'atime') next.atimeMs = value;
-  if (attr === 'mtime') {
-    next.mtimeMs = value;
-    if (!dirs.has(target)) meta.set(target, { mtimeMs: value });
+  for (const member of hardMembers(target)) {
+    const next = { ...(attrs.get(member) ?? {}) };
+    if (attr === 'mode') next.mode = value & 0o7777;
+    if (attr === 'uid') next.uid = value;
+    if (attr === 'gid') next.gid = value;
+    if (attr === 'atime') next.atimeMs = value;
+    if (attr === 'mtime') {
+      next.mtimeMs = value;
+      if (!dirs.has(member)) meta.set(member, { mtimeMs: value });
+    }
+    attrs.set(member, next);
   }
-  attrs.set(target, next);
   saveAttrs();
   return 0;
+}
+
+export function linkSync(existing, path) {
+  const source = resolvePath(existing, false);
+  if (dirs.has(source)) throw fail('EPERM', 'link', norm(existing), 'operation not permitted');
+  if (!files.has(source)) throw fail('ENOENT', 'link', norm(existing), 'no such file or directory');
+  const target = resolvePath(path, false);
+  if (files.has(target) || dirs.has(target) || links.has(target)) throw fail('EEXIST', 'link', norm(path), 'file already exists');
+  ensureParent(target, 'link');
+  const id = attrs.get(source)?.hard ?? Math.max(0, ...[...attrs.values()].map((value) => value.hard ?? 0)) + 1;
+  attrs.set(source, { ...(attrs.get(source) ?? {}), hard: id });
+  attrs.set(target, { ...(attrs.get(source) ?? {}), hard: id, mtimeMs: undefined });
+  files.set(target, files.get(source));
+  touch(target);
+  mark(target, 'write');
+  saveAttrs();
 }
 
 export function readlinkSync(path) {
@@ -473,12 +507,12 @@ export function openSync(path, flags = 'r') {
   if (flags.startsWith('r') && !files.has(target)) throw fail('ENOENT', 'open', target, 'no such file or directory');
   if (!files.has(target)) {
     ensureParent(target, 'open');
-    files.set(target, Buffer.alloc(0));
+    storeBytes(target, Buffer.alloc(0));
     touch(target);
     mark(target, 'write');
   }
   if (flags.startsWith('w')) {
-    files.set(target, Buffer.alloc(0));
+    storeBytes(target, Buffer.alloc(0));
     mark(target, 'write');
   }
   const fd = nextFd++;
@@ -506,7 +540,7 @@ export function writeSync(fd, data, ...rest) {
   const next = Buffer.alloc(Math.max(previous.byteLength, at + bytes.byteLength));
   next.set(previous);
   next.set(bytes, at);
-  files.set(handle.path, next);
+  storeBytes(handle.path, next);
   touch(handle.path);
   mark(handle.path, 'write');
   if (!handle.append) handle.position = at + bytes.byteLength;
@@ -522,7 +556,7 @@ export function writeAtSync(fd, data, position) {
   const next = end > previous.byteLength ? Buffer.alloc(end) : previous;
   if (next !== previous) next.set(previous);
   next.set(bytes, position);
-  files.set(handle.path, next);
+  storeBytes(handle.path, next);
   touch(handle.path);
   mark(handle.path, 'write');
   return bytes.byteLength;
@@ -534,7 +568,7 @@ export function truncateSync(fd, size) {
   const previous = files.get(handle.path) ?? Buffer.alloc(0);
   const next = Buffer.alloc(size);
   next.set(previous.subarray(0, size));
-  files.set(handle.path, next);
+  storeBytes(handle.path, next);
   touch(handle.path);
   mark(handle.path, 'write');
 }

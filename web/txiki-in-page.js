@@ -131,6 +131,13 @@ async function instantiate() {
   const slot = { stdout: [], stderr: [], cwd: '/workspace', session: null, memory: null, exports: null };
   const wasi = createWasi({ args: ['tjs'], stdout: (chunk) => slot.stdout.push(chunk), stderr: (chunk) => slot.stderr.push(chunk) });
   const bytesAt = (ptr, len) => new Uint8Array(slot.memory.buffer, ptr, len);
+let storage = null;
+const refreshStorage = () => {
+  navigator.storage?.estimate?.().then((estimate) => {
+    storage = estimate;
+  }, () => {});
+};
+refreshStorage();
   const textAt = (ptr, len) => decoder.decode(bytesAt(ptr, len));
   const absolute = (name) => posix.resolve(slot.cwd, name);
   const host = {
@@ -229,6 +236,31 @@ async function instantiate() {
       slots[4] = info.uid;
       slots[5] = info.gid;
       slots[6] = info.atimeMs;
+      return 0;
+    },
+    tjs_fs_link(tptr, tlen, pptr, plen) {
+      try {
+        fs.linkSync(absolute(textAt(tptr, tlen)), absolute(textAt(pptr, plen)));
+        return 0;
+      } catch (err) {
+        return { ENOENT: -2, EEXIST: -17, EPERM: -1 }[err.code] ?? -5;
+      }
+    },
+    tjs_fs_quota(out) {
+      if (!storage || storage.quota === undefined) return -1;
+      const slots = new Float64Array(slot.memory.buffer, out, 2);
+      slots[0] = storage.quota;
+      slots[1] = storage.usage ?? 0;
+      return 0;
+    },
+    tjs_fs_flush(id) {
+      fs.flushFs().then(
+        () => {
+          refreshStorage();
+          slot.exports.tjs_fs_flush_done(id, 0);
+        },
+        () => slot.exports.tjs_fs_flush_done(id, 1),
+      );
       return 0;
     },
     tjs_fs_setattr(ptr, len, follow, attr, value) {

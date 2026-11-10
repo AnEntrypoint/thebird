@@ -35,7 +35,7 @@ export const BROWSER_SOURCES = ['scripts/txiki/browser/uv-browser.c', 'scripts/t
 export const EXIT_FLUSH_TARGET = 'src/mod_os.c';
 export const EXIT_FLUSH_HEADER = 'scripts/txiki/browser/exit-flush.h';
 export const TXIKI_WASM_SHA256 = JSON.parse(readFileSync(new URL('./txiki/pin.json', import.meta.url), 'utf8')).tjsWasmSha256;
-const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time'];
+const BROWSER_EXPORTS = ['tjs_browser_eval', 'tjs_browser_resume', 'tjs_browser_tick', 'tjs_browser_cancel', 'tjs_browser_set_deadline', 'tjs_browser_end', 'gm_txiki_new', 'gm_txiki_free', 'gm_txiki_context', 'gm_txiki_loop_alive', 'gm_txiki_loop_turn', 'gm_txiki_load_builtin', 'gm_txiki_refresh_loop_time', 'tjs_fs_flush_done'];
 const REQUIRED_EXPORTS = ['_initialize', 'malloc', 'free', ...BROWSER_EXPORTS];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');

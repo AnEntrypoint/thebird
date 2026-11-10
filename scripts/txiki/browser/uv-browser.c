@@ -560,8 +560,10 @@ int uv_os_homedir(char *buffer, size_t *size) {
     return 0;
 }
 
+int tjs_fs_flushes_pending(void);
+
 int tjs_browser_work_pending(const uv_loop_t *loop) {
-    return loop->timers != NULL || loop->pending_head != NULL;
+    return loop->timers != NULL || loop->pending_head != NULL || tjs_fs_flushes_pending();
 }
 
 void tjs_browser_defer(uv_loop_t *loop, void (*fn)(void *arg), void *arg) {

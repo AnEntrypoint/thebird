@@ -26,6 +26,9 @@ HOST_IMPORT("tjs_fs_readlink") int32_t host_fs_readlink(const char *path, int32_
 HOST_IMPORT("tjs_fs_readdir") int32_t host_fs_readdir(const char *path, int32_t len, char *out, int32_t cap);
 HOST_IMPORT("tjs_fs_realpath") int32_t host_fs_realpath(const char *path, int32_t len, char *out, int32_t cap);
 HOST_IMPORT("tjs_fs_rename") int32_t host_fs_rename(const char *from, int32_t from_len, const char *to, int32_t to_len);
+HOST_IMPORT("tjs_fs_link") int32_t host_fs_link(const char *from, int32_t from_len, const char *to, int32_t to_len);
+HOST_IMPORT("tjs_fs_quota") int32_t host_fs_quota(double *out);
+HOST_IMPORT("tjs_fs_flush") int32_t host_fs_flush(int32_t id);
 HOST_IMPORT("tjs_fs_setattr") int32_t host_fs_setattr(const char *path, int32_t len, int32_t follow, int32_t attr, double value);
 HOST_IMPORT("tjs_fs_resolve") int32_t host_fs_resolve(const char *path, int32_t len, char *out, int32_t cap);
 
@@ -692,7 +695,94 @@ int uv_fs_closedir(uv_loop_t *loop, uv_fs_t *req, uv_dir_t *dir, uv_fs_cb cb) {
     return fs_finish(req, loop, cb, 0);
 }
 
+struct fs_wait {
+    uv_fs_t *req;
+    uv_loop_t *loop;
+    int32_t id;
+    struct fs_wait *next;
+};
+
+static struct fs_wait *waiting_flushes = NULL;
+static int flushes_waiting = 0;
+
+int tjs_fs_flushes_pending(void) {
+    return flushes_waiting > 0;
+}
+static int32_t next_flush_id = 1;
+
+static int fs_flush(uv_fs_t *req, uv_loop_t *loop, uv_fs_cb cb) {
+    if (!cb) return UV_ENOSYS;
+    struct fs_wait *wait = malloc(sizeof(*wait));
+    if (!wait) return fs_finish(req, loop, cb, UV_ENOMEM);
+    wait->req = req;
+    wait->loop = loop;
+    wait->id = next_flush_id++;
+    wait->next = waiting_flushes;
+    waiting_flushes = wait;
+    req->loop = loop;
+    req->cb = cb;
+    flushes_waiting++;
+    host_fs_flush(wait->id);
+    return 0;
+}
+
+void tjs_fs_flush_done(int32_t id, int32_t status) {
+    for (struct fs_wait **link = &waiting_flushes; *link; link = &(*link)->next) {
+        struct fs_wait *wait = *link;
+        if (wait->id != id) continue;
+        *link = wait->next;
+        uv_fs_t *req = wait->req;
+        uv_loop_t *loop = wait->loop;
+        free(wait);
+        flushes_waiting--;
+        req->result = status == 0 ? 0 : UV_EIO;
+        tjs_browser_defer(loop, fs_done, req);
+        return;
+    }
+}
+
+int uv_fs_fsync(uv_loop_t *loop, uv_fs_t *req, uv_file file, uv_fs_cb cb) {
+    req->fs_type = UV_FS_FSYNC;
+    req->ptr = NULL;
+    if (!position_find(file)) return fs_finish(req, loop, cb, UV_EBADF);
+    return fs_flush(req, loop, cb);
+}
+
+int uv_fs_fdatasync(uv_loop_t *loop, uv_fs_t *req, uv_file file, uv_fs_cb cb) {
+    req->fs_type = UV_FS_FDATASYNC;
+    req->ptr = NULL;
+    if (!position_find(file)) return fs_finish(req, loop, cb, UV_EBADF);
+    return fs_flush(req, loop, cb);
+}
+
+int uv_fs_link(uv_loop_t *loop, uv_fs_t *req, const char *path, const char *new_path, uv_fs_cb cb) {
+    req->fs_type = UV_FS_LINK;
+    req->path = path;
+    req->ptr = NULL;
+    int32_t status = host_fs_link(path, (int32_t) strlen(path), new_path, (int32_t) strlen(new_path));
+    return fs_finish(req, loop, cb, status);
+}
+
+int uv_fs_statfs(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
+    req->fs_type = UV_FS_STATFS;
+    req->path = path;
+    req->ptr = NULL;
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
+    if (host_fs_stat(path, (int32_t) strlen(path), slots) != 0) return fs_finish(req, loop, cb, UV_ENOENT);
+    double quota[2] = {0, 0};
+    if (host_fs_quota(quota) != 0) return fs_finish(req, loop, cb, UV_ENOSYS);
+    uv_statfs_t *out = calloc(1, sizeof(*out));
+    if (!out) return fs_finish(req, loop, cb, UV_ENOMEM);
+    out->f_bsize = 4096;
+    out->f_frsize = 4096;
+    out->f_blocks = (uint64_t) (quota[0] / 4096);
+    out->f_bfree = quota[0] > quota[1] ? (uint64_t) ((quota[0] - quota[1]) / 4096) : 0;
+    out->f_bavail = out->f_bfree;
+    req->ptr = out;
+    return fs_finish(req, loop, cb, 0);
+}
+
 void uv_fs_req_cleanup(uv_fs_t *req) {
-    if (req->fs_type == UV_FS_READLINK || req->fs_type == UV_FS_REALPATH || req->fs_type == UV_FS_MKDTEMP || req->fs_type == UV_FS_MKSTEMP) free(req->ptr);
+    if (req->fs_type == UV_FS_READLINK || req->fs_type == UV_FS_REALPATH || req->fs_type == UV_FS_MKDTEMP || req->fs_type == UV_FS_MKSTEMP || req->fs_type == UV_FS_STATFS) free(req->ptr);
     req->ptr = NULL;
 }
