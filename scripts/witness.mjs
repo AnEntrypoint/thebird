@@ -134,10 +134,10 @@ if (existsSync(chrome)) {
     ['run', `tjs -e "tjs.statFs('/workspace').then((s) => console.log('uvfs-statfs', s.bsize, s.blocks > 0, s.bfree <= s.blocks, s.bavail <= s.bfree), (e) => console.log('uvfs-statfs-err', String(e)))"`],
     ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.sync().then(() => console.log('uvfs-fsync ok')).then(() => f.datasync()).then(() => console.log('uvfs-fdatasync ok')).then(() => f.close()), (e) => console.log('uvfs-sync-err', String(e)))"`],
     ['run', `tjs -e "tjs.link('/workspace/uvfs-link-src.txt', '/workspace/uvfs-nlink-x.txt').then(() => tjs.stat('/workspace/uvfs-link-src.txt')).then((s) => console.log('uvfs-nlink', s.nlink), (e) => console.log('uvfs-nlink-err', String(e)))"`],
-    ['run', `tjs -e "console.log('uvos-env', tjs.getenv('PATH') === undefined, Object.keys(tjs.environ()).length, tjs.tmpDir, tjs.loadavg().join(','))"`],
-    ['run', `tjs -e "tjs.setenv('UVOS_A', '1'); const a = tjs.getenv('UVOS_A'); tjs.unsetenv('UVOS_A'); console.log('uvos-set', a, tjs.getenv('UVOS_A') === undefined)"`],
-    ['run', `tjs -e "const b = new Uint8Array(32); tjs.random(b.buffer); const c = new Uint8Array(32); tjs.random(c.buffer); console.log('uvos-rand', b.some((x) => x !== 0), b.join(',') !== c.join(','), tjs.cwd, tjs.getenv('HOME') === undefined)"`],
-    ['run', `tjs -e "let r = 'ok'; try { tjs.chdir('/nope-missing'); } catch (e) { r = 'rejected'; } tjs.chdir('/workspace'); console.log('uvos-info', tjs.pid, tjs.ppid, tjs.userInfo.userName, tjs.userInfo.homeDir, tjs.cpuInfo().length >= 1, tjs.networkInterfaces().length, tjs.uptime() >= 0, r, tjs.exePath, tjs.cwd)"`],
+    ['run', `tjs -e "console.log('uvos-env', tjs.env.PATH === undefined, Object.keys(tjs.env).length, tjs.tmpDir, tjs.system.loadAvg.join(','))"`],
+    ['run', `tjs -e "tjs.env.UVOS_A = '1'; const a = tjs.env.UVOS_A; delete tjs.env.UVOS_A; console.log('uvos-set', a, tjs.env.UVOS_A === undefined)"`],
+    ['run', `tjs -e "const b = new Uint8Array(32); crypto.getRandomValues(b); const c = new Uint8Array(32); crypto.getRandomValues(c); console.log('uvos-rand', b.some((x) => x !== 0), b.join(',') !== c.join(','), tjs.cwd, tjs.env.HOME === undefined)"`],
+    ['run', `tjs -e "let r = 'ok'; try { tjs.chdir('/nope-missing'); } catch (e) { r = 'rejected'; } tjs.chdir('/workspace'); console.log('uvos-info', tjs.pid, tjs.ppid, tjs.system.userInfo.userName, tjs.system.userInfo.homeDir, tjs.system.cpus.length >= 1, tjs.system.networkInterfaces.length, tjs.system.uptime >= 0, r, tjs.exePath, tjs.cwd)"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
