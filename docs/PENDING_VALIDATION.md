@@ -934,3 +934,20 @@ Phase B witnesses still to run (none run in this stretch): the full `npm run wit
 - gm import checks, all PASS: `script-imports` → `"script-imports 42 lib"`; `eval-import` → `"script-imports 42 lib\neval-import 42"`; `missing-import` → `"missing-import could not load 'import-probe/nope.mjs'"`; `realpath` → `"realpath /workspace/import-probe/m.mjs"`.
 - The one FAIL, upstream fx (not thebird, not worked around): `a resize after the command palette keeps the welcome panel and the rules at 70 columns` → `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`. Cause: fx `src/ui/resize_runtime.zig`, the resize observation does not settle after palette use. Waiting on fx's push; no thebird change for it.
 - Phase B witnesses still open after this pass: the resize check above, rerun after fx's push.
+
+## Phase A: fx full TUI in the browser (docs only, nothing built, not pushed)
+
+Finding, checked against the tree, before any change:
+- The term build is already vendored and wired. `web/vendor/fx/fx-term.wasm` has sha256 `074e0e09b3707e876ec0671b1525f6dca38cf627fff88f7ac7de06ca9a864bfb`, identical to `/workspace/fx/fx/zig-out/bin/fx-term.wasm`. `web/vendor/fx/wasm-terminal.js` and `web/vendor/fx/xterm.js` are the VT surface: bytes go to xterm.js through `xtermAdapter`, and `web/fx-tui.js` runs `createFxTerminal` on `fx-term.wasm`.
+- A bare `fx` already takes over the terminal: `web/fx-in-page.js` calls `requestTakeover('fx')` when argv is empty, `web/shell-client.js` and `web/terminal.js` (`runFxTui`) run the term build, and `fx --version`, `fx check` and `fx ask` stay on the core line builtin (`fx-core.wasm`). The owner's diagnosis (only the core, line builtins only) is therefore out of date for bare `fx`. The witness already passes the welcome panel, input box, footer, cursor, palette and palette Escape, typed text, resize with no palette, Ctrl-C and `/exit` (`PASS` lines in the Phase B run).
+- `ghostty-vt.wasm` and WTerm are not in this repo, not in the fx checkout (`grep -rli ghostty` finds only CHANGELOG, tests and a Zig test name), and not on fx.sh/try as fetched (the page names no wasm files and no grid component; it links the source at github.com/vercel-labs/fx). Nothing here can be vendored from them. The owner needs to name the artifact or repo for those two, or confirm that xterm.js stays as the VT surface.
+
+Changes in Phase A: none to code. The only change is this section. What the witness does not yet cover, and the witness each needs (Phase B, after fx pushes the resize fix and the go-ahead):
+1. Welcome gate, sign-in choices: already covered by "fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page".
+2. Transcript: send a prompt through the stub gateway (`scripts/fx-stub-gateway.mjs`, the same gateway `fx ask` uses) with `window.THEBIRD_FX` set, and check the transcript rows in the TUI screen (`screenRows`), in `scripts/witness.mjs` beside the TUI checks.
+3. Full-transcript screen: open it after the transcript and check its heading and a row from the earlier turn.
+4. Approval: a tool call that needs approval through the stub gateway, check the approval panel text and that Escape or the deny key returns to the input.
+5. Ask presentation: the TUI's ask prompt (a model question), answer it in the input, check the answer row.
+6. Resize: the palette-then-resize check ("a resize after the command palette keeps the welcome panel and the rules at 70 columns") stays the fx-owned FAIL until fx's `src/ui/resize_runtime.zig` fix is pushed; rerun it then, with no thebird workaround.
+
+These four surfaces need the stub gateway to answer a streamed turn and a tool call, which the current stub does not do. The gateway change is part of the Phase A code work for the next pass, once the owner names the VT surface.
