@@ -45,6 +45,7 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 - `curl` and `wget`, for hosts that send CORS headers to the page.
 - `fx --version`, `fx --help` and `fx check` from fx's browser WebAssembly core. `fx ask <prompt>` needs `window.THEBIRD_FX = { apiKey, model }` and WebAssembly JSPI.
 - `gm --version`, `gm check`, `gm serve`, `gm tools`, `gm attach`, `gm call <tool> '<json>'` and `gm stdio '<json-rpc>'`. gm is gm's stdio MCP server in the page. Its three served tools are `next_context`, `run_code` and `finish`; every other verb is `gm.<name>` inside a `run_code` body. Skills are gm's real `skill://gm/SKILL.md`, `skill://gm/WORKFLOWS.md` and `skill://gm-continue/SKILL.md`. `gm attach` lists the hub's apps; a future app joins with `gmAttach(name, handler)`. The append-only run log is under `/workspace/.gm/runs` and resumes across page loads.
+- `playwriter --version`, `playwriter status`, `playwriter execute <code>` and `playwriter stdio '<json-rpc>'`. Load the Birdman extension, grant the toolbar button on the thebird tab, then gm's `playwriter_execute({ code })` and `playwriter_browsers({ action })` verbs control other tabs over CDP. Execute bodies run in txiki.js with `browser`, `context`, `state` and `console` in scope; no Node playwriter server or upstream browser extension is used.
 - `which`, `type` and `command -v` give the same answer for each name.
 
 ## Limits

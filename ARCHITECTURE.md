@@ -26,8 +26,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/pty-adapter.js` | PTY-style adapter: keystrokes and paste in, output bytes out. Keeps the input line, cursor, history, Tab, the Ctrl keys and the run queue; `resize` sends the column and row count to the shell as the COLUMNS and LINES shell variables. |
 | `web/shell-client.js` | Page-side client for the worker: `run`, `complete`, `cwd`, `cancel`, `onOutput`, `ready`. Its `cancel` sets the shared cancel word on an isolated page and replaces the worker if a cancelled run does not answer within 1.5 s. |
 | `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
-| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the eleven custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
-| `web/builtins.js` | `BUILTIN_NAMES` and `runBuiltin`: the one dispatch for `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`, `fx` and `gm`. The bash page and the txiki shell's bridge both call it. |
+| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the twelve custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
+| `web/builtins.js` | `BUILTIN_NAMES` and `runBuiltin`: the one dispatch for `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `curl`, `wget`, `fx`, `gm` and `playwriter`. The bash page and the txiki shell's bridge both call it. |
 | `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
 | `web/git-in-page.js` | `git` builtin: refuses remote verbs, then builds the git program from the texts below and runs it in the txiki engine with `runTjs`. |
 | `web/git-program.js` | Git program that runs inside the txiki engine: the fs adapter over `__thebirdFs`, and each git command. |
@@ -37,7 +37,8 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/python-worker.js` | Web Worker that holds Pyodide, runs `python3` scripts and installs pure packages with micropip. |
 | `web/curl-in-page.js` | `curl` and `wget` builtins: generate a module that calls txiki.js `fetch`, run through `web/txiki-in-page.js`. |
 | `web/fx-in-page.js` | `fx` builtin over `web/vendor/fx/fx-core.wasm`. |
-| `web/gm-in-page.js` | `gm` builtin: gm's stdio MCP server over `web/vendor/gm/gm-core.wasm` and floosie's `rpc` hub. Three served tools (`next_context`, `run_code`, `finish`); other verbs are `gm.<name>` inside a `run_code` body. `gm stdio` takes one JSON-RPC line and answers one line. Its append-only run log resumes under `/workspace/.gm/runs`. |
+| `web/gm-in-page.js` | `gm` builtin: gm's stdio MCP server over `web/vendor/gm/gm-core.wasm` and floosie's `rpc` hub. Three served tools (`next_context`, `run_code`, `finish`); other verbs are `gm.<name>` inside a `run_code` body. `gm stdio` takes one JSON-RPC line and answers one line. Its append-only run log resumes under `/workspace/.gm/runs`. The `playwriter_execute`, `playwriter_browsers`, `browser_tabs` and `browser_close_run` verbs come from `web/playwriter-in-page.js`. |
+| `web/playwriter-in-page.js` | `playwriter` builtin and floosie `playwriter` endpoint: Birdman extension CDP transport, a Playwright-like browser/context/page facade, and execute bodies run inside txiki.js through `web/txiki-in-page.js`. State persists across execute calls; reset clears it. |
 | `web/vendor/floosie/browser.js` | Bare JS browser build of floosie: chunks, codecs, processors and the browser stdio factory, which routes `rpc` chunks to named apps or the `*` default. |
 | `web/shims/fs.js` | Synchronous in-memory tree hydrated from and flushed to OPFS. |
 | `web/shims/fs-promises.js` | Promise wrappers over `fs.js`. |
