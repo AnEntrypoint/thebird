@@ -2,7 +2,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
+#include <time.h>
 
 #include <uv.h>
 
@@ -24,6 +26,7 @@ HOST_IMPORT("tjs_fs_readlink") int32_t host_fs_readlink(const char *path, int32_
 HOST_IMPORT("tjs_fs_readdir") int32_t host_fs_readdir(const char *path, int32_t len, char *out, int32_t cap);
 HOST_IMPORT("tjs_fs_realpath") int32_t host_fs_realpath(const char *path, int32_t len, char *out, int32_t cap);
 HOST_IMPORT("tjs_fs_rename") int32_t host_fs_rename(const char *from, int32_t from_len, const char *to, int32_t to_len);
+HOST_IMPORT("tjs_fs_setattr") int32_t host_fs_setattr(const char *path, int32_t len, int32_t follow, int32_t attr, double value);
 HOST_IMPORT("tjs_fs_resolve") int32_t host_fs_resolve(const char *path, int32_t len, char *out, int32_t cap);
 
 void tjs_browser_defer(uv_loop_t *loop, void (*fn)(void *arg), void *arg);
@@ -98,6 +101,10 @@ static int64_t stat_into(uv_fs_t *req, int32_t status, const double *slots) {
     req->statbuf.st_size = (uint64_t) slots[1];
     req->statbuf.st_mtim.tv_sec = (long) (slots[2] / 1000);
     req->statbuf.st_mtim.tv_nsec = (long) ((int64_t) slots[2] % 1000) * 1000000;
+    req->statbuf.st_uid = (uint64_t) slots[4];
+    req->statbuf.st_gid = (uint64_t) slots[5];
+    req->statbuf.st_atim.tv_sec = (long) (slots[6] / 1000);
+    req->statbuf.st_atim.tv_nsec = (long) ((int64_t) slots[6] % 1000) * 1000000;
     return 0;
 }
 
@@ -153,7 +160,7 @@ int uv_fs_fstat(uv_loop_t *loop, uv_fs_t *req, uv_file file, uv_fs_cb cb) {
     req->ptr = NULL;
     struct fd_position *slot = position_find(file);
     if (!slot) return fs_finish(req, loop, cb, UV_EBADF);
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_stat(slot->path, (int32_t) strlen(slot->path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -223,7 +230,7 @@ int uv_fs_stat(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
     req->fs_type = UV_FS_STAT;
     req->path = path;
     req->ptr = NULL;
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_stat(path, (int32_t) strlen(path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -232,7 +239,7 @@ int uv_fs_lstat(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) {
     req->fs_type = UV_FS_LSTAT;
     req->path = path;
     req->ptr = NULL;
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int64_t result = stat_into(req, host_fs_lstat(path, (int32_t) strlen(path), slots), slots);
     return fs_finish(req, loop, cb, result);
 }
@@ -457,6 +464,114 @@ int uv_fs_mkstemp(uv_loop_t *loop, uv_fs_t *req, const char *tpl, uv_fs_cb cb) {
     return fs_finish(req, loop, cb, make_temp(req, tpl, 0));
 }
 
+#define ATTR_MODE 0
+#define ATTR_UID 1
+#define ATTR_GID 2
+#define ATTR_ATIME 3
+#define ATTR_MTIME 4
+
+static int64_t set_attr(const char *path, int follow, int attr, double value) {
+    return host_fs_setattr(path, (int32_t) strlen(path), follow, attr, value) == 0 ? 0 : UV_ENOENT;
+}
+
+static int64_t set_owner(const char *path, int follow, uv_uid_t uid, uv_gid_t gid) {
+    if (uid != (uv_uid_t) -1) {
+        int64_t status = set_attr(path, follow, ATTR_UID, (double) uid);
+        if (status != 0) return status;
+    }
+    if (gid != (uv_gid_t) -1) return set_attr(path, follow, ATTR_GID, (double) gid);
+    return 0;
+}
+
+static int64_t set_times(const char *path, int follow, double atime, double mtime) {
+    double now = (double) time(NULL);
+    if (!isnan(atime)) {
+        double seconds = isinf(atime) ? now : atime;
+        int64_t status = set_attr(path, follow, ATTR_ATIME, seconds * 1000);
+        if (status != 0) return status;
+    }
+    if (!isnan(mtime)) {
+        double seconds = isinf(mtime) ? now : mtime;
+        return set_attr(path, follow, ATTR_MTIME, seconds * 1000);
+    }
+    return 0;
+}
+
+static int64_t fd_path_status(uv_file file, int64_t (*action)(const char *path, void *arg), void *arg) {
+    struct fd_position *slot = position_find(file);
+    if (!slot) return UV_EBADF;
+    return action(slot->path, arg);
+}
+
+static int64_t chmod_action(const char *path, void *arg) {
+    return set_attr(path, 1, ATTR_MODE, (double) *(int *) arg);
+}
+
+static int64_t owner_action(const char *path, void *arg) {
+    uv_uid_t *ids = arg;
+    return set_owner(path, 1, ids[0], (uv_gid_t) ids[1]);
+}
+
+static int64_t times_action(const char *path, void *arg) {
+    double *times = arg;
+    return set_times(path, 1, times[0], times[1]);
+}
+
+int uv_fs_chmod(uv_loop_t *loop, uv_fs_t *req, const char *path, int mode, uv_fs_cb cb) {
+    req->fs_type = UV_FS_CHMOD;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, set_attr(path, 1, ATTR_MODE, (double) mode));
+}
+
+int uv_fs_fchmod(uv_loop_t *loop, uv_fs_t *req, uv_file file, int mode, uv_fs_cb cb) {
+    req->fs_type = UV_FS_FCHMOD;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, fd_path_status(file, chmod_action, &mode));
+}
+
+int uv_fs_chown(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb) {
+    req->fs_type = UV_FS_CHOWN;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, set_owner(path, 1, uid, gid));
+}
+
+int uv_fs_lchown(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb) {
+    req->fs_type = UV_FS_LCHOWN;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, set_owner(path, 0, uid, gid));
+}
+
+int uv_fs_fchown(uv_loop_t *loop, uv_fs_t *req, uv_file file, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb) {
+    req->fs_type = UV_FS_FCHOWN;
+    req->ptr = NULL;
+    uv_uid_t ids[2] = {uid, (uv_uid_t) gid};
+    return fs_finish(req, loop, cb, fd_path_status(file, owner_action, ids));
+}
+
+int uv_fs_utime(uv_loop_t *loop, uv_fs_t *req, const char *path, double atime, double mtime, uv_fs_cb cb) {
+    req->fs_type = UV_FS_UTIME;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, set_times(path, 1, atime, mtime));
+}
+
+int uv_fs_lutime(uv_loop_t *loop, uv_fs_t *req, const char *path, double atime, double mtime, uv_fs_cb cb) {
+    req->fs_type = UV_FS_LUTIME;
+    req->path = path;
+    req->ptr = NULL;
+    return fs_finish(req, loop, cb, set_times(path, 0, atime, mtime));
+}
+
+int uv_fs_futime(uv_loop_t *loop, uv_fs_t *req, uv_file file, double atime, double mtime, uv_fs_cb cb) {
+    req->fs_type = UV_FS_FUTIME;
+    req->ptr = NULL;
+    double times[2] = {atime, mtime};
+    return fs_finish(req, loop, cb, fd_path_status(file, times_action, times));
+}
+
 int uv_fs_ftruncate(uv_loop_t *loop, uv_fs_t *req, uv_file file, int64_t offset, uv_fs_cb cb) {
     req->fs_type = UV_FS_FTRUNCATE;
     req->ptr = NULL;
@@ -481,7 +596,7 @@ static uv_dirent_type_t dirent_type(const char *dir, const char *name) {
     memcpy(full, dir, dir_len);
     full[dir_len] = '/';
     memcpy(full + dir_len + 1, name, name_len + 1);
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     int32_t status = host_fs_lstat(full, (int32_t) (dir_len + 1 + name_len), slots);
     free(full);
     if (status != 0) return UV_DIRENT_UNKNOWN;
@@ -497,7 +612,7 @@ int uv_fs_opendir(uv_loop_t *loop, uv_fs_t *req, const char *path, uv_fs_cb cb) 
     char *resolved = absolute_path(path);
     if (!resolved) return fs_finish(req, loop, cb, UV_ENAMETOOLONG);
     int32_t len = (int32_t) strlen(resolved);
-    double slots[4] = {0, 0, 0, 0};
+    double slots[7] = {0, 0, 0, 0, 0, 0, 0};
     if (host_fs_stat(resolved, len, slots) != 0) {
         free(resolved);
         return fs_finish(req, loop, cb, UV_ENOENT);

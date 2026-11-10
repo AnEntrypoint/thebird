@@ -1233,3 +1233,21 @@ Expected in Phase B: the wasm changes, so `scripts/txiki/pin.json` must move to 
 - Gates on this pass: `npm run check` exit 0; `npm run lint:comments` 0 comments in 100 repo-owned files; `npm test` 6 pass, 0 fail; `node scripts/lint-architecture.mjs` (live probes) 349 claims, 349 pass, 0 fail, 0 unverified, wall 684 s.
 - Build wall: the second `vendor-txiki.mjs` run 195 s. Witness wall: run 19 872 s (before the witness fix), run 20 1115 s.
 - Still stubbed, with reasons in `scripts/txiki/stubs.tsv`: chmod, chown, fchmod, fchown, lchown, futime, utime, lutime, link, statfs (no OPFS operation), fsync and fdatasync (the host write is buffered until `flushFs`, and the host call is synchronous).
+
+## Queue: fx host tools and the metadata uv_fs rows (Phase A, not built)
+
+Phase A is code, tests and docs only. No build, gate or witness has run for these changes. Phase B owns the build, the pin move, the witnesses and the push.
+
+- Item 1, fx host tools (`web/fx-host-tools.js`, `test/fx-stub-tools.test.mjs`): `pageHostToolsJson()` returns `{"tools":[{name,description,inputSchema}]}` for `PAGE_HOST_TOOLS`. A node:test checks that it parses and that its names equal `PAGE_HOST_TOOL_NAMES`. The test was run once in this phase (6 pass, 0 fail), which the queue did not ask for at Phase A.
+  - Blocked on the fx SDK: `fx_terminal_initialize(bytes_ptr, bytes_len)` has to run before `_start`, and the vendored `web/vendor/fx/wasm-runtime.js` calls `_start` inside `instantiate` with no pre-start hook and no exposed instance. There is no way for the page to place the JSON bytes in wasm memory before the TUI starts. Nothing in `web/vendor/fx/` was edited. Approval and ask therefore stay open until the SDK exposes that hook.
+- Item 2, metadata rows (witness: `scripts/witness.mjs` uv_fs attr block, not yet run):
+  - `scripts/txiki/browser/fs-uv-browser.c`: `chmod`, `fchmod`, `chown`, `fchown`, `lchown`, `utime`, `lutime` and `futime` are real over `tjs_fs_setattr`. Stat slots are now seven (uid, gid, atime added). Seconds from libuv become milliseconds for the shim.
+  - `web/txiki-in-page.js`: `tjs_fs_stat` and `tjs_fs_lstat` write seven slots, with mode from `info.mode`; new `tjs_fs_setattr` maps attr codes 0 to 4 onto mode, uid, gid, atime, mtime.
+  - `web/shims/fs.js`: `attrs` map persisted to `/.thebird/attrs.json`; `statOf` and `linkStat` read it; `setAttrSync`; `touch` keeps the live mtime authoritative and drops a stored mtime on the next write; remove and rename carry attributes (`forgetAttrs`, `replaceAttrs`).
+  - `scripts/txiki/stubs.tsv`: the eight rows are removed. Four stay with an exact cause, each saying the call is reachable from JS and returns `UV_ENOSYS`:
+    - `uv_fs_link` (`tjs.link`): OPFS files have no inode identity, so a second name cannot share the first name's bytes.
+    - `uv_fs_statfs` (`tjs.statFs`): OPFS usage is only available through an async estimate, and the host call is synchronous.
+    - `uv_fs_fsync` (`File.sync`) and `uv_fs_fdatasync` (`File.datasync`): host writes sit in the dirty map until the async `flushFs`, and the synchronous host call cannot wait for it.
+  - Witness attr block, JS-reachable rows only: `tjs.chmod` (expects `uvfs-chmod 384`), `File.chmod` (`uvfs-fchmod 416`), `File.chown` (`uvfs-fchown 1234 5678`), `File.utime` (`uvfs-futime 1700000000000 1600000000000`). There is no global `chown`, `lchown`, `utime` or `lutime` in txiki's `mod_fs.c`, so those four have no JS entry to witness; their C path is a real implementation with no JS call site.
+  - `AGENTS.md`: the stubbed-row sentence lists the four remaining rows and the attribute storage.
+- Witness wall time: not run in Phase A.

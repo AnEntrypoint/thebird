@@ -123,6 +123,11 @@ if (existsSync(chrome)) {
     ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-src.txt', '/workspace/uvfs-dst.txt').then(() => tjs.readFile('/workspace/uvfs-dst.txt')).then((b) => console.log('uvfs-copy-truncate', new TextDecoder().decode(b)))"`],
     ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-c13', '/workspace/uvfs-big-copy.bin').then(() => tjs.stat('/workspace/uvfs-big-copy.bin')).then((s) => console.log('uvfs-copy-big', s.size))"`],
     ['run', `tjs -e "tjs.copyFile('/workspace/uvfs-none.txt', '/workspace/uvfs-x.txt').then(() => console.log('uvfs-copy-missing ok'), () => console.log('uvfs-copy-missing rejected'))"`],
+    ['run', "printf 'attr' > /workspace/uvfs-attr.txt && echo attr-seeded"],
+    ['run', `tjs -e "tjs.chmod('/workspace/uvfs-attr.txt', 0o600).then(() => tjs.stat('/workspace/uvfs-attr.txt')).then((s) => console.log('uvfs-chmod', s.mode & 0o777))"`],
+    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.chmod(0o640).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-fchmod', s.mode & 0o777))"`],
+    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.chown(1234, 5678).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-fchown', s.uid, s.gid))"`],
+    ['run', `tjs -e "tjs.open('/workspace/uvfs-attr.txt', 'r+').then((f) => f.utime(1700000000000, 1600000000000).then(() => f.close()).then(() => tjs.stat('/workspace/uvfs-attr.txt'))).then((s) => console.log('uvfs-futime', s.atime.getTime(), s.mtime.getTime()))"`],
   ]);
   const uvFsLines = uvFs.out.split('\n');
   const uvFsSeen = JSON.stringify(uvFsLines.filter((line) => line.startsWith('uvfs-')).slice(0, 6));
@@ -132,6 +137,10 @@ if (existsSync(chrome)) {
   check('uv_fs_copyfile replaces the destination: a shorter source leaves exactly the source bytes', uvFsLines.includes('uvfs-copy-truncate short'), uvFsSeen);
   check('uv_fs_copyfile copies a 131072-byte file across more than one 64 KiB chunk', uvFsLines.includes('uvfs-copy-big 131072'), uvFsSeen);
   check('uv_fs_copyfile rejects a missing source', uvFsLines.includes('uvfs-copy-missing rejected'), uvFsSeen);
+  check('uv_fs_chmod (tjs.chmod) sets the mode bits that stat reports', uvFsLines.includes('uvfs-chmod 384'), uvFsSeen);
+  check('uv_fs_fchmod (File.chmod) sets the mode bits that stat reports', uvFsLines.includes('uvfs-fchmod 416'), uvFsSeen);
+  check('uv_fs_fchown (File.chown) sets the owner and group that stat reports', uvFsLines.includes('uvfs-fchown 1234 5678'), uvFsSeen);
+  check('uv_fs_futime (File.utime) sets the access and modification times that stat reports', uvFsLines.includes('uvfs-futime 1700000000000 1600000000000'), uvFsSeen);
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });

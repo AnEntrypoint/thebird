@@ -3,10 +3,12 @@ import { posix } from './path.js';
 
 const MOUNT = 'thebird-workspace';
 const LINKS_FILE = '/.thebird/links.json';
+const ATTR_FILE = '/.thebird/attrs.json';
 const MAX_LINKS = 40;
 const files = new Map();
 const dirs = new Set(['/']);
 const links = new Map();
+const attrs = new Map();
 const meta = new Map();
 const dirty = new Map();
 const revisions = new Map();
@@ -81,7 +83,7 @@ function saveLinks() {
     mark('/.thebird', 'write');
   }
   files.set(LINKS_FILE, Buffer.from(JSON.stringify([...links])));
-  meta.set(LINKS_FILE, { mtimeMs: Date.now() });
+  touch(LINKS_FILE);
   mark(LINKS_FILE, 'write');
 }
 
@@ -98,6 +100,52 @@ function removeLinks(path) {
   if (removed) saveLinks();
 }
 
+function saveAttrs() {
+  if (!dirs.has('/.thebird')) {
+    dirs.add('/.thebird');
+    mark('/.thebird', 'write');
+  }
+  files.set(ATTR_FILE, Buffer.from(JSON.stringify([...attrs])));
+  touch(ATTR_FILE);
+  mark(ATTR_FILE, 'write');
+}
+
+function touch(path) {
+  touch(path);
+  const attr = attrs.get(path);
+  if (attr?.mtimeMs !== undefined) {
+    delete attr.mtimeMs;
+    saveAttrs();
+  }
+}
+
+function forgetAttrs(path) {
+  const prefix = path + '/';
+  let removed = false;
+  for (const key of [...attrs.keys()]) {
+    if (key === path || key.startsWith(prefix)) {
+      attrs.delete(key);
+      removed = true;
+    }
+  }
+  if (removed) saveAttrs();
+}
+
+function replaceAttrs(source, target) {
+  if (source === target) return;
+  forgetAttrs(target);
+  const prefix = source + '/';
+  let moved = false;
+  for (const key of [...attrs.keys()]) {
+    if (key === source || key.startsWith(prefix)) {
+      attrs.set(target + key.slice(source.length), attrs.get(key));
+      attrs.delete(key);
+      moved = true;
+    }
+  }
+  if (moved) saveAttrs();
+}
+
 function bytesFrom(data, encoding) {
   if (typeof data === 'string') return Buffer.from(data, encoding);
   return Buffer.from(data);
@@ -106,34 +154,41 @@ function bytesFrom(data, encoding) {
 function statOf(path) {
   if (files.has(path)) {
     const info = meta.get(path) ?? { mtimeMs: Date.now() };
+    const attr = attrs.get(path) ?? {};
     return {
       size: files.get(path).byteLength,
-      mode: 0o100644,
+      mode: 0o100000 | (attr.mode ?? 0o644),
       ino: 0,
       dev: 0,
-      uid: 0,
-      gid: 0,
+      uid: attr.uid ?? 0,
+      gid: attr.gid ?? 0,
       mtimeMs: info.mtimeMs,
       ctimeMs: info.mtimeMs,
+      atimeMs: attr.atimeMs ?? info.mtimeMs,
       mtime: new Date(info.mtimeMs),
       ctime: new Date(info.mtimeMs),
+      atime: new Date(attr.atimeMs ?? info.mtimeMs),
       isFile: () => true,
       isDirectory: () => false,
       isSymbolicLink: () => false,
     };
   }
   if (dirs.has(path)) {
+    const attr = attrs.get(path) ?? {};
+    const mtimeMs = attr.mtimeMs ?? 0;
     return {
       size: 0,
-      mode: 0o40755,
+      mode: 0o40000 | (attr.mode ?? 0o755),
       ino: 0,
       dev: 0,
-      uid: 0,
-      gid: 0,
-      mtimeMs: 0,
-      ctimeMs: 0,
-      mtime: new Date(0),
-      ctime: new Date(0),
+      uid: attr.uid ?? 0,
+      gid: attr.gid ?? 0,
+      mtimeMs,
+      ctimeMs: mtimeMs,
+      atimeMs: attr.atimeMs ?? mtimeMs,
+      mtime: new Date(mtimeMs),
+      ctime: new Date(mtimeMs),
+      atime: new Date(attr.atimeMs ?? mtimeMs),
       isFile: () => false,
       isDirectory: () => true,
       isSymbolicLink: () => false,
@@ -144,17 +199,20 @@ function statOf(path) {
 
 function linkStat(path) {
   const info = meta.get(path) ?? { mtimeMs: 0 };
+  const attr = attrs.get(path) ?? {};
   return {
     size: links.get(path).length,
-    mode: 0o120777,
+    mode: 0o120000 | (attr.mode ?? 0o777),
     ino: 0,
     dev: 0,
-    uid: 0,
-    gid: 0,
+    uid: attr.uid ?? 0,
+    gid: attr.gid ?? 0,
     mtimeMs: info.mtimeMs,
     ctimeMs: info.mtimeMs,
+    atimeMs: attr.atimeMs ?? info.mtimeMs,
     mtime: new Date(info.mtimeMs),
     ctime: new Date(info.mtimeMs),
+    atime: new Date(attr.atimeMs ?? info.mtimeMs),
     isFile: () => false,
     isDirectory: () => false,
     isSymbolicLink: () => true,
@@ -202,7 +260,7 @@ export function writeFileSync(path, data, options) {
   if (flag.includes('x') && files.has(target)) throw fail('EEXIST', 'open', target, 'file already exists');
   ensureParent(target, 'open');
   files.set(target, bytesFrom(data, encoding));
-  meta.set(target, { mtimeMs: Date.now() });
+  touch(target);
   mark(target, 'write');
 }
 
@@ -213,7 +271,7 @@ export function appendFileSync(path, data, options) {
   const next = Buffer.concat([previous, bytesFrom(data, encoding)]);
   ensureParent(target, 'open');
   files.set(target, next);
-  meta.set(target, { mtimeMs: Date.now() });
+  touch(target);
   mark(target, 'write');
 }
 
@@ -267,6 +325,24 @@ export function lstatSync(path, options) {
   return statSync(target, options);
 }
 
+export function setAttrSync(path, follow, attr, value) {
+  const target = resolvePath(path, follow);
+  if (!files.has(target) && !dirs.has(target) && !links.has(target)) return -1;
+  if (!['mode', 'uid', 'gid', 'atime', 'mtime'].includes(attr)) return -1;
+  const next = { ...(attrs.get(target) ?? {}) };
+  if (attr === 'mode') next.mode = value & 0o7777;
+  if (attr === 'uid') next.uid = value;
+  if (attr === 'gid') next.gid = value;
+  if (attr === 'atime') next.atimeMs = value;
+  if (attr === 'mtime') {
+    next.mtimeMs = value;
+    if (!dirs.has(target)) meta.set(target, { mtimeMs: value });
+  }
+  attrs.set(target, next);
+  saveAttrs();
+  return 0;
+}
+
 export function readlinkSync(path) {
   const target = resolvePath(path, false);
   if (links.has(target)) return links.get(target);
@@ -279,7 +355,7 @@ export function symlinkSync(target, path) {
   if (files.has(link) || dirs.has(link) || links.has(link)) throw fail('EEXIST', 'symlink', link, 'file already exists');
   ensureParent(link, 'symlink');
   links.set(link, String(target));
-  meta.set(link, { mtimeMs: Date.now() });
+  touch(link);
   saveLinks();
 }
 
@@ -306,6 +382,7 @@ export function rmSync(path, options) {
     files.delete(target);
     meta.delete(target);
     mark(target, 'delete');
+    forgetAttrs(target);
     return;
   }
   const hasChildren = childrenOf(target).length > 0;
@@ -317,6 +394,7 @@ export function rmSync(path, options) {
     meta.delete(file);
   }
   for (const dir of [...dirs]) if (dir === target || dir.startsWith(prefix)) dirs.delete(dir);
+  forgetAttrs(target);
   removeLinks(target);
 }
 
@@ -325,12 +403,14 @@ export function unlinkSync(path) {
   if (links.has(target)) {
     links.delete(target);
     meta.delete(target);
+    forgetAttrs(target);
     saveLinks();
     return;
   }
   if (!files.has(target)) throw fail('ENOENT', 'unlink', target, 'no such file or directory');
   files.delete(target);
   meta.delete(target);
+  forgetAttrs(target);
   mark(target, 'delete');
 }
 
@@ -339,20 +419,22 @@ export function renameSync(from, to) {
   const target = resolvePath(to, false);
   if (links.has(source)) {
     ensureParent(target, 'rename');
+  replaceAttrs(source, target);
     const value = links.get(source);
     links.delete(source);
     meta.delete(source);
     links.set(target, value);
-    meta.set(target, { mtimeMs: Date.now() });
+    touch(target);
     saveLinks();
     return;
   }
   if (!existsSync(source)) throw fail('ENOENT', 'rename', source, 'no such file or directory');
   ensureParent(target, 'rename');
+  replaceAttrs(source, target);
   links.delete(target);
   if (files.has(source)) {
     files.set(target, files.get(source));
-    meta.set(target, { mtimeMs: Date.now() });
+    touch(target);
     files.delete(source);
     meta.delete(source);
     mark(source, 'delete');
@@ -364,7 +446,7 @@ export function renameSync(from, to) {
   for (const file of moved) {
     const next = target + file.slice(source.length);
     files.set(next, files.get(file));
-    meta.set(next, { mtimeMs: Date.now() });
+    touch(next);
     files.delete(file);
     meta.delete(file);
   }
@@ -392,7 +474,7 @@ export function openSync(path, flags = 'r') {
   if (!files.has(target)) {
     ensureParent(target, 'open');
     files.set(target, Buffer.alloc(0));
-    meta.set(target, { mtimeMs: Date.now() });
+    touch(target);
     mark(target, 'write');
   }
   if (flags.startsWith('w')) {
@@ -425,7 +507,7 @@ export function writeSync(fd, data, ...rest) {
   next.set(previous);
   next.set(bytes, at);
   files.set(handle.path, next);
-  meta.set(handle.path, { mtimeMs: Date.now() });
+  touch(handle.path);
   mark(handle.path, 'write');
   if (!handle.append) handle.position = at + bytes.byteLength;
   return bytes.byteLength;
@@ -441,7 +523,7 @@ export function writeAtSync(fd, data, position) {
   if (next !== previous) next.set(previous);
   next.set(bytes, position);
   files.set(handle.path, next);
-  meta.set(handle.path, { mtimeMs: Date.now() });
+  touch(handle.path);
   mark(handle.path, 'write');
   return bytes.byteLength;
 }
@@ -453,7 +535,7 @@ export function truncateSync(fd, size) {
   const next = Buffer.alloc(size);
   next.set(previous.subarray(0, size));
   files.set(handle.path, next);
-  meta.set(handle.path, { mtimeMs: Date.now() });
+  touch(handle.path);
   mark(handle.path, 'write');
 }
 
@@ -516,6 +598,7 @@ async function loadTree() {
   dirs.clear();
   dirs.add('/');
   links.clear();
+  attrs.clear();
   meta.clear();
   dirty.clear();
   async function walk(handle, prefix) {
@@ -533,6 +616,13 @@ async function loadTree() {
     }
   }
   await walk(root, '');
+  const storedAttrs = files.get(ATTR_FILE);
+  if (storedAttrs) {
+    for (const [path, value] of JSON.parse(Buffer.from(storedAttrs).toString('utf8'))) {
+      attrs.set(path, value);
+      if (value.mtimeMs !== undefined && meta.has(path)) meta.set(path, { mtimeMs: value.mtimeMs });
+    }
+  }
   const stored = files.get(LINKS_FILE);
   if (stored) {
     for (const [link, target] of JSON.parse(Buffer.from(stored).toString('utf8'))) {

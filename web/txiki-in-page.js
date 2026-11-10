@@ -221,12 +221,20 @@ async function instantiate() {
     tjs_fs_stat(ptr, len, out) {
       const info = fs.statSync(absolute(textAt(ptr, len)), { throwIfNoEntry: false });
       if (!info) return -1;
-      const slots = new Float64Array(slot.memory.buffer, out, 4);
+      const slots = new Float64Array(slot.memory.buffer, out, 7);
       slots[0] = info.isDirectory() ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
-      slots[3] = info.isDirectory() ? 0o40755 : 0o100644;
+      slots[3] = info.mode;
+      slots[4] = info.uid;
+      slots[5] = info.gid;
+      slots[6] = info.atimeMs;
       return 0;
+    },
+    tjs_fs_setattr(ptr, len, follow, attr, value) {
+      const name = ['mode', 'uid', 'gid', 'atime', 'mtime'][attr];
+      if (!name) return -1;
+      return fs.setAttrSync(absolute(textAt(ptr, len)), follow !== 0, name, value);
     },
     tjs_fs_readdir(ptr, len, out, cap) {
       let names;
@@ -260,11 +268,14 @@ async function instantiate() {
       if (!info) return -1;
       const link = info.isSymbolicLink();
       const dir = !link && info.isDirectory();
-      const slots = new Float64Array(slot.memory.buffer, out, 4);
+      const slots = new Float64Array(slot.memory.buffer, out, 7);
       slots[0] = link ? 3 : dir ? 2 : 1;
       slots[1] = info.size;
       slots[2] = info.mtimeMs;
-      slots[3] = link ? 0o120777 : dir ? 0o40755 : 0o100644;
+      slots[3] = info.mode;
+      slots[4] = info.uid;
+      slots[5] = info.gid;
+      slots[6] = info.atimeMs;
       return 0;
     },
     tjs_fs_symlink(tptr, tlen, pptr, plen) {
