@@ -15,7 +15,7 @@ const MARKDOWN = /\.md$/;
 const YAML = /\.ya?ml$/;
 const C_SOURCE = /\.(c|h|cpp|hpp|css)$/;
 const DOTFILE_HASH = '.gitignore';
-const NO_COMMENT_SYNTAX = /\.(json|wasm|tsv)$/;
+const NO_COMMENT_SYNTAX = /\.(json|wasm|tsv)$|(^|\/)(LICENSE|NOTICE)$/;
 const PROVENANCE = {
   'web/vendor/acorn.mjs': 'acorn',
   'web/vendor/isomorphic-git.mjs': 'isomorphic-git',

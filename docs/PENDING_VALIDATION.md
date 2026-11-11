@@ -1531,3 +1531,32 @@ Verify in Phase B, before any claim that the wiring works (these are my reading 
 - Redraw cost: each batch of output re-sends the whole frame, coalesced by one `setTimeout(0)`. Check that the TUI stays responsive in the witness.
 
 Hold: nothing pushed. The eleven local commits (4c231bf through 0d3d1aa) and this wiring go out together after fx's `tool_admission.zig` and `resize_runtime.zig` fixes are on origin/main; the dispatcher will tell me when.
+
+## fx TUI parity, stretch 10 Phase B: ghostty wiring validation (no push)
+
+Build and lints:
+- `npm run check`: exit 0.
+- `npm run lint:comments`: exit 0 (0 comments in 101 repo-owned files). It failed first on `web/vendor/ghostty/LICENSE` and `NOTICE` (no comment rule for plain-text licence files). `scripts/lint-comments.mjs` now treats `LICENSE` and `NOTICE` basenames as non-comment files.
+- `npm run lint:architecture`: exit 0, 357 claims pass, 0 fail. Fixed in this step: `AGENTS.md:30` failed on bare backticked `NOTICE` and `LICENSE` (reworded to "licence and notice files"); ARCHITECTURE.md gained rows for `web/ghostty-screen.js` and `web/vendor/ghostty/`, and the `web/fx-tui.js` row now describes the ghostty path.
+- fx term wasm rebuilt from fx `0a1a651e` (`zig build fx-term-wasm -Dwasm-surface=term`, Zig 0.17.1, exit 0): `web/vendor/fx/fx-term.wasm` 4827585 bytes, sha256 `634b22424c350618a8a98ded337565bfd57c59368f4dc0c70e0f238a9ba16436`. The fx checkout was detached to 0a1a651e for the build and returned to `main` (610d7621). Manifest `term` hash and `source` line updated by hand (`vendor-fx.mjs` would overwrite the source text). The 12 JavaScript modules match `sdk/` at 0a1a651e byte for byte. `fx-core.wasm` is unchanged (fae75200 build).
+
+Wiring checks in Node (scratch harness outside the repo, `/tmp/ghostty-check`, real `ghostty-vt.wasm`):
+- The 16-byte cell layout reads correctly: `f` at codepoint 102 with fg 204,204,204 and width 1; SGR for 255 and 245 and for true colour is right.
+- Text placement by absolute rows (`\x1b[3;1H┃ hi there`) lands on row 3 as written.
+- Grapheme argument order `(row, column)`: not exercised (no combining or emoji input in the harness). Still open for the witness.
+
+Witness run 1 (on the wiring before the palette fix below), `node scripts/witness.mjs`, `CHROME_BIN=/usr/bin/chromium-browser`, under `timeout 1800`:
+- Log `/tmp/witness-run1.log`: 174 PASS lines, 5 FAIL lines recorded. Log birth 02:00:33, last write 03:48:18 (about 1 h 48 min).
+- No `WITNESS-EXIT` line and no summary: the run did not finish. Its last line is the browser cleanup (`closed 5 Chromium tree(s)`) after the pip rows, so the process ended before the remaining sections ran. The background shell was stopped at session teardown; that and the 30-minute `timeout` disagree with the 1 h 48 min wall time, and I have not resolved why.
+- FAIL rows:
+  - fx-owned, stays waiting on fx's push: `resizing the page reflows the TUI to 70 by 24 and keeps the welcome panel and the rules at 70 columns`; `a resize after the command palette keeps the welcome panel and the rules at 70 columns`; `approval: a bash tool call opens the approval panel with its options and its command row` (`options: []`, the stub's bash request reaches the page but no panel draws).
+  - Mine, fixed (see below): `the TUI draws the title in bold 256-colour palette 255 and the version in palette 245`. Cause: every cell was written as 24-bit SGR, so xterm reported `palette:false`. Fix: exact RGB matches to xterm's palette entries 16–255 are written as `38;5;n` / `48;5;n`, which draws the same colour.
+  - Mine, open: `typed text lands in the TUI input box`. It passed on the native xterm path in earlier runs (PENDING run 2). With the ghostty wrapper the typed-state screen shows the header on rows 0 and 2 and no `┃ hello` row, and the settle times out. The Node harness draws simple text correctly, so the cause is in the byte stream fx sends after typing. Not identified yet; fx's source shows the TUI avoids alt-screen sequences in this mode, so the alt-screen mirror is not the cause. Next step: capture the fx byte stream for one keypress and replay it through `GhosttyScreen`.
+
+Changes in this step (committed locally, not pushed):
+- `web/ghostty-screen.js`: palette-index SGR for exact palette matches (`paletteEntries`, `colourSgr`).
+- `scripts/lint-comments.mjs`: `LICENSE` and `NOTICE` are non-comment files.
+- `AGENTS.md`, `ARCHITECTURE.md`: as listed above.
+- `web/vendor/fx/fx-term.wasm`, `web/vendor/fx/manifest.json`: rebuilt term from fx 0a1a651e.
+
+Not run in this step: the witness again (the wiring changed after run 1, so the next full witness run must come after fx's approval and palette fixes land). Hold: nothing pushed. The thirteen local commits and this step go out in one push after fx's commit `1740f6e8b167` lands on origin/main; then rebuild the term wasm from that commit, run the witness once, and push once.

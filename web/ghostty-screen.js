@@ -23,7 +23,28 @@ export const loadGhosttyVt = (url) => {
   return vtLoading;
 };
 
-const colourFor = (value) => value.join(';');
+const CUBE_LEVELS = [0, 95, 135, 175, 215, 255];
+
+const paletteEntries = () => {
+  const entries = new Map();
+  for (let index = 16; index < 232; index++) {
+    const cube = index - 16;
+    const rgb = [CUBE_LEVELS[Math.floor(cube / 36)], CUBE_LEVELS[Math.floor(cube / 6) % 6], CUBE_LEVELS[cube % 6]];
+    entries.set(rgb.join(';'), index);
+  }
+  for (let index = 232; index < 256; index++) {
+    const level = 8 + (index - 232) * 10;
+    entries.set([level, level, level].join(';'), index);
+  }
+  return entries;
+};
+
+const PALETTE = paletteEntries();
+
+const colourSgr = (value, base) => {
+  const index = PALETTE.get(value.join(';'));
+  return index === undefined ? `${base};2;${value.join(';')}` : `${base};5;${index}`;
+};
 
 const sgrFor = (cell) => {
   const inverse = (cell.flags & FLAG.INVERSE) !== 0;
@@ -37,7 +58,7 @@ const sgrFor = (cell) => {
   if (cell.flags & FLAG.UNDERLINE) attributes += ';4';
   if (cell.flags & FLAG.BLINK) attributes += ';5';
   if (cell.flags & FLAG.STRIKETHROUGH) attributes += ';9';
-  return `\x1b[${attributes};38;2;${colourFor(foreground)};48;2;${colourFor(background)}m`;
+  return `\x1b[${attributes};${colourSgr(foreground, '38')};${colourSgr(background, '48')}m`;
 };
 
 export class GhosttyScreen {
