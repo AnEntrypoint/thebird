@@ -1702,3 +1702,12 @@ Held (depends on fx's unpushed code): the fx-term.wasm rebuild from fx's stretch
 - Totals: PASS 213, FAIL 1, WITNESS-EXIT 1, WALL_SECONDS 877.
 - Own rows: all pass, including the typed-text row, the 70-column resize, the palette-closes row, the grapheme row, the palette colour row and the Ctrl-C rows, with the alternate-screen mirror removed.
 - The one FAIL: `approval: a bash tool call opens the approval panel with its options and its command row` (fx-owned, reported from the witness): `options: []`, the stub's bash request reaches the page and the panel never draws.
+
+## fx origin main 797693e2: approval and ask witnesses rerun (run 25)
+
+- fx-term.wasm rebuilt from fx origin main 797693e2 (`zig build fx-term-wasm -Dwasm-surface=term`, exit 0, wall 124 s), sha256 `d323fcf5cdf5b2c7b82593c75235869d20da2e028c5ccc12b1766d275005370e`, recorded in `web/vendor/fx/manifest.json`. The SDK modules match fx's `sdk/` files. fx-core.wasm is unchanged. `/tmp/thebird-wasm-build.done` touched when the build exited.
+- Load before start: 4.39 (under 6). Witness: `npm run witness`, WITNESS-EXIT 1, wall 1860 s, PASS 213, FAIL 1.
+- Fixed by fx upstream since run 24, now PASS: the ask row (`ask: the question is shown, and the answer reaches the stub as a tool result`), the advertise row (`["ask","bash"]`), and the palette-resize row.
+- The one FAIL: `approval: a bash tool call opens the approval panel with its options and its command row` (`options: []`). Evidence from a live probe of the approval session: the stub's request carried tools `["bash","ask"]` and the stub returned a `tool-call` for bash, and the TUI ran it at once in `ask` mode with no approval panel (`Failed bash: Tools are unavailable in the current JavaScript host.`, then `tool-result=seen`). The host-tool runtime sets `requires_approval` from `writes` (`src/core/tooling/host_tool_runtime.zig:134`), so the gate is not applied on this path. The owner is fx. The page's `bash` host tool is still `UNAVAILABLE` in `web/fx-host-tools.js`, a thebird item that is not part of this row.
+- Witness-side change: `scripts/fx-stub-gateway.mjs` `seen[].roles` now reads the request's `prompt` items; before, it read the text string and always reported `[]`.
+- uv_os (env, setenv, random/cwd, record) and uv_fs rows: all PASS in this run.
