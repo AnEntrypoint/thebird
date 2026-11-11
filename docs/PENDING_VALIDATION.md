@@ -1727,3 +1727,13 @@ Witness runs on this stretch's tree:
 - Run 26, full, before the python serialisation and the fixture seeds: PASS 141, FAIL 13, GROUPS 53, WALL 2093 s. Failures: `node-txiki-npm` and `nested` (engine timeouts under load), `approval` (recorded above), `fetch` (no `notes/`), `tab-complete` and `cd-path` (fixtures from another group), `site`, `python`, `pip`, `python-files` (the 900 s command limit while three groups shared the host, load 6–14), `python-splash`. Longest step: `python` 901.7 s, which is the command limit.
 - Rerun 1, the failing groups together, before the fixture seeds: PASS 25, FAIL 7, WALL 3118 s.
 - Rerun 2, after the fixture seeds and the python serialisation, stopped by a reboot: no totals.
+
+### Witness after the reboot: full run 27 and the reruns
+
+- Run 27, full `node scripts/witness.mjs` on the committed tree (`d7fd310`, load 4–10): PASS 209, FAIL 3, GROUPS 53, WALL 2559.7 s, WITNESS-EXIT 1.
+  - `approval` (recorded failure, fx-owned, cause above).
+  - `python` (`python3 notes/script.py` row): `notes/` did not exist in the group's own browser profile. Fixed in `6108cf5`: the group now runs `mkdir -p notes` first.
+  - `command-table` (the `which`, `command -v` and `type` agreement row, 6 of 7 lookup chunks): the seventh chunk printed no `lookup-chunk-done`. Reproduced 3 of 3 in isolation without the change below; the same chunk run alone in the page passes, and a seven-run queue passes. A `chunk-start-N` echo at the start of each chunk makes the row pass 4 of 4. The cause is not found; the echo is kept as the fix for the row's shape, and the cause stays open.
+- Rerun 3, `--group=command-table,python` alone: python passes its 7 checks (wall 175.3 s); command-table fails 6 of 7 chunks as above.
+- Rerun 1 (before the fixture seeds and the python serialisation): PASS 25, FAIL 7, WALL 3118 s. Rerun 2 was cut short by the reboot; its groups were also run in the same session with load 10–14, where `nested` hit CDP answer timeouts and `site` and `node-txiki-npm` hit their waits.
+- The longest step in run 27 is `site`'s python-dependent `python3`/`qjs` run and the `python` group's cold start: `GROUP python`'s 172.8 s and `GROUP site` 200.9 s in run 27; in the load-heavy run 26 the python groups reached the 900 s command limit (`python` 901.7 s, `pip` 901.3 s).
