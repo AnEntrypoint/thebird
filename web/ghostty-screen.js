@@ -122,7 +122,7 @@ export class GhosttyScreen {
   }
 
   textOf(cell, row, column) {
-    if (cell.graphemeLength > 1) {
+    if (cell.graphemeLength > 0) {
       const count = this.exports.ghostty_render_state_get_grapheme(this.handle, row, column, this.graphemePointer, GRAPHEME_CAPACITY);
       if (count > 0) {
         const codes = new Uint32Array(this.exports.memory.buffer, this.graphemePointer, count);
@@ -145,7 +145,7 @@ export class GhosttyScreen {
       parts.push(alternate ? '\x1b[?1049h' : '\x1b[?1049l');
       this.alternate = alternate;
     }
-    parts.push('\x1b[?25l');
+    parts.push('\x1b[?7l\x1b[?25l');
     let style = '';
     for (let row = 0; row < this.rows; row++) {
       parts.push(`\x1b[${row + 1};1H`);
@@ -160,7 +160,7 @@ export class GhosttyScreen {
         parts.push(this.textOf(cell, row, column));
       }
     }
-    parts.push('\x1b[0m', `\x1b[${cursorY + 1};${cursorX + 1}H`, cursorVisible ? '\x1b[?25h' : '');
+    parts.push('\x1b[0m', `\x1b[${cursorY + 1};${cursorX + 1}H`, cursorVisible ? '\x1b[?25h' : '', '\x1b[?7h');
     return parts.join('');
   }
 
@@ -176,7 +176,9 @@ export function ghosttyAdapter(term, screen) {
   let scheduled = false;
   const paint = () => {
     scheduled = false;
-    if (screen.handle) term.write(screen.frame());
+    if (!screen.handle) return;
+    screen.resize(term.cols, term.rows);
+    term.write(screen.frame());
   };
   const schedule = () => {
     if (scheduled) return;

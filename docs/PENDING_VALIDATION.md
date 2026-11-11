@@ -1560,3 +1560,20 @@ Changes in this step (committed locally, not pushed):
 - `web/vendor/fx/fx-term.wasm`, `web/vendor/fx/manifest.json`: rebuilt term from fx 0a1a651e.
 
 Not run in this step: the witness again (the wiring changed after run 1, so the next full witness run must come after fx's approval and palette fixes land). Hold: nothing pushed. The thirteen local commits and this step go out in one push after fx's approval and palette fixes land on origin/main (fx turn 1740f6e8b167; its commit hash is not known yet); then rebuild the term wasm from that commit, run the witness once, and push once.
+
+## fx TUI parity, stretch 10 Phase B (step 1): typed-text row fixed in `web/ghostty-screen.js`
+
+Method: `createFxTerminal` from `web/vendor/fx/wasm-terminal.js` ran in Node 24 with `--experimental-wasm-jspi` and a recording terminal adapter (`/tmp/ghostty-check/fx-node.mjs`, scratch outside the repo). It received the real `fx-term.wasm` (634b2242…) and `initializeHostTools`. Fx wrote 13 chunks, 2380 bytes, through startup and five keypresses `h e l l o`. Replayed through `GhosttyScreen` (`replay.mjs`), the viewport reads `┃ hello` on row 2 after the last key. So the byte stream is correct; the defect is in the wrapper.
+
+Cause 1 (the browser symptom: header on rows 0 and 2, no `┃ hello`): the frame is 80 columns wide, and xterm can be narrower. A narrower terminal wraps each full-width row into the next, which pushes content down and leaves the header fragments on later rows. Reproduced in Node with a second ghostty instance standing in for xterm: at 70 columns the header row is lost and `┃ hello` moves to row 1 (`width.mjs`). Fix: `paint` resizes the screen to the xterm's current `cols` and `rows` before each frame, and each frame turns autowrap off (`\x1b[?7l` … `\x1b[?7h`), so no row can wrap. After the fix the 70-column replay shows the header on row 0 and `┃ hello` on row 2 (`verify.mjs`).
+
+Cause 2 (found while checking graphemes): `textOf` only read a grapheme when `graphemeLength > 1`, but `graphemeLength` counts the extra codepoints, so one extra (a combining accent, a skin-tone modifier) was dropped. Fix: `graphemeLength > 0`.
+
+Grapheme (row, column) check, with combining and emoji in one screen (`verify.mjs`, `cells.mjs`):
+- input `éx`, `👍🏽y`, `👨‍👩‍👧z`; read back `éx`, `👍🏽y`, `👨‍👩‍👧z`, so the text matches the input.
+- The ZWJ family is at (row 2, col 0) with `graphemeLength` 4 and 5 codepoints; the skin-tone emoji is at (row 1, col 0). Reading each at (row, column) returns the right sequence, so the argument order `(row, column)` is confirmed. Swapping the arguments would read (col, row), a different cell.
+- Cell layout: `codepoint` at 0 and `width` at 11 match the cells dumped (`w=2` for the emoji and `w=0` for its spacer). `graphemeLength` is the number of extra codepoints, as the fix above shows.
+
+Also in this step: the palette SGR fix from `bef8562` was rechecked (`sgr.mjs`: 255 → `38;5;255`, 245 → `38;5;245`, true colour stays 24-bit). `node --check web/ghostty-screen.js` passes; `npm run lint:comments` exits 0.
+
+Not verified: the witness row itself (the Node replay cannot reach xterm's buffer). Step 2 runs the full witness on this tree.
