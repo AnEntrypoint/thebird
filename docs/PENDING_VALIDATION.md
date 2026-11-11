@@ -1656,3 +1656,9 @@ Change (`scripts/witness.mjs`): the row `a resize after the command palette keep
 Cause, from `probe8.log`: the old row checked a welcome panel that fx's first keystroke clears (S1: `welcome false` after typing `hello`), and it checked two 70-column composer rules. After the palette round trip the probe shows no rules at all (S5: `rules 0`, `cols 70, rows 24`), so a rules check cannot pass in fx's state. The old settle also waited for two `^─{70}$` lines and so never settled. The change keeps the defect's subject, a stale line wider than the terminal after a resize, and drops the expectation fx does not produce. The rules are not relaxed: no rule row is required and none is counted.
 
 Not changed: the approval row (fx-owned, reported from the witness).
+
+## fx TUI parity, post-Q10 Phase B: term wasm rebuilt from fx b3e33d55
+
+- Built from origin/main `b3e33d55` (Q10 commit, after `894bd360` and `8baf324d`) with `zig build fx-term-wasm -Dwasm-surface=term`, Zig 0.17.1, exit 0. Output `fx-term.wasm` 4826… bytes is recorded in the manifest as sha256 `d4c6109a000c75e28415dcadf66e28ab61adfd90c3f8940f861f9729c32fb512`.
+- The 12 SDK modules match `b3e33d55:sdk/` byte for byte.
+- Caveat, recorded and not hidden: while the build ran, fx's checkout had an uncommitted 4-line addition in `src/main.zig` (a `pub fn submitPlanDescription` forwarding to `InputSubmitRuntime`) and an untracked `tests/e2e/plan-command.test.ts`. Both were left as they were. The added method is not referenced by the term build, and Zig analyses unreferenced functions lazily, so the emitted wasm should match a clean build; I did not compare the bytes against a clean-tree build, so this is an unverified assumption. Rebuild from a clean fx tree once fx's working changes are committed, to remove the caveat.
