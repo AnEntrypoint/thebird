@@ -1175,7 +1175,7 @@ group('python', async () => {
   const python = await terminal([
     ['run', 'python3 -c "print(6*7)"'],
     ['run', 'python3 -c "1/0"'],
-    ['run', 'echo py-hello > notes/in.txt'],
+    ['run', 'mkdir -p notes && echo py-hello > notes/in.txt'],
     ['run', `echo "open('notes/out.txt','w').write(open('notes/in.txt').read().upper())" > notes/script.py`],
     ['run', 'python3 notes/script.py'],
     ['run', 'cat notes/out.txt'],
