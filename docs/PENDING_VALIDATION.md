@@ -1618,3 +1618,15 @@ Checks: `node --check web/ghostty-screen.js` passes.
 - Run 4, on fx 9c24e3c7 (`/tmp/witness-run4.log`, term wasm `73c5146…`): PASS 211, FAIL 2, WITNESS-EXIT 1, WALL_SECONDS 929. The same two fx-owned rows fail; no FAIL row is in the thebird wiring.
 - Phase A changes made in this step: none needed. Both FAIL rows are fx-owned and fx's code was not touched.
 - Term wasm: rebuilt from fx 9c24e3c7 (origin/main); the 12 SDK modules match that commit.
+
+## fx TUI parity, Phase A (post Q10 pass): grapheme witness row and the run-1 wall time
+
+Grapheme row (browser, not Node): `scripts/witness.mjs` opens a new fx session, types `e` + combining acute accent, a space, a skin-toned thumbs-up (`👍🏽`), a space, and a ZWJ family (`👨‍👩‍👧`), then checks that the input line in xterm's buffer starts with `┃ ` and that the same string follows. Row text: `combining and emoji text lands in the TUI input box as whole graphemes, in a browser session`. Witness evidence: pending the post-Q10 witness run; the Node replay (`verify.mjs`) already matches these graphemes at (row, column). Checks: `node --check scripts/witness.mjs` passes.
+
+Run-1 wall time (`/tmp/witness-run1.log`, birth 02:00:33, last write 03:48:18, no WITNESS-EXIT line): the defect is real. Findings:
+- The witness exits on SIGTERM through `process.on('SIGTERM', ... process.exit(143))`, and `timeout 1800` sends SIGTERM. I checked the mechanism with a Node process that has the same handler: `timeout 3` exited 124 at the cap, so the handler does not block the cap.
+- The witness's synchronous waits are bounded: `spawnSync` calls use 120 s, 60 s and 30 s timeouts, and the `gh` lookup retries three times at 30 s per action. None can hold the event loop for an hour.
+- The run's log has no `WITNESS-EXIT` line. Node's exit handler wrote the browser cleanup line at 03:48, but the shell that ran `timeout` never wrote its exit line, so the job's shell ended before it recorded a status.
+- Cause (best supported by these logs): the run was a background job in a shell that was stopped and then torn down at the session boundary (its later notification said "stopped, no completion record"). The 1800 s cap did not run in wall-clock order, so the process kept running until the teardown at 03:48. The log lacks timestamps, so this cannot be proven from the file alone.
+- Runs 2 to 4, under the same `timeout 3600`, ended on their own: WALL_SECONDS 1018, 942 and 929.
+- Action: the witness now records start and end times in its checkpoint log? Not changed: the bounded background job pattern (`date +%s` start, `WALL_SECONDS` on exit) is in place for every run since run 2, and that pattern is what the Phase B runs use.

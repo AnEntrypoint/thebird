@@ -232,6 +232,20 @@ if (existsSync(chrome)) {
   check('a resize after the command palette keeps the welcome panel and the rules at 70 columns (native fx fails the same way: upstream fx TUI defect)', tui.paletteResizeSettled === true && screenRows('paletteResized').some((line) => line.includes('Welcome to fx')) && screenRows('paletteResized').filter((line) => /^─{70}$/.test(line)).length === 2, JSON.stringify({ settled: tui.paletteResizeSettled, screen: screenRows('paletteResized').slice(0, 4) }));
   check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
   check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
+  const GRAPHEMES = 'é \u{1F44D}\u{1F3FD} \u{1F468}‍\u{1F469}‍\u{1F467}';
+  const graphemes = {};
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await type('fx');
+      await press('Enter');
+      await waitFor("globalThis.thebird.text().includes('Welcome to fx')", 120000).catch(() => {});
+      await type(GRAPHEMES);
+      await waitFor("globalThis.thebird.text().split('\\n').some((line) => line.startsWith('┃ ' + " + JSON.stringify(GRAPHEMES) + "))", 30000).catch(() => {});
+      graphemes.screen = await evaluate(TUI_SCREEN);
+    },
+  });
+  check('combining and emoji text lands in the TUI input box as whole graphemes, in a browser session', graphemes.screen?.split('\n').some((line) => line.startsWith('┃ ' + GRAPHEMES)) === true, JSON.stringify((graphemes.screen ?? '').split('\n').slice(0, 3)));
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
   const surfaces = {};
