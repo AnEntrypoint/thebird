@@ -1489,3 +1489,23 @@ What is already in place, so the page-wiring step is smaller than the decision a
 - Screen-by-screen witnesses already exist in `scripts/witness.mjs`: startup (`fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page`), the palette (`escape closes the command palette…`), the resize (`resizing the page reflows the TUI to 70 by 24…`), the palette-then-resize (`a resize after the command palette…`, fx-owned), the approval panel (`approval: a bash tool call opens the approval panel…`, fx-owned), the ask panel (`ask: the question is shown, and the answer reaches the stub…`), the transcript (`transcript: the prompt and the stub answer appear in the TUI transcript`) and the full-transcript screen (`Ctrl-O opens the full transcript…`).
 
 Changes in this Phase A: this section only. Code, vendored files and witnesses are unchanged. Witness: none run, per Phase A. Waiting on: the owner's answer on `ghostty-vt.wasm`, and fx's `tool_admission.zig` and `resize_runtime.zig` fixes for the two fx-owned rows. Nothing is pushed; the nine local commits and this record go out together after both rows pass.
+
+## fx TUI parity, stretch 10 Phase A (continued): ghostty-vt from npm
+
+Source and license, checked before vendoring:
+- npm `ghostty-web` version 0.4.0, `license = 'MIT'` in the registry metadata. Its LICENSE file is MIT, `Copyright (c) 2025 Coder`. MIT with the notice kept, so it is accepted for vendoring under the owner's rule.
+- The tarball's npm integrity (`sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==`) matches the downloaded bytes.
+- The wasm `dist/ghostty-vt.wasm` (423045 bytes) is identical to the package's top-level `ghostty-vt.wasm`. Its exports are the Ghostty VT surface: `ghostty_terminal_new`, `ghostty_terminal_write`, `ghostty_terminal_resize`, `ghostty_render_state_update` and the `get_cursor`/`get_viewport`/`get_grapheme` readers, plus key encoding and OSC/SGR parsers. Its only import is `env.log`.
+
+Changes in this step (each with its witness):
+| Change | File | Witness |
+| --- | --- | --- |
+| Vendored `ghostty-vt.wasm` from ghostty-web 0.4.0 `dist/`, unmodified | `web/vendor/ghostty/ghostty-vt.wasm` | None run in Phase A. Static: `sha256sum` = `d6f0326f1874ad2ce9f289e3a4a0c5f3507d4cb38d8747e4b287def470a0c60a`. |
+| The package's MIT LICENSE, unmodified | `web/vendor/ghostty/LICENSE` | Static: `diff` against the tarball's `package/LICENSE` is empty. |
+| NOTICE with the package, version, tarball integrity, wasm SHA-256 and size | `web/vendor/ghostty/NOTICE` | Static: the hash in NOTICE is the hash of the file above. |
+
+Not done in this step, so the page still runs fx on xterm.js:
+- The wiring that runs `fx-term.wasm` output through `ghostty-vt.wasm` is not written. It is a design choice, not a mechanical change. Either (a) ghostty-vt parses fx's output and the page redraws each frame cell by cell into the xterm.js `Terminal`, or (b) ghostty-web's own `Terminal` (an xterm.js-compatible API, MIT, in the same package) replaces the xterm.js instance. Option (a) keeps xterm's buffer that the witness reads (`globalThis.thebird.term.buffer.active`). Option (b) changes that API and every TUI row that reads it. The owner should pick one before the wiring is written.
+- The line builtins in `web/fx-in-page.js` (`fx --version`, `fx check`, `fx ask`) are unchanged. Their witness rows stay as they are until the new path exists.
+
+Witness: none run in Phase A. Hold: nothing pushed; the ten local commits (4c231bf through f97393b) and this step go out together after fx's `tool_admission.zig` and `resize_runtime.zig` fixes are on origin/main.

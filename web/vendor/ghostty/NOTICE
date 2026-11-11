@@ -1,0 +1,8 @@
+ghostty-vt.wasm
+
+Package: ghostty-web 0.4.0 (npm, https://registry.npmjs.org/ghostty-web/-/ghostty-web-0.4.0.tgz)
+Tarball sha512 (npm integrity): sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==
+File: dist/ghostty-vt.wasm, copied unmodified
+SHA-256: d6f0326f1874ad2ce9f289e3a4a0c5f3507d4cb38d8747e4b287def470a0c60a
+Size: 423045 bytes
+License: MIT, the text in LICENSE in this directory (Copyright (c) 2025 Coder)
