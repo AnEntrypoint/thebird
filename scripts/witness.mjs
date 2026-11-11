@@ -475,7 +475,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
       await type(String.fromCodePoint(0x1f600));
       await new Promise((resolve) => setTimeout(resolve, 300));
       wide.cursorAfterEmoji = await evaluate('globalThis.thebird.term.buffer.active.cursorX');
-      wide.promptLength = await evaluate('globalThis.thebird.pty.state().prompt.length');
+      wide.promptLength = await evaluate("[...globalThis.thebird.pty.state().prompt].length");
       await press('u', { ctrl: true });
     },
   });

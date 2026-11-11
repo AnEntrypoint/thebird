@@ -1669,3 +1669,16 @@ Not changed: the approval row (fx-owned, reported from the witness).
 - FAIL 1, `a resize after the command palette closes settles at 70 by 24, with no line wider than 70 columns and the input box drawn` (my row, restated in 35b7fda): `settled:false`, screen rows `["𝒇x v0.0.16 · Run /help for commands…", "", "┃…", ""]`. Cause: the row's length check used `String.length`, which counts UTF-16 units. The header's `𝒇` is two units, so a correct 70-cell line measured 71 and failed. Fixed in the witness: the settle and the row now count code points (`[...line].length`). Probe `probe10.log` (PROBE-EXIT 0) evaluates the corrected settle expression on the 70×24 state: `SETTLE true`. This fix has not yet been through a full witness run; the next fx stretch's witness is the run that checks it.
 - FAIL 2, `approval: a bash tool call opens the approval panel with its options and its command row` (fx-owned, fx stretch B): `options: []`, the stub's bash request reaches the page and the panel never draws.
 - All other rows pass in this run, including the typed-text row, the 70-column resize row, and the grapheme row.
+
+## width and column sweep of scripts/witness.mjs (and scripts/browser-driver.mjs)
+
+Every witness check that compares a width, a column or a position was read. Results:
+- `wide characters take two cells in the shell output, and the input cursor moves by the cell width of typed CJK and emoji` (line ~478): the expected cursor offset came from `prompt.length` (UTF-16 units). Changed to `[...prompt].length` (code points). The prompt is ASCII (`thebird /workspace> `), so the value is unchanged today; the change keeps a non-ASCII prompt from breaking the offset.
+- `a resize after the command palette closes settles at 70 by 24…` (fixed in 3f52ef5): code points, already in place.
+- `resizing the page reflows the TUI to 70 by 24…` and the row-2 line checks: `/^─{70}$/` on text read with `translateToString(true)`, which is code-unit text but the rules are single-cell characters, so the check is correct.
+- Title and styles (`TUI_TITLE`, `styleOf`) read cells by column (`getCell(x)`), and the wide-cell check reads `getCell(col).getWidth()`: both are cell-based and correct.
+- Input editing (`editing.endLength`, line ~946) compares the caret and the value length, both in the same UTF-16 units of the input element: consistent.
+- The boot splash (line ~1180) counts `[...row].length` against the probe width; the splash uses single-cell box characters, so code points equal cells.
+- `scripts/browser-driver.mjs`: no width or column checks.
+
+Nothing else in the witness counts screen width with string length or string index.
