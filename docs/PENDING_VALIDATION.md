@@ -1688,3 +1688,10 @@ Nothing else in the witness counts screen width with string length or string ind
 - Totals: PASS 213, FAIL 1, WITNESS-EXIT 1, WALL_SECONDS 1081.
 - The palette-closes resize row passes (validates 3f52ef5 and its code-point count).
 - The one FAIL: `approval: a bash tool call opens the approval panel with its options and its command row` (fx-owned, fx stretch B): `options: []`, the stub's bash request reaches the page and the panel never draws.
+
+## Phase A of the reachable-work pass (no fx code)
+
+1. Alternate-screen mirror removed (`web/ghostty-screen.js`): `frame()` no longer tracks ghostty's alternate-screen state or emits `?1049h`/`?1049l`. The reason: the mirror could drop the TUI's xterm alternate buffer if fx ever entered and left its own alternate screen, which would bring back the scrollback problem fixed in `722d363`. `runFxTui` sets and restores the alternate buffer itself. Latent, since fx does not use alternate-screen sequences in this mode, so it had not fired. Checks: `node --check` passes; the Node replay (`replay.mjs`) and the width check (`verify.mjs`) give the same rows as before. Witness that covers it: the TUI rows (startup, typed text, the 70-column resize, the palette-then-resize row, the grapheme row) in the next witness run.
+2. Superseded wording in this file: entries that say "not run in this step" or "next step" for the witness, or for the palette, typed-text and resize rows, were written before later steps. The later entries (post-Q10 Phase B, witness runs 5 and 6, and the sweep) are current. Documentation only; witness: none.
+
+Held (depends on fx's unpushed code): the fx-term.wasm rebuild from fx's stretch A/B commit, and its witness. Approval row: fx-owned, reported from the witness.

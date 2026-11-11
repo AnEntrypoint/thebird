@@ -69,7 +69,6 @@ export class GhosttyScreen {
     this.handle = exports.ghostty_terminal_new(cols, rows);
     if (!this.handle) throw new Error('ghostty-vt could not create a terminal');
     this.graphemePointer = exports.ghostty_wasm_alloc_u8_array(GRAPHEME_CAPACITY * 4);
-    this.alternate = false;
   }
 
   write(data) {
@@ -136,15 +135,10 @@ export class GhosttyScreen {
   frame() {
     const x = this.exports;
     const cells = this.readCells();
-    const alternate = x.ghostty_terminal_is_alternate_screen(this.handle) !== 0;
     const cursorX = x.ghostty_render_state_get_cursor_x(this.handle);
     const cursorY = x.ghostty_render_state_get_cursor_y(this.handle);
     const cursorVisible = x.ghostty_render_state_get_cursor_visible(this.handle) !== 0;
     const parts = [];
-    if (alternate !== this.alternate) {
-      parts.push(alternate ? '\x1b[?1049h' : '\x1b[?1049l');
-      this.alternate = alternate;
-    }
     parts.push('\x1b[?7l\x1b[?25l');
     let style = '';
     for (let row = 0; row < this.rows; row++) {
