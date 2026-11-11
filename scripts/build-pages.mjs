@@ -14,7 +14,7 @@ export async function buildPages(out = join(root, '_site')) {
   if (!existsSync(join(root, 'web', 'vendor', 'floosie', 'browser.js'))) await vendorFloosie();
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  cpSync(join(root, 'web'), join(out, 'web'), { recursive: true });
+  cpSync(join(root, 'web'), join(out, 'web'), { recursive: true, filter: (source) => !source.startsWith(join(root, 'web', 'vendor', 'floosie')) });
   copyFileSync(join(root, 'web', 'terminal.html'), join(out, 'index.html'));
   await build({
     entryPoints: [join(out, 'web', 'terminal.js')],

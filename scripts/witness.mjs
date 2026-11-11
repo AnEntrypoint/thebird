@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -393,8 +393,6 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
   const fxArtifactShipped = existsSync(fxArtifact);
-  const floosieArtifact = join(pagesDir, 'web', 'vendor', 'floosie', 'browser.js');
-  const floosieArtifactShipped = existsSync(floosieArtifact);
   const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
   const siteBundle = join(pagesDir, 'web', 'terminal.bundle.js');
   const bundleText = existsSync(siteBundle) ? readFileSync(siteBundle, 'utf8') : '';
@@ -1481,6 +1479,7 @@ check('gh unavailable with every pin matching gives UNVERIFIED and no FAIL', Boo
 check('negative control: a tag that resolves to another SHA is a FAIL when gh is available', driftVerdict(workflow, agents, () => ({ resolved: flipped(firstRow.sha) })).status === 'FAIL', 'a moved tag is reported as drift');
 check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
+check('the Pages artifact leaves out floosie while no page module imports it', (() => { const imports = readdirSync(join(root, 'web')).filter((f) => /\.js$/.test(f)).some((f) => readFileSync(join(root, 'web', f), 'utf8').includes('vendor/floosie')); const built = readFileSync(join(root, 'scripts', 'build-pages.mjs'), 'utf8').includes("join(root, 'web', 'vendor', 'floosie')"); return !imports && built; })(), 'no web/*.js imports vendor/floosie; build-pages filters it from the artifact');
 check('pages.yml builds floosie browser bundle from latest floosie main before the page build', /repository: AnEntrypoint\/floosie/.test(workflow) && /path: floosie/.test(workflow) && /FLOOSIE_REPO: \$\{\{ github\.workspace \}\}\/floosie/.test(workflow) && workflow.indexOf('node scripts/vendor-floosie.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/floosie\/browser\.js/.test(workflow), 'floosie checkout, FLOOSIE_REPO, vendor script, asset check and build order');
 check('pages.yml rebuilds fx from gmfx only when GMFX_TOKEN is set, and always verifies the committed fx against its manifest', /if: env\.GMFX_TOKEN != ''/.test(workflow) && /token: \$\{\{ env\.GMFX_TOKEN \}\}/.test(workflow) && /FX_REPO: \$\{\{ github\.workspace \}\}\/gmfx/.test(workflow) && /node scripts\/vendor-fx\.mjs --verify/.test(workflow) && !/^\s*repository: AnEntrypoint\/gmfx\n\s*ref: main\n\s*path: gmfx\n\s*\n/m.test(workflow) && workflow.indexOf('--verify') < workflow.indexOf('node scripts/build-pages.mjs'), 'gated gmfx checkout and rebuild, verify step before the page build')
 check('committed web/vendor/fx matches its manifest hashes (no checkout needed)', (() => { const r = spawnSync(process.execPath, [join(root, 'scripts', 'vendor-fx.mjs'), '--verify'], { encoding: 'utf8' }); return r.status === 0; })(), 'node scripts/vendor-fx.mjs --verify');
