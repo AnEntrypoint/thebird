@@ -93,7 +93,3 @@ export function pythonBundle({ signal } = {}) {
 }
 
 export const pythonBundleReady = () => ready;
-
-export function prefetchPythonBundle() {
-  return pythonBundle().catch(() => {});
-}

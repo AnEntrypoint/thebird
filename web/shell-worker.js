@@ -2,11 +2,9 @@ import { Buffer } from './shims/buffer.js';
 import { flushFs, hydrate, mkdirSync, readdirSync } from './shims/fs.js';
 import { posix } from './shims/path.js';
 import { createShell, hasBackgroundOperator } from './bash-shell.js';
-import { onPythonPhase, prefetchPython } from './python-in-page.js';
+import { onPythonPhase } from './python-in-page.js';
 import { clearCancel, setCancelWord } from './txiki-in-page.js';
 import { settleTakeover } from './takeover.js';
-
-prefetchPython();
 
 const WORKSPACE = '/workspace';
 const windowFromUrl = (search) => {
