@@ -92,7 +92,7 @@ const waitForHeadroom = async () => {
 };
 
 async function runGroup(entry) {
-  await waitForHeadroom();
+  if (entry.heavy) await waitForHeadroom();
   const context = { name: entry.name, results: [], browser: null, profile: mkdtempSync(join(tmpdir(), `thebird-profile-${entry.name}-`)) };
   const started = performance.now();
   try {

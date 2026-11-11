@@ -99,7 +99,7 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 - Use Conventional Commits.
 - Iteration habits: run a failing row alone with `node scripts/witness.mjs --check=<substring>` (or `--group=<name>`, `--list` names the groups) and not the full witness; the full run is for Phase B only. The runner starts at most three groups at once, the cap being set in `scripts/witness.mjs`.
-- Start a heavy run only when the first field of `/proc/loadavg` is under 6.
+- The load gate applies to heavy groups only (Pyodide and pip cold starts, which run one at a time). It waits until the first field of `/proc/loadavg` is under 6 before a cold start, because a cold start under contention is what exceeds its 900 s bound. Other groups start at once: their rows are functional and do not depend on host load.
 - Wait on a background job by its PID with a bound (`timeout <s> tail --pid=<pid> -f /dev/null`), never by `sleep` polling; stop your own jobs by PID, never with pkill or killall.
 - Read the per-group and per-terminal wall times the witness prints before optimising; report the longest step.
 - fx work: take it from origin main once pushed; until then take it from the local fx checkout at /workspace/fx/fx and name the commit in the ledger row.
