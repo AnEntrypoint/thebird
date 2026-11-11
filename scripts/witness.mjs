@@ -351,32 +351,6 @@ group('fx-provider', async () => {
   check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
 
-group('fx-tui-provider', async () => {
-  const liveKey = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
-  if (!liveKey) throw new Error('fx-tui-provider needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
-  const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
-  const tui = {};
-  const result = await terminal([], {
-    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      await type('fx');
-      await press('Enter');
-      await waitFor("globalThis.thebird.text().includes('Welcome to fx')", 120000);
-      await type('hi');
-      await press('Enter');
-      await waitFor(`globalThis.thebird.text().includes('hi')`, 60000);
-      await new Promise((ok) => setTimeout(ok, 45000));
-      tui.screen = await evaluate(TUI_SCREEN);
-    },
-  });
-  const statuses = result.logs.filter((line) => line.includes(' net-response ') && line.endsWith(liveUrl)).map((line) => line.split(' ')[4]);
-  const lines = (tui.screen ?? '').split('\n');
-  const userRow = lines.map((line, index) => (line.includes(' hi') ? index : -1)).filter((index) => index >= 0).at(-1) ?? -1;
-  const replied = userRow >= 0 && lines.slice(userRow + 1).some((line) => /\S/.test(line.replace(/[┃│╭╰─]/g, '')));
-  check('fx TUI sends hi as a user turn to the live 8793 gateway and the request returns 200', statuses.length > 0 && statuses.every((status) => status === '200'), JSON.stringify({ statuses }));
-  check('fx TUI shows no "no user or assistant turn" error and gets a reply after hi', !(tui.screen ?? '').includes('no user or assistant turn') && replied, JSON.stringify({ replied, screenTail: lines.slice(-12).join('\n').slice(0, 900) }));
-});
-
 group('fx-ask', async () => {
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;

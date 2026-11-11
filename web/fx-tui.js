@@ -1,8 +1,6 @@
 import { createFxTerminal } from './vendor/fx/wasm-terminal.js';
 import { initializeHostTools } from './fx-host-tools.js';
 import { GhosttyScreen, ghosttyAdapter, loadGhosttyVt } from './ghostty-screen.js';
-import { providerFetch, providerOf } from './fx-in-page.js';
-import { customProviderDefinition } from './vendor/fx/custom-provider.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-term.wasm', import.meta.url).href;
 const GHOSTTY_URL = new URL('./vendor/ghostty/ghostty-vt.wasm', import.meta.url).href;
@@ -48,23 +46,20 @@ const memoryPromptHistoryStore = () => {
   };
 };
 
-const environmentFor = (fx, provider) => ({
-  ...(provider ? { FX_PROVIDER: provider.name, FX_CONFIGURED_PROVIDERS: customProviderDefinition(provider).json } : {}),
-  ...(fx.apiKey === undefined || provider ? {} : { AI_GATEWAY_API_KEY: fx.apiKey }),
+const environmentFor = (fx) => ({
+  ...(fx.apiKey === undefined ? {} : { AI_GATEWAY_API_KEY: fx.apiKey }),
   ...(fx.model === undefined ? {} : { FX_MODEL: fx.model }),
   ...(fx.permissionMode === undefined ? {} : { FX_PERMISSION_MODE: fx.permissionMode }),
-  ...(fx.gatewayChatUrl === undefined || provider ? {} : { FX_GATEWAY_CHAT_URL: fx.gatewayChatUrl }),
+  ...(fx.gatewayChatUrl === undefined ? {} : { FX_GATEWAY_CHAT_URL: fx.gatewayChatUrl }),
 });
 
 export async function runFxTui(term, fx = {}) {
   const screen = new GhosttyScreen(await loadGhosttyVt(GHOSTTY_URL), term.cols, term.rows);
   term.write("\x1b[?1049h");
-  const provider = providerOf(fx);
   const app = await createFxTerminal({
     terminal: ghosttyAdapter(term, screen),
     wasm: WASM_URL,
-    env: environmentFor(fx, provider),
-    ...(provider ? { fetch: providerFetch(provider, fx.apiKey) } : {}),
+    env: environmentFor(fx),
     oauthSessionStore: memoryOauthSessionStore(),
     promptHistoryStore: memoryPromptHistoryStore(),
     beforeStart: initializeHostTools,

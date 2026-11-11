@@ -42,24 +42,13 @@ const CLI_MODEL_METADATA = {
   'claude-hy4[1m]': { contextWindow: 1000000, maxOutputTokens: 64000, supportsToolUse: true, supportsVision: true },
 };
 
-export const providerOf = (options) => {
+const providerOf = (options) => {
   if (options.provider) return options.provider;
   const url = options.gatewayChatUrl ? new URL(options.gatewayChatUrl) : null;
   if (!url || url.hostname === 'ai-gateway.vercel.sh' || GATEWAY_PATHS.some((path) => url.pathname.endsWith(path))) return undefined;
   const baseUrl = options.gatewayChatUrl.replace(/\/chat\/completions\/?$/, '');
   return { name: 'gy4', baseUrl, models: { [options.model]: options.modelMetadata ?? CLI_MODEL_METADATA[options.model] ?? {} } };
 };
-
-export function providerFetch(provider, apiKey) {
-  const prefix = provider.baseUrl.replace(/\/$/, '');
-  return (input, init = {}) => {
-    const url = String(input?.url ?? input);
-    if (!url.startsWith(`${prefix}/`)) return fetch(input, init);
-    const headers = new Headers(init.headers ?? input?.headers);
-    headers.set('authorization', `Bearer ${apiKey}`);
-    return fetch(input, { ...init, headers });
-  };
-}
 
 const customEngine = ({ provider, apiKey }) => ({ provider, credentials: () => ({ apiKey }) });
 const gatewayEngine = ({ apiKey, gatewayChatUrl }) => ({ apiKey, gatewayChatUrl });
