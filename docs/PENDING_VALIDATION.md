@@ -1599,3 +1599,15 @@ Probes (scratch, `/tmp/ghostty-check/probe*.mjs`, logs `probe2.log`, `probe4.log
 - Right after resize to 70×24 (`probe4.log`, PROBE-EXIT 0): `cols 70, rows 24, length 24, baseY 0, type alternate`. The welcome panel is present, but both rule lines are 93 characters, so the witness row's `^─{70}$` check fails. xterm reports 70 columns while those rows still hold 93-column rules. The frame writes only the 70 columns from the ghostty screen, so the 93-column tail in those rows comes from earlier output. Not fixed in this step: the cause is not yet isolated. Candidates are fx's redraw after the resize (its size comes from the resize event) and xterm's handling of rows wider than the new width. The witness row stays open.
 
 Still fx-owned and not changed here: palette-then-resize and the approval panel (see the earlier fx entries).
+
+## fx TUI parity, stretch 10 Phase A (step 4): the 70-column resize rows
+
+Cause, from `probe5.log` (frames recorded with a `term.write` wrapper): the last frame written after the resize to 70×24 has both rule rows exactly 70 characters, so the wrapper and fx's redraw are correct. The 93-character rules are stale cells that xterm keeps in those lines after a narrower resize. Each line still has length 93 with trailing spaces past column 70, and writes that cover only 70 columns leave the tail in place.
+
+Test (`probe6.log`): `\x1b[2J` written straight to xterm after the resize clears those rows (no rule lines remain), so the stale tail is the cause and the erase fixes it.
+
+Change (`web/ghostty-screen.js`): the adapter's resize handler sets a flag, and the next paint starts with `\x1b[2J` before the frame, then clears the flag. The frame already repaints every row, so the clear loses nothing.
+
+Probe after the change (`probe7.log`, PROBE-EXIT 0): `cols 70, rows 24, type alternate`. The last frame's rule rows are 70 characters. Both buffer rule rows read `rule 70` after trimming trailing spaces, which is what the witness reads (`translateToString(true)`). The raw line length is still 93 because of trailing spaces; the witness check passes on the trimmed text.
+
+Checks: `node --check web/ghostty-screen.js` passes.

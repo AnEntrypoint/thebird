@@ -174,11 +174,14 @@ export class GhosttyScreen {
 export function ghosttyAdapter(term, screen) {
   const adapter = xtermAdapter(term);
   let scheduled = false;
+  let resized = false;
   const paint = () => {
     scheduled = false;
     if (!screen.handle) return;
     screen.resize(term.cols, term.rows);
-    term.write(screen.frame());
+    const clear = resized ? '\x1b[2J' : '';
+    resized = false;
+    term.write(clear + screen.frame());
   };
   const schedule = () => {
     if (scheduled) return;
@@ -187,6 +190,7 @@ export function ghosttyAdapter(term, screen) {
   };
   term.onResize(({ cols, rows }) => {
     screen.resize(cols, rows);
+    resized = true;
     schedule();
   });
   return {
