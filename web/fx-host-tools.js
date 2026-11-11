@@ -42,6 +42,6 @@ export function initializeHostTools(instance) {
 
 export function pageHostToolsJson() {
   return JSON.stringify({
-    tools: PAGE_HOST_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+    tools: PAGE_HOST_TOOLS.map(({ name, description, inputSchema, writes }) => ({ name, description, inputSchema, writes: writes === true })),
   });
 }
