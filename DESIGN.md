@@ -12,15 +12,14 @@ thebird is a bash terminal that runs in the browser. The page does the work, and
 - No external execution engine. The earlier CLI, library, REPL, verb passthrough and relay POST endpoints are gone, so the page runs every command itself.
 - No library API and no CLI. The package exports nothing; the product is the page.
 - Browser code uses the modules in `web/shims/` in place of `node:` imports.
-- Third-party bundles are committed unmodified. Generated runtimes (bashkit, fx, gm) are built from their upstream sources and pinned by SHA-256 in a manifest.
-- gm is gm's stdio MCP server in the page, not a reimplementation. floosie's browser bundle carries its `rpc` chunks and routes each line to an app on the hub; gm attaches as the default endpoint, so many apps can join the same hub. Its three served tools and gm's served skills are the real ones. A wasm core built from gm's portable C++ supplies JSON normalization and SHA-256; the tool verbs and append-only run log run in browser JavaScript over the OPFS shim. `gm stdio` takes one single-quoted JSON-RPC line and answers one line, the page's own stdio instead of a host pipe.
+- Third-party bundles are committed unmodified. Generated runtimes (bashkit, fx) are built from their upstream sources and pinned by SHA-256 in a manifest.
 
 ## Layers
 
 1. Page: `web/terminal.html`, `web/terminal.js`, `web/pty-adapter.js`, `web/shell-client.js`. xterm.js draws the screen and handles escape sequences; the adapter keeps the input line, history, Tab and the run queue, and passes keys and paste in and output bytes out.
 2. Worker: `web/shell-worker.js`. Hydrates OPFS, creates `/workspace`, answers run, complete, cwd and cancel messages, and flushes OPFS after each message.
 3. Shell: `web/bash-shell.js` over bashkit, with the lookup prologue from `web/shell-lookup.js`.
-4. Builtins: `web/git-in-page.js`, `web/sqlite-in-txiki.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/fx-in-page.js`, `web/gm-in-page.js`, and the commit gate `web/commit-gate.js`.
+4. Builtins: `web/git-in-page.js`, `web/sqlite-in-txiki.js`, `web/python-in-page.js`, `web/curl-in-page.js`, `web/fx-in-page.js`, and the commit gate `web/commit-gate.js`.
 5. Storage and shims: `web/shims/`, with the OPFS-backed filesystem in `web/shims/fs.js`.
 6. Static server: `src/relay.js`, started by `bin/thebird-relay.js`.
 
