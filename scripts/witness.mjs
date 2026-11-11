@@ -345,7 +345,7 @@ group('fx-provider', async () => {
   const ask = await terminal([['run', 'fx ask reply with only the word ok'], ['run', 'echo rc=$?']], {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
   });
-  const statuses = ask.logs.filter((line) => line.startsWith('worker response ') && line.endsWith(liveUrl)).map((line) => line.split(' ')[2]);
+  const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.endsWith(liveUrl)).map((line) => line.split(' ')[4]);
   const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
   check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
   check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));

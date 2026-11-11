@@ -190,7 +190,9 @@ export async function startBrowser({ chrome, profile }) {
       const origin = owners.has(from) ? 'worker' : 'page';
       if (method === 'Runtime.consoleAPICalled') owner.logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
       else if (method === 'Runtime.exceptionThrown') owner.logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
-      else if (method === 'Network.responseReceived' && origin === 'worker') owner.logs.push(`worker response ${params.response.status} ${params.response.url}`);
+      else if (method === 'Network.requestWillBeSent') owner.logs.push(`${origin} net-request ${params.requestId} ${params.timestamp.toFixed(3)} ${params.request.url}`);
+      else if (method === 'Network.responseReceived') owner.logs.push(`${origin} net-response ${params.requestId} ${params.timestamp.toFixed(3)} ${params.response.status} ${params.response.url}`);
+      else if (method === 'Network.loadingFinished') owner.logs.push(`${origin} net-finished ${params.requestId} ${params.timestamp.toFixed(3)} ${params.encodedDataLength}`);
       else if (method === 'Log.entryAdded') owner.logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
     };
     socket.onmessage = ({ data }) => {
@@ -231,6 +233,7 @@ export async function runTerminal({ browser, url, timeoutMs = 120000, interact, 
   sessions.set(sessionId, { logs, blockUrls });
   try {
     await send('Page.enable', {}, sessionId);
+    await send('Network.enable', {}, sessionId);
     if (initScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript }, sessionId);
     await send('Runtime.enable', {}, sessionId);
     await send('Log.enable', {}, sessionId);
