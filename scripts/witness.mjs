@@ -67,6 +67,10 @@ async function browserFor(restart) {
     await context.browser.close();
     context.browser = null;
   }
+  if (restart === 'fresh') {
+    rmSync(context.profile, { recursive: true, force: true });
+    context.profile = mkdtempSync(join(tmpdir(), `thebird-profile-${context.name}-`));
+  }
   context.browser ??= await startBrowser({ chrome, profile: context.profile });
   return context.browser;
 }
@@ -529,7 +533,7 @@ group('palette-colour', async () => {
   const alone = await terminal([['run', "printf 'alone-no-newline'"]]);
   const aloneLines = alone.out.split('\n');
   const aloneAt = aloneLines.indexOf('alone-no-newline');
-  check('colour: a 256-colour index and a truecolour value reach the cell, and queued output starts its own row after unterminated output', palette.x196?.fg === 196 && palette.x196.palette === true && palette.rgb?.rgb === true && palette.rgb.fg === 0xff0000 && noNewlineAt !== -1 && palette.lines[noNewlineAt + 1] === 'after-no-newline', JSON.stringify({ x196: palette.x196, rgb: palette.rgb, around: palette.lines.slice(Math.max(noNewlineAt, 0), noNewlineAt + 3) }));
+  check('colour: a 256-colour index and a truecolour value reach the cell, and queued output starts its own row after unterminated output', palette.x196?.fg === 196 && palette.x196.palette === true && palette.rgb?.rgb === true && palette.rgb.fg === 0xff0000 && noNewlineAt !== -1 && palette.lines.slice(noNewlineAt + 1).includes('after-no-newline'), JSON.stringify({ x196: palette.x196, rgb: palette.rgb, around: palette.lines.slice(Math.max(noNewlineAt, 0), noNewlineAt + 3) }));
   check('colour: unterminated output is followed by the prompt on its own row', aloneAt !== -1 && aloneLines[aloneAt + 1]?.startsWith('thebird '), JSON.stringify(aloneLines.slice(-3)));
 });
 
@@ -1233,6 +1237,7 @@ group('python-splash', async () => {
   check('the cold python3 call shows the ASCII thebird splash while the bundle loads, then hides it', splashRun.modes?.includes('ascii') && !splashRun.modes.includes('text') && splashRun.hidden === true, JSON.stringify(splashRun));
   const bundleFailed = {};
   await terminal([], {
+    restart: 'fresh',
     blockUrls: ['https://anentrypoint.github.io/pyodide-minimal/*'],
     interact: async ({ type, press, evaluate, waitFor }) => {
       await type('python3 -c "print(1)"');

@@ -174,13 +174,14 @@ export async function startBrowser({ chrome, profile }) {
     };
     const onEvent = ({ method, params = {}, sessionId: from }) => {
       if (method === 'Target.attachedToTarget') {
-        const owner = sessions.get(from);
+        const owner = sessions.get(owners.get(from) ?? from);
         if (owner && ['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {
-          owners.set(params.sessionId, from);
+          owners.set(params.sessionId, owners.get(from) ?? from);
           send('Runtime.enable', {}, params.sessionId).catch(() => {});
           send('Log.enable', {}, params.sessionId).catch(() => {});
           blockRequests(params.sessionId, owner.blockUrls);
         }
+        if (owner?.blockUrls.length) send('Runtime.runIfWaitingForDebugger', {}, params.sessionId).catch(() => {});
         return;
       }
       const owner = sessions.get(owners.has(from) ? owners.get(from) : from);
@@ -232,7 +233,7 @@ export async function runTerminal({ browser, url, timeoutMs = 120000, interact, 
     await send('Runtime.enable', {}, sessionId);
     await send('Log.enable', {}, sessionId);
     blockRequests(sessionId, blockUrls);
-    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
+    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: blockUrls.length > 0, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 
     const evaluate = async (expression) => {
