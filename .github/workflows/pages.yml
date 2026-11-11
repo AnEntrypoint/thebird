@@ -12,6 +12,9 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  GMFX_TOKEN: ${{ secrets.GMFX_TOKEN }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,11 +22,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out private gmfx when a token is set
+        if: env.GMFX_TOKEN != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AnEntrypoint/gmfx
           ref: main
           path: gmfx
+          token: ${{ env.GMFX_TOKEN }}
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AnEntrypoint/floosie
@@ -46,7 +52,8 @@ jobs:
         run: node scripts/vendor-txiki.mjs
       - name: Check tjs.wasm against the pin
         run: echo "$(node -p "JSON.parse(require('fs').readFileSync('scripts/txiki/pin.json', 'utf8')).tjsWasmSha256")  web/vendor/txiki/tjs.wasm" | sha256sum -c -
-      - name: Build fx core WASM from latest gmfx
+      - name: Rebuild fx from gmfx when a token is set
+        if: env.GMFX_TOKEN != ''
         env:
           ZIG: /workspace/tools/zig-x86_64-linux-0.17.1/zig
           FX_REPO: ${{ github.workspace }}/gmfx
@@ -56,6 +63,8 @@ jobs:
           node scripts/vendor-fx.mjs
           test -s web/vendor/fx/fx-core.wasm
           node -e "const m=require('./web/vendor/fx/manifest.json'); if (m.wasm.name !== 'fx-core.wasm' || !/^[0-9a-f]{64}$/.test(m.wasm.sha256)) process.exit(1)"
+      - name: Check committed fx against its manifest
+        run: node scripts/vendor-fx.mjs --verify
       - name: Build floosie browser bundle from latest floosie main
         env:
           FLOOSIE_REPO: ${{ github.workspace }}/floosie
