@@ -3,7 +3,7 @@ const CANCEL_GRACE_MS = 1500;
 const fxConfig = () => {
   const value = globalThis.THEBIRD_FX;
   if (!value || typeof value !== 'object') return undefined;
-  return { apiKey: value.apiKey, model: value.model, permissionMode: value.permissionMode, gatewayChatUrl: value.gatewayChatUrl };
+  return { apiKey: value.apiKey, model: value.model, permissionMode: value.permissionMode, gatewayChatUrl: value.gatewayChatUrl, provider: value.provider };
 };
 
 export function shellClient({ url = new URL('./shell-worker.js', import.meta.url).href, commandTimeoutMs } = {}) {

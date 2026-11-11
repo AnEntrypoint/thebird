@@ -6,7 +6,7 @@ import { PAGE_HOST_TOOLS } from './fx-host-tools.js';
 const WASM_URL = new URL('./vendor/fx/fx-core.wasm', import.meta.url).href;
 const MANIFEST_URL = new URL('./vendor/fx/manifest.json', import.meta.url).href;
 const USAGE = 'usage: fx | fx --version | fx --help | fx check | fx ask <prompt>';
-const HELP = `${USAGE}\n\nfx runs libfx's WebAssembly core in this browser. Set window.THEBIRD_FX to { apiKey, model, gatewayChatUrl } before fx ask. The key stays in this page and is never written to the workspace.`;
+const HELP = `${USAGE}\n\nfx runs libfx's WebAssembly core in this browser. Set window.THEBIRD_FX to { apiKey, model, gatewayChatUrl } before fx ask, or { apiKey, model, provider: { name, baseUrl, models } } for a custom OpenAI-compatible provider. The key stays in this page and is never written to the workspace.`;
 const DEFAULT_MODEL = 'anthropic/claude-haiku-5.5';
 let manifest = null;
 
@@ -37,6 +37,9 @@ const textOf = (turn) => (async () => {
   return text.trimEnd();
 })();
 
+const customEngine = ({ provider, apiKey }) => ({ provider, credentials: () => ({ apiKey }) });
+const gatewayEngine = ({ apiKey, gatewayChatUrl }) => ({ apiKey, gatewayChatUrl });
+
 const ask = async (argv, signal) => {
   const prompt = argv.join(' ').trim();
   if (!prompt) throw new Error(USAGE);
@@ -44,9 +47,8 @@ const ask = async (argv, signal) => {
   const options = config();
   const engine = await createFxEngine({
     wasm: WASM_URL,
-    apiKey: options.apiKey,
+    ...(options.provider ? customEngine(options) : gatewayEngine(options)),
     model: options.model ?? DEFAULT_MODEL,
-    gatewayChatUrl: options.gatewayChatUrl,
     tools: PAGE_HOST_TOOLS,
   }, wasmRuntimeFactory());
   if (signal.aborted) {

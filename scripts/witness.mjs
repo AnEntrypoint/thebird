@@ -338,6 +338,17 @@ group('fx-approval', async () => {
   check('host tools: the TUI advertises exactly bash and ask to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash']), JSON.stringify(tuiTools));
 });
 
+group('fx-provider', async () => {
+  const chat = await startFxStubGateway();
+  const metadata = { contextWindow: 1000000, maxOutputTokens: 64000, supportsToolUse: true, supportsVision: true };
+  const providerInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'claude-hy4[1m]', provider: { name: 'gy4', baseUrl: chat.chatBaseUrl, models: { 'claude-hy4[1m]': metadata } } })};`;
+  const ask = await terminal([['run', 'fx ask hello'], ['run', 'echo rc=$?']], { initScript: providerInit });
+  await chat.close();
+  const httpErrors = ask.logs.filter((line) => /status of 4\d\d|status of 5\d\d|HTTP [45]\d\d|400 \(/.test(line));
+  check('fx ask on a custom provider with claude-hy4[1m] model_metadata prints ok and no HTTP error', /^ok$/m.test(ask.out) && httpErrors.length === 0, JSON.stringify({ out: ask.out.slice(-240), console: ask.logs.slice(0, 6) }));
+  check('the chat request carries the user turn and the host key, and the model metadata reaches the engine', chat.chatSeen.length > 0 && chat.chatSeen.some((call) => call.roles.includes('user')) && chat.chatSeen.every((call) => call.authorization === `Bearer ${FX_STUB_KEY}`), JSON.stringify(chat.chatSeen.slice(0, 2)));
+});
+
 group('fx-ask', async () => {
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
