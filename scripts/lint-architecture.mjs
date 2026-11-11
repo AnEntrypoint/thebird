@@ -244,7 +244,7 @@ function agentsStatic() {
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
   record('The relay answers GET and HEAD only', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
   cites('Ctrl-C ends a `curl`', ['in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on']);
-  cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers', 'pages.yml builds fx core WASM from latest gmfx main before the page build']);
+  cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers', 'pages.yml rebuilds fx from gmfx only when GMFX_TOKEN is set, and always verifies the committed fx against its manifest']);
   cites('The build job has `contents: read` only', ['pages.yml gives the build job contents read only, and the deploy job only pages and id-token write']);
   record('The actions in `pages.yml` are pinned', all(
     outcome(['11d5960a326750d5838078e36cf38b85af677262', '49933ea5288caeca8642d1e84afbd3f7d6820020', '56afc609e74202658d3ffba0e8f6dda462b719fa', 'd6db90164ac5ed86f2b6aed7e0febac5b3c0c03e'].every((sha) => fileHas('.github/workflows/pages.yml', sha) && docLines.join('\n').includes(sha)), 'each SHA in the AGENTS.md mapping is the one pages.yml uses'),
