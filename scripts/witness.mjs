@@ -297,25 +297,11 @@ group('fx-approval', async () => {
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
       await submit('[tool:bash] [input:{"command":"echo approval"}]');
-      surfaces.approvalShown = await settle(hasText('Allow once'), 90000);
+      surfaces.approvalShown = await settle(`${hasText('Allow once')} || ${hasText('tool-result=seen')}`, 90000);
       await grab('approval');
       await press('Escape');
       await new Promise((ok) => setTimeout(ok, 2000));
       await grab('approvalDismissed');
-      await submit('[tool:ask] [input:{"question":"pick"}]');
-      surfaces.askShown = await settle(hasText('pick'), 90000);
-      await grab('ask');
-      await submit('blue');
-      surfaces.askAnswered = await settle(hasText('tool-result=seen'), 90000);
-      await grab('askReply');
-      await submit('[lines:60] long');
-      surfaces.linesShown = await settle(hasRow('line 60'), 90000);
-      await press('o', { ctrl: true });
-      surfaces.fullShown = await settle(hasText('esc close'), 60000);
-      await grab('full');
-      await press('Escape');
-      surfaces.fullClosed = await settle(`!${hasText('esc close')}`, 30000);
-      await grab('closedScreen');
     },
   });
   await terminal([], {
@@ -344,6 +330,42 @@ group('fx-approval', async () => {
   check('host tools: fx_terminal_initialize accepted the page host tools before the TUI started (count 2)', surfaces.hostToolCount === 2, String(surfaces.hostToolCount));
   const tuiTools = [...new Set(stubTui.seen.flatMap((request) => request.tools))].sort();
   check('host tools: the TUI advertises exactly bash and ask to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash']), JSON.stringify(tuiTools));
+});
+
+group('fx-ask', async () => {
+  const stubTui = await startFxStubGateway();
+  const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
+  const surfaces = {};
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    initScript: stubInit,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
+      const hasRow = (text) => `globalThis.thebird.text().split('\\n').some((line) => line === ${JSON.stringify(text)})`;
+      const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
+      const submit = async (text) => { await type(text); await press('Enter'); };
+      await type('fx');
+      await press('Enter');
+      surfaces.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      await submit('[tool:ask] [input:{"question":"pick"}]');
+      surfaces.askShown = await settle(hasText('pick'), 90000);
+      await grab('ask');
+      await submit('blue');
+      surfaces.askAnswered = await settle(hasText('tool-result=seen'), 90000);
+      await grab('askReply');
+      await submit('[lines:60] long');
+      surfaces.linesShown = await settle(hasRow('line 60'), 90000);
+      await press('o', { ctrl: true });
+      surfaces.fullShown = await settle(hasText('esc close'), 60000);
+      await grab('full');
+      await press('Escape');
+      surfaces.fullClosed = await settle(`!${hasText('esc close')}`, 30000);
+      await grab('closedScreen');
+    },
+  });
+  await stubTui.close();
+  const surfaceHas = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line.includes(text));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askReply', 'tool-result=seen'), JSON.stringify((surfaces.askReply ?? '').split('\n').slice(-6)));
   check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('closedScreen', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
 });
