@@ -1,6 +1,6 @@
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
-import { prefetchPythonBundle, pythonBundle } from './python-bundle.js';
+import { prefetchPythonBundle, pythonBundle, pythonBundleReady } from './python-bundle.js';
 
 const WORKSPACE = '/workspace';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
@@ -43,7 +43,8 @@ export const prefetchPython = prefetchPythonBundle;
 
 async function bundleFor(signal) {
   try {
-    const bundle = await pythonBundle({ signal, onStart: () => phaseSink('loading') });
+    if (!pythonBundleReady()) phaseSink('loading');
+    const bundle = await pythonBundle({ signal });
     phaseSink('done');
     return bundle;
   } catch (err) {

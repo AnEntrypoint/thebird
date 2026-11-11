@@ -14,6 +14,7 @@ const REQUIRED = [...Object.keys(CORE_PINS), 'pyodide-lock.json'];
 
 let decoder = null;
 let loading = null;
+let ready = false;
 
 export function unpack(raw) {
   const headerLength = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getUint32(0, true);
@@ -67,8 +68,7 @@ function decodeBundle(compressed) {
   });
 }
 
-async function fetchBundle(signal, onStart) {
-  onStart?.();
+async function fetchBundle(signal) {
   const cache = await openCache();
   const cached = await cachedBundle(cache);
   if (cached) {
@@ -81,13 +81,18 @@ async function fetchBundle(signal, onStart) {
   return decodeBundle(await downloadBundle(cache, signal));
 }
 
-export function pythonBundle({ signal, onStart } = {}) {
-  loading ??= fetchBundle(signal, onStart).catch((err) => {
+export function pythonBundle({ signal } = {}) {
+  loading ??= fetchBundle(signal).then((bundle) => {
+    ready = true;
+    return bundle;
+  }).catch((err) => {
     loading = null;
     throw err;
   });
   return loading;
 }
+
+export const pythonBundleReady = () => ready;
 
 export function prefetchPythonBundle() {
   return pythonBundle().catch(() => {});
