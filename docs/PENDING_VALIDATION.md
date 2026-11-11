@@ -1461,3 +1461,19 @@ Goal: rebuild `web/vendor/fx/fx-term.wasm` from fx `8c5e581f` and witness the pa
 Resolution: the blocker recorded at `7efcba9` (`src/core/hooks/external_run.zig` did not compile for wasm32-wasi at `8c5e581f`: `.pid = pid` with pid `void`, and `std.posix.SIG.IGN` in the wasm target) is resolved on fx origin `main` by `fae75200`, which contains the palette-then-resize and approval fixes. `zig build fx-term-wasm -Dwasm-surface=term` (Zig 0.17.1) at `fae75200`: exit 0, 4826113 bytes.
 
 Vendored: `web/vendor/fx/fx-term.wasm` from `fae75200`, SHA-256 `79660073d5c4d2ec342cc34f3e2b466f91586bff627bdd4557f524c71266cf22`. `wasm-terminal.js` and the SDK modules come from the same checkout (`scripts/vendor-fx.mjs`). `fx-core.wasm` is unchanged (SHA-256 `1c894cb9…`).
+
+## Phase B on fae75200: approval and palette rows (queue pass 9)
+
+Witness run 12 (`npm run witness`, 18m19.5s, `WITNESS-EXIT 1`, `witness totals: PASS 211 FAIL 2`). The two FAILs are the palette-then-resize row and the approval row. Thebird-side defects found on the way are fixed and committed.
+
+Thebird defects fixed in this pass:
+- `web/shell-client.js` dropped `permissionMode` from the TUI config, so every TUI session ran in fx's default `auto` mode. It now passes it through. The footer of the ask session reads `ask · haiku 5.5` in run 12, so the mode reaches fx.
+- `web/fx-host-tools.js` dropped each host tool's `writes` flag. It now sends `writes` for each tool.
+- `scripts/fx-stub-gateway.mjs` answered a later turn with text, because a tool result anywhere in the history counted as answered. A result now counts only after the latest user turn.
+- `scripts/witness.mjs`: the auto-mode bash check runs in its own session (default `auto`), and the approval steps run in an ask session. Witness run 12: `PASS auto mode: a bash tool call runs to its tool result with no approval prompt`, `PASS negative control …`, `PASS ask: the question is shown …`.
+
+Approval row, cause in fx (not fixed here): the ask session shows `ask · haiku 5.5`, and the bash host tool still runs straight to its result (`authorized=true tool-result=seen`, no `Allow once`). The stub sends the `bash` call on the first request, and the TUI sends the continuation without a panel. So fx's admission (`src/core/tooling/tool_admission.zig`, `resolveAdmission` for dynamic host tools) does not return `permission_required` for a page host tool in ask mode. The fx change needed: admission must treat a host tool with `requires_approval` (from `writes`) as `permission_required` in `.ask` mode. Then the approval row passes with no thebird change.
+
+Palette-then-resize row, cause in fx (not fixed here): on fae75200 the term build still drops the welcome panel and the rules after the command palette is opened and closed and the page resizes to 70 by 24: `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`. The plain resize without the palette passes in the same run. The fx change needed is in the resize path after a palette close, in `src/ui/resize_runtime.zig` (the fae75200 fix does not reach the term build's path). Witness output for the same row is in run 12.
+
+Not pushed: the push waits for the owner, because the rows that were to pass do not.
