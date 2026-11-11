@@ -1,8 +1,9 @@
 import { createFxTerminal } from './vendor/fx/wasm-terminal.js';
 import { initializeHostTools } from './fx-host-tools.js';
-import { xtermAdapter } from './vendor/fx/xterm.js';
+import { GhosttyScreen, ghosttyAdapter, loadGhosttyVt } from './ghostty-screen.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-term.wasm', import.meta.url).href;
+const GHOSTTY_URL = new URL('./vendor/ghostty/ghostty-vt.wasm', import.meta.url).href;
 const REVISION_CONFLICT = Object.assign(new Error('fx session revision conflict'), { code: 'FX_OAUTH_SESSION_REVISION_CONFLICT' });
 
 const memoryOauthSessionStore = () => {
@@ -53,8 +54,9 @@ const environmentFor = (fx) => ({
 });
 
 export async function runFxTui(term, fx = {}) {
+  const screen = new GhosttyScreen(await loadGhosttyVt(GHOSTTY_URL), term.cols, term.rows);
   const app = await createFxTerminal({
-    terminal: xtermAdapter(term),
+    terminal: ghosttyAdapter(term, screen),
     wasm: WASM_URL,
     env: environmentFor(fx),
     oauthSessionStore: memoryOauthSessionStore(),
@@ -66,5 +68,6 @@ export async function runFxTui(term, fx = {}) {
     return await app.exited;
   } finally {
     app.abort();
+    screen.free();
   }
 }
