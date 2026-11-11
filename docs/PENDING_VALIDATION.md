@@ -1559,4 +1559,4 @@ Changes in this step (committed locally, not pushed):
 - `AGENTS.md`, `ARCHITECTURE.md`: as listed above.
 - `web/vendor/fx/fx-term.wasm`, `web/vendor/fx/manifest.json`: rebuilt term from fx 0a1a651e.
 
-Not run in this step: the witness again (the wiring changed after run 1, so the next full witness run must come after fx's approval and palette fixes land). Hold: nothing pushed. The thirteen local commits and this step go out in one push after fx's commit `1740f6e8b167` lands on origin/main; then rebuild the term wasm from that commit, run the witness once, and push once.
+Not run in this step: the witness again (the wiring changed after run 1, so the next full witness run must come after fx's approval and palette fixes land). Hold: nothing pushed. The thirteen local commits and this step go out in one push after fx's approval and palette fixes land on origin/main (fx turn 1740f6e8b167; its commit hash is not known yet); then rebuild the term wasm from that commit, run the witness once, and push once.
