@@ -1,6 +1,6 @@
 {
   "generator": "scripts/vendor-fx.mjs",
-  "source": "fx 0a1a651e (fx-term.wasm built with zig build fx-term-wasm -Dwasm-surface=term; SDK modules); fx-core.wasm kept from fae75200, not rebuilt in this step",
+  "source": "fx 63225598 (fx-term.wasm built with zig build fx-term-wasm -Dwasm-surface=term from origin/main; SDK modules); fx-core.wasm kept from fae75200, not rebuilt in this step",
   "sdkApiVersion": 2,
   "wasm": {
     "name": "fx-core.wasm",
@@ -9,7 +9,7 @@
   "term": {
     "name": "fx-term.wasm",
     "surface": "term",
-    "sha256": "634b22424c350618a8a98ded337565bfd57c59368f4dc0c70e0f238a9ba16436"
+    "sha256": "23e8b73e8e601c0cf7f8bde6615204c75c782acbd125963b26eee6a6df3ea402"
   },
   "modules": [
     {
