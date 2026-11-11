@@ -2,7 +2,6 @@ import { createServer } from 'node:http';
 import { PAGE_HOST_TOOL_NAMES } from '../web/fx-host-tools.js';
 
 export const FX_STUB_KEY = 'thebird-stub-key';
-export const FX_STUB_PORT = Number(process.env.THEBIRD_FX_STUB_PORT ?? 18931);
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -58,7 +57,7 @@ export function streamPlan({ prompt, tools = [] }) {
   };
 }
 
-export function startFxStubGateway({ port = FX_STUB_PORT, host = '127.0.0.1' } = {}) {
+export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
   const seen = [];
   const server = createServer((req, res) => {
     if (req.method === 'OPTIONS') {

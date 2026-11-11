@@ -102,16 +102,37 @@ export function closeBrowserTrees() {
   return closed;
 }
 
+export function closeBrowserTree(root) {
+  const table = processTable();
+  const tree = new Set([root]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [pid, { ppid }] of table) {
+      if (tree.has(ppid) && !tree.has(pid)) {
+        tree.add(pid);
+        grew = true;
+      }
+    }
+  }
+  const closed = [];
+  for (const pid of tree) {
+    if (!recorded.has(pid) || table.get(pid)?.start !== recorded.get(pid)) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+      closed.push(pid);
+    } catch {
+      continue;
+    }
+  }
+  return closed;
+}
+
 process.on('exit', () => closeBrowserTrees());
 for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
   process.on(signal, () => process.exit(code));
 }
 
-export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, trace, replay, initScript }) {
-  if (replay) {
-    await replayTerminal({ replay, interact, timeoutMs });
-    return replay.state;
-  }
+export async function startBrowser({ chrome, profile }) {
   rmSync(join(profile, 'DevToolsActivePort'), { force: true });
   const child = spawn(chrome, [
     '--headless',
@@ -123,7 +144,6 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
   ], { stdio: 'ignore', detached: true });
   recordBrowserTree(child.pid);
   const poller = setInterval(() => refresh(), 500);
-
   try {
     const portFile = join(profile, 'DevToolsActivePort');
     const deadline = Date.now() + 30000;
@@ -132,7 +152,6 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       await sleep(100);
     }
     const [port, path] = readFileSync(portFile, 'utf8').split('\n');
-
     const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
     await new Promise((ok, fail) => {
       socket.onopen = ok;
@@ -141,30 +160,35 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
 
     let nextId = 1;
     const waiting = new Map();
-    const logs = [];
+    const sessions = new Map();
+    const owners = new Map();
     const send = (method, params = {}, sessionId) => withTimeout(new Promise((ok, fail) => {
       const id = nextId++;
       waiting.set(id, { ok, fail });
       socket.send(JSON.stringify({ id, method, params, sessionId }));
     }), CDP_TIMEOUT_MS, method);
-    const blockRequests = (sessionId) => {
+    const blockRequests = (sessionId, blockUrls) => {
       if (blockUrls.length === 0) return;
       send('Network.enable', {}, sessionId).catch(() => {});
       send('Network.setBlockedURLs', { urls: blockUrls }, sessionId).catch(() => {});
     };
     const onEvent = ({ method, params = {}, sessionId: from }) => {
       if (method === 'Target.attachedToTarget') {
-        if (['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {
+        const owner = sessions.get(from);
+        if (owner && ['worker', 'service_worker', 'shared_worker'].includes(params.targetInfo.type)) {
+          owners.set(params.sessionId, from);
           send('Runtime.enable', {}, params.sessionId).catch(() => {});
           send('Log.enable', {}, params.sessionId).catch(() => {});
-          blockRequests(params.sessionId);
+          blockRequests(params.sessionId, owner.blockUrls);
         }
         return;
       }
-      const origin = from ? 'worker' : 'page';
-      if (method === 'Runtime.consoleAPICalled') logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
-      else if (method === 'Runtime.exceptionThrown') logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
-      else if (method === 'Log.entryAdded') logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
+      const owner = sessions.get(owners.has(from) ? owners.get(from) : from);
+      if (!owner) return;
+      const origin = owners.has(from) ? 'worker' : 'page';
+      if (method === 'Runtime.consoleAPICalled') owner.logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
+      else if (method === 'Runtime.exceptionThrown') owner.logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
+      else if (method === 'Log.entryAdded') owner.logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
     };
     socket.onmessage = ({ data }) => {
       const message = JSON.parse(data);
@@ -175,13 +199,39 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       if (message.error) pending.fail(new Error(message.error.message));
       else pending.ok(message.result);
     };
-    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
+    return {
+      child,
+      profile,
+      send,
+      sessions,
+      blockRequests,
+      async close() {
+        clearInterval(poller);
+        await send('Browser.close').catch(() => {});
+        socket.close();
+        await Promise.race([once(child, 'exit'), sleep(10000)]);
+        closeBrowserTree(child.pid);
+      },
+    };
+  } catch (error) {
+    clearInterval(poller);
+    closeBrowserTree(child.pid);
+    throw error;
+  }
+}
+
+export async function runTerminal({ browser, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, initScript }) {
+  const { send, sessions, blockRequests } = browser;
+  const logs = [];
+  const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
+  sessions.set(sessionId, { logs, blockUrls });
+  try {
     await send('Page.enable', {}, sessionId);
     if (initScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript }, sessionId);
     await send('Runtime.enable', {}, sessionId);
     await send('Log.enable', {}, sessionId);
-    blockRequests(sessionId);
+    blockRequests(sessionId, blockUrls);
     await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 
@@ -196,46 +246,26 @@ export async function runTerminal({ chrome, profile, url, timeoutMs = 120000, in
       await sleep(300);
     }
     if (interact) {
-      const traced = (entry) => trace?.push(entry);
       await interact(driverFor({
-        evaluate: async (expression) => {
-          const value = await evaluate(expression);
-          traced({ kind: 'eval', expression, value });
-          return value;
-        },
+        evaluate,
         press: async (key, { ctrl = false } = {}) => {
           const spec = KEYS[key];
           const base = { key, code: spec.code, windowsVirtualKeyCode: spec.keyCode, nativeVirtualKeyCode: spec.keyCode, modifiers: ctrl ? 2 : 0 };
           await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: spec.text }, sessionId);
           await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
-          traced({ kind: 'press', key, ctrl });
         },
         type: async (text) => {
           await send('Input.insertText', { text }, sessionId);
-          traced({ kind: 'type', text });
         },
-        note: async (name, read) => {
-          const value = read();
-          traced({ kind: 'note', name, value });
-          return value;
-        },
+        note: async (name, read) => read(),
         pause: () => sleep(100),
         limit: timeoutMs,
       }));
     }
-    const state = { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: globalThis.thebird.text() })")) };
-    await send('Browser.close').catch(() => {});
-    socket.close();
-    await Promise.race([once(child, 'exit'), sleep(10000)]);
-    return state;
+    return { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: globalThis.thebird.text() })")) };
   } finally {
-    clearInterval(poller);
-    refresh();
-    if (child.exitCode === null && child.signalCode === null) {
-      closeBrowserTrees();
-      await Promise.race([once(child, 'exit'), sleep(10000)]);
-    }
-    closeBrowserTrees();
+    sessions.delete(sessionId);
+    await send('Target.closeTarget', { targetId }).catch(() => {});
   }
 }
 
@@ -248,29 +278,4 @@ function driverFor({ evaluate, press, type, note, pause, limit }) {
     }
   };
   return { evaluate, waitFor, press, type, note, pause };
-}
-
-async function replayTerminal({ replay, interact, timeoutMs }) {
-  let step = 0;
-  const take = (probe) => {
-    const entry = replay.trace[step++];
-    if (!entry || Object.keys(probe).some((key) => entry[key] !== probe[key])) {
-      throw new Error(`checkpoint replay diverged at step ${step}: expected ${JSON.stringify(probe)}`);
-    }
-    return entry;
-  };
-  if (!interact) return;
-  await interact(driverFor({
-    evaluate: async (expression) => take({ kind: 'eval', expression }).value,
-    press: async (key, { ctrl = false } = {}) => {
-      take({ kind: 'press', key, ctrl });
-    },
-    type: async (text) => {
-      take({ kind: 'type', text });
-    },
-    note: async (name) => take({ kind: 'note', name }).value,
-    pause: async () => {},
-    limit: timeoutMs,
-  }));
-  if (step !== replay.trace.length) throw new Error(`checkpoint replay left ${replay.trace.length - step} steps unused`);
 }

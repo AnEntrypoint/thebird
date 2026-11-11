@@ -1,13 +1,18 @@
 import { spawnSync } from 'node:child_process';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
-import { closeBrowserTrees, runTerminal, withTimeout } from './browser-driver.mjs';
-import { digest, openCheckpoint, PAUSED } from './witness-checkpoint.mjs';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from './browser-driver.mjs';
+import { vendorBashkit } from './vendor-bashkit.mjs';
+import { vendorFx } from './vendor-fx.mjs';
+import { vendorFloosie } from './vendor-floosie.mjs';
+import { buildPages } from './build-pages.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from './fx-stub-gateway.mjs';
 
 const reapBrowserTrees = (reason) => {
   const closed = closeBrowserTrees();
@@ -23,96 +28,114 @@ process.on('unhandledRejection', (error) => {
   console.error(error);
   process.exit(1);
 });
-import { vendorBashkit } from './vendor-bashkit.mjs';
-import { vendorFx } from './vendor-fx.mjs';
-import { startFxStubGateway, FX_STUB_KEY } from './fx-stub-gateway.mjs';
-import { vendorGm } from './vendor-gm.mjs';
-import { vendorFloosie } from './vendor-floosie.mjs';
-import { buildPages } from './build-pages.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COLD_START_MS = 900000;
-const checkpoint = process.env.THEBIRD_WITNESS_CHECKPOINT ? openCheckpoint({ dir: resolve(process.env.THEBIRD_WITNESS_CHECKPOINT), root }) : null;
-const recorded = checkpoint?.state.checks ?? [];
-let checkCount = 0;
-let callPassed = 0;
-let callFailed = 0;
-let failures = recorded.filter((entry) => !entry.ok).length;
+const LOAD_CAP = 6;
+const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
+const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
+const haveChrome = existsSync(chrome);
+const scope = new AsyncLocalStorage();
+const groups = [];
+const services = new Map();
+const shared = (name, make) => {
+  if (!services.has(name)) services.set(name, make());
+  return services.get(name);
+};
+const getRelay = () => shared('relay', () => startRelay({ port: 0 }));
+const sharedPages = () => shared('pages', () => buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-'))));
+const current = () => scope.getStore();
+const group = (name, run) => groups.push({ name, run, source: run.toString(), browser: /\b(terminal|runAt)\(/.test(run.toString()), heavy: /python3|\bpip\b|pyodide/.test(run.toString()) });
+let heavyTail = Promise.resolve();
+const runHeavy = (entry) => {
+  const next = heavyTail.then(() => runGroup(entry));
+  heavyTail = next.catch(() => {});
+  return next;
+};
 
 function check(name, ok, detail = '') {
   const passed = Boolean(ok);
-  const index = checkCount++;
-  if (index < recorded.length) {
-    if (recorded[index].name !== name || recorded[index].ok !== passed) {
-      failures++;
-      console.log(`FAIL replay diverged at check ${index + 1}: ${name}`);
-    }
-    return;
-  }
-  recorded.push({ name, ok: passed });
+  current().results.push({ name, ok: passed });
   console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
-  if (passed) callPassed++;
-  else {
-    callFailed++;
-    failures++;
+}
+
+async function browserFor(restart) {
+  const context = current();
+  if (restart && context.browser) {
+    await context.browser.close();
+    context.browser = null;
+  }
+  context.browser ??= await startBrowser({ chrome, profile: context.profile });
+  return context.browser;
+}
+
+async function runAt(url, { restart = false, interact, initScript, blockUrls, timeoutMs = COLD_START_MS, label = 'page' } = {}) {
+  const started = performance.now();
+  const browser = await browserFor(restart);
+  try {
+    return await runTerminal({ browser, url, timeoutMs, interact, initScript, blockUrls });
+  } finally {
+    console.log(`TERMINAL ${current().name} ${label} wall ${((performance.now() - started) / 1000).toFixed(1)}s`);
   }
 }
-const portOf = (name) => checkpoint?.state.ports[name] ?? 0;
-const rememberPort = (name, port) => {
-  if (checkpoint) checkpoint.state.ports[name] = port;
+
+async function terminal(pairs, options = {}) {
+  const { params = [], ...rest } = options;
+  const relay = await getRelay();
+  const url = relay.url + '?' + new URLSearchParams([...pairs, ...params]).toString();
+  return runAt(url, { ...rest, label: pairs[0]?.[1]?.slice(0, 40) ?? 'interact' });
+}
+
+const loadAverage = () => Number(readFileSync('/proc/loadavg', 'utf8').split(' ')[0]);
+const waitForHeadroom = async () => {
+  while (loadAverage() >= LOAD_CAP) await new Promise((ok) => setTimeout(ok, 2000));
 };
 
-const relay = await startRelay({ port: portOf('relay') });
-rememberPort('relay', Number(new URL(relay.url).port));
+async function runGroup(entry) {
+  await waitForHeadroom();
+  const context = { name: entry.name, results: [], browser: null, profile: mkdtempSync(join(tmpdir(), `thebird-profile-${entry.name}-`)) };
+  const started = performance.now();
+  try {
+    await scope.run(context, entry.run);
+  } catch (error) {
+    context.results.push({ name: `${entry.name} raised an error`, ok: false });
+    console.log(`FAIL ${entry.name} raised an error: ${error.message}`);
+  } finally {
+    await context.browser?.close();
+    rmSync(context.profile, { recursive: true, force: true });
+  }
+  const seconds = (performance.now() - started) / 1000;
+  console.log(`GROUP ${entry.name} wall ${seconds.toFixed(1)}s`);
+  return { name: entry.name, seconds, results: context.results };
+}
+
+const TUI_SCREEN = `(() => { const b = globalThis.thebird.term.buffer.active; const rows = []; for (let i = 0; i < b.length; i++) rows.push(b.getLine(i).translateToString(true)); return rows.join('\\n'); })()`;
+const TUI_STATE = `JSON.stringify((() => { const t = globalThis.thebird.term; const b = t.buffer.active; return { cols: t.cols, rows: t.rows, alt: b.type, cursorX: b.cursorX, cursorY: b.cursorY, tui: document.body.dataset.tui ?? null }; })())`;
+const TUI_TITLE = `JSON.stringify((() => { const b = globalThis.thebird.term.buffer.active; for (let y = 0; y < b.length; y++) { const line = b.getLine(y); if (line.translateToString(true).includes('v0.0.16')) return [0, 2].map((x) => { const c = line.getCell(x); return { x, fg: c.getFgColor(), palette: c.isFgPalette(), bold: !!c.isBold() }; }); } return null; })())`;
+const TUI_RESIZE_SETTLED = `globalThis.thebird.term.cols === 70 && globalThis.thebird.term.rows === 24 && globalThis.thebird.text().split('\\n').some((line) => /^─{70}$/.test(line))`;
+const TUI_PALETTE_RESIZE_SETTLED = `(() => { const t = globalThis.thebird.term; const b = t.buffer.active; if (t.cols !== 70 || t.rows !== 24) return false; for (let i = 0; i < b.length; i++) if ([...b.getLine(i).translateToString(true)].length > 70) return false; return globalThis.thebird.text().split('\\n').some((line) => line.startsWith('┃')); })()`;
+const GRAPHEMES = 'é \u{1F44D}\u{1F3FD} \u{1F468}‍\u{1F469}‍\u{1F467}';
+
+group('relay', async () => {
+  const relay = await getRelay();
 check('relay serves the browser terminal page', (await fetch(relay.url)).status === 200);
 const isolated = await fetch(relay.url);
 check('relay sends the cross-origin isolation headers', isolated.headers.get('cross-origin-opener-policy') === 'same-origin' && isolated.headers.get('cross-origin-embedder-policy') === 'require-corp');
 check('relay serves web files', (await fetch(relay.url + 'web/terminal.js')).status === 200 && (await fetch(relay.url + 'web/shell-worker.js')).status === 200);
 check('relay refuses paths outside web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'package.json')).status === 404 && (await fetch(relay.url + 'src/relay.js')).status === 404);
 check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST', body: '{}' })).status === 405 && (await fetch(relay.url + 'web/terminal.js', { method: 'PUT' })).status === 405);
+});
 
-const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
-if (existsSync(chrome)) {
-  if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
-  if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
-  if (!existsSync(join(root, 'web', 'vendor', 'gm', 'gm-core.wasm'))) await vendorGm();
-  if (!existsSync(join(root, 'web', 'vendor', 'floosie', 'browser.js'))) await vendorFloosie();
-  const profile = checkpoint ? checkpoint.profile : mkdtempSync(join(tmpdir(), 'thebird-profile-'));
-  if (checkpoint) mkdirSync(profile, { recursive: true });
-  const recordedRun = async (material, options) => {
-    if (!checkpoint) return runTerminal({ chrome, profile, ...options });
-    const index = checkpoint.state.terminals;
-    const key = digest(JSON.stringify(material));
-    const file = checkpoint.terminalFile(index);
-    if (existsSync(file)) {
-      const saved = JSON.parse(readFileSync(file, 'utf8'));
-      if (saved.key !== key) throw new Error(`checkpoint terminal ${index} does not match this witness`);
-      return runTerminal({ replay: saved, interact: options.interact, timeoutMs: options.timeoutMs });
-    }
-    if (checkpoint.overBudget()) {
-      checkpoint.save();
-      console.log(`CALL ${checkpoint.state.calls} PAUSED before terminal ${index}: checks this call PASS ${callPassed} FAIL ${callFailed}`);
-      process.exit(PAUSED);
-    }
-    const trace = [];
-    const state = await runTerminal({ chrome, profile, ...options, trace });
-    writeFileSync(file, `${JSON.stringify({ key, trace, state })}\n`);
-    checkpoint.state.terminals = index + 1;
-    checkpoint.save();
-    return state;
-  };
-  const terminal = (pairs, options = {}) => {
-    const { params = [], interact, ...rest } = options;
-    const url = relay.url + '?' + new URLSearchParams([...pairs, ...params]).toString();
-    return recordedRun({ url, pairs, params, ...rest }, { chrome, profile, url, timeoutMs: COLD_START_MS, interact, ...rest });
-  };
-
+group('playwriter-hello', async () => {
   const hello = await terminal([['run', 'echo hello-ok'], ['run', 'sleep 40; echo slept-40'], ['run', 'playwriter --version'], ['run', 'which playwriter; command -v playwriter; type playwriter'], ['run', "playwriter frobnicate; echo after-frobnicate"]]);
   check('browser terminal runs a bash line in headless Chromium', hello.engine === 'ready' && hello.out.includes('hello-ok'));
   check('in-page bash runs a 40-second sleep without a timeout', /^slept-40$/m.test(hello.out), hello.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const helloLines = hello.out.split('\n');
   check('playwriter answers --version, and which, command -v and type agree that it is a shell builtin', helloLines.includes('birdman playwriter 0.1.0') && helloLines.filter((line) => line === 'playwriter').length >= 2 && helloLines.includes('playwriter is a shell builtin'), helloLines.filter((line) => /playwriter/.test(line)).join(' / ').slice(0, 140));
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
+});
+
+group('uv-fs', async () => {
   const uvSeed = "printf 'abcdefghijklmnop' > /workspace/uvfs-c0";
   const uvDoubling = Array.from({ length: 13 }, (_, i) => `cat /workspace/uvfs-c${i} /workspace/uvfs-c${i} > /workspace/uvfs-c${i + 1}`).join(' && ');
   const uvFs = await terminal([
@@ -161,6 +184,9 @@ if (existsSync(chrome)) {
   check('uv_os_setenv and uv_os_unsetenv store and remove a variable that uv_os_getenv reads back', uvFsLines.includes('uvos-set 1 true'), uvFsSeen);
   check('uv_random fills bytes from the browser entropy source (non-zero, differs between calls); uv_cwd reports the shell directory', uvFsLines.includes('uvos-rand true true /workspace true'), uvFsSeen);
   check('uv_os_getpid, uv_os_getppid, uv_os_get_passwd, uv_cpu_info, uv_interface_addresses, uv_uptime, uv_chdir and uv_exepath read the browser record; chdir to a missing path is rejected', uvFsLines.includes('uvos-info 1 0 thebird /.thebird true 0 true rejected /.thebird/tjs /workspace'), uvFsSeen);
+});
+
+group('fx-builtin', async () => {
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
@@ -171,12 +197,10 @@ if (existsSync(chrome)) {
   const fxLines = fxAsk.out.split('\n');
   check('fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin', fxLines.filter((line) => line === 'fx').length >= 2 && fxLines.includes('fx is a shell builtin'), JSON.stringify(fxLines.filter((line) => /fx/.test(line)).slice(0, 6)));
   check('fx --version and fx check report the bundled wasm and JSPI from the shell worker', /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(fxAsk.out) && /^fx ready: JSPI available; core application\/wasm$/m.test(fxAsk.out), JSON.stringify(fxAsk.out.slice(0, 300)));
-  const TUI_SCREEN = `(() => { const b = globalThis.thebird.term.buffer.active; const rows = []; for (let i = 0; i < b.length; i++) rows.push(b.getLine(i).translateToString(true)); return rows.join('\\n'); })()`;
-  const TUI_STATE = `JSON.stringify((() => { const t = globalThis.thebird.term; const b = t.buffer.active; return { cols: t.cols, rows: t.rows, alt: b.type, cursorX: b.cursorX, cursorY: b.cursorY, tui: document.body.dataset.tui ?? null }; })())`;
-  const TUI_TITLE = `JSON.stringify((() => { const b = globalThis.thebird.term.buffer.active; for (let y = 0; y < b.length; y++) { const line = b.getLine(y); if (line.translateToString(true).includes('v0.0.16')) return [0, 2].map((x) => { const c = line.getCell(x); return { x, fg: c.getFgColor(), palette: c.isFgPalette(), bold: !!c.isBold() }; }); } return null; })())`;
+});
+
+group('fx-tui', async () => {
   const tui = {};
-  const TUI_RESIZE_SETTLED = `globalThis.thebird.term.cols === 70 && globalThis.thebird.term.rows === 24 && globalThis.thebird.text().split('\\n').some((line) => /^─{70}$/.test(line))`;
-  const TUI_PALETTE_RESIZE_SETTLED = `(() => { const t = globalThis.thebird.term; const b = t.buffer.active; if (t.cols !== 70 || t.rows !== 24) return false; for (let i = 0; i < b.length; i++) if ([...b.getLine(i).translateToString(true)].length > 70) return false; return globalThis.thebird.text().split('\\n').some((line) => line.startsWith('┃')); })()`;
   await terminal([], {
     timeoutMs: COLD_START_MS,
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -233,7 +257,9 @@ if (existsSync(chrome)) {
   check('a resize after the command palette closes settles at 70 by 24, with no line wider than 70 columns and the input box drawn', tui.paletteResizeSettled === true && screenRows('paletteResized').some((line) => line.startsWith('┃')) && screenRows('paletteResized').every((line) => [...line].length <= 70), JSON.stringify({ settled: tui.paletteResizeSettled, screen: screenRows('paletteResized').slice(0, 4) }));
   check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
   check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
-  const GRAPHEMES = 'é \u{1F44D}\u{1F3FD} \u{1F468}‍\u{1F469}‍\u{1F467}';
+});
+
+group('fx-graphemes', async () => {
   const graphemes = {};
   await terminal([], {
     timeoutMs: COLD_START_MS,
@@ -247,6 +273,9 @@ if (existsSync(chrome)) {
     },
   });
   check('combining and emoji text lands in the TUI input box as whole graphemes, in a browser session', graphemes.screen?.split('\n').some((line) => line.startsWith('┃ ' + GRAPHEMES)) === true, JSON.stringify((graphemes.screen ?? '').split('\n').slice(0, 3)));
+});
+
+group('fx-approval', async () => {
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
   const surfaces = {};
@@ -317,8 +346,11 @@ if (existsSync(chrome)) {
   check('host tools: the TUI advertises exactly bash and ask to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash']), JSON.stringify(tuiTools));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askReply', 'tool-result=seen'), JSON.stringify((surfaces.askReply ?? '').split('\n').slice(-6)));
   check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('closedScreen', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
+});
+
+group('site', async () => {
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
-  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-')));
+  const pagesDir = await sharedPages();
   const pagesServer = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
     const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
@@ -330,18 +362,15 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     res.writeHead(200, { 'content-type': SITE_TYPES[extname(file)] ?? 'application/octet-stream' });
     res.end(readFileSync(file));
   });
-  await new Promise((resolve) => pagesServer.listen(portOf('pages'), '127.0.0.1', resolve));
-  rememberPort('pages', pagesServer.address().port);
+  await new Promise((resolve) => pagesServer.listen(0, '127.0.0.1', resolve));
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
-  const siteUrl = pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'gm --version'], ['run', 'gm check'], ['run', 'gm serve'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', 'gm attach'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString();
-  const site = await recordedRun({ url: siteUrl }, { chrome, profile, url: siteUrl, timeoutMs: COLD_START_MS });
+  const siteUrl = pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString();
+  const site = await runAt(siteUrl, { timeoutMs: COLD_START_MS });
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
   const fxArtifactShipped = existsSync(fxArtifact);
-  const gmArtifact = join(pagesDir, 'web', 'vendor', 'gm', 'gm-core.wasm');
-  const gmArtifactShipped = existsSync(gmArtifact);
   const floosieArtifact = join(pagesDir, 'web', 'vendor', 'floosie', 'browser.js');
   const floosieArtifactShipped = existsSync(floosieArtifact);
   const siteIndex = readFileSync(join(pagesDir, 'index.html'), 'utf8');
@@ -352,18 +381,23 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   rmSync(pagesDir, { recursive: true, force: true });
   check('the built site runs qjs -e through the txiki engine, and ships no quickjs artifact', quickjsArtifactGone && /^1$/m.test(site.out) && /^pages-ok$/m.test(site.out), site.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('in-page fx reports its bundled WASM version and passes its offline check', site.engine === 'ready' && /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(site.out) && /^fx ready: JSPI (available|missing); core application\/wasm$/m.test(site.out) && /^fx$/m.test(site.out) && /^builtin$/m.test(site.out) && fxArtifactShipped, site.out.split('\n').slice(-8).join(' / ').slice(0, 220));
-  check('in-page gm reports its bundled WASM version, passes its offline check and serves MCP methods', site.engine === 'ready' && /^gm-core\.wasm [0-9a-f]{12} C\+\+ core ABI 2$/m.test(site.out) && /^gm ready: core [0-9a-f]{12}; JSON and sha256 answered$/m.test(site.out) && /^gm MCP 2025-11-25: initialize, ping, tools\/list/m.test(site.out) && /"protocolVersion":"2025-11-25"/.test(site.out) && /value\\":42/.test(site.out) && /finished\\":true/.test(site.out) && /floosie hub: gm/.test(site.out) && floosieArtifactShipped && /^gm$/m.test(site.out) && /^builtin$/m.test(site.out) && gmArtifactShipped, site.out.split('\n').slice(-12).join(' / ').slice(0, 260));
   check('the built GitHub Pages site runs bash and python3 without COOP/COEP headers', site.engine === 'ready' && /^pages-ok$/m.test(site.out) && /^42$/m.test(site.out) && pagesResponse.headers.get('cross-origin-opener-policy') === null && pagesResponse.headers.get('cross-origin-embedder-policy') === null, site.out.split('\n').slice(-3).join(' / ').slice(0, 140));
+});
+
+group('opfs-files', async () => {
   const after = await terminal([['run', 'mkdir -p notes && echo opfs-hello > notes/a.txt'], ['run', 'ls notes']]);
   check('in-page bash writes and lists files over OPFS', after.engine === 'ready' && /^a\.txt$/m.test(after.out), after.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
-  const reloaded = await terminal([['run', 'cat notes/a.txt']]);
+  const reloaded = await terminal([['run', 'cat notes/a.txt']], { restart: true });
   check('the OPFS file survives a browser restart', reloaded.engine === 'ready' && reloaded.out.includes('opfs-hello'));
   const script = await terminal([['run', 'cat notes/a.txt | tr a-z A-Z > notes/upper.txt && cat notes/upper.txt']]);
   check('in-page bash runs a script over the OPFS tree', script.out.includes('OPFS-HELLO'), script.out.split('\n').slice(-2).join(' / ').slice(0, 120));
   const links = await terminal([['run', 'mkdir -p notes/links && echo link-target > notes/links/target.txt && ln -s target.txt notes/links/alias.txt && readlink notes/links/alias.txt && cat notes/links/alias.txt && test -f notes/links/alias.txt && echo stat-follows && echo via-link > notes/links/alias.txt && cat notes/links/target.txt']]);
   check('in-page ln -s makes a link that readlink reports, and a read and a stat follow it', /^target\.txt$/m.test(links.out) && /^link-target$/m.test(links.out) && /^stat-follows$/m.test(links.out) && /^via-link$/m.test(links.out), links.out.split('\n').slice(-4).join(' / ').slice(0, 160));
-  const kept = await terminal([['run', 'readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']]);
+  const kept = await terminal([['run', 'readlink notes/links/alias.txt && cat notes/links/alias.txt && ls -l notes/links && rm notes/links/alias.txt && test -L notes/links/alias.txt || echo link-removed && cat notes/links/target.txt']], { restart: true });
   check('in-page symlinks survive a browser restart, ls -l shows them, and rm removes only the link', /^target\.txt$/m.test(kept.out) && /^via-link$/m.test(kept.out) && /alias\.txt -> target\.txt/.test(kept.out) && /^link-removed$/m.test(kept.out) && kept.out.split('\n').filter((line) => line === 'via-link').length === 2, kept.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+});
+
+group('ansi-colour', async () => {
   const ansiCommand = "printf '\\033[31mred-line\\033[0m\\n\\033[1;4;42mstyled-line\\033[0m\\n'";
   const styled = {};
   await terminal([['run', ansiCommand]], {
@@ -377,6 +411,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   check('xterm renders SGR colour: red-line uses palette 1, styled-line is bold, underlined and on palette 2', styled.red?.palette === true && styled.red.fg === 1 && styled.styled?.bold === true && styled.styled.underline === true && styled.styled.bgPalette === true && styled.styled.bg === 2, JSON.stringify(styled));
   check('the terminal consumes the escape sequences, so the text carries none of them', /^red-line$/m.test(styled.text) && /^styled-line$/m.test(styled.text) && !styled.text.split('\n').filter((line) => !line.startsWith('thebird ')).some((line) => line.includes('[31m')), JSON.stringify(styled.text?.slice(0, 80)));
+});
+
+group('xterm-vt', async () => {
   const vt = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -409,6 +446,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('xterm enters and leaves the alternate screen, and the normal screen does not keep its text', vt.alternate === 'alternate' && vt.normal === 'normal' && vt.altGone === true, JSON.stringify(vt));
   check('a 200-character line wraps across rows and reads back as one line', vt.wrapped >= 2 && vt.longLine === true, JSON.stringify(vt));
   check('a terminal resize reaches the shell as COLUMNS and LINES', vt.size === 'cols-60-lines-20', JSON.stringify(vt.size));
+});
+
+group('scrollback', async () => {
   const scroll = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -425,6 +465,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('scrollback keeps history: wheel-style scrolling moves the viewport up, and Ctrl-L keeps the history and line 1', scroll.history > 0 && scroll.viewportUp < scroll.history && scroll.historyAfterClear > 0 && scroll.lineOneKept === true, JSON.stringify(scroll));
+});
+
+group('container-resize', async () => {
   const resized = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -442,6 +485,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a container resize with no window resize changes the columns, the screen fits the box, and the shell sees the new COLUMNS', resized.narrow < resized.wide && resized.wideFit.right && resized.wideFit.bottom && resized.narrowFit.right && resized.narrowFit.bottom && resized.shellCols === 'cols-' + resized.narrow, JSON.stringify(resized));
+});
+
+group('palette-colour', async () => {
   const palette = {};
   await terminal([
     ['run', "printf '\\033[38;5;196mX196\\033[0m\\n'"],
@@ -463,6 +509,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const aloneAt = aloneLines.indexOf('alone-no-newline');
   check('colour: a 256-colour index and a truecolour value reach the cell, and queued output starts its own row after unterminated output', palette.x196?.fg === 196 && palette.x196.palette === true && palette.rgb?.rgb === true && palette.rgb.fg === 0xff0000 && noNewlineAt !== -1 && palette.lines[noNewlineAt + 1] === 'after-no-newline', JSON.stringify({ x196: palette.x196, rgb: palette.rgb, around: palette.lines.slice(Math.max(noNewlineAt, 0), noNewlineAt + 3) }));
   check('colour: unterminated output is followed by the prompt on its own row', aloneAt !== -1 && aloneLines[aloneAt + 1]?.startsWith('thebird '), JSON.stringify(aloneLines.slice(-3)));
+});
+
+group('wide-chars', async () => {
   const wideText = String.fromCodePoint(0x6c49, 0x5b57, 0x1f600) + 'x';
   const wide = {};
   await terminal([['run', "printf '" + wideText + "\\n'"]], {
@@ -480,6 +529,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('wide characters take two cells in the shell output, and the input cursor moves by the cell width of typed CJK and emoji', JSON.stringify(wide.cells) === '[2,2,2,1]' && wide.cursorAfterCjk === wide.promptLength + 4 && wide.cursorAfterEmoji === wide.promptLength + 6, JSON.stringify(wide));
+});
+
+group('paste', async () => {
   const pasted = {};
   await terminal([], {
     interact: async ({ evaluate, press }) => {
@@ -491,8 +543,14 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a multi-line paste goes into the input line with each newline as a space, queues nothing and runs nothing', pasted.state?.line === 'one two three' && pasted.state.queued === 0 && pasted.output?.length === 0, JSON.stringify({ line: pasted.state?.line, queued: pasted.state?.queued, output: pasted.output }));
+});
+
+group('host-tools', async () => {
   const host = await terminal([['run', 'ruby -v']]);
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
+});
+
+group('node-txiki-npm', async () => {
   const PROMPT = 'thebird /workspace> ';
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
   const NODE_COMMANDS = ['which node', 'command -v node', 'type node', 'node -v', 'node node-marker.js', 'node -e "console.log(typeof process, process.version)"', 'node node-check.js hello', 'node -e "console.log(\'x\'); process.exit(0)"', 'node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?', 'echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"'];
@@ -560,7 +618,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('a dynamic import from node -e resolves against the shell directory', (nodeOutput(IMPORT_COMMANDS[1]) ?? '').split('\n').includes('eval-import 42'), JSON.stringify(nodeOutput(IMPORT_COMMANDS[1])));
   check('a missing module reports the loader error and the shell goes on', /^missing-import could not load/m.test(nodeOutput(IMPORT_COMMANDS[2]) ?? ''), JSON.stringify(nodeOutput(IMPORT_COMMANDS[2])));
   const REALPATH_FROM_WORKSPACE = 'realpath /workspace/import-probe/m.mjs';
-  check('tjs.realPath resolves a dotted path to the absolute file, from the cwd /workspace (gm reports /import-probe/m.mjs from its own project root; that is the same file, resolved from a different cwd)', nodeOutput(IMPORT_COMMANDS[3]) === REALPATH_FROM_WORKSPACE, JSON.stringify(nodeOutput(IMPORT_COMMANDS[3])));
+  check('tjs.realPath resolves a dotted path to the absolute file, from the cwd /workspace (the same file as /import-probe/m.mjs, resolved from a different cwd)', nodeOutput(IMPORT_COMMANDS[3]) === REALPATH_FROM_WORKSPACE, JSON.stringify(nodeOutput(IMPORT_COMMANDS[3])));
   check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
   check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
   check('readFileSync without an encoding returns bytes whose toString is the text, so JSON.parse reads it', nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"') === 'thebird-json', JSON.stringify(nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"')));
@@ -624,6 +682,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('sqlite3 inside the txiki shell prints 1 for select 1 and exits 0', txikiRuns.sqlite?.stdout === '1\nrc=0\n' && txikiRuns.sqlite?.stderr === '', JSON.stringify(txikiRuns.sqlite));
   check('a python3 sleep is aborted at 500 ms inside the txiki shell and rejects with status 130 in under 5 s', txikiRuns.pyAbort?.status?.includes('status 130') === true && txikiRuns.pyAbort?.elapsed < 5000, JSON.stringify(txikiRuns.pyAbort));
   check('the txiki engine has TextEncoder, TextDecoder and findLastIndex, and JSON escapes the marker byte', txikiRuns.engine === 'function function function 8\n', JSON.stringify(txikiRuns.engine));
+});
+
+group('loops', async () => {
   const loops = {};
   await terminal([], {
     interact: async ({ evaluate, waitFor }) => {
@@ -659,6 +720,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('a pending timer does not hold the engine past the timeout: status 124 well before the 60 s timer', loops.runs?.waiting?.status === 124 && loops.runs.waiting.elapsed < 5000, JSON.stringify(loops.runs?.waiting));
   check('an abort cancels a waiting engine run at the next tick and reports status 130', loops.runs?.aborted?.status === 130 && loops.runs.aborted.elapsed < 5000, JSON.stringify(loops.runs?.aborted));
   check('tjs and qjs report the timeout as a timeout error', loops.runs?.tjs?.error === 'timeout: command timed out' && loops.runs?.qjs?.error === 'timeout: command timed out', JSON.stringify({ tjs: loops.runs?.tjs?.error, qjs: loops.runs?.qjs?.error }));
+});
+
+group('spin', async () => {
   const spinning = {};
   const spun = await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -681,6 +745,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   check('Ctrl-C stops a node loop that never yields: the command reports cancelled, exits 130 and returns within 10 s', spun.out.includes('^C') && /^cancelled$/m.test(spun.out) && /^status=130$/m.test(spun.out) && spinning.elapsed < 10000, `cancel took ${spinning.elapsed} ms; ${spun.out.split('\n').slice(-4).join(' / ')}`);
   check('after Ctrl-C on a cross-origin isolated page the shell keeps its directory; without isolation it restarts at /workspace', spinning.isolated ? /^\/workspace\/loop-check$/m.test(spun.out) : /^\/workspace$/m.test(spun.out), `isolated=${spinning.isolated}; ${spun.out.split('\n').slice(-2).join(' / ')}`);
+});
+
+group('nested', async () => {
   const nestedRuns = {};
   await terminal([], {
     interact: async ({ evaluate, waitFor }) => {
@@ -699,15 +766,18 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   check('the txiki shell serves git, node, qjs and python3 from inside itself: each nested builtin runs on its own engine instance and returns its output', nestedRuns.run?.stdout === 'git-ok\n4\n3\n42\ndone\n' && nestedRuns.run?.exitCode === 0, JSON.stringify(nestedRuns.run));
 
+});
+
+group('fetch', async () => {
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
   for (const [name, server] of [['cors', corsHost], ['plain', plainHost]]) {
-    await new Promise((resolve) => server.listen(portOf(name), '127.0.0.1', resolve));
-    rememberPort(name, server.address().port);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   }
   const corsPort = corsHost.address().port;
   const plainPort = plainHost.address().port;
   const fetched = await terminal([
+    ['run', 'mkdir -p notes'],
     ['run', `curl -s http://127.0.0.1:${corsPort}/hello`],
     ['run', `wget -O notes/fetched.txt http://127.0.0.1:${corsPort}/hello`],
     ['run', 'cat notes/fetched.txt'],
@@ -727,6 +797,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const status = await terminal([['run', 'false'], ['run', 'echo rc=$?'], ['run', '(exit 3)'], ['run', 'echo rc=$?'], ['run', 'true'], ['run', 'echo rc=$?']]);
   const statuses = status.out.match(/^rc=\d+$/gm) ?? [];
   check('in-page bash keeps $? across terminal lines', statuses.join(' ') === 'rc=1 rc=3 rc=0', statuses.join(' ') || status.out.slice(0, 140));
+});
+
+group('git-repo', async () => {
   const version = await terminal([['run', 'git --version']]);
   check('in-page git --version names the in-page library, not a host git', /^git version \S+ \(in-page, isomorphic-git\)$/m.test(version.out), version.out.split('\n').find((line) => line.startsWith('git')) ?? version.out.slice(0, 140));
   const repo = await terminal([
@@ -782,6 +855,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', 'git commit -m broken'],
   ]);
   check('in-page git commit refuses broken syntax and non-ASCII and names both', broken.out.includes('commit refused by the in-page gate') && broken.out.includes('syntax:') && broken.out.includes('ascii:'), broken.out.split('\n').find((line) => line.includes('refused by the in-page gate'))?.slice(0, 160) ?? 'no refusal line');
+});
+
+group('git-background', async () => {
   const background = await terminal([
     ['run', 'echo refused-line & echo should-not-run'],
     ['run', 'echo and-ok && echo and-ok2'],
@@ -789,6 +865,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     ['run', 'echo "quoted & kept"'],
   ]);
   check('in-page bash refuses background jobs and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs are not supported') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
+});
+
+group('input-recall', async () => {
   const recalled = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -810,6 +889,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('in-page terminal recalls submitted commands with the up and down arrows', recalled.up1 === 'echo second-typed' && recalled.up2 === 'echo first-typed' && recalled.down1 === 'echo second-typed' && recalled.down2 === '', JSON.stringify(recalled));
+});
+
+group('ctrl-c-line', async () => {
   const cancelled = {};
   const interrupted = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
@@ -826,9 +908,12 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('in-page terminal Ctrl-C cancels a running command and the shell carries on', interrupted.out.includes('^C') && cancelled.elapsed < 10000 && /^after-cancel$/m.test(interrupted.out), `cancel took ${cancelled.elapsed} ms`);
+});
+
+group('tab-complete', async () => {
   const completed = {};
   const listed = await terminal([
-    ['run', 'mkdir -p notes/tab'],
+    ['run', 'mkdir -p notes/tab && echo fetched > notes/fetched.txt'],
     ['run', 'echo alpha > notes/tab/alpha.txt'],
     ['run', 'echo beta > notes/tab/beta.txt'],
   ], {
@@ -854,8 +939,11 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page terminal completes a unique file name with Tab and adds a space', completed.unique === 'cat notes/fetched.txt ', JSON.stringify(completed.unique));
   check('in-page terminal completes a directory with a trailing slash', completed.directory === 'ls notes/', JSON.stringify(completed.directory));
   check('in-page terminal lists several matches when Tab cannot finish a name', /notes\/tab\/alpha\.txt {2}notes\/tab\/beta\.txt/.test(listed.out) && completed.listed === 'cat notes/tab/', JSON.stringify(completed.listed));
+});
+
+group('cd-path', async () => {
   const moved = {};
-  await terminal([], {
+  await terminal([['run', 'mkdir -p notes && echo fetched > notes/fetched.txt']], {
     interact: async ({ type, press, evaluate, waitFor }) => {
       const value = () => evaluate("globalThis.thebird.pty.state().line");
       const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
@@ -875,6 +963,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   check('in-page prompt shows the working directory after cd', moved.prompt === 'thebird /workspace/notes> ', JSON.stringify(moved.prompt));
   check('in-page cd persists to the next command and Tab completes relative to it', /^\/workspace\/notes$/m.test(moved.out) && moved.completed === 'cat fetched.txt ', JSON.stringify(moved.completed));
+});
+
+group('queue', async () => {
   const queued = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
       await type('for i in $(seq 1 20); do sleep 0.1; done');
@@ -889,6 +980,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   const firstQueued = queued.out.indexOf('\nqueued-one\n');
   check('in-page terminal runs lines typed during a command in order, not as busy errors', firstQueued !== -1 && queued.out.indexOf('\nqueued-two\n') > firstQueued && !queued.out.includes('busy'), queued.out.split('\n').filter((line) => line.startsWith('queued')).join(' / '));
+});
+
+group('queue-drop', async () => {
   const dropped = await terminal([], {
     interact: async ({ type, press, waitFor }) => {
       await type('for i in $(seq 1 100); do sleep 0.1; done');
@@ -902,10 +996,12 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('in-page terminal Ctrl-C drops lines queued behind the cancelled command', !/^dropped-line$/m.test(dropped.out) && dropped.out.includes('^C'), dropped.out.split('\n').filter((line) => line === '^C' || line.includes('dropped')).join(' / ').slice(0, 140));
+});
+
+group('ctrl-c-curl', async () => {
   let heldRequests = 0;
   const holdServer = createServer(() => { heldRequests++; });
-  await new Promise((resolve) => holdServer.listen(portOf('hold'), '127.0.0.1', resolve));
-  rememberPort('hold', holdServer.address().port);
+  await new Promise((resolve) => holdServer.listen(0, '127.0.0.1', resolve));
   const held = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor, note, pause }) => {
@@ -928,8 +1024,14 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   holdServer.closeAllConnections();
   holdServer.close();
   check('in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on', held.requests > 0 && held.echoed && held.elapsed < 10000 && held.out.includes('cancelled') && /^after-held-cancel$/m.test(held.out), `requests reaching the held server=${held.requests} ^C echoed=${held.echoed} cancel took ${held.elapsed} ms`);
+});
+
+group('qjs', async () => {
   const quickjs = await terminal([['run', 'qjs -e "console.log(6*7)"'], ['run', 'qjs -e "throw new TypeError(\'boom\')"'], ['run', 'which qjs']]);
   check('in-page qjs runs quickjs-ng through the txiki engine, prints console output, and reports an uncaught error', quickjs.engine === 'ready' && /^42$/m.test(quickjs.out) && quickjs.out.includes('Uncaught TypeError: boom') && /^qjs$/m.test(quickjs.out), quickjs.out.split('\n').slice(-4).join(' / ').slice(0, 160));
+});
+
+group('editing', async () => {
   const editing = {};
   await terminal([['run', 'echo before-clear']], {
     interact: async ({ type, press, evaluate }) => {
@@ -952,6 +1054,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   });
   check('in-page terminal Ctrl-U clears the line, and Ctrl-A and Ctrl-E move the caret to its ends', editing.cleared === '' && editing.start === 0 && editing.end === editing.endLength && editing.endLength > 0, JSON.stringify({ cleared: editing.cleared, start: editing.start, end: editing.end, endLength: editing.endLength }));
   check('in-page terminal Ctrl-L clears the output', editing.afterClear === 'thebird /workspace> ', JSON.stringify(editing.afterClear.slice(0, 80)));
+});
+
+group('streaming', async () => {
   const streaming = {};
   const ticks = await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
@@ -966,6 +1071,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const seen = ticks.out.match(/^tick[1-5]$/gm) ?? [];
   check('in-page terminal shows shell output while the command is still running', streaming.busy === true && streaming.beforeLast === true, JSON.stringify(streaming));
   check('in-page terminal prints each streamed line once, in order', seen.join(' ') === 'tick1 tick2 tick3 tick4 tick5', seen.join(' '));
+});
+
+group('history', async () => {
   const storedBefore = {};
   await terminal([], {
     interact: async ({ type, press, waitFor, evaluate }) => {
@@ -990,6 +1098,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('in-page terminal recalls a submitted command after the page reloads', recalledAfterReload === 'echo kept-line' && !/^kept-line$/m.test(reopenedHistory.out), JSON.stringify(recalledAfterReload));
+});
+
+group('command-tab', async () => {
   const commandTab = {};
   await terminal([], {
     interact: async ({ type, press, evaluate }) => {
@@ -1009,6 +1120,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page terminal completes a command name in command position with Tab', commandTab.python === 'python3 ' && commandTab.sqlite === 'sqlite3 ', JSON.stringify(commandTab));
   const completedRuns = await terminal([['run', 'mkdir -p notes'], ['run', 'sqlite3 notes/cmd.db "select 2+3"']]);
   check('a command completed by name really runs in-page', /^5$/m.test(completedRuns.out), completedRuns.out.split('\n').slice(-2).join(' / ').slice(0, 120));
+});
+
+group('command-table', async () => {
   const listing = await terminal([], {
     interact: async ({ press }) => {
       await press('Tab');
@@ -1027,9 +1141,15 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const lookupTable = await terminal(lookupChunks.map((chunk) => ['run', `for n in ${chunk.map((name) => `'${name}'`).join(' ')}; do a=$(command -v "$n"); w=$(which "$n"); k=$(type -t "$n"); [ "$a" = "$w" ] || echo mismatch-which-$n; case "$a" in /*) [ "$k" = file ] || echo mismatch-kind-$n ;; *) case "$k" in builtin|keyword|function) ;; *) echo mismatch-kind-$n ;; esac ;; esac; done; echo lookup-chunk-done`]));
   const chunksDone = lookupTable.out.split('\n').filter((line) => line === 'lookup-chunk-done').length;
   check('which, command -v and type agree for every name Tab offers, path or builtin', chunksDone === lookupChunks.length && !/^mismatch-/m.test(lookupTable.out), `${chunksDone}/${lookupChunks.length} chunks; ` + lookupTable.out.split('\n').filter((line) => /^mismatch-/.test(line)).slice(0, 4).join(' / ').slice(0, 160));
+});
+
+group('emulations', async () => {
   const emulated = await terminal([['run', 'uname -s'], ['run', 'echo plain-line'], ['run', 'whoami'], ['run', 'tar --version']]);
   const notes = emulated.out.split('in-page emulations').length - 1;
   check('in-page uname, whoami and tar are labelled as emulations, and plain commands are not', notes === 3 && /^Linux$/m.test(emulated.out) && /^plain-line$/m.test(emulated.out) && /^tar \(bashkit\) /m.test(emulated.out), `notes ${notes}`);
+});
+
+group('sqlite', async () => {
   const sqlite = await terminal([
     ['run', 'mkdir -p notes'],
     ['run', 'sqlite3 notes/app.db "create table t(x)"'],
@@ -1039,7 +1159,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('in-page sqlite3 creates a database and answers a query through tjs:sqlite', sqlite.engine === 'ready' && /^6$/m.test(sqlite.out), sqlite.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const tjsSum = await terminal([['run', `tjs -e "import { Database } from 'tjs:sqlite'; const db = new Database('notes/app.db'); console.log(db.prepare('select sum(x) as total from t').all()[0].total); db.close();"`]]);
   check('in-page tjs -e opens a tjs:sqlite database and sums it', /^6$/m.test(tjsSum.out), tjsSum.out.split('\n').slice(-2).join(' / ').slice(0, 140));
-  const reopened = await terminal([['run', 'sqlite3 notes/app.db "select count(*) from t"']]);
+  const reopened = await terminal([['run', 'sqlite3 notes/app.db "select count(*) from t"']], { restart: true });
   check('in-page sqlite3 database survives a browser restart', /^3$/m.test(reopened.out), reopened.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const rowStatements = "drop table if exists people; create table people(id integer primary key, name text, score real); insert into people(name, score) values ('ann', 1.5), ('bo', null), ('cy', 3); select id, name, score from people order by id; select sum(score) as total, count(*) as n from people; select name from people where name like 'b%'";
   const { DatabaseSync } = await import('node:sqlite');
@@ -1049,6 +1169,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const expectedRows = referenceRows.join('\n');
   const rowsRun = await terminal([['run', `sqlite3 notes/rows.db "${rowStatements}"`]]);
   check('in-page sqlite3 returns the same rows as a reference SQLite for the same statements', expectedRows.length > 0 && rowsRun.out.includes(expectedRows), `expected ${JSON.stringify(expectedRows)} / got ${JSON.stringify(rowsRun.out.split('\n').slice(-6).join(' / ').slice(0, 220))}`);
+});
+
+group('python', async () => {
   const python = await terminal([
     ['run', 'python3 -c "print(6*7)"'],
     ['run', 'python3 -c "1/0"'],
@@ -1061,6 +1184,10 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const linkError = await terminal([['run', `python3 -c "raise ValueError('see https://example.org/docs')"`]]);
   check('in-page python3 error text keeps a readable link instead of bashkit cutting it at //', !linkError.out.includes('<path>') && /ValueError: see example\.org\/docs$/m.test(linkError.out), linkError.out.split('\n').find((line) => line.includes('ValueError')) ?? 'no error line');
   check('in-page python3 reports a traceback as an error', python.out.includes('ZeroDivisionError'), python.out.split('\n').find((line) => line.includes('ZeroDivisionError'))?.slice(0, 140) ?? 'no traceback');
+  check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
+});
+
+group('python-splash', async () => {
   const splashRun = {};
   await terminal([], {
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -1086,12 +1213,18 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
     },
   });
   check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
+});
+
+group('pyodide-lock', async () => {
   const PYODIDE_LOCK_URL = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json';
   const PYODIDE_LOCK_SHA256 = '5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010';
   const pyodideLockBytes = Buffer.from(await fetch(PYODIDE_LOCK_URL, { signal: AbortSignal.timeout(60000) }).then((response) => response.arrayBuffer()).catch(() => new ArrayBuffer(0)));
   const pyodideLockDigest = createHash('sha256').update(pyodideLockBytes).digest('hex');
   const pyodideLock = pyodideLockDigest === PYODIDE_LOCK_SHA256 ? JSON.parse(pyodideLockBytes.toString('utf8')) : null;
   check('the micropip wheel the page loads is the one pinned in the Pyodide lock', pyodideLock !== null && readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pyodideLock.packages.micropip.file_name}'`), pyodideLock ? pyodideLock.packages.micropip.file_name : `lock sha256 ${pyodideLockDigest} from ${PYODIDE_LOCK_URL} is not the pinned ${PYODIDE_LOCK_SHA256}`);
+});
+
+group('pip', async () => {
   const pipInstall = await terminal([
     ['run', 'pip install tabulate && python3 -c "import tabulate; print(tabulate.__version__)"'],
     ['run', 'pip install tabulate==0.9.0'],
@@ -1119,6 +1252,9 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const pipHelpStdout = await terminal([['run', 'pip --help 2>/dev/null; echo help-stdout-rc=$?']]);
   check('a bare pip prints its usage to stderr only, and exits 2', /^quiet-rc=2$/m.test(pipQuiet.out) && !pipQuiet.out.includes('usage:'), pipQuiet.out.split('\n').slice(-3).join(' / ').slice(0, 160));
   check('pip --help prints its usage to stdout, so it survives 2>/dev/null', /^help-stdout-rc=0$/m.test(pipHelpStdout.out) && pipHelpStdout.out.includes('usage: pip install'), pipHelpStdout.out.split('\n').slice(-3).join(' / ').slice(0, 160));
+});
+
+group('splash-probe', async () => {
   const splashProbe = {};
   await terminal([], {
     interact: async ({ evaluate, waitFor }) => {
@@ -1180,8 +1316,11 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   check('the boot splash frames animate: two samples 450 ms apart differ, and each is six rows of the same width', splashProbe.probe?.distinct === true && splashFrames.length === 2 && splashFrames.every((frame) => frame.split('\n').length === 6 && frame.split('\n').every((row) => [...row].length === splashProbe.probe.width)), JSON.stringify({ first: splashFrames[0], second: splashFrames[1] }));
   check('the splash logo is centred in the viewport and sits inside it', splashCentred && splashProbe.probe.logoBox.left >= 0 && splashProbe.probe.logoBox.top >= 0 && splashProbe.probe.logoBox.right <= splashProbe.probe.viewport.width && splashProbe.probe.logoBox.bottom <= splashProbe.probe.viewport.height, JSON.stringify({ box: splashProbe.probe?.logoBox, viewport: splashProbe.probe?.viewport, offset: splashProbe.probe?.centreOffset }));
   check('done() removes the logo, hides the splash and clears its frame timer', splashProbe.probe?.timersWhileLoading === 1 && splashProbe.probe.afterDone.children === 0 && splashProbe.probe.afterDone.hidden === true && splashProbe.probe.afterDone.mode === null && splashProbe.probe.afterDone.timersLater === 0 && splashProbe.hidden === true, JSON.stringify(splashProbe.probe?.afterDone));
-  check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
-  const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]]);
+});
+
+group('python-files', async () => {
+  await terminal([['run', 'mkdir -p notes && echo PY-HELLO > notes/out.txt']]);
+  const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]], { restart: true });
   check('in-page python3 files survive a browser restart', pythonReopened.out.split('\n').filter((line) => line === 'PY-HELLO').length >= 2, pythonReopened.out.split('\n').slice(-3).join(' / ').slice(0, 140));
   const incremental = await terminal([
     ['run', 'echo one > notes/inc.txt'],
@@ -1208,23 +1347,30 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const totalMs = Number(timed.out.split('\n').filter((line) => /^\d+$/.test(line)).pop());
   check('python3 warm calls are timed in-page over 300 files and average under 5 ms', Number.isFinite(totalMs) && totalMs > 0 && totalMs / 30 < 5, `${totalMs} ms for 30 calls`);
   console.log(`python3 sync timing: 300 files, ${(totalMs / 30).toFixed(1)} ms per warm call (30 calls in-page)`);
+});
+
+group('expiry', async () => {
   const EXPIRY_WINDOW_MS = 10000;
   const expiry = await terminal([['run', 'for i in $(seq 1 30); do sleep 1; echo tick$i; done; echo late-finish']], { params: [['commandTimeoutMs', String(EXPIRY_WINDOW_MS)]] });
   const expiryTicks = [...expiry.out.matchAll(/^tick(\d+)$/gm)].map((match) => Number(match[1]));
   check('a command past the expiry window is cut at the window with the expiry message, and the lines after it do not run', expiry.out.includes(`error: resource limit exceeded: execution timeout (${EXPIRY_WINDOW_MS / 1000}s)`) && expiryTicks.length >= 5 && expiryTicks.length < 30 && !/^late-finish$/m.test(expiry.out), `${expiryTicks.length} ticks; ` + expiry.out.split('\n').slice(-2).join(' / ').slice(0, 120));
-  rmSync(profile, { recursive: true, force: true });
-} else {
-  console.log('SKIP browser checks — no Chromium at ' + chrome + ' (set CHROME_BIN)');
-}
+});
 
+group('fs-watch', async () => {
 const seeded = await import('../web/shims/fs.js');
 const watcher = seeded.watch();
 const chained = watcher.on('change', () => {}) === watcher && watcher.once('change', () => {}) === watcher;
 check('fs.watch returns an inert handle: close is a no-op and on/once return the handle', typeof watcher.close === 'function' && chained && watcher.close() === undefined);
+});
+
+group('retired-artifacts', async () => {
 const sqliteRetired = !existsSync(join(root, 'web', 'sqlite-in-page.js')) && existsSync(join(root, 'web', 'sqlite-program.js')) && readFileSync(join(root, 'web', 'builtins.js'), 'utf8').includes("from './sqlite-in-txiki.js'");
 check('sqlite3 runs a static txiki program, and web/sqlite-in-page.js is retired', sqliteRetired, existsSync(join(root, 'web', 'sqlite-in-page.js')) ? 'web/sqlite-in-page.js is still present' : sqliteRetired ? 'builtins.js imports web/sqlite-in-txiki.js, which runs web/sqlite-program.js' : 'web/sqlite-program.js is missing or builtins.js still imports the old file');
 const qjsRetired = !existsSync(join(root, 'web', 'quickjs-in-page.js')) && !existsSync(join(root, 'web', 'vendor', 'quickjs')) && existsSync(join(root, 'web', 'qjs-program.js')) && readFileSync(join(root, 'web', 'builtins.js'), 'utf8').includes("from './qjs-in-txiki.js'");
 check('qjs runs as a static txiki program, and the quickjs-ng wasm and its build are retired', qjsRetired, existsSync(join(root, 'web', 'quickjs-in-page.js')) ? 'web/quickjs-in-page.js is still present' : existsSync(join(root, 'web', 'vendor', 'quickjs')) ? 'web/vendor/quickjs is still present' : qjsRetired ? 'builtins.js imports web/qjs-in-txiki.js, which runs web/qjs-program.js' : 'web/qjs-program.js is missing or builtins.js still imports the old file');
+});
+
+group('lint-architecture-comments', async () => {
 const architecture = spawnSync(process.execPath, [join(root, 'scripts', 'lint-architecture.mjs'), '--static'], { cwd: root, encoding: 'utf8', timeout: 120000 });
 const architectureFailures = architecture.stdout.split('\n').filter((line) => line.startsWith('FAIL')).length;
 check('ARCHITECTURE.md and AGENTS.md claims have no contradictions with the code', architecture.status === 0 && architectureFailures === 0, architectureFailures ? `${architectureFailures} claim(s) fail; run node scripts/lint-architecture.mjs` : architecture.stdout.split('\n').at(-2) ?? '');
@@ -1232,6 +1378,9 @@ const comments = spawnSync(process.execPath, [join(root, 'scripts', 'lint-commen
 check('repo-owned code has no comments (scripts/lint-comments.mjs)', comments.status === 0 && /repo-owned files checked: 0 comments;/.test(comments.stdout), comments.stdout.split('\n').filter((line) => line.startsWith('FAIL')).slice(0, 3).join('; ') || comments.stdout.trim().split('\n').at(-1));
 const vendoredLines = comments.stdout.split('\n').filter((line) => line.startsWith('VENDORED'));
 check('every vendored bundle with comments has a provenance witness (upstream name)', comments.status === 0 && vendoredLines.length > 0 && vendoredLines.every((line) => line.includes('named (third-party, not edited)') || /listed in web\/vendor\/(fx|floosie)\/manifest\.json \(third-party, not edited\)/.test(line)) && !comments.stdout.includes('FAIL'), vendoredLines.map((line) => line.split(':')[0].replace('VENDORED ', '')).join(', ') || 'no vendored bundle reported');
+});
+
+group('hosting-pins', async () => {
 const workflow = readFileSync(join(root, '.github', 'workflows', 'pages.yml'), 'utf8');
 const scopesIn = (text, indent) => Object.fromEntries([...text.matchAll(new RegExp(`^ {${indent}}([a-z-]+): (read|write)$`, 'gm'))].map((m) => [m[1], m[2]]));
 const jobsSection = workflow.slice(workflow.indexOf('\njobs:') + 1);
@@ -1311,21 +1460,75 @@ check('negative control: a tag that resolves to another SHA is a FAIL when gh is
 check('negative control: a desynced mapping SHA is a FAIL when gh is available', driftVerdict(workflow, desyncedMapping, () => ({ resolved: firstRow.sha })).status === 'FAIL', 'the local mismatch is not hidden by a matching remote');
 check('pages.yml gives the build job contents read only, and the deploy job only pages and id-token write', sortedScopes(topScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(buildScopes) === sortedScopes({ contents: 'read' }) && sortedScopes(deployScopes) === sortedScopes({ pages: 'write', 'id-token': 'write' }), `top=${JSON.stringify(topScopes)} build=${JSON.stringify(buildScopes)} deploy=${JSON.stringify(deployScopes)}`);
 check('pages.yml builds floosie browser bundle from latest floosie main before the page build', /repository: AnEntrypoint\/floosie/.test(workflow) && /path: floosie/.test(workflow) && /FLOOSIE_REPO: \$\{\{ github\.workspace \}\}\/floosie/.test(workflow) && workflow.indexOf('node scripts/vendor-floosie.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/floosie\/browser\.js/.test(workflow), 'floosie checkout, FLOOSIE_REPO, vendor script, asset check and build order');
-check('pages.yml builds gm core WASM from latest gm main before the page build', /repository: AnEntrypoint\/gm\b/.test(workflow) && /path: gm\b/.test(workflow) && /GM_REPO: \$\{\{ github\.workspace \}\}\/gm\b/.test(workflow) && workflow.indexOf('node scripts/vendor-gm.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/gm\/gm-core\.wasm/.test(workflow), 'gm checkout, GM_REPO, vendor script, asset check and build order');
 check('pages.yml builds fx core WASM from latest gmfx main before the page build', /repository: AnEntrypoint\/gmfx/.test(workflow) && /ref: main/.test(workflow) && /path: gmfx/.test(workflow) && /FX_REPO: \$\{\{ github\.workspace \}\}\/gmfx/.test(workflow) && workflow.indexOf('node scripts/vendor-fx.mjs') < workflow.indexOf('node scripts/build-pages.mjs') && /test -s web\/vendor\/fx\/fx-core\.wasm/.test(workflow), 'gmfx checkout, FX_REPO, vendor script, asset check and build order');
 check('the desynced-mapping fixture is used only when THEBIRD_WITNESS_FIXTURE is set', desyncFixture ? mappingUnderTest !== agents : mappingUnderTest === agents, `fixture=${desyncFixture}`);
+});
+
+group('birdman', async () => {
 const birdmanManifest = JSON.parse(readFileSync(join(root, 'web', 'vendor', 'birdman', 'manifest.json'), 'utf8'));
 const birdmanDigest = createHash('sha256').update(readFileSync(join(root, 'web', 'vendor', 'birdman', 'client.js'))).digest('hex');
 check('the vendored birdman client matches its manifest sha256, and the playwriter builtin imports that client', birdmanDigest === birdmanManifest.client.sha256 && readFileSync(join(root, 'web', 'playwriter-in-page.js'), 'utf8').includes("from './vendor/birdman/client.js'"), `sha256=${birdmanDigest.slice(0, 12)}`);
+});
+
+group('call-timeout', async () => {
 const hungCall = await withTimeout(new Promise(() => {}), 50, 'Runtime.evaluate').then(() => 'answered', (err) => err.message);
 check('a DevTools call that never answers aborts with a timeout instead of stalling', hungCall === 'Runtime.evaluate did not answer within 50 ms', hungCall);
 const promptCall = await withTimeout(Promise.resolve('answered'), 50, 'Runtime.evaluate');
 check('a DevTools call that answers in time is returned unchanged (negative control)', promptCall === 'answered', promptCall);
+});
+
+group('shell-budget', async () => {
 const bashShellSource = readFileSync(join(root, 'web', 'bash-shell.js'), 'utf8');
 const shellWorkerSource = readFileSync(join(root, 'web', 'shell-worker.js'), 'utf8');
 check('the component ships the 900 s command expiry window, and the page can shorten it only through commandTimeoutMs', /^const COMMAND_TIMEOUT_MS = 900000;$/m.test(bashShellSource) && bashShellSource.includes('commandTimeoutMs = COMMAND_TIMEOUT_MS') && shellWorkerSource.includes('commandTimeoutMs: windowFromUrl(self.location.search)'), 'web/bash-shell.js and web/shell-worker.js');
-await relay.close();
-if (checkpoint) console.log(`checkpoint ${process.env.THEBIRD_WITNESS_CHECKPOINT}: call ${checkpoint.state.calls}, ${checkpoint.state.terminals} browser runs recorded`);
-console.log(`witness totals: PASS ${recorded.filter((entry) => entry.ok).length} FAIL ${recorded.filter((entry) => !entry.ok).length}`);
-console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
+});
+
+const argv = Object.fromEntries(process.argv.slice(2).map((arg) => {
+  const [key, ...rest] = arg.replace(/^--/, '').split('=');
+  return [key, rest.length ? rest.join('=') : true];
+}));
+if (argv.list) {
+  for (const entry of groups) console.log(entry.name);
+  process.exit(0);
+}
+let selected = groups;
+if (typeof argv.group === 'string') {
+  const names = argv.group.split(',');
+  const unknown = names.filter((name) => !groups.some((entry) => entry.name === name));
+  if (unknown.length) {
+    console.error(`unknown group: ${unknown.join(', ')} (see --list)`);
+    process.exit(2);
+  }
+  selected = selected.filter((entry) => names.includes(entry.name));
+}
+if (typeof argv.check === 'string') selected = selected.filter((entry) => entry.source.includes(argv.check));
+if (selected.length === 0) {
+  console.error('no group matches the selection (see --list)');
+  process.exit(2);
+}
+
+if (haveChrome && selected.some((entry) => entry.browser)) {
+  if (!existsSync(join(root, 'web', 'vendor', 'bashkit', 'bashkit_wasm_bg.wasm'))) await vendorBashkit();
+  if (!existsSync(join(root, 'web', 'vendor', 'fx', 'fx-core.wasm'))) await vendorFx();
+  if (!existsSync(join(root, 'web', 'vendor', 'floosie', 'browser.js'))) await vendorFloosie();
+} else if (selected.some((entry) => entry.browser)) {
+  console.log(`SKIP browser groups — no Chromium at ${chrome} (set CHROME_BIN)`);
+}
+
+const queue = selected.filter((entry) => !entry.browser || haveChrome);
+const outcomes = [];
+const startedAll = performance.now();
+await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () => {
+  while (queue.length) {
+    const entry = queue.shift();
+    outcomes.push(await (entry.heavy ? runHeavy(entry) : runGroup(entry)));
+  }
+}));
+const failures = outcomes.flatMap((outcome) => outcome.results).filter((result) => !result.ok).length;
+const passed = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok).length;
+console.log('\nGROUP WALL TIMES (slowest first)');
+for (const outcome of [...outcomes].sort((a, b) => b.seconds - a.seconds)) console.log(`${outcome.seconds.toFixed(1).padStart(8)}s  ${outcome.name}`);
+console.log(`\ntotals: PASS ${passed} FAIL ${failures} GROUPS ${outcomes.length} WALL ${((performance.now() - startedAll) / 1000).toFixed(1)}s`);
+console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
+for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
 process.exitCode = failures ? 1 : 0;
