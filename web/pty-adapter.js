@@ -55,6 +55,7 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
   let atLineStart = true;
   let busy = false;
   let idle = Promise.resolve();
+  let turns = Promise.resolve();
 
   const advanceOver = (offset, codes) => codes.reduce((at, char) => {
     const width = cellWidth(char);
@@ -68,7 +69,7 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
   const endCell = (index) => (index > 0 && index % cols === 0 ? { row: index / cols - 1, col: cols - 1 } : cellAt(index));
   const moveTo = (from, to) => {
     const dy = to.row - from.row;
-    return (dy < 0 ? `\x1b[${-dy}A` : dy > 0 ? `\x1b[${dy}B` : '') + `\x1b[${to.col + 1}G`;
+    return (dy < 0 ? `\x1b[${-dy}A` : '\n'.repeat(Math.max(dy, 0))) + `\x1b[${to.col + 1}G`;
   };
   const replaceChars = (next) => {
     chars = next;
@@ -292,10 +293,14 @@ export function createPtyAdapter({ term, client, onBusy = () => {} }) {
     writeOutput,
     refreshPrompt,
     runLine(command) {
-      showPrompt = true;
-      replaceChars(Array.from(command));
-      render();
-      submit();
+      turns = turns.then(() => {
+        showPrompt = true;
+        replaceChars(Array.from(command));
+        render();
+        submit();
+        return idle;
+      });
+      idle = turns;
     },
     paste(text) {
       const codes = Array.from(text.replace(PASTE_BREAKS, ' ')).filter(isPrintable);
