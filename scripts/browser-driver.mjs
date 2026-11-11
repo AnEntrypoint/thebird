@@ -226,14 +226,16 @@ export async function startBrowser({ chrome, profile }) {
   }
 }
 
-export async function runTerminal({ browser, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, initScript }) {
+export async function runTerminal({ browser, browserContextId, url, timeoutMs = 120000, interact, blockUrls = [], onProgress, initScript }) {
   const { send, sessions, blockRequests } = browser;
   const logs = [];
-  const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+  const { targetId } = await send('Target.createTarget', { url: 'about:blank', ...(browserContextId ? { browserContextId } : {}) });
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   sessions.set(sessionId, { logs, blockUrls });
   try {
     await send('Page.enable', {}, sessionId);
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId).catch(() => {});
+    await send('Page.bringToFront', {}, sessionId).catch(() => {});
     await send('Network.enable', {}, sessionId);
     if (initScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript }, sessionId);
     await send('Runtime.enable', {}, sessionId);

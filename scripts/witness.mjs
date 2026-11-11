@@ -61,25 +61,33 @@ function check(name, ok, detail = '') {
   console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
 }
 
+let sharedBrowser = null;
+const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
+async function sharedBrowserFor() {
+  sharedBrowser ??= await startBrowser({ chrome, profile: sharedProfile });
+  return sharedBrowser;
+}
+async function disposeContext(context) {
+  if (!context.browserContextId || !sharedBrowser) return;
+  await sharedBrowser.send('Target.disposeBrowserContext', { browserContextId: context.browserContextId }).catch(() => {});
+  context.browserContextId = null;
+}
 async function browserFor(restart) {
   const context = current();
-  if (restart && context.browser) {
-    await context.browser.close();
-    context.browser = null;
+  if (restart) await disposeContext(context);
+  const browser = await sharedBrowserFor();
+  if (!context.browserContextId) {
+    const { browserContextId } = await browser.send('Target.createBrowserContext');
+    context.browserContextId = browserContextId;
   }
-  if (restart === 'fresh') {
-    rmSync(context.profile, { recursive: true, force: true });
-    context.profile = mkdtempSync(join(tmpdir(), `thebird-profile-${context.name}-`));
-  }
-  context.browser ??= await startBrowser({ chrome, profile: context.profile });
-  return context.browser;
+  return browser;
 }
 
 async function runAt(url, { restart = false, interact, initScript, blockUrls, timeoutMs = COLD_START_MS, label = 'page' } = {}) {
   const started = performance.now();
   const browser = await browserFor(restart);
   try {
-    return await runTerminal({ browser, url, timeoutMs, interact, initScript, blockUrls });
+    return await runTerminal({ browser, browserContextId: current().browserContextId, url, timeoutMs, interact, initScript, blockUrls });
   } finally {
     console.log(`TERMINAL ${current().name} ${label} wall ${((performance.now() - started) / 1000).toFixed(1)}s`);
   }
@@ -99,7 +107,7 @@ const waitForHeadroom = async () => {
 
 async function runGroup(entry) {
   if (entry.heavy) await waitForHeadroom();
-  const context = { name: entry.name, results: [], browser: null, profile: mkdtempSync(join(tmpdir(), `thebird-profile-${entry.name}-`)) };
+  const context = { name: entry.name, results: [], browserContextId: null };
   const started = performance.now();
   try {
     await scope.run(context, entry.run);
@@ -107,8 +115,7 @@ async function runGroup(entry) {
     context.results.push({ name: `${entry.name} raised an error`, ok: false });
     console.log(`FAIL ${entry.name} raised an error: ${error.message}`);
   } finally {
-    await context.browser?.close();
-    rmSync(context.profile, { recursive: true, force: true });
+    await disposeContext(context);
   }
   const seconds = (performance.now() - started) / 1000;
   console.log(`GROUP ${entry.name} wall ${seconds.toFixed(1)}s`);
@@ -1629,5 +1636,7 @@ console.log(`\ntotals: PASS ${passed} FAIL ${failures} GROUPS ${outcomes.length}
 clearInterval(sampler);
 console.log(`peak witness tree RSS ${treeRss.mb.toFixed(0)} MB across ${treeRss.processes} descendant processes`);
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
+await sharedBrowser?.close();
 for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
+rmSync(sharedProfile, { recursive: true, force: true });
 process.exitCode = failures ? 1 : 0;
