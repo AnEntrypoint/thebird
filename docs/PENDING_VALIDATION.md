@@ -1509,3 +1509,25 @@ Not done in this step, so the page still runs fx on xterm.js:
 - The line builtins in `web/fx-in-page.js` (`fx --version`, `fx check`, `fx ask`) are unchanged. Their witness rows stay as they are until the new path exists.
 
 Witness: none run in Phase A. Hold: nothing pushed; the ten local commits (4c231bf through f97393b) and this step go out together after fx's `tool_admission.zig` and `resize_runtime.zig` fixes are on origin/main.
+
+## fx TUI parity, stretch 10 Phase A (wiring): fx output through ghostty-vt into xterm.js (no build, test or witness)
+
+Design, option (a) as decided: xterm.js stays the buffer the witness reads. fx-term.wasm's output bytes go to `ghostty-vt.wasm`, and each frame is redrawn into xterm.js cell by cell from ghostty's render state. Input, resize and mouse still go through xterm.js, as before.
+
+Changes in this step (each with its witness: none run in Phase A):
+| Change | File | Witness |
+| --- | --- | --- |
+| New module: loads `ghostty-vt.wasm` once (`loadGhosttyVt`, env `log` decodes the message), wraps a terminal (`GhosttyScreen`: write, resize, read the viewport as 16-byte cells, read the cursor, build a frame with `\x1b[row;colH` per row, SGR per style run, cursor placement and alt-screen toggles, free), and `ghosttyAdapter`, which wraps `xtermAdapter` so input, resize and key handling are unchanged and output goes through ghostty. | `web/ghostty-screen.js` (new) | None run in Phase A. Syntax: `node --check web/ghostty-screen.js` passes (not a build or test). |
+| `runFxTui` creates the ghostty screen from the term's size, passes `ghosttyAdapter(term, screen)` as the fx terminal, and frees the screen when the TUI exits. The xterm adapter import is removed from this file. | `web/fx-tui.js` | None run. Syntax: `node --check web/fx-tui.js` passes. |
+| `AGENTS.md`: `web/ghostty-screen.js` in the browser list; `web/vendor/ghostty/` in the vendored notes. | `AGENTS.md` | None run. `lint:architecture` checks these lists and has not been run since this change. |
+
+What the line builtins do: unchanged. `fx --version`, `fx check` and `fx ask` stay on `web/fx-in-page.js` (`fx-core.wasm`), and their witness rows are not edited.
+
+Verify in Phase B, before any claim that the wiring works (these are my reading of the package, not run):
+- Cell layout: 16 bytes per cell, codepoint u32 at 0, fg RGB at 4, bg RGB at 7, flags at 10 (BOLD 1, ITALIC 2, UNDERLINE 4, STRIKETHROUGH 8, INVERSE 16, INVISIBLE 32, BLINK 64, FAINT 128), width at 11 (0 for a wide-character spacer, which is skipped), grapheme length at 14. Taken from the package's `ghostty-web.js`, class `K`.
+- Grapheme argument order: `ghostty_render_state_get_grapheme(handle, row, column, buffer, 16)`. I read the package's two call sites as (row, column). If the frame shows wrong emoji or combining marks, swap the two arguments.
+- Alternate screen: ghostty's `is_alternate_screen` drives `\x1b[?1049h/l` in xterm, so `term.buffer.active.type` follows fx's alt screen. The TUI witness reads that buffer type.
+- Colour: every cell is written with explicit 24-bit SGR, so fx's palette colours are whatever ghostty resolved them to.
+- Redraw cost: each batch of output re-sends the whole frame, coalesced by one `setTimeout(0)`. Check that the TUI stays responsive in the witness.
+
+Hold: nothing pushed. The eleven local commits (4c231bf through 0d3d1aa) and this wiring go out together after fx's `tool_admission.zig` and `resize_runtime.zig` fixes are on origin/main; the dispatcher will tell me when.
