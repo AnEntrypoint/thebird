@@ -1,6 +1,6 @@
 import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
-import { pythonBundle } from './python-bundle.js';
+import { prefetchPythonBundle, pythonBundle } from './python-bundle.js';
 
 const WORKSPACE = '/workspace';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
@@ -38,6 +38,8 @@ function spawn(bundle) {
   worker.postMessage({ id: 0, op: 'load', files: bundle.files, lock: bundle.lock });
   return worker;
 }
+
+export const prefetchPython = prefetchPythonBundle;
 
 async function bundleFor(signal) {
   try {

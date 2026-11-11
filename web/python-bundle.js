@@ -36,23 +36,49 @@ export function unpack(raw) {
   return { files, lock: new TextDecoder().decode(files.get('pyodide-lock.json')) };
 }
 
-async function fetchBundle(signal, onStart) {
-  onStart?.();
+const CACHE_NAME = 'thebird-python-bundle-1';
+
+const openCache = () => globalThis.caches?.open(CACHE_NAME).catch(() => null) ?? Promise.resolve(null);
+
+async function downloadBundle(cache, signal) {
   const response = await fetch(BUNDLE_URL, { signal });
   if (!response.ok) throw new Error(`Python bundle: HTTP ${response.status}`);
   const compressed = new Uint8Array(await response.arrayBuffer());
+  await cache?.put(BUNDLE_URL, new Response(compressed.slice())).catch(() => {});
+  return compressed;
+}
+
+async function cachedBundle(cache) {
+  const hit = await cache?.match(BUNDLE_URL).catch(() => null);
+  return hit ? new Uint8Array(await hit.arrayBuffer()) : null;
+}
+
+function decodeBundle(compressed) {
   decoder ??= init().catch((err) => {
     decoder = null;
     throw err;
   });
-  await decoder;
-  let raw;
-  try {
-    raw = decompress(compressed);
-  } catch (err) {
-    throw new Error(`Python bundle: cannot decode (${err.message ?? err})`);
+  return decoder.then(() => {
+    try {
+      return unpack(decompress(compressed));
+    } catch (err) {
+      throw new Error(`Python bundle: cannot decode (${err.message ?? err})`);
+    }
+  });
+}
+
+async function fetchBundle(signal, onStart) {
+  onStart?.();
+  const cache = await openCache();
+  const cached = await cachedBundle(cache);
+  if (cached) {
+    try {
+      return await decodeBundle(cached);
+    } catch {
+      await cache?.delete(BUNDLE_URL).catch(() => {});
+    }
   }
-  return unpack(raw);
+  return decodeBundle(await downloadBundle(cache, signal));
 }
 
 export function pythonBundle({ signal, onStart } = {}) {
@@ -61,4 +87,8 @@ export function pythonBundle({ signal, onStart } = {}) {
     throw err;
   });
   return loading;
+}
+
+export function prefetchPythonBundle() {
+  return pythonBundle().catch(() => {});
 }

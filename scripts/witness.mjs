@@ -1338,6 +1338,22 @@ group('splash-probe', async () => {
   check('done() removes the logo, hides the splash and clears its frame timer', splashProbe.probe?.timersWhileLoading === 1 && splashProbe.probe.afterDone.children === 0 && splashProbe.probe.afterDone.hidden === true && splashProbe.probe.afterDone.mode === null && splashProbe.probe.afterDone.timersLater === 0 && splashProbe.hidden === true, JSON.stringify(splashProbe.probe?.afterDone));
 });
 
+group('python-warm', async () => {
+  await terminal([], {
+    interact: async ({ type, press, waitFor }) => {
+      await type('python3 -c "print(1)"');
+      await press('Enter');
+      await waitFor("/^1$/m.test(globalThis.thebird.text())", 240000);
+    },
+  });
+  const warmStarted = performance.now();
+  const warm = await terminal([['run', 'python3 -c "print(2)"']], {
+    blockUrls: ['https://anentrypoint.github.io/pyodide-minimal/*'],
+  });
+  const warmSeconds = ((performance.now() - warmStarted) / 1000).toFixed(1);
+  check('a second page start runs python3 from the bundle in Cache Storage with the network blocked', warm.engine === 'ready' && /^2$/m.test(warm.out), `${warmSeconds}s ${warm.out.split('\n').slice(0, 2).join(' / ').slice(0, 120)}`);
+});
+
 group('python-files', async () => {
   await terminal([['run', 'mkdir -p notes && echo PY-HELLO > notes/out.txt']]);
   const pythonReopened = await terminal([['run', 'cat notes/out.txt'], ['run', `python3 -c "print(open('notes/out.txt').read().strip())"`]], { restart: true });
