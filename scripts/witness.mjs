@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { startNpmMirror } from './npm-mirror.mjs';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
@@ -43,6 +44,7 @@ const shared = (name, make) => {
   return services.get(name);
 };
 const getRelay = () => shared('relay', () => startRelay({ port: 0 }));
+const getMirror = () => shared('npm-mirror', () => startNpmMirror());
 const sharedPages = () => shared('pages', () => buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-'))));
 const current = () => scope.getStore();
 const group = (name, run) => groups.push({ name, run, source: run.toString(), browser: /\b(terminal|runAt)\(/.test(run.toString()), heavy: /python3|\bpip\b|pyodide/.test(run.toString()) });
@@ -570,6 +572,16 @@ group('host-tools', async () => {
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
 });
 
+group('node-txiki-npm-registry', async () => {
+  const registry = await terminal([
+    ['run', 'npm install thebird-no-such-package-404; echo rc=$?'],
+    ['run', 'cd /workspace && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
+  ]);
+  const registryOut = registry.out;
+  check('.npmrc _authToken failure names the registry URL and says why the browser refused it', /npm: request to https:\/\/registry\.npmjs\.org\/debug failed: .*Authorization header/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify(registryOut.slice(0, 600)));
+  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify(registryOut.slice(0, 400)));
+});
+
 group('node-txiki-npm', async () => {
   const PROMPT = 'thebird /workspace> ';
   const PROMPT_COUNT = "(() => { const b = globalThis.thebird.term.buffer.active; let n = 0; for (let i = 0; i < b.length; i++) if (b.getLine(i).translateToString(true).startsWith('thebird /workspace>')) n++; return n; })()";
@@ -642,7 +654,9 @@ group('node-txiki-npm', async () => {
   check('console.log output written before process.exit(0) is kept', nodeOutput('node -e "console.log(\'x\'); process.exit(0)"') === 'x', JSON.stringify(nodeOutput('node -e "console.log(\'x\'); process.exit(0)"')));
   check('console.log output written before process.exit(3) is kept and the status is 3', nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?') === 'y\nrc=3', JSON.stringify(nodeOutput('node -e "console.log(\'y\'); process.exit(3)"; echo rc=$?')));
   check('readFileSync without an encoding returns bytes whose toString is the text, so JSON.parse reads it', nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"') === 'thebird-json', JSON.stringify(nodeOutput('echo \'{"name":"thebird-json"}\' > node-json.json && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node-json.json\')).name)"')));
+  const mirror = await getMirror();
   const npmRun = await terminal([
+    ['run', `printf 'registry=${mirror.url}\\n' > /.npmrc && echo mirror-set`],
     ['run', 'npm -v'],
     ['run', 'npx -v'],
     ['run', 'mkdir -p npm-check && cd npm-check && npm install debug'],
@@ -652,7 +666,6 @@ group('node-txiki-npm', async () => {
     ['run', 'type npx'],
     ['run', 'type node'],
     ['run', 'node -e "console.log(process.version)"'],
-    ['run', 'npm install thebird-no-such-package-404; echo rc=$?'],
     ['run', 'npm install --save-exact debug; echo rc=$?'],
   ]);
   const npmOut = npmRun.out;
@@ -662,7 +675,6 @@ group('node-txiki-npm', async () => {
   check('npx semver runs the registry bin: the range filter prints 1.2.4 and 1.2.10 and not 1.2.3', /^1\.2\.4$/m.test(npmOut) && /^1\.2\.10$/m.test(npmOut) && !/^1\.2\.3$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('which npm names npm and type npx reports a shell builtin', /^npm$/m.test(npmOut) && /^npx is a shell builtin$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('node still resolves to txiki after npm and npx are added', /^node is a shell builtin$/m.test(npmOut) && /^v\d+\.\d+\.\d+$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
-  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(npmOut) && /^rc=1$/m.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   check('npm rejects an option it does not implement, with status 1 and the option named', /npm: unsupported option: --save-exact/.test(npmOut), JSON.stringify(npmOut.slice(0, 400)));
   const npmProjects = await terminal([
     ['run', 'mkdir -p yaml-project && cd yaml-project && npm install js-yaml'],
@@ -677,7 +689,6 @@ group('node-txiki-npm', async () => {
     ['run', 'cd .. && mkdir -p peer-project && cd peer-project && npm install react-dom && node -e "console.log(\'react-installed\', require(\'fs\').existsSync(\'node_modules/react/package.json\'))"'],
     ['run', 'cd .. && mkdir -p scoped-project && cd scoped-project && npm install @noble/hashes && node -e "console.log(JSON.parse(require(\'fs\').readFileSync(\'node_modules/@noble/hashes/package.json\', \'utf8\')).name)"'],
     ['run', 'mkdir -p /workspace/esmp/node_modules/tool/bin /workspace/esmp/node_modules/tool/lib && cd /workspace/esmp && echo \'{"name":"tool","version":"1.0.0","bin":{"tool":"bin/tool.mjs"}}\' > node_modules/tool/package.json && echo \'export const greet = (n) => `hi ${n}`; export default { kind: "default" };\' > node_modules/tool/lib/greet.mjs && echo \'import def, { greet } from "../lib/greet.mjs"; import * as ns from "../lib/greet.mjs"; console.log(greet(process.argv[2]), def.kind, typeof ns.greet, import.meta.url.slice(0, 7));\' > node_modules/tool/bin/tool.mjs && npx tool world; echo rc=$?'],
-    ['run', 'cd /workspace && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
   ]);
   const projectOut = npmProjects.out;
   check('npm install js-yaml installs its argparse dependency, and the bin link points into the package', /^\+ js-yaml@\d+\.\d+\.\d+$/m.test(projectOut) && /^\+ argparse@\d+\.\d+\.\d+$/m.test(projectOut) && /^added 2 packages$/m.test(projectOut) && /^\.\.\/js-yaml\/bin\/js-yaml\.mjs$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 600)));
@@ -690,7 +701,6 @@ group('node-txiki-npm', async () => {
   check('npm ci rebuilds node_modules exactly from package-lock.json', /^ci:added 1 package$/m.test(projectOut), JSON.stringify(projectOut.slice(-1400)));
   check('a peer dependency is installed automatically (react-dom needs react)', /^\+ react@\d+\.\d+\.\d+$/m.test(projectOut) && /^react-installed true$/m.test(projectOut), JSON.stringify(projectOut.slice(-1400)));
   check('a scoped package installs under node_modules/@scope/name', /^@noble\/hashes$/m.test(projectOut), JSON.stringify(projectOut.slice(0, 1400)));
-  check('.npmrc _authToken failure names the registry URL and says why the browser refused it', /npm: request to https:\/\/registry\.npmjs\.org\/debug failed: .*Authorization header/.test(projectOut) && /^rc=1$/m.test(projectOut), JSON.stringify(projectOut.slice(-600)));
   check('the txiki shell runs a script on the engine, and the saved state carries the directory and variables to the next run', txikiShell.runs?.first?.stdout === 'first-7\n' && txikiShell.runs?.second?.stdout === 'second-7\n/workspace/notes/txiki\n', JSON.stringify(txikiShell.runs));
   const txikiPip = txikiShell.runs?.pipVersion ?? {};
   check('the txiki shell answers pip --version from the page micropip, with no stderr and exit 0', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)\nrc=0\n$/.test(txikiPip.stdout ?? '') && txikiPip.stderr === '', JSON.stringify(txikiPip));
