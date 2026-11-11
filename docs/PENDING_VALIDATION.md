@@ -1648,3 +1648,11 @@ Cause: the welcome panel leaves on the first keystroke (S1), in fx's own output.
 Action: no code change in thebird for this row, since the trace shows the wrapper is faithful to fx's output. The row needs fx's decision on whether the welcome panel should return after the palette and the first keystroke; this stays open and is not relaxed.
 
 Approval row: unchanged, fx-owned.
+
+## fx TUI parity, Phase A: palette-then-resize row restated in the witness
+
+Change (`scripts/witness.mjs`): the row `a resize after the command palette keeps the welcome panel and the rules at 70 columns` is replaced by `a resize after the command palette closes settles at 70 by 24, with no line wider than 70 columns and the input box drawn`. Its settle condition is `TUI_PALETTE_RESIZE_SETTLED`: the terminal is 70 by 24, no buffer line is wider than 70 columns, and a line starts with `┃`. The row passes when that settle holds and the rows from `paletteResized` are all within 70 columns and include the input box.
+
+Cause, from `probe8.log`: the old row checked a welcome panel that fx's first keystroke clears (S1: `welcome false` after typing `hello`), and it checked two 70-column composer rules. After the palette round trip the probe shows no rules at all (S5: `rules 0`, `cols 70, rows 24`), so a rules check cannot pass in fx's state. The old settle also waited for two `^─{70}$` lines and so never settled. The change keeps the defect's subject, a stale line wider than the terminal after a resize, and drops the expectation fx does not produce. The rules are not relaxed: no rule row is required and none is counted.
+
+Not changed: the approval row (fx-owned, reported from the witness).
