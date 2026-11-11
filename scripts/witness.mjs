@@ -252,11 +252,6 @@ if (existsSync(chrome)) {
       await submit('hello');
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
-      await submit('[tool:bash] [input:{"command":"echo auto"}]');
-      surfaces.autoRan = await settle(hasText('tool-result=seen'), 90000);
-      await grab('auto');
-      await submit('/permissions ask');
-      await new Promise((ok) => setTimeout(ok, 2000));
       await submit('[tool:bash] [input:{"command":"echo approval"}]');
       surfaces.approvalShown = await settle(hasText('Allow once'), 90000);
       await grab('approval');
@@ -279,13 +274,28 @@ if (existsSync(chrome)) {
       await grab('closedScreen');
     },
   });
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url })};`,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
+      const submit = async (text) => { await type(text); await press('Enter'); };
+      await type('fx');
+      await press('Enter');
+      await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      await submit('[tool:bash] [input:{"command":"echo auto"}]');
+      surfaces.autoRan = await settle(hasText('tool-result=seen'), 90000);
+      surfaces.auto = await evaluate(TUI_SCREEN);
+    },
+  });
   await stubTui.close();
   const surfaceHas = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line.includes(text));
   const surfaceRow = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line === text);
   check('transcript: the prompt and the stub answer appear in the TUI transcript', surfaces.transcriptShown === true && surfaceHas('transcript', 'stub gateway answer: prompt=hello'), JSON.stringify({ shown: surfaces.transcriptShown, stub: stubTui.seen.slice(0, 2) }));
   const approvalPanelRows = (name) => (surfaces[name] ?? '').split('\n').filter((line) => line.includes('echo approval') && !line.startsWith('┃'));
   check('auto mode: a bash tool call runs to its tool result with no approval prompt', surfaces.autoRan === true && surfaceHas('auto', 'tool-result=seen') && !surfaceHas('auto', 'Allow once') && !surfaceHas('auto', '3. Deny'), JSON.stringify({ ran: surfaces.autoRan, rows: (surfaces.auto ?? '').split('\n').filter((line) => /Allow once|Deny|tool-result/.test(line)).slice(0, 4) }));
-  check('approval: a bash tool call opens the approval panel with its options and its command row', surfaces.approvalShown === true && surfaceHas('approval', '1. Allow once') && surfaceHas('approval', '3. Deny') && approvalPanelRows('approval').length > 0, JSON.stringify({ options: (surfaces.approval ?? '').split('\n').filter((line) => /1\. Allow once|3\. Deny/.test(line)), commandRows: approvalPanelRows('approval') }));
+  check('approval: a bash tool call opens the approval panel with its options and its command row', surfaces.approvalShown === true && surfaceHas('approval', '1. Allow once') && surfaceHas('approval', '3. Deny') && approvalPanelRows('approval').length > 0, JSON.stringify({ options: (surfaces.approval ?? '').split('\n').filter((line) => /1\. Allow once|3\. Deny/.test(line)), commandRows: approvalPanelRows('approval'), screenTail: (surfaces.approval ?? '').split('\n').filter((line) => line.trim() !== '').slice(-8), stub: stubTui.seen.map((request) => ({ roles: request.roles, tools: request.tools, prompt: String(Array.isArray(request.prompt) ? request.prompt.map((item) => item?.content?.[0]?.text ?? item?.role).join(' | ') : request.prompt).slice(0, 160) })) }));
   check('negative control: a plain prompt with no approval-requiring tool shows no approval panel', surfaceHas('transcript', 'stub gateway answer: prompt=hello') && !surfaceHas('transcript', 'Allow once') && !surfaceHas('transcript', '3. Deny'), JSON.stringify((surfaces.transcript ?? '').split('\n').filter((line) => /Allow once|3\. Deny/.test(line))));
   check('host tools: fx_terminal_initialize accepted the page host tools before the TUI started (count 2)', surfaces.hostToolCount === 2, String(surfaces.hostToolCount));
   const tuiTools = [...new Set(stubTui.seen.flatMap((request) => request.tools))].sort();

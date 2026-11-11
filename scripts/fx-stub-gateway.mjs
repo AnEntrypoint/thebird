@@ -81,7 +81,7 @@ export function startFxStubGateway({ port = FX_STUB_PORT, host = '127.0.0.1' } =
         request = {};
       }
       const prompt = lastUserText(request.prompt);
-      seen.push({ streaming, authorized, prompt, tools: (request.tools ?? []).map((tool) => tool?.name) });
+      seen.push({ streaming, authorized, prompt, roles: (Array.isArray(prompt) ? prompt : []).map((item) => item?.role), tools: (request.tools ?? []).map((tool) => tool?.name) });
       if (!authorized) {
         res.writeHead(401, { ...CORS, 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: { message: 'invalid api key' } }));
