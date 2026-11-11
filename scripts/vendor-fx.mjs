@@ -46,7 +46,7 @@ export async function vendorFx() {
   for (const name of modules) copyFileSync(join(fxRepo, 'sdk', name), join(out, name));
   const manifest = {
     generator: 'scripts/vendor-fx.mjs',
-    source: 'local fx checkout',
+    source: process.env.FX_COMMIT ? `fx ${process.env.FX_COMMIT}` : 'local fx checkout',
     sdkApiVersion: 2,
     wasm: { name: 'fx-core.wasm', sha256: sha256(join(out, 'fx-core.wasm')) },
     term: { name: 'fx-term.wasm', surface: 'term', sha256: sha256(join(out, 'fx-term.wasm')) },
@@ -56,7 +56,15 @@ export async function vendorFx() {
   return { out, manifest };
 }
 
+export function verifyVendorFx() {
+  const manifest = JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8'));
+  const files = [manifest.wasm, manifest.term, ...manifest.modules];
+  const bad = files.filter((file) => sha256(join(out, file.name)) !== file.sha256);
+  if (bad.length) throw new Error(`fx vendor does not match its manifest: ${bad.map((file) => file.name).join(', ')}`);
+  return { out, manifest };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = await vendorFx();
-  console.log(`fx vendor written to ${result.out}: ${result.manifest.wasm.sha256.slice(0, 12)}`);
+  const result = process.argv.includes('--verify') ? verifyVendorFx() : await vendorFx();
+  console.log(`fx vendor ${process.argv.includes('--verify') ? 'verified' : 'written'} at ${result.out}: ${result.manifest.wasm.sha256.slice(0, 12)}`);
 }
