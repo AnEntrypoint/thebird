@@ -1611,3 +1611,10 @@ Change (`web/ghostty-screen.js`): the adapter's resize handler sets a flag, and 
 Probe after the change (`probe7.log`, PROBE-EXIT 0): `cols 70, rows 24, type alternate`. The last frame's rule rows are 70 characters. Both buffer rule rows read `rule 70` after trimming trailing spaces, which is what the witness reads (`translateToString(true)`). The raw line length is still 93 because of trailing spaces; the witness check passes on the trimmed text.
 
 Checks: `node --check web/ghostty-screen.js` passes.
+
+## fx TUI parity, Phase B: witness on fx 63225598 and 9c24e3c7
+
+- Run 3, on fx 63225598 (`/tmp/witness-run3.log`): PASS 211, FAIL 2, WITNESS-EXIT 1, WALL_SECONDS 942. FAIL rows: `a resize after the command palette keeps the welcome panel and the rules at 70 columns` (fx-owned); `approval: a bash tool call opens the approval panel` (fx-owned, `options: []`, the panel never draws). The typed-text row and the 70-column resize row pass.
+- Run 4, on fx 9c24e3c7 (`/tmp/witness-run4.log`, term wasm `73c5146…`): PASS 211, FAIL 2, WITNESS-EXIT 1, WALL_SECONDS 929. The same two fx-owned rows fail; no FAIL row is in the thebird wiring.
+- Phase A changes made in this step: none needed. Both FAIL rows are fx-owned and fx's code was not touched.
+- Term wasm: rebuilt from fx 9c24e3c7 (origin/main); the 12 SDK modules match that commit.
