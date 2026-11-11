@@ -1,15 +1,15 @@
 {
   "generator": "scripts/vendor-fx.mjs",
-  "source": "fx e92842c8",
+  "source": "fx 3c82305e",
   "sdkApiVersion": 2,
   "wasm": {
     "name": "fx-core.wasm",
-    "sha256": "c380e426133a2f612f97a9479f65f34e6a4bcbe0742a3cc223ff42e5b8979a49"
+    "sha256": "9f302cded7dfaaf142440d717c548ecbe67f0a8272eb20bae98cbae502de910d"
   },
   "term": {
     "name": "fx-term.wasm",
     "surface": "term",
-    "sha256": "101ab267a3e2fc1adeeae80238e8da569af0716895ca693f920e7b985205b6fb"
+    "sha256": "2e563088d032200b3477488ae6eafbc8921547b7636a9350bb02b4889033c9c7"
   },
   "modules": [
     {
