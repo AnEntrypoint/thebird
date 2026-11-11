@@ -1234,6 +1234,18 @@ group('python', async () => {
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
 });
 
+group('python-lazy', async () => {
+  const idle = await terminal([], {
+    interact: async ({ waitFor, pause }) => {
+      await waitFor("globalThis.thebird.text().includes('thebird /workspace>')", 120000);
+      await new Promise((ok) => setTimeout(ok, 8000));
+      await pause();
+    },
+  });
+  const bundleRequests = idle.logs.filter((line) => / net-request /.test(line) && line.includes('pyodide-minimal'));
+  check('a page start with no python call does not request the Pyodide bundle', bundleRequests.length === 0, JSON.stringify(bundleRequests.slice(0, 2)));
+});
+
 group('python-splash', async () => {
   const splashRun = {};
   await terminal([], {
