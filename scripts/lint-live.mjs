@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startRelay } from '../src/relay.js';
-import { runTerminal } from './browser-driver.mjs';
+import { closeBrowserTree, runTerminal, startBrowser } from './browser-driver.mjs';
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const COMMANDS = 'echo printf test seq sed awk grep sort uniq wc head tail cut tr find xargs tee ls cp mv rm mkdir touch cat basename dirname date env export type jq base64 md5sum sha256sum gzip gunzip sleep';
@@ -64,7 +64,14 @@ async function main() {
     const probes = [...PROBES, ['curl-cors', `curl -s http://127.0.0.1:${corsPort}/hello`]];
     const pairs = probes.flatMap(([id, command]) => [['run', `echo @@BEGIN-${id}`], ['run', command], ['run', `echo @@END-${id}`]]);
     say(`live: terminal starts with ${probes.length} probes, limit ${TERMINAL_LIMIT_MS} ms`);
-    const state = await runTerminal({ chrome, profile, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: TERMINAL_LIMIT_MS, onProgress: streamProbes });
+    const browser = await startBrowser({ chrome, profile });
+    let state;
+    try {
+      state = await runTerminal({ browser, url: relay.url + '?' + new URLSearchParams(pairs).toString(), timeoutMs: TERMINAL_LIMIT_MS, onProgress: streamProbes });
+    } finally {
+      await browser.close();
+      closeBrowserTree(browser.child.pid);
+    }
     streamProbes(state.out);
     say(`live: terminal finished, engine ${state.engine}`);
     console.log('LIVE-RESULT ' + JSON.stringify(blocksOf(state.out, probes)));
