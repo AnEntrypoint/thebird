@@ -1591,3 +1591,11 @@ Probe after the fix (`probe2.log`, PROBE-EXIT 0): `cols 93, rows 29, length 29, 
 Checks: `npm run check` and `npm run lint:comments` (see the commit log for their exit codes at this step).
 
 Still open, not changed in this step: the resize rows and the approval row. They stay fx-owned and wait on fx's push, as recorded earlier.
+
+## fx TUI parity, stretch 10 Phase A (step 3): probe results after the alternate-screen fix
+
+Probes (scratch, `/tmp/ghostty-check/probe*.mjs`, logs `probe2.log`, `probe4.log`):
+- Typed state at 93×29 (`probe2.log`, PROBE-EXIT 0): `type alternate, baseY 0`, `2 ┃ hello`. Typed-text row fixed in the browser.
+- Right after resize to 70×24 (`probe4.log`, PROBE-EXIT 0): `cols 70, rows 24, length 24, baseY 0, type alternate`. The welcome panel is present, but both rule lines are 93 characters, so the witness row's `^─{70}$` check fails. xterm reports 70 columns while those rows still hold 93-column rules. The frame writes only the 70 columns from the ghostty screen, so the 93-column tail in those rows comes from earlier output. Not fixed in this step: the cause is not yet isolated. Candidates are fx's redraw after the resize (its size comes from the resize event) and xterm's handling of rows wider than the new width. The witness row stays open.
+
+Still fx-owned and not changed here: palette-then-resize and the approval panel (see the earlier fx entries).
