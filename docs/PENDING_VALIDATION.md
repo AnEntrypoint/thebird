@@ -1577,3 +1577,17 @@ Grapheme (row, column) check, with combining and emoji in one screen (`verify.mj
 Also in this step: the palette SGR fix from `bef8562` was rechecked (`sgr.mjs`: 255 → `38;5;255`, 245 → `38;5;245`, true colour stays 24-bit). `node --check web/ghostty-screen.js` passes; `npm run lint:comments` exits 0.
 
 Not verified: the witness row itself (the Node replay cannot reach xterm's buffer). Step 2 runs the full witness on this tree.
+
+## fx TUI parity, stretch 10 Phase A (step 2): typed-text row fixed in the browser
+
+Browser probe (`/tmp/ghostty-check/probe.mjs`, scratch outside the repo; same relay, Chromium and `runTerminal` as the witness): open fx, resize xterm to 70×24 then 93×29, type `hello`, dump the whole xterm buffer. Before the fix the buffer was `length 31, baseY 2, type normal`, with two stale lines above the TUI (`0| 𝒇x v0.0.16 · Run /help …` and `1| …spaces… 𝒇x v0.0.16 · Run /help`), and `┃ hello` on buffer line 4. The witness reads the whole buffer, so those lines are the rows it checks.
+
+Cause: the 70-column frames wrapped in xterm before the resize to 93 and left stale lines in the normal buffer's scrollback. Xterm then reflowed them, so the TUI sat two lines down. Node cannot reproduce it: the Node model keeps no scrollback. A browser-like Node run with the real `ghosttyAdapter` and the same resize events passed (`browserlike.mjs`), which confirms the difference is xterm's normal-buffer scrollback.
+
+Fix: `web/fx-tui.js` `runFxTui` writes `\x1b[?1049h` before the TUI starts and `\x1b[?1049l` after it exits. The TUI now runs in xterm's alternate buffer, which has no scrollback and no reflow, and the shell's normal buffer comes back unchanged on exit. The witness row reads `buffer.active.type`, and the TUI state does not require `normal`.
+
+Probe after the fix (`probe2.log`, PROBE-EXIT 0): `cols 93, rows 29, length 29, baseY 0, viewportY 0, type alternate, cursor (7,2)`. Lines: `0 𝒇x v0.0.16 · Run /help …`, `2 ┃ hello`, `4 run /login · auto · grok-4.7`. The typed-text row's check (`some line startsWith '┃ hello'`) now holds in the buffer.
+
+Checks: `npm run check` and `npm run lint:comments` (see the commit log for their exit codes at this step).
+
+Still open, not changed in this step: the resize rows and the approval row. They stay fx-owned and wait on fx's push, as recorded earlier.

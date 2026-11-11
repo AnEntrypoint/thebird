@@ -55,6 +55,7 @@ const environmentFor = (fx) => ({
 
 export async function runFxTui(term, fx = {}) {
   const screen = new GhosttyScreen(await loadGhosttyVt(GHOSTTY_URL), term.cols, term.rows);
+  term.write("\x1b[?1049h");
   const app = await createFxTerminal({
     terminal: ghosttyAdapter(term, screen),
     wasm: WASM_URL,
@@ -69,5 +70,6 @@ export async function runFxTui(term, fx = {}) {
   } finally {
     app.abort();
     screen.free();
+    term.write("\x1b[?1049l");
   }
 }
