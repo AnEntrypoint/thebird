@@ -1682,3 +1682,9 @@ Every witness check that compares a width, a column or a position was read. Resu
 - `scripts/browser-driver.mjs`: no width or column checks.
 
 Nothing else in the witness counts screen width with string length or string index.
+
+## witness run 6, after the width sweep (`/tmp/witness-run6.log`)
+
+- Totals: PASS 213, FAIL 1, WITNESS-EXIT 1, WALL_SECONDS 1081.
+- The palette-closes resize row passes (validates 3f52ef5 and its code-point count).
+- The one FAIL: `approval: a bash tool call opens the approval panel with its options and its command row` (fx-owned, fx stretch B): `options: []`, the stub's bash request reaches the page and the panel never draws.
