@@ -1477,3 +1477,15 @@ Approval row, cause in fx (not fixed here): the ask session shows `ask · haiku 
 Palette-then-resize row, cause in fx (not fixed here): on fae75200 the term build still drops the welcome panel and the rules after the command palette is opened and closed and the page resizes to 70 by 24: `{"settled":false,"screen":["𝒇x v0.0.16 · Run /help for commands","","┃",""]}`. The plain resize without the palette passes in the same run. The fx change needed is in the resize path after a palette close, in `src/ui/resize_runtime.zig` (the fae75200 fix does not reach the term build's path). Witness output for the same row is in run 12.
 
 Not pushed: the push waits for the owner, because the rows that were to pass do not.
+
+## fx TUI parity, stretch 10 Phase A: ghostty-vt.wasm not available (no build, test or witness)
+
+Decision recorded by the owner: the page runs the full fx CLI as `fx-term.wasm` with output drawn through `ghostty-vt.wasm`, and thebird replaces the line builtins in `web/fx-in-page.js`.
+
+Blocked on the artifact: `ghostty-vt.wasm` is not in this environment. A search of the filesystem finds no `ghostty*` or `*wterm*` wasm. The fx checkout mentions ghostty only in source (`src/core/app/app_input_runtime.zig`, `src/ui/shell_runtime.zig`, `src/ui/terminal/theme_protocol.zig`) and in tests, and the system has only a terminfo entry. So the vendoring step cannot run, and no vendored file was added. The owner needs to name the repo or the release that carries `ghostty-vt.wasm`, or confirm xterm.js (`web/vendor/xterm/`, already the VT surface for `fx-term.wasm` via `web/vendor/fx/wasm-terminal.js`) as the drawing surface.
+
+What is already in place, so the page-wiring step is smaller than the decision assumes:
+- A bare `fx` already runs `fx-term.wasm` as the TUI (`runFxTui`, `web/fx-tui.js`). `fx --version`, `fx check` and `fx ask` stay on the core line builtin (`web/fx-in-page.js`, `fx-core.wasm`), and the witness checks those lines by name, so replacing them is a behaviour change, not only a wiring change.
+- Screen-by-screen witnesses already exist in `scripts/witness.mjs`: startup (`fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page`), the palette (`escape closes the command palette…`), the resize (`resizing the page reflows the TUI to 70 by 24…`), the palette-then-resize (`a resize after the command palette…`, fx-owned), the approval panel (`approval: a bash tool call opens the approval panel…`, fx-owned), the ask panel (`ask: the question is shown, and the answer reaches the stub…`), the transcript (`transcript: the prompt and the stub answer appear in the TUI transcript`) and the full-transcript screen (`Ctrl-O opens the full transcript…`).
+
+Changes in this Phase A: this section only. Code, vendored files and witnesses are unchanged. Witness: none run, per Phase A. Waiting on: the owner's answer on `ghostty-vt.wasm`, and fx's `tool_admission.zig` and `resize_runtime.zig` fixes for the two fx-owned rows. Nothing is pushed; the nine local commits and this record go out together after both rows pass.
