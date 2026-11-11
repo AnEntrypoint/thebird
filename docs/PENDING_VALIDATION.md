@@ -1630,3 +1630,21 @@ Run-1 wall time (`/tmp/witness-run1.log`, birth 02:00:33, last write 03:48:18, n
 - Cause (best supported by these logs): the run was a background job in a shell that was stopped and then torn down at the session boundary (its later notification said "stopped, no completion record"). The 1800 s cap did not run in wall-clock order, so the process kept running until the teardown at 03:48. The log lacks timestamps, so this cannot be proven from the file alone.
 - Runs 2 to 4, under the same `timeout 3600`, ended on their own: WALL_SECONDS 1018, 942 and 929.
 - Action: no witness code change for the timing. The bounded background job pattern (`date +%s` start, `WALL_SECONDS` on exit) is in place for every run since run 2, and that pattern is what the Phase B runs use.
+
+## fx TUI parity, Phase A: palette-then-resize row, trace and cause
+
+Row (`scripts/witness.mjs`): `a resize after the command palette keeps the welcome panel and the rules at 70 columns`. It needs `Welcome to fx` in the buffer and two 70-column rule rows after a palette open, Escape, a backspace and a resize to 70×24.
+
+Trace (`/tmp/ghostty-check/probe8.mjs`, log `probe8.log`, PROBE-EXIT 0; recorded frames via a `term.write` wrapper). Buffer state at each step, 93×29 until the resize:
+- S0 welcome: `welcome true`, two 93-column rules, `Welcome to fx` at row 4.
+- S1 after typing `hello`: `welcome false`, no rules. The welcome panel is gone.
+- S2 palette (`/`): `Commands 49 · type to filter`, rules back at 93 columns in the palette frame, no welcome.
+- S3 Escape: no welcome, no rules.
+- S4 backspace to an empty input: still no welcome, no rules.
+- S5 resize to 70×24: `cols 70, rows 24, welcome false, rules 0`.
+
+Cause: the welcome panel leaves on the first keystroke (S1), in fx's own output. The Node replay of fx's raw stream from `fx-node.mjs` already shows the welcome gone at `key h` (see `replay.mjs` output in this step's notes), so the wrapper is not removing it: the frame it paints is the state fx drew. The palette-then-resize row expects fx to show the welcome panel again after a palette round trip, and fx's state machine does not do that. The row therefore fails on fx's state, not on the wrapper or the resize path. The 70-column fix from `93d1a84` does not change this row, because no rule rows exist to resize.
+
+Action: no code change in thebird for this row, since the trace shows the wrapper is faithful to fx's output. The row needs fx's decision on whether the welcome panel should return after the palette and the first keystroke; this stays open and is not relaxed.
+
+Approval row: unchanged, fx-owned.
