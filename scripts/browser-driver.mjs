@@ -179,6 +179,7 @@ export async function startBrowser({ chrome, profile }) {
           owners.set(params.sessionId, owners.get(from) ?? from);
           send('Runtime.enable', {}, params.sessionId).catch(() => {});
           send('Log.enable', {}, params.sessionId).catch(() => {});
+          send('Network.enable', {}, params.sessionId).catch(() => {});
           blockRequests(params.sessionId, owner.blockUrls);
         }
         if (owner?.blockUrls.length) send('Runtime.runIfWaitingForDebugger', {}, params.sessionId).catch(() => {});
@@ -189,6 +190,7 @@ export async function startBrowser({ chrome, profile }) {
       const origin = owners.has(from) ? 'worker' : 'page';
       if (method === 'Runtime.consoleAPICalled') owner.logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
       else if (method === 'Runtime.exceptionThrown') owner.logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
+      else if (method === 'Network.responseReceived' && origin === 'worker') owner.logs.push(`worker response ${params.response.status} ${params.response.url}`);
       else if (method === 'Log.entryAdded') owner.logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
     };
     socket.onmessage = ({ data }) => {

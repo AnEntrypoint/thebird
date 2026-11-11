@@ -37,6 +37,19 @@ const textOf = (turn) => (async () => {
   return text.trimEnd();
 })();
 
+const GATEWAY_PATHS = ['/v4/ai/language-model', '/v3/ai/language-model'];
+const CLI_MODEL_METADATA = {
+  'claude-hy4[1m]': { contextWindow: 1000000, maxOutputTokens: 64000, supportsToolUse: true, supportsVision: true },
+};
+
+const providerOf = (options) => {
+  if (options.provider) return options.provider;
+  const url = options.gatewayChatUrl ? new URL(options.gatewayChatUrl) : null;
+  if (!url || url.hostname === 'ai-gateway.vercel.sh' || GATEWAY_PATHS.some((path) => url.pathname.endsWith(path))) return undefined;
+  const baseUrl = options.gatewayChatUrl.replace(/\/chat\/completions\/?$/, '');
+  return { name: 'gy4', baseUrl, models: { [options.model]: options.modelMetadata ?? CLI_MODEL_METADATA[options.model] ?? {} } };
+};
+
 const customEngine = ({ provider, apiKey }) => ({ provider, credentials: () => ({ apiKey }) });
 const gatewayEngine = ({ apiKey, gatewayChatUrl }) => ({ apiKey, gatewayChatUrl });
 
@@ -45,9 +58,10 @@ const ask = async (argv, signal) => {
   if (!prompt) throw new Error(USAGE);
   if (!supportsJspi()) throw new Error('fx needs WebAssembly JSPI: open thebird in Chrome or Edge 137+');
   const options = config();
+  const provider = providerOf(options);
   const engine = await createFxEngine({
     wasm: WASM_URL,
-    ...(options.provider ? customEngine(options) : gatewayEngine(options)),
+    ...(provider ? customEngine({ ...options, provider }) : gatewayEngine(options)),
     model: options.model ?? DEFAULT_MODEL,
     tools: PAGE_HOST_TOOLS,
   }, wasmRuntimeFactory());

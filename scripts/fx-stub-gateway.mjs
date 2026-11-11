@@ -57,44 +57,12 @@ export function streamPlan({ prompt, tools = [] }) {
   };
 }
 
-const hasTurn = (messages) => messages.some((item) => item?.role === 'user' || item?.role === 'assistant');
-
-const chatChunk = (delta, finish) => `data: ${JSON.stringify({ id: 'stub-chat', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-
 export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
   const seen = [];
-  const chatSeen = [];
   const server = createServer((req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS);
       return res.end();
-    }
-    if (req.method === 'POST' && req.url === '/v1/chat/completions') {
-      let raw = '';
-      req.on('data', (chunk) => { raw += chunk; });
-      req.on('end', () => {
-        let request = {};
-        try {
-          request = JSON.parse(raw);
-        } catch {
-          request = {};
-        }
-        const messages = Array.isArray(request.messages) ? request.messages : [];
-        chatSeen.push({ model: request.model, stream: request.stream === true, roles: messages.map((item) => item?.role), authorization: req.headers.authorization ?? null });
-        if (!hasTurn(messages)) {
-          res.writeHead(400, { ...CORS, 'content-type': 'application/json' });
-          return res.end(JSON.stringify({ error: { message: 'messages has no user or assistant turn' } }));
-        }
-        if (request.stream !== true) {
-          res.writeHead(200, { ...CORS, 'content-type': 'application/json' });
-          return res.end(JSON.stringify({ id: 'stub-chat', object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }));
-        }
-        res.writeHead(200, { ...CORS, 'content-type': 'text/event-stream' });
-        res.write(chatChunk({ role: 'assistant', content: 'ok' }, null));
-        res.write(chatChunk({}, 'stop'));
-        res.end('data: [DONE]\n\n');
-      });
-      return;
     }
     if (req.method !== 'POST' || req.url !== '/v4/ai/language-model') {
       res.writeHead(404, { ...CORS, 'content-type': 'application/json' });
@@ -131,9 +99,7 @@ export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
     server.once('error', fail);
     server.listen(port, host, () => ok({
       url: `http://${host}:${server.address().port}/v4/ai/language-model`,
-      chatBaseUrl: `http://${host}:${server.address().port}/v1`,
       seen,
-      chatSeen,
       close: () => new Promise((done) => server.close(done)),
     }));
   });

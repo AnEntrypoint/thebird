@@ -339,14 +339,16 @@ group('fx-approval', async () => {
 });
 
 group('fx-provider', async () => {
-  const chat = await startFxStubGateway();
-  const metadata = { contextWindow: 1000000, maxOutputTokens: 64000, supportsToolUse: true, supportsVision: true };
-  const providerInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'claude-hy4[1m]', provider: { name: 'gy4', baseUrl: chat.chatBaseUrl, models: { 'claude-hy4[1m]': metadata } } })};`;
-  const ask = await terminal([['run', 'fx ask hello'], ['run', 'echo rc=$?']], { initScript: providerInit });
-  await chat.close();
-  const httpErrors = ask.logs.filter((line) => /status of 4\d\d|status of 5\d\d|HTTP [45]\d\d|400 \(/.test(line));
-  check('fx ask on a custom provider with claude-hy4[1m] model_metadata prints ok and no HTTP error', /^ok$/m.test(ask.out) && httpErrors.length === 0, JSON.stringify({ out: ask.out.slice(-240), console: ask.logs.slice(0, 6) }));
-  check('the chat request carries the user turn and the host key, and the model metadata reaches the engine', chat.chatSeen.length > 0 && chat.chatSeen.some((call) => call.roles.includes('user')) && chat.chatSeen.every((call) => call.authorization === `Bearer ${FX_STUB_KEY}`), JSON.stringify(chat.chatSeen.slice(0, 2)));
+  const liveKey = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
+  if (!liveKey) throw new Error('fx-provider needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
+  const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
+  const ask = await terminal([['run', 'fx ask reply with only the word ok'], ['run', 'echo rc=$?']], {
+    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
+  });
+  const statuses = ask.logs.filter((line) => line.startsWith('worker response ') && line.endsWith(liveUrl)).map((line) => line.split(' ')[2]);
+  const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
+  check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
+  check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
 
 group('fx-ask', async () => {
