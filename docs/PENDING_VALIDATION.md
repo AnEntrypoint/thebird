@@ -1695,3 +1695,10 @@ Nothing else in the witness counts screen width with string length or string ind
 2. Superseded wording in this file: entries that say "not run in this step" or "next step" for the witness, or for the palette, typed-text and resize rows, were written before later steps. The later entries (post-Q10 Phase B, witness runs 5 and 6, and the sweep) are current. Documentation only; witness: none.
 
 Held (depends on fx's unpushed code): the fx-term.wasm rebuild from fx's stretch A/B commit, and its witness. Approval row: fx-owned, reported from the witness.
+
+## witness run 7, reachable-work Phase B (`/tmp/witness-run7.log`)
+
+- Build: `npm run check` exit 0; `lint:comments` 0 comments in 101 repo-owned files; `lint:architecture` 357 claims pass, 0 fail.
+- Totals: PASS 213, FAIL 1, WITNESS-EXIT 1, WALL_SECONDS 877.
+- Own rows: all pass, including the typed-text row, the 70-column resize, the palette-closes row, the grapheme row, the palette colour row and the Ctrl-C rows, with the alternate-screen mirror removed.
+- The one FAIL: `approval: a bash tool call opens the approval panel with its options and its command row` (fx-owned, reported from the witness): `options: []`, the stub's bash request reaches the page and the panel never draws.
