@@ -1571,6 +1571,25 @@ if (haveChrome && selected.some((entry) => entry.browser)) {
 const queue = selected.filter((entry) => !entry.browser || haveChrome);
 const outcomes = [];
 const startedAll = performance.now();
+const treeRss = { mb: 0, processes: 0 };
+const sampleTreeRss = () => {
+  const rows = spawnSync('ps', ['-eo', 'pid=,ppid=,rss='], { encoding: 'utf8' }).stdout.trim().split('\n').map((line) => line.trim().split(/\s+/).map(Number));
+  const children = new Map();
+  for (const [pid, ppid] of rows) children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+  const rssOf = new Map(rows.map(([pid, , rss]) => [pid, rss]));
+  const tree = [];
+  const stack = [process.pid];
+  while (stack.length) {
+    const pid = stack.pop();
+    tree.push(pid);
+    stack.push(...(children.get(pid) ?? []));
+  }
+  const kb = tree.reduce((sum, pid) => sum + (rssOf.get(pid) ?? 0), 0);
+  if (kb / 1024 > treeRss.mb) treeRss.mb = kb / 1024;
+  treeRss.processes = Math.max(treeRss.processes, tree.length - 1);
+};
+const sampler = setInterval(sampleTreeRss, 500);
+sampler.unref();
 await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () => {
   while (queue.length) {
     const entry = queue.shift();
@@ -1582,6 +1601,8 @@ const passed = outcomes.flatMap((outcome) => outcome.results).filter((result) =>
 console.log('\nGROUP WALL TIMES (slowest first)');
 for (const outcome of [...outcomes].sort((a, b) => b.seconds - a.seconds)) console.log(`${outcome.seconds.toFixed(1).padStart(8)}s  ${outcome.name}`);
 console.log(`\ntotals: PASS ${passed} FAIL ${failures} GROUPS ${outcomes.length} WALL ${((performance.now() - startedAll) / 1000).toFixed(1)}s`);
+clearInterval(sampler);
+console.log(`peak witness tree RSS ${treeRss.mb.toFixed(0)} MB across ${treeRss.processes} descendant processes`);
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
 process.exitCode = failures ? 1 : 0;
