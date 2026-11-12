@@ -61,20 +61,21 @@ function check(name, ok, detail = '') {
   console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
 }
 
-let sharedBrowser = null;
 const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
-async function sharedBrowserFor() {
-  sharedBrowser ??= await startBrowser({ chrome, profile: sharedProfile });
-  return sharedBrowser;
-}
+let sharedBrowserStart = null;
+const sharedBrowserFor = () => {
+  sharedBrowserStart ??= startBrowser({ chrome, profile: sharedProfile });
+  return sharedBrowserStart;
+};
 async function disposeContext(context) {
-  if (!context.browserContextId || !sharedBrowser) return;
-  await sharedBrowser.send('Target.disposeBrowserContext', { browserContextId: context.browserContextId }).catch(() => {});
+  if (!context.browserContextId || !sharedBrowserStart) return;
+  const browser = await sharedBrowserStart;
+  await browser.send('Target.disposeBrowserContext', { browserContextId: context.browserContextId }).catch(() => {});
   context.browserContextId = null;
 }
 async function browserFor(restart) {
   const context = current();
-  if (restart) await disposeContext(context);
+  if (restart === 'fresh') await disposeContext(context);
   const browser = await sharedBrowserFor();
   if (!context.browserContextId) {
     const { browserContextId } = await browser.send('Target.createBrowserContext');
@@ -1636,7 +1637,7 @@ console.log(`\ntotals: PASS ${passed} FAIL ${failures} GROUPS ${outcomes.length}
 clearInterval(sampler);
 console.log(`peak witness tree RSS ${treeRss.mb.toFixed(0)} MB across ${treeRss.processes} descendant processes`);
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
-await sharedBrowser?.close();
+await (await sharedBrowserStart)?.close();
 for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
 rmSync(sharedProfile, { recursive: true, force: true });
-process.exitCode = failures ? 1 : 0;
+process.exit(failures ? 1 : 0);
