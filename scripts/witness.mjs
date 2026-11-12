@@ -675,7 +675,7 @@ group('node-txiki-npm-registry', async () => {
   ]);
   const registryOut = registry.out;
   check('.npmrc _authToken failure names the registry URL and says why the browser refused it', /npm: request to https:\/\/registry\.npmjs\.org\/debug failed: .*Authorization header/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify(registryOut.slice(0, 600)));
-  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify(registryOut.slice(0, 400)));
+  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify({ out: registryOut.slice(0, 400), net: registry.logs.filter((line) => /registry\.npmjs\.org/.test(line)).slice(0, 12) }));
 });
 
 group('node-txiki-npm', async () => {
