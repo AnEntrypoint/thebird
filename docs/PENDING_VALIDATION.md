@@ -1788,3 +1788,15 @@ Witness runs on this stretch's tree:
 - Driver change needed for that row: `scripts/browser-driver.mjs` auto-attaches nested workers when the page has `blockUrls`, so the Pyodide worker's requests reach the log and the block applies to it. Before, the worker's requests were not logged at all.
 - Phase B run (`--group=site-package,site-manifest-retry,python-lazy,python-warm,pip-fallback,pip`): `totals: PASS 16 FAIL 0 GROUPS 6 WALL 169.8s`.
 - Not run in Phase B: the `pyodide-lock` group, whose lock fallback changed in this stretch.
+
+### fx TUI on the configured provider, and the Pyodide-lock fallback row (Phase A and B)
+
+- Re-vendored fx-term.wasm and fx-core.wasm from fx `22d48e96` (origin main), with `node scripts/vendor-fx.mjs --verify` passing and `manifest.json` recording `fx 22d48e96`. The rebuild also changed `fx-core.wasm`, because it is built from the same commit.
+- `web/fx-provider.js` (new): the provider mapping moved out of `web/fx-in-page.js`, so `fx ask` and the TUI use one `providerOf`. `providerOf` now defaults the model to `DEFAULT_MODEL` when none is given; before, a missing model produced an `undefined` key. `providerRegistry` writes the one-provider registry (`protocol: openai-chat-completions`, `auth: { type: none }`, snake_case model metadata). `providerFetch` adds `Authorization: Bearer <key>` only to URLs under the provider's base URL.
+- `web/fx-in-page.js`: imports the shared module. `fx ask` behaviour is unchanged except the default model above.
+- `web/fx-tui.js`: when a provider applies, the TUI passes `FX_CONFIGURED_PROVIDERS`, `FX_PROVIDER` and `FX_MODEL` (plus `FX_PERMISSION_MODE` when set) and the key-adding `fetch`. The gateway path keeps the old variables, so the existing TUI rows are unaffected.
+- `AGENTS.md`: lists `web/fx-provider.js` in the browser runtime (one line, committed index-only against HEAD; the other session's hunks are untouched).
+- Row `fx-tui-registry` (new): a chat-completions stub on loopback records the request. The TUI types `hi`, and the stub's reply appears on the screen. Checks: `input true, reply true`; `count 1, model relay-model, user hi, auth present`.
+- Two faults in my first Phase B run, both fixed: (a) the live row matched `net-response` lines by their URL ending, but those lines now end with the `from-sw`/`from-network` marker, so its status list was empty; it now matches field 5 exactly. (b) The registry row waited for a welcome panel that is not drawn once a provider is configured; it now waits for the input box.
+- Phase B first run (`--group=fx-builtin,fx-tui,fx-graphemes,fx-tui-registry,fx-approval,fx-provider,fx-ask,pyodide-lock`): `totals: PASS 26 FAIL 2 GROUPS 8 WALL 246.6s`; the two failures are the faults above. The Pyodide-lock row passed: `the micropip wheel the page loads is the one pinned in the Pyodide lock`.
+- Phase B rerun of the two changed rows (`--group=fx-tui-registry,fx-provider`): `totals: PASS 4 FAIL 0 GROUPS 2 WALL 2.9s`. The wall time is the printed figure; the checks above show the requests and the reply.

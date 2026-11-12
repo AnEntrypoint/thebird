@@ -290,6 +290,54 @@ group('fx-graphemes', async () => {
   check('combining and emoji text lands in the TUI input box as whole graphemes, in a browser session', graphemes.screen?.split('\n').some((line) => line.startsWith('┃ ' + GRAPHEMES)) === true, JSON.stringify((graphemes.screen ?? '').split('\n').slice(0, 3)));
 });
 
+async function startChatStub(reply) {
+  const requests = [];
+  const server = createServer(async (req, res) => {
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-headers', 'authorization, content-type');
+    res.setHeader('access-control-allow-methods', 'POST, OPTIONS');
+    if (req.method === 'OPTIONS') return res.writeHead(204).end();
+    if (req.method !== 'POST' || req.url !== '/v1/chat/completions') return res.writeHead(404).end();
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    requests.push({ authorization: req.headers.authorization ?? null, body: JSON.parse(raw) });
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(`data: ${JSON.stringify({ id: 'chat-1', choices: [{ index: 0, delta: { role: 'assistant', content: reply }, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+    res.end('data: [DONE]\n\n');
+  });
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  return { url: `http://127.0.0.1:${server.address().port}/v1/chat/completions`, requests, close: () => new Promise((ok) => { server.closeAllConnections(); server.close(ok); }) };
+}
+
+group('fx-tui-registry', async () => {
+  const reply = 'hello from the registry provider';
+  const stub = await startChatStub(reply);
+  const surfaces = {};
+  try {
+    await terminal([], {
+      timeoutMs: COLD_START_MS,
+      initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'relay-model', gatewayChatUrl: stub.url })};`,
+      interact: async ({ type, press, evaluate, waitFor }) => {
+        const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+        await type('fx');
+        await press('Enter');
+        surfaces.inputReady = await settle(`globalThis.thebird.text().includes('┃')`, 120000);
+        await type('hi');
+        await press('Enter');
+        surfaces.reply = await settle(`globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(reply)}))`, 90000);
+        surfaces.screen = await evaluate(TUI_SCREEN);
+      },
+    });
+    const sent = stub.requests[0];
+    const userTurn = sent?.body?.messages?.find((message) => message.role === 'user');
+    check('the TUI types hi and the registry provider replies on the screen', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}`);
+    check('the TUI sends one chat-completions request for hi, with the model and the page key', stub.requests.length === 1 && sent.body.model === 'relay-model' && userTurn?.content === 'hi' && sent.authorization === `Bearer ${FX_STUB_KEY}`, JSON.stringify({ count: stub.requests.length, model: sent?.body?.model, user: userTurn?.content, auth: sent?.authorization ? 'present' : null }));
+  } finally {
+    await stub.close();
+  }
+});
+
 group('fx-approval', async () => {
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
@@ -354,7 +402,7 @@ group('fx-provider', async () => {
   const ask = await terminal([['run', 'fx ask reply with only the word ok'], ['run', 'echo rc=$?']], {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
   });
-  const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.endsWith(liveUrl)).map((line) => line.split(' ')[4]);
+  const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
   check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
   check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
