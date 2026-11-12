@@ -14,6 +14,7 @@ const MIME = {
   txt: 'text/plain; charset=utf-8',
 };
 const NOT_PACKED = new Set([MANIFEST, 'thebird-package.tar.br']);
+const MANIFEST_ATTEMPTS = 3;
 
 let loaded = null;
 const digest = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -37,10 +38,19 @@ function untar(tar, count) {
   return files;
 }
 
+async function fetchManifest() {
+  for (let attempt = 1; ; attempt++) {
+    const response = await fetch(scoped(MANIFEST), { cache: 'no-cache' }).catch(() => null);
+    if (response?.ok) return response.json();
+    if (response?.status === 404) return null;
+    if (attempt === MANIFEST_ATTEMPTS) throw new Error(`manifest ${response ? `HTTP ${response.status}` : 'network error'}`);
+    await new Promise((ok) => setTimeout(ok, 250 * 2 ** (attempt - 1)));
+  }
+}
+
 async function loadPackage() {
-  const manifestResponse = await fetch(scoped(MANIFEST), { cache: 'no-cache' });
-  if (!manifestResponse.ok) return null;
-  const manifest = await manifestResponse.json();
+  const manifest = await fetchManifest();
+  if (!manifest) return null;
   const packageUrl = scoped(manifest.package.split('/').pop());
   const cacheName = `${CACHE_PREFIX}${manifest.packageSha256}`;
   const cache = await caches.open(cacheName);

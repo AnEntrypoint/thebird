@@ -1244,10 +1244,18 @@ group('python', async () => {
 });
 
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
-async function servePages() {
+async function servePages({ manifestFailures = 0 } = {}) {
   const pagesDir = await sharedPages();
+  const served = { manifest: 0 };
   const server = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+    if (pathname === '/thebird/thebird-package.json') {
+      served.manifest++;
+      if (served.manifest <= manifestFailures) {
+        res.writeHead(503).end();
+        return;
+      }
+    }
     const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
     const file = rest === null ? null : join(pagesDir, rest);
     if (!file || !file.startsWith(pagesDir) || !existsSync(file) || statSync(file).isDirectory()) {
@@ -1258,8 +1266,27 @@ async function servePages() {
     res.end(readFileSync(file));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { dir: pagesDir, url: `http://127.0.0.1:${server.address().port}/thebird/`, close: () => server.close() };
+  return { dir: pagesDir, url: `http://127.0.0.1:${server.address().port}/thebird/`, served, close: () => server.close() };
 }
+
+group('site-manifest-retry', async () => {
+  const pages = await servePages({ manifestFailures: 2 });
+  try {
+    await runAt(pages.url, { timeoutMs: COLD_START_MS, label: 'site-manifest-retry first' });
+    let controlled = false;
+    const second = await runAt(pages.url, {
+      timeoutMs: COLD_START_MS,
+      label: 'site-manifest-retry second',
+      interact: async ({ evaluate }) => {
+        controlled = await evaluate('Boolean(navigator.serviceWorker.controller)');
+      },
+    });
+    const webResponses = second.logs.filter((line) => / net-response /.test(line) && line.includes('/thebird/web/'));
+    check('a transient 503 on the site manifest is retried, and the second page start is served from the package', controlled && webResponses.length > 0 && webResponses.every((line) => line.endsWith('from-sw')) && pages.served.manifest >= 3, `manifest requests ${pages.served.manifest}, ${webResponses.length} web responses`);
+  } finally {
+    pages.close();
+  }
+});
 
 group('site-package', async () => {
   const pages = await servePages();
@@ -1325,10 +1352,33 @@ group('python-splash', async () => {
   check('a Python bundle that fails to download shows its error as plain text in the splash and in python3 output', bundleFailed.splash === 'Failed to fetch' && bundleFailed.out.includes('python3: Failed to fetch'), JSON.stringify(bundleFailed.splash));
 });
 
+async function fetchWithFallback(urls) {
+  let failure = null;
+  for (const url of urls) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await fetch(url, { signal: AbortSignal.timeout(60000) });
+      } catch (error) {
+        failure = error;
+      }
+    }
+  }
+  throw failure;
+}
+
+group('pip-fallback', async () => {
+  const run = await terminal([['run', 'pip --version']], { blockUrls: ['https://cdn.jsdelivr.net/pyodide/v314.0.7/full/micropip-*'] });
+  const requestIds = (needle) => run.logs.filter((line) => / net-request / .test(line) && line.includes(needle)).map((line) => line.split(' ')[2]);
+  const failedIds = new Set(run.logs.filter((line) => / net-failed /.test(line)).map((line) => line.split(' ')[2]));
+  const blockedWheel = requestIds('cdn.jsdelivr.net/pyodide/v314.0.7/full/micropip-0.11.1').filter((id) => failedIds.has(id)).length;
+  const fallbackWheel = requestIds('fastly.jsdelivr.net/pyodide/v314.0.7/full/micropip-0.11.1').length;
+  check('pip falls back past a blocked jsDelivr micropip wheel: one retry on it, then fastly.jsdelivr.net', /^pip \d+\.\d+\.\d+ \(micropip, in-page\)$/m.test(run.out) && blockedWheel >= 2 && fallbackWheel >= 1, `blocked ${blockedWheel}, fastly ${fallbackWheel}, out ${run.out.split('\n').slice(-2).join(' / ').slice(0, 120)}`);
+});
+
 group('pyodide-lock', async () => {
   const PYODIDE_LOCK_URL = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide-lock.json';
   const PYODIDE_LOCK_SHA256 = '5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010';
-  const pyodideLockBytes = Buffer.from(await fetch(PYODIDE_LOCK_URL, { signal: AbortSignal.timeout(60000) }).then((response) => response.arrayBuffer()).catch(() => new ArrayBuffer(0)));
+  const pyodideLockBytes = Buffer.from(await fetchWithFallback([PYODIDE_LOCK_URL, PYODIDE_LOCK_URL.replace('cdn.jsdelivr.net', 'fastly.jsdelivr.net')]).then((response) => response.arrayBuffer()).catch(() => new ArrayBuffer(0)));
   const pyodideLockDigest = createHash('sha256').update(pyodideLockBytes).digest('hex');
   const pyodideLock = pyodideLockDigest === PYODIDE_LOCK_SHA256 ? JSON.parse(pyodideLockBytes.toString('utf8')) : null;
   check('the micropip wheel the page loads is the one pinned in the Pyodide lock', pyodideLock !== null && readFileSync(join(root, 'web', 'python-worker.js'), 'utf8').includes(`'${pyodideLock.packages.micropip.file_name}'`), pyodideLock ? pyodideLock.packages.micropip.file_name : `lock sha256 ${pyodideLockDigest} from ${PYODIDE_LOCK_URL} is not the pinned ${PYODIDE_LOCK_SHA256}`);

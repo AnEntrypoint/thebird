@@ -181,6 +181,7 @@ export async function startBrowser({ chrome, profile }) {
           send('Log.enable', {}, params.sessionId).catch(() => {});
           send('Network.enable', {}, params.sessionId).catch(() => {});
           blockRequests(params.sessionId, owner.blockUrls);
+          if (owner.blockUrls.length) send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, params.sessionId).catch(() => {});
         }
         if (owner?.blockUrls.length) send('Runtime.runIfWaitingForDebugger', {}, params.sessionId).catch(() => {});
         return;

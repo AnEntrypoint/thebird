@@ -1,5 +1,5 @@
 const WORKSPACE = '/workspace';
-const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
+const PYODIDE_HOSTS = ['https://cdn.jsdelivr.net/pyodide/v314.0.7/full/', 'https://fastly.jsdelivr.net/pyodide/v314.0.7/full/'];
 const INDEX_URL = 'https://pyodide.invalid/v314.0.7/';
 const MICROPIP_WHEEL = 'micropip-0.11.1-py3-none-any.whl';
 const SKIPPED = /^\/workspace\/\.(thebird|git)(\/|$)/;
@@ -148,8 +148,22 @@ async function capture(body) {
   };
 }
 
+async function fetchPyodideFile(name) {
+  let failure = null;
+  for (const base of PYODIDE_HOSTS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await fetch(base + name);
+      } catch (error) {
+        failure = error;
+      }
+    }
+  }
+  throw failure;
+}
+
 async function installMicropip(py) {
-  const response = await fetch(PYODIDE_CDN + MICROPIP_WHEEL);
+  const response = await fetchPyodideFile(MICROPIP_WHEEL);
   if (!response.ok) throw new Error(`micropip wheel: HTTP ${response.status}`);
   py.unpackArchive(await response.arrayBuffer(), 'wheel');
 }
