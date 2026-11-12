@@ -1837,3 +1837,11 @@ Witness runs on this stretch's tree:
 - Evidence (npm group alone, witness wall 1.6 s): the 404 request returns `404 https://registry.npmjs.org/thebird-no-such-package-404 from-network` with `access-control-allow-origin: *`; the `debug` request with the invalid token ends in `net::ERR_FAILED` (the browser refuses the Authorization header, the auth row's expected cause). After the 404 the engine logs `net::ERR_ABORTED` for the same request: it drops the body read after the status, and the row still passes.
 - Cause of the earlier intermittent `Failed to fetch` (full runs 2 only): not reproduced. Runs 3, 4 and alone passed. The logging now records status, headers and any net error on every run, so the next failure names the Chromium error.
 - python `Page.navigate did not answer within 60000 ms` (full run 4 only): not reproduced. The `python` group alone passes (witness wall 9.0 s, `totals: PASS 6 FAIL 0`, combined with `node-txiki-npm-registry`). Cause unproven. The 60 s bound is the navigate call's own timeout on a new page target. It fired during the full run, when the shared browser served many groups at once. The next full run decides it.
+
+### Full witness run 5 (f8d2189): python Page.navigate settled, not reproduced
+
+- `totals: PASS 224 FAIL 3 GROUPS 63 WALL 819.4s`; `WITNESS-EXIT 1`. The witness wall is 819.4 s, the longest step of this run.
+- python row: `GROUP python wall 8.1s`, passed; no `Page.navigate did not answer` line in this run. The python group alone passed earlier (9.0 s). Across runs 4 and 5, the 60 s navigate timeout appeared once, in run 4 only. Its cause is still unproven, and no code change was made for it.
+- Failures: the three live 8793 rows (`fx ask on the live 8793 gateway`, `the 8793 chat request returns 200`, `the TUI on the live 8793 gateway`), blocked on the hy4 server outside this repo.
+- npm 404 row: passed in this run.
+- Push: held. The full witness does not exit 0.
