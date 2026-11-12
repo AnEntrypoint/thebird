@@ -338,6 +338,28 @@ group('fx-tui-registry', async () => {
   }
 });
 
+group('fx-tui-live', async () => {
+  const liveKey = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
+  if (!liveKey) throw new Error('fx-tui-live needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
+  const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
+  const surfaces = {};
+  await terminal([], {
+    timeoutMs: COLD_START_MS,
+    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      await type('fx');
+      await press('Enter');
+      surfaces.inputReady = await settle(`globalThis.thebird.text().includes('┃')`, 120000);
+      await type('hi');
+      await press('Enter');
+      surfaces.reply = await settle(`/┃ hi[\\s\\S]*\\n {2}(?!\\d+s )\\S/.test(globalThis.thebird.text())`, 120000);
+      surfaces.screen = await evaluate(TUI_SCREEN);
+    },
+  });
+  check('the TUI on the live 8793 gateway answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(0, 4).join(' / ').slice(0, 160)}`);
+});
+
 group('fx-approval', async () => {
   const stubTui = await startFxStubGateway();
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
