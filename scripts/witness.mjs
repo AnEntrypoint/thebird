@@ -470,7 +470,7 @@ group('fx-ask', async () => {
 
 group('site', async () => {
 const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
-  const pagesDir = await sharedPages();
+  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-own-')));
   const pagesServer = createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
     const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
