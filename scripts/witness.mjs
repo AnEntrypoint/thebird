@@ -668,14 +668,19 @@ group('host-tools', async () => {
   check('in-page bash reports host tools it lacks as exit 127', host.out.includes('ruby: command not found'));
 });
 
+const registryNet = (logs) => {
+  const ids = new Set(logs.filter((line) => line.startsWith('worker net-') && line.includes('https://registry.npmjs.org/')).map((line) => line.split(' ')[2]));
+  return { requests: ids.size, lines: logs.filter((line) => line.startsWith('worker net-') && ids.has(line.split(' ')[2])).slice(0, 30), failed: logs.filter((line) => /^(worker|page) net-failed/.test(line)).slice(0, 10) };
+};
+
 group('node-txiki-npm-registry', async () => {
   const registry = await terminal([
     ['run', 'npm install thebird-no-such-package-404; echo rc=$?'],
     ['run', 'cd /workspace && mkdir -p auth-project && cd auth-project && printf "//registry.npmjs.org/:_authToken=thebird-invalid\\n" > .npmrc && npm install debug; echo rc=$?'],
-  ]);
+  ], { blockUrls: ['https://registry.npmjs.org/__witness-never-requested__*'] });
   const registryOut = registry.out;
   check('.npmrc _authToken failure names the registry URL and says why the browser refused it', /npm: request to https:\/\/registry\.npmjs\.org\/debug failed: .*Authorization header/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify(registryOut.slice(0, 600)));
-  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify({ out: registryOut.slice(0, 400), net: registry.logs.filter((line) => /registry\.npmjs\.org/.test(line)).slice(0, 12) }));
+  check('npm install of a package the registry does not have fails with status 1 and shows the registry URL', /npm: 404 Not Found - GET https:\/\/registry\.npmjs\.org\/thebird-no-such-package-404/.test(registryOut) && /^rc=1$/m.test(registryOut), JSON.stringify({ out: registryOut.slice(0, 400), net: registryNet(registry.logs) }));
 });
 
 group('node-txiki-npm', async () => {

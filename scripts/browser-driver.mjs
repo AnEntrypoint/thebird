@@ -192,7 +192,10 @@ export async function startBrowser({ chrome, profile }) {
       if (method === 'Runtime.consoleAPICalled') owner.logs.push(`${origin} console.${params.type}: ${params.args.map((arg) => arg.value ?? arg.description ?? arg.type).join(' ')}`);
       else if (method === 'Runtime.exceptionThrown') owner.logs.push(`${origin} exception: ${params.exceptionDetails.exception?.description ?? params.exceptionDetails.text}`);
       else if (method === 'Network.requestWillBeSent') owner.logs.push(`${origin} net-request ${params.requestId} ${params.timestamp.toFixed(3)} ${params.request.url}`);
-      else if (method === 'Network.responseReceived') owner.logs.push(`${origin} net-response ${params.requestId} ${params.timestamp.toFixed(3)} ${params.response.status} ${params.response.url} ${params.response.fromServiceWorker ? 'from-sw' : 'from-network'}`);
+      else if (method === 'Network.responseReceived') {
+        owner.logs.push(`${origin} net-response ${params.requestId} ${params.timestamp.toFixed(3)} ${params.response.status} ${params.response.url} ${params.response.fromServiceWorker ? 'from-sw' : 'from-network'}`);
+        owner.logs.push(`${origin} net-headers ${params.requestId} ${JSON.stringify(params.response.headers)}`);
+      }
       else if (method === 'Network.loadingFailed') owner.logs.push(`${origin} net-failed ${params.requestId} ${params.timestamp.toFixed(3)} ${params.errorText} ${params.blockedReason ?? ''}`);
       else if (method === 'Network.loadingFinished') owner.logs.push(`${origin} net-finished ${params.requestId} ${params.timestamp.toFixed(3)} ${params.encodedDataLength}`);
       else if (method === 'Log.entryAdded') owner.logs.push(`${origin} log ${params.entry.level}: ${params.entry.text} ${params.entry.url ?? ''}`);
