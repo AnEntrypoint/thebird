@@ -62,6 +62,7 @@ function check(name, ok, detail = '') {
 }
 
 const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
+const DEFAULT_CONTEXT_GROUPS = new Set(['pip']);
 let sharedBrowserStart = null;
 const sharedBrowserFor = () => {
   sharedBrowserStart ??= startBrowser({ chrome, profile: sharedProfile });
@@ -77,7 +78,7 @@ async function browserFor(restart) {
   const context = current();
   if (restart === 'fresh') await disposeContext(context);
   const browser = await sharedBrowserFor();
-  if (!context.browserContextId) {
+  if (!context.browserContextId && !DEFAULT_CONTEXT_GROUPS.has(context.name)) {
     const { browserContextId } = await browser.send('Target.createBrowserContext');
     context.browserContextId = browserContextId;
   }
