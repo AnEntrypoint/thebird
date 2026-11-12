@@ -1821,3 +1821,12 @@ Witness runs on this stretch's tree:
 - Live 8793 rows (`fx ask on the live 8793 gateway`, `the 8793 chat request returns 200`): in full run 3 they got 502 and then nothing listening on 8793. The shim is inside the hy4-relay client (`/workspace/hy4-relay/src/client.js`). The client process is not running, and `client-run.log` shows `no peer announcing this topic yet`, so the remote hy4 server is not on the swarm. This is outside this repository, and the rows cannot pass until that server is up.
 - Validation on 87c7c2f plus the witness diagnostic: `npm run check` exit 0, `npm run lint:comments` exit 0, `node scripts/build-pages.mjs` exit 0 (`files=97`), `pack-site-brotli.mjs --verify` exit 0.
 - Full witness: not exit 0 (full run 3: 2 failures, both live 8793 rows). Not pushed.
+
+### Full witness run 4 (75f11a6): npm 404 cause still open, new python navigation timeout
+
+- Wall time: `totals: PASS 220 FAIL 4 GROUPS 63 WALL 413.5s`; `WITNESS-EXIT 1`.
+- npm 404 row (`npm install of a package the registry does not have`): PASS this run, so the diagnostic (`net-failed` lines for registry.npmjs.org) was not printed. The run has no `net-failed` line for the registry, so the Chromium error is still unnamed. The row failed in full run 2 (both registry requests `Failed to fetch`) and passed in runs 3 and 4 and alone. Cause still open; the next failure prints the error.
+- Live 8793 rows (`fx ask on the live 8793 gateway`, `the 8793 chat request returns 200`, `the TUI on the live 8793 gateway`): FAIL, the hy4 server outside this repo is not on the swarm (see the previous entry). Blocked.
+- New: `python raised an error: Page.navigate did not answer within 60000 ms`. A browser-level navigation timeout under the full run's load, not a result of the npm change. Not investigated further in this run; it needs its own run.
+- Cleanup: the witness closed 0 Chromium trees. A Chromium tree from another session (`scripts/browser/planet-witness-run.mjs`, profile under /workspace/jayzee) is still running and was not touched.
+- Push: held. The full witness does not exit 0.
