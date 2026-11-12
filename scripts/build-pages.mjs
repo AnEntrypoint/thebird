@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 import { vendorBashkit } from './vendor-bashkit.mjs';
 import { vendorFx } from './vendor-fx.mjs';
 import { vendorFloosie } from './vendor-floosie.mjs';
+import { packSiteBrotli, verifySiteBrotli } from './pack-site-brotli.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,6 +27,8 @@ export async function buildPages(out = join(root, '_site')) {
   writeFileSync(join(out, 'index.html'), readFileSync(join(out, 'index.html'), 'utf8').replace('src="web/terminal.js"', 'src="web/terminal.bundle.js"'));
   writeFileSync(join(out, '.nojekyll'), '');
   writeFileSync(join(out, 'sw.js'), "import './web/package-sw.js';\n");
+  await packSiteBrotli(out, join(out, 'thebird-package.tar.br'));
+  verifySiteBrotli(out, join(out, 'thebird-package.json'));
   return out;
 }
 

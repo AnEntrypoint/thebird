@@ -74,6 +74,10 @@ jobs:
           test -s web/vendor/floosie/browser.js
       - run: npm ci
       - run: node scripts/build-pages.mjs
+      - name: Brotli pack entire Pages package
+        run: |
+          node scripts/pack-site-brotli.mjs
+          node scripts/pack-site-brotli.mjs --verify
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
           path: _site
