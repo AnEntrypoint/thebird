@@ -7,6 +7,7 @@ import { createPtyAdapter } from './pty-adapter.js';
 import { createSplash } from './splash.js';
 import { runFxTui } from './fx-tui.js';
 
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { type: 'module' }).catch(() => {});
 const params = new URLSearchParams(location.search);
 const term = new Terminal({
   cursorBlink: true,

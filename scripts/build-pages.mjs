@@ -25,6 +25,7 @@ export async function buildPages(out = join(root, '_site')) {
   });
   writeFileSync(join(out, 'index.html'), readFileSync(join(out, 'index.html'), 'utf8').replace('src="web/terminal.js"', 'src="web/terminal.bundle.js"'));
   writeFileSync(join(out, '.nojekyll'), '');
+  writeFileSync(join(out, 'sw.js'), "import './web/package-sw.js';\n");
   return out;
 }
 

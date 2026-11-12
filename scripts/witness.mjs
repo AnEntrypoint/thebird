@@ -1243,6 +1243,47 @@ group('python', async () => {
   check('in-page python3 reads and writes files on the OPFS tree', /^PY-HELLO$/m.test(python.out), python.out.split('\n').slice(-2).join(' / ').slice(0, 140));
 });
 
+const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.txt': 'text/plain' };
+async function servePages() {
+  const pagesDir = await sharedPages();
+  const server = createServer((req, res) => {
+    const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+    const rest = pathname.startsWith('/thebird/') ? pathname.slice('/thebird/'.length) || 'index.html' : null;
+    const file = rest === null ? null : join(pagesDir, rest);
+    if (!file || !file.startsWith(pagesDir) || !existsSync(file) || statSync(file).isDirectory()) {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': SITE_TYPES[extname(file)] ?? 'application/octet-stream' });
+    res.end(readFileSync(file));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { dir: pagesDir, url: `http://127.0.0.1:${server.address().port}/thebird/`, close: () => server.close() };
+}
+
+group('site-package', async () => {
+  const pages = await servePages();
+  try {
+    check('the built site carries the Brotli package and the root worker stub', existsSync(join(pages.dir, 'thebird-package.tar.br')) && existsSync(join(pages.dir, 'sw.js')));
+    await runAt(pages.url, { timeoutMs: COLD_START_MS, label: 'site-package first' });
+    let controlled = false;
+    const second = await runAt(pages.url, {
+      timeoutMs: COLD_START_MS,
+      label: 'site-package second',
+      interact: async ({ evaluate }) => {
+        controlled = await evaluate('Boolean(navigator.serviceWorker.controller)');
+      },
+    });
+    const webResponses = second.logs.filter((line) => / net-response /.test(line) && line.includes('/thebird/web/'));
+    const fromNetwork = webResponses.filter((line) => line.endsWith('from-network'));
+    check('a second page start is controlled by the site worker', controlled === true);
+    check('a second page start loads every web asset through the site worker, with no network response for web/', controlled && webResponses.length > 0 && fromNetwork.length === 0, fromNetwork.slice(0, 6).map((line) => line.split(' ').slice(-2).join(' ')).join(' | ') || `${webResponses.length} web responses`);
+    check('a page start with no python call requests no Pyodide file from the site package path', !second.logs.some((line) => / net-request /.test(line) && line.includes('pyodide-minimal')));
+  } finally {
+    pages.close();
+  }
+});
+
 group('python-lazy', async () => {
   const idle = await terminal([], {
     interact: async ({ waitFor, pause }) => {
