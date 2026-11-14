@@ -32,8 +32,13 @@ Browser SDK: `window.THEBIRD_CRAFT.apps()`, `.intent(text)`, `.task(text,file,me
 
 ## Display and live feedback
 
-`web/craft-workspace.js` subscribes to `/__thebird/events`. On `document` or `progress` events it registers a `THEBIRD_FEATURES` card with filename, app, status, preview image/path and text output. Generated previews live under `/sites/<app>/previews/`. Registration, discovery, calls and display happen in-session; no host restart is needed.
+`web/craft-workspace.js` subscribes to `/__thebird/events`. On `document` or `progress` events it registers a `window.THEBIRD_FEATURES` card with filename, app, status, preview image/path and text output. Generated previews live under `/sites/<app>/previews/`. Registration, discovery, calls and display happen in-session; no host restart is needed.
 
 ## Sample/witness documents
 
 `node bin/thebird-craft.js sample` creates a CSV sheet sample, a text document sample, and converts a text source into a PDF sample. `npm run host:check` calls the lazy HTTP/MCP paths for all three types, checks that no craft process is resident, and asserts visible document workspace/card markers in headless Chromium DOM.
+
+
+## In-browser fx normal-computer semantics
+
+fx is configured with a user-wide capability prompt: bash, node, npm, npx, tjs, curl/wget, git, python3, pip, sqlite3, `/workspace` files, MCP/webserver routes, `fetch`, `EventSource`, `window.THEBIRD_WEBSERVERS`, `window.THEBIRD_CRAFT` and `window.THEBIRD_FEATURES` are available in-session. `web/fx-capabilities.js` supplies the prompt and refusal detector; `web/fx-in-page.js` uses runtime-wired host tools and normal-computer help text. Agents must not be told that terminal tools are unavailable or that the browser is a crippled JavaScript host.

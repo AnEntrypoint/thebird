@@ -51,5 +51,55 @@
       "/ __thebird/mcp/pdfcraft"
     ],
     "display": "Open/task calls create a visible THEBIRD_FEATURES document card and send SSE/HMR progress."
+  },
+  "fxCapabilities": {
+    "environment": "normal computer",
+    "toolAvailability": "bash and ask are wired live in-session through the shell client; terminal tools are available",
+    "commands": [
+      "bash",
+      "sh",
+      "node",
+      "npm",
+      "npx",
+      "tjs",
+      "qjs",
+      "curl",
+      "wget",
+      "git",
+      "python3",
+      "pip",
+      "sqlite3",
+      "fx",
+      "feature",
+      "playwriter"
+    ],
+    "filesystem": "/workspace and browser OPFS-backed shell workspace",
+    "webservers": [
+      "/__thebird/registry",
+      "/__thebird/events",
+      "/__thebird/progress",
+      "/__thebird/mcp",
+      "/sites/<id>/settings"
+    ],
+    "craft": [
+      "gridcraft",
+      "wordcraft",
+      "pdfcraft"
+    ],
+    "browserApis": [
+      "fetch",
+      "EventSource",
+      "THEBIRD_WEBSERVERS",
+      "THEBIRD_CRAFT",
+      "THEBIRD_FEATURES"
+    ],
+    "forbiddenRefusals": [
+      "terminal tools are unavailable",
+      "JavaScript host",
+      "crippled JS host",
+      "cannot inspect files",
+      "no exit code or shell output"
+    ],
+    "selfCheck": "Ask fx to create and run a normal Node server; the answer must describe commands or actions, not claim that terminal tools are unavailable."
   }
 }

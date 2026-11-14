@@ -38,6 +38,13 @@ try {
   await flushFs();
   postMessage({ ready: true });
   let queue = Promise.resolve();
+  let toolShell = null;
+  const toolAnswer = async (data) => {
+    toolShell ??= await createShell({ cwd: WORKSPACE, commandTimeoutMs: windowFromUrl(self.location.search) });
+    const result = await toolShell.run(data.toolRun);
+    await flushFs();
+    postMessage({ id: data.id, ok: true, result });
+  };
   const answer = async (data) => {
     let reply;
     try {
@@ -75,6 +82,14 @@ try {
     }
     if (data.resize) {
       shell.resize(data.resize);
+      return;
+    }
+    if (data.toolRun !== undefined) {
+      toolAnswer(data).catch((err) => postMessage({ id: data.id, ok: false, error: err.message }));
+      return;
+    }
+    if (data.cancelTool) {
+      toolShell?.cancel();
       return;
     }
     queue = queue.then(() => answer(data)).catch((err) => postMessage({ id: data.id, ok: false, error: err.message }));

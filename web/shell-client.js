@@ -103,6 +103,7 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   return {
     ready,
     run: (command) => request({ run: command, fx: fxConfig() }, true),
+    tool: (command) => request({ toolRun: command }),
     complete: (prefix, { command = false } = {}) => request({ complete: prefix, command }),
     cwd: () => request({ query: 'cwd' }),
     cancel() {

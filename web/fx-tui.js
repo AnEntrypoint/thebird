@@ -1,5 +1,4 @@
 import { createFxTerminal } from './vendor/fx/wasm-terminal.js';
-import { initializeHostTools } from './fx-host-tools.js';
 import { GhosttyScreen, ghosttyAdapter, loadGhosttyVt } from './ghostty-screen.js';
 import { DEFAULT_MODEL, providerFetch, providerOf, providerRegistry } from './fx-provider.js';
 
@@ -61,7 +60,7 @@ const providerEnvironment = (fx, provider) => ({
   ...(fx.permissionMode === undefined ? {} : { FX_PERMISSION_MODE: fx.permissionMode }),
 });
 
-export async function runFxTui(term, fx = {}) {
+export async function runFxTui(term, fx = {}, host = {}) {
   const screen = new GhosttyScreen(await loadGhosttyVt(GHOSTTY_URL), term.cols, term.rows);
   term.write("\x1b[?1049h");
   const provider = providerOf(fx);
@@ -72,7 +71,8 @@ export async function runFxTui(term, fx = {}) {
     ...(provider ? { fetch: providerFetch(provider, fx.apiKey) } : {}),
     oauthSessionStore: memoryOauthSessionStore(),
     promptHistoryStore: memoryPromptHistoryStore(),
-    beforeStart: initializeHostTools,
+    ...(host.tools === undefined ? {} : { tools: host.tools }),
+    ...(host.hostToolExecutor === undefined ? {} : { hostToolExecutor: host.hostToolExecutor }),
   });
   app.interactive.catch(() => {});
   try {

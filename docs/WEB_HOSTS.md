@@ -111,3 +111,7 @@ npm run host:check
 ## Hosted webserver system
 
 The canonical host is also the live parent for registered Node webservers. See `docs/WEBSERVER_STANDARD.md` for the standard contract, normal commands, SDK, MCP/fx hookups, responsive shell, HMR/SSE and user-wide prompts. `npm run host:check` registers and unregisters a temporary test server against the live registry while preserving the canonical 27-check baseline.
+
+## In-browser fx normal-computer self-check
+
+The page sets `window.THEBIRD_FX_TOOLS` to live `bash` and `ask` tools, and `web/fx-capabilities.js` exposes the user-wide normal-computer prompt and refusal detector. `npm run host:check` asserts `data-fx-tools="wired"`, `data-fx-prompt="normal-computer"`, `data-fx-refusals="none"`, and runs a command-oriented self-check against the prompt. The desktop shell starts collapsed with a reserved rail marker `data-webserver-shell="collapsed"`, so the terminal is visible.

@@ -2,12 +2,13 @@ import { createFxEngine, supportsJspi } from './vendor/fx/engine.js';
 import { wasmRuntimeFactory } from './vendor/fx/wasm-runtime.js';
 import { requestTakeover } from './takeover.js';
 import { PAGE_HOST_TOOLS } from './fx-host-tools.js';
+import { THEBIRD_FX_SYSTEM_PROMPT, fxPromptFor } from './fx-capabilities.js';
 import { DEFAULT_MODEL, providerOf } from './fx-provider.js';
 
 const WASM_URL = new URL('./vendor/fx/fx-core.wasm', import.meta.url).href;
 const MANIFEST_URL = new URL('./vendor/fx/manifest.json', import.meta.url).href;
 const USAGE = 'usage: fx | fx --version | fx --help | fx check | fx ask <prompt>';
-const HELP = `${USAGE}\n\nfx runs libfx's WebAssembly core in this browser. Set window.THEBIRD_FX to { apiKey, model, gatewayChatUrl } before fx ask, or { apiKey, model, provider: { name, baseUrl, models } } for a custom OpenAI-compatible provider. The key stays in this page and is never written to the workspace.`;
+const HELP = `${USAGE}\n\nfx runs libfx's WebAssembly core in the browser with live normal-computer tools. Bash, node, npm, tjs, curl/wget, git, python3, pip, sqlite3, /workspace files, MCP/webserver routes, fetch and EventSource are available in-session. Set window.THEBIRD_FX to { apiKey, model, gatewayChatUrl } before fx ask, or { apiKey, model, provider: { name, baseUrl, models } } for a custom OpenAI-compatible provider. The key stays in this page and is never written to the workspace.`;
 let manifest = null;
 
 const loadManifest = async () => {
@@ -25,7 +26,7 @@ const config = () => {
   const value = globalThis.THEBIRD_FX;
   if (!value || typeof value !== 'object') throw new Error('fx ask needs window.THEBIRD_FX with apiKey and model');
   if (typeof value.apiKey !== 'string' || !value.apiKey) throw new Error('fx ask needs window.THEBIRD_FX.apiKey');
-  return value;
+  return { ...value, systemPrompt: value.systemPrompt ?? THEBIRD_FX_SYSTEM_PROMPT, capabilities: value.capabilities ?? { tools: (globalThis.THEBIRD_FX_TOOLS ?? PAGE_HOST_TOOLS).map((tool) => tool.name) } };
 };
 
 const textOf = (turn) => (async () => {
@@ -50,7 +51,7 @@ const ask = async (argv, signal) => {
     wasm: WASM_URL,
     ...(provider ? customEngine({ ...options, provider }) : gatewayEngine(options)),
     model: options.model ?? DEFAULT_MODEL,
-    tools: PAGE_HOST_TOOLS,
+    tools: globalThis.THEBIRD_FX_TOOLS ?? PAGE_HOST_TOOLS,
   }, wasmRuntimeFactory());
   if (signal.aborted) {
     await engine.close().catch(() => {});
@@ -60,7 +61,7 @@ const ask = async (argv, signal) => {
   signal.addEventListener('abort', onAbort, { once: true });
   try {
     return await Promise.race([
-      textOf(engine.prompt(prompt)),
+      textOf(engine.prompt(fxPromptFor(prompt))),
       new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })),
     ]);
   } catch (error) {

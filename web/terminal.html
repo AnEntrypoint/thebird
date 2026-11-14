@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="web/vendor/xterm/xterm.css">
 <style>
 html, body { margin: 0; height: 100%; background: #000000; overflow: hidden }
-#terminal { position: absolute; inset: 8px; touch-action: none }
+#terminal { position: absolute; inset: 8px; left: calc(var(--webserver-shell-width, 17rem) + 8px); touch-action: none }
 #features { position: fixed; z-index: 2; top: 12px; right: 12px; width: min(22rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; color: #edf5f7; font: 14px Inter, ui-sans-serif, system-ui, sans-serif; pointer-events: auto }
 #features:empty { display: none }
 .thebird-feature-card { border: 1px solid #31515a; border-radius: 12px; padding: 12px 14px; background: #15242df2; box-shadow: 0 12px 40px #0009 }
@@ -26,7 +26,16 @@ html, body { margin: 0; height: 100%; background: #000000; overflow: hidden }
 .webserver-card small, .webserver-card [data-webserver-mcp] { display: block; color: #8eb5be }
 .webserver-card a { color: #6fe1c6 }
 #webserver-shell footer { color: #b6d7dc; line-height: 1.4 }
-@media (max-width: 700px) { #terminal { inset: 0 } #webserver-shell { z-index: 4 } }
+#webserver-shell[data-layout="phone"] { z-index: 4; transform: translateX(-100%) }
+#webserver-shell[data-layout="phone"][data-open="true"] { transform: translateX(0) }
+#webserver-shell-toggle { position: fixed; z-index: 6; left: 8px; top: 8px; display: none; border: 1px solid #31515a; border-radius: 8px; padding: .4rem .6rem; background: #183c40; color: #edf5f7; font: 16px Inter, ui-sans-serif, system-ui, sans-serif }
+html[data-webserver-shell="phone"] #webserver-shell-toggle { display: block }
+html[data-webserver-shell-open="true"] #webserver-shell-toggle { display: none }
+#thebird-ask { position: fixed; z-index: 10; left: 50%; bottom: 1.5rem; transform: translateX(-50%); width: min(36rem, calc(100vw - 2rem)); display: grid; grid-template-columns: 1fr auto auto; gap: .5rem; align-items: center; padding: .75rem; background: #101820; border: 1px solid #31515a; border-radius: 10px; color: #edf5f7; font: 13px Inter, ui-sans-serif, system-ui, sans-serif }
+#thebird-ask label { grid-column: 1 / -1 }
+#thebird-ask input { min-width: 0; padding: .4rem .5rem; border: 1px solid #31515a; border-radius: 6px; background: #0b1118; color: #edf5f7; font: inherit }
+#thebird-ask button { padding: .4rem .7rem; border: 1px solid #31515a; border-radius: 6px; background: #183c40; color: #edf5f7; font: inherit }
+@media (max-width: 700px) { #terminal { inset: 0 } }
 #splash { position: fixed; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; color: #e5e5e5; font: 14px Menlo, Consolas, "DejaVu Sans Mono", monospace; pointer-events: none }
 #splash[hidden] { display: none }
 #splash .logo { position: relative }

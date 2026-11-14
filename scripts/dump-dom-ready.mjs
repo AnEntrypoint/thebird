@@ -53,7 +53,7 @@ try {
   let ready = false;
   for (let i = 0; i < 240; i++) {
     dom = await evaluate('document.documentElement.outerHTML');
-    ready = dom.includes('data-boot="ready"') && dom.includes('data-engine="ready"') && dom.includes('data-feature-program="ready"') && dom.includes('data-feature-count="4"');
+    ready = dom.includes('data-boot="ready"') && dom.includes('data-engine="ready"') && dom.includes('data-feature-program="ready"') && dom.includes('data-feature-count="5"');
     if (ready) break;
     await sleep(250);
   }

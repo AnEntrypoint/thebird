@@ -6,6 +6,9 @@ import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
 import { createSplash } from './splash.js';
 import { runFxTui } from './fx-tui.js';
+import { createPageHostTools, hostToolExecutor } from './fx-host-tools.js';
+import { createPageAsk } from './fx-ask.js';
+import { THEBIRD_FX_CAPABILITIES, THEBIRD_FX_SYSTEM_PROMPT, assertNoHostRefusal } from './fx-capabilities.js';
 import './features.js';
 import { applyFeatureRequest, loadFeatureRequests } from './features-bridge.js';
 import { runFeatureProgram } from './features-in-txiki.js';
@@ -50,6 +53,19 @@ try {
 }
 
 const client = shellClient({ commandTimeoutMs: params.get('commandTimeoutMs') ?? undefined });
+globalThis.THEBIRD_FX_CAPABILITIES = THEBIRD_FX_CAPABILITIES;
+globalThis.THEBIRD_FX_SYSTEM_PROMPT = THEBIRD_FX_SYSTEM_PROMPT;
+const fxTools = createPageHostTools({
+  bash: (command) => client.tool(command),
+  ask: createPageAsk(),
+});
+globalThis.THEBIRD_FX_TOOLS = fxTools;
+globalThis.THEBIRD_WEBSERVERS = globalThis.THEBIRD_WEBSERVERS ?? null;
+globalThis.THEBIRD_CRAFT = globalThis.THEBIRD_CRAFT ?? null;
+document.body.dataset.fxTools = 'wired';
+document.body.dataset.fxPrompt = 'normal-computer';
+document.body.dataset.fxRefusals = assertNoHostRefusal(THEBIRD_FX_SYSTEM_PROMPT).length ? 'present' : 'none';
+const fxHostToolExecutor = hostToolExecutor(fxTools);
 const pty = createPtyAdapter({
   term,
   client,
@@ -79,7 +95,7 @@ client.onTakeover(async ({ id, fx }) => {
   document.body.dataset.tui = 'fx';
   let code = 0;
   try {
-    code = await runFxTui(term, fx);
+    code = await runFxTui(term, fx, { tools: fxTools, hostToolExecutor: fxHostToolExecutor });
   } catch (error) {
     term.write(`fx: ${error.message}\r\n`);
     code = 1;

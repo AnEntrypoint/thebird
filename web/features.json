@@ -61,6 +61,22 @@
           }
         ]
       }
+    },
+    {
+      "op": "register",
+      "id": "fx-normal-computer-prompt",
+      "source": "system",
+      "spec": {
+        "title": "fx works on a normal computer",
+        "description": "Bash, node, npm, tjs, /workspace files, MCP/webserver routes, fetch and EventSource are available in-session.",
+        "status": "terminal tools are available",
+        "body": [
+          {
+            "type": "p",
+            "text": "Use bash and node normally; terminal tools are available."
+          }
+        ]
+      }
     }
   ]
 }

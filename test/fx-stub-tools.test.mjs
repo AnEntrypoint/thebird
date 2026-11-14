@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PAGE_HOST_TOOLS, PAGE_HOST_TOOL_NAMES, pageHostToolsJson } from '../web/fx-host-tools.js';
+import { PAGE_HOST_TOOLS, PAGE_HOST_TOOL_NAMES, createPageHostTools, hostToolExecutor, pageHostToolsJson } from '../web/fx-host-tools.js';
 import { streamPlan } from '../scripts/fx-stub-gateway.mjs';
 
 const userPrompt = (text) => [{ role: 'user', content: [{ type: 'text', text }] }];
@@ -35,8 +35,22 @@ test('the stub rejects an unlisted name even when the request advertises it', ()
 
 test('a page tool reports that it is unavailable instead of running', () => {
   for (const tool of PAGE_HOST_TOOLS) {
-    assert.match(tool.execute(), /is not available on the thebird page yet/);
+    assert.match(tool.execute().content, /is not available on the thebird page yet/);
   }
+});
+
+test('a wired bash tool runs through the page shell and reports the exit status', async () => {
+  const tools = createPageHostTools({ bash: async (command) => ({ exitCode: command === 'true' ? 0 : 7, output: command === 'true' ? 'ok\n' : 'bad\n' }) });
+  const bash = tools.find((tool) => tool.name === 'bash');
+  assert.deepEqual(await bash.execute({ command: 'true' }), { content: 'ok\n', isError: false });
+  assert.deepEqual(await bash.execute({ command: 'false' }), { content: 'bad\n', isError: true });
+});
+
+test('the host tool executor dispatches by name and fails unknown tools', async () => {
+  const tools = createPageHostTools({ ask: async (question) => 'answer to ' + question });
+  const execute = hostToolExecutor(tools);
+  assert.deepEqual(await execute('ask', { question: 'why' }), { content: 'answer to why' });
+  assert.match((await execute('rm', {})).content, /unknown host tool: rm/);
 });
 
 test('the host-tool JSON handed to fx_terminal_initialize parses and names exactly the stubbed tools', () => {

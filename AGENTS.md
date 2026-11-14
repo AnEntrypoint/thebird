@@ -131,4 +131,9 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 
 ## Lazy Craft apps
 
-GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.
+GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `window.THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.
+
+
+## In-browser fx normal-computer semantics
+
+fx is configured with a user-wide capability prompt: bash, node, npm, npx, tjs, curl/wget, git, python3, pip, sqlite3, `/workspace` files, MCP/webserver routes, `fetch`, `EventSource`, `window.THEBIRD_WEBSERVERS`, `window.THEBIRD_CRAFT` and `window.THEBIRD_FEATURES` are available in-session. `web/fx-capabilities.js` supplies the prompt and refusal detector; `web/fx-in-page.js` uses runtime-wired host tools and normal-computer help text. Agents must not be told that terminal tools are unavailable or that the browser is a crippled JavaScript host.
