@@ -1,0 +1,21 @@
+import sdk from '../sdk/browser/index.js';
+const shell = document.getElementById('webserver-shell') ?? document.createElement('aside');
+shell.id = 'webserver-shell';
+shell.className = 'thebird-webserver-shell';
+shell.dataset.shell = 'webservers';
+shell.dataset.layout = matchMedia('(max-width: 700px)').matches ? 'phone' : 'desktop';
+shell.dataset.collapsed = 'false';
+shell.dataset.hmr = 'connecting';
+if (!shell.isConnected) document.body.append(shell);
+const render = (registry) => {
+  const servers = registry.servers ?? [];
+  shell.dataset.count = String(servers.length);
+  shell.dataset.hmr = 'live';
+  shell.innerHTML = '<header class="webserver-shell-header"><strong>Webservers</strong><button data-shell-toggle aria-label="Collapse webservers">≡</button></header><section data-webserver-list>' + servers.map((server) => '<article class="webserver-card" data-webserver-id="' + server.id + '" data-webserver-status="' + server.status + '" data-webserver-hmr="' + server.hmr + '"><img src="/sites/' + server.id + '/favicon.ico" alt="" width="24" height="24"><div><a href="/sites/' + server.id + '/">' + server.title + '</a><small>' + server.status + ' · HMR ' + server.hmr + '</small></div><a data-webserver-settings href="/sites/' + server.id + '/settings">Settings</a><span data-webserver-mcp>MCP</span></article>').join('') + '</section><footer data-webserver-prompts>Use node bin/thebird-webserver.js register &lt;id&gt;</footer>';
+  shell.querySelector('[data-shell-toggle]')?.addEventListener('click', () => { shell.dataset.collapsed = shell.dataset.collapsed === 'true' ? 'false' : 'true'; });
+};
+const refresh = async () => render(await sdk.registry());
+globalThis.THEBIRD_WEBSERVER_SHELL = { refresh, render };
+sdk.events(async () => refresh());
+refresh().catch((error) => { shell.dataset.hmr = 'failed'; console.error(error); });
+export default { refresh, render };

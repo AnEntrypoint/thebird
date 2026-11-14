@@ -7,6 +7,26 @@
 <style>
 html, body { margin: 0; height: 100%; background: #000000; overflow: hidden }
 #terminal { position: absolute; inset: 8px; touch-action: none }
+#features { position: fixed; z-index: 2; top: 12px; right: 12px; width: min(22rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; color: #edf5f7; font: 14px Inter, ui-sans-serif, system-ui, sans-serif; pointer-events: auto }
+#features:empty { display: none }
+.thebird-feature-card { border: 1px solid #31515a; border-radius: 12px; padding: 12px 14px; background: #15242df2; box-shadow: 0 12px 40px #0009 }
+.thebird-feature-header { display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.thebird-feature-title { margin: 0; font-size: 16px; color: #6fe1c6 }
+.thebird-feature-description, .thebird-feature-status { margin: 8px 0 0; line-height: 1.4 }
+.thebird-feature-status { color: #8eb5be; font-size: 12px }
+.thebird-feature-close { border: 0; background: transparent; color: #edf5f7; font-size: 20px; cursor: pointer }
+.thebird-feature-button { margin-top: 10px; border: 1px solid #6fe1c6; border-radius: 8px; padding: 6px 10px; background: #183c40; color: #edf5f7; cursor: pointer }
+.thebird-feature-canvas { display: block; max-width: 100%; margin-top: 10px; border-radius: 6px }
+#webserver-shell { position: fixed; z-index: 3; left: 0; top: 0; bottom: 0; width: 17rem; overflow-y: auto; padding: 1rem; box-sizing: border-box; color: #edf5f7; background: #101820f2; border-right: 1px solid #31515a; font: 13px Inter, ui-sans-serif, system-ui, sans-serif; transition: transform .2s ease }
+#webserver-shell[data-collapsed="true"] { transform: translateX(calc(-100% + 2.5rem)) }
+#webserver-shell[data-layout="phone"] { inset: 0; width: 100vw; height: 100vh; border: 0; padding: 1rem; overflow-y: auto }
+.webserver-shell-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem }
+.webserver-shell-header button { background: #183c40; color: #edf5f7; border: 1px solid #31515a; border-radius: 6px }
+.webserver-card { display: grid; grid-template-columns: 24px 1fr auto; gap: .6rem; align-items: center; border: 1px solid #31515a; border-radius: 10px; padding: .6rem; margin-bottom: .6rem; background: #15242dcc }
+.webserver-card small, .webserver-card [data-webserver-mcp] { display: block; color: #8eb5be }
+.webserver-card a { color: #6fe1c6 }
+#webserver-shell footer { color: #b6d7dc; line-height: 1.4 }
+@media (max-width: 700px) { #terminal { inset: 0 } #webserver-shell { z-index: 4 } }
 #splash { position: fixed; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; color: #e5e5e5; font: 14px Menlo, Consolas, "DejaVu Sans Mono", monospace; pointer-events: none }
 #splash[hidden] { display: none }
 #splash .logo { position: relative }
@@ -14,5 +34,7 @@ html, body { margin: 0; height: 100%; background: #000000; overflow: hidden }
 #splash .phase { position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.75em; text-align: center; white-space: nowrap }
 </style>
 <div id="terminal"></div>
+<aside id="features" data-feature-api="1"></aside>
+<aside id="webserver-shell" class="thebird-webserver-shell" data-shell="webservers"></aside>
 <div id="splash" hidden></div>
 <script type="module" src="web/terminal.js"></script>

@@ -97,6 +97,10 @@ self.addEventListener('fetch', (event) => {
     }
     const body = files?.get(path);
     if (!body) return fetch(event.request);
-    return new Response(body, { headers: { 'content-type': mimeFor(path) } });
+    return new Response(body, { headers: {
+    'content-type': mimeFor(path),
+    'cross-origin-opener-policy': 'same-origin',
+    'cross-origin-embedder-policy': 'require-corp',
+  } });
   })());
 });

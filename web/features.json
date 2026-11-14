@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "api": "THEBIRD_FEATURES",
+  "runtime": "txiki.js in the browser",
+  "requests": [
+    {
+      "op": "register",
+      "id": "fx-visible-demo",
+      "source": "fx",
+      "spec": {
+        "title": "fx-programmed feature",
+        "description": "Registered through the fx/txiki feature bridge and visible in a normal browser.",
+        "status": "txiki.js runtime bridge active",
+        "body": [
+          {
+            "type": "p",
+            "text": "This card is programmed by fx."
+          },
+          {
+            "type": "button",
+            "id": "fx-demo-button",
+            "label": "Feature ready"
+          },
+          {
+            "type": "canvas",
+            "width": 180,
+            "height": 48,
+            "text": "fx canvas"
+          }
+        ]
+      }
+    },
+    {
+      "op": "register",
+      "id": "agent-webserver-prompt",
+      "source": "system",
+      "spec": {
+        "title": "Set up a thebird webserver",
+        "description": "Use normal Node, npm and bash. Register a webserver; the system gives you a folder and live routes.",
+        "status": "user-wide prompt; normal Node/npm/bash",
+        "body": [
+          {
+            "type": "p",
+            "text": "Register: node bin/thebird-webserver.js register my-app"
+          }
+        ]
+      }
+    }
+  ]
+}

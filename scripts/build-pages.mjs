@@ -16,6 +16,7 @@ export async function buildPages(out = join(root, '_site')) {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   cpSync(join(root, 'web'), join(out, 'web'), { recursive: true, filter: (source) => !source.startsWith(join(root, 'web', 'vendor', 'floosie')) });
+  cpSync(join(root, 'sdk'), join(out, 'sdk'), { recursive: true });
   copyFileSync(join(root, 'web', 'terminal.html'), join(out, 'index.html'));
   await build({
     entryPoints: [join(out, 'web', 'terminal.js')],
@@ -27,6 +28,7 @@ export async function buildPages(out = join(root, '_site')) {
   writeFileSync(join(out, 'index.html'), readFileSync(join(out, 'index.html'), 'utf8').replace('src="web/terminal.js"', 'src="web/terminal.bundle.js"'));
   writeFileSync(join(out, '.nojekyll'), '');
   writeFileSync(join(out, 'sw.js'), "import './web/package-sw.js';\n");
+  writeFileSync(join(out, 'web', 'features.json'), readFileSync(join(root, 'web', 'features.json')));
   await packSiteBrotli(out, join(out, 'thebird-package.tar.br'));
   verifySiteBrotli(out, join(out, 'thebird-package.json'));
   return out;

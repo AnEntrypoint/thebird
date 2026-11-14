@@ -6,6 +6,10 @@ import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
 import { createSplash } from './splash.js';
 import { runFxTui } from './fx-tui.js';
+import './features.js';
+import { applyFeatureRequest, loadFeatureRequests } from './features-bridge.js';
+import { runFeatureProgram } from './features-in-txiki.js';
+import './webserver-shell.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { type: 'module' }).catch(() => {});
 const params = new URLSearchParams(location.search);
@@ -53,7 +57,14 @@ const pty = createPtyAdapter({
     else delete document.body.dataset.busy;
   },
 });
-globalThis.thebird = { term, pty, text: screenText };
+globalThis.thebird = { term, pty, text: screenText, features: globalThis.THEBIRD_FEATURES, applyFeatureRequest, loadFeatureRequests, runFeatureProgram };
+const featureRequests = loadFeatureRequests();
+globalThis.THEBIRD_FEATURE_READY = featureRequests;
+client.ready.then(() => {
+  document.body.dataset.engine = 'ready';
+}).catch(() => {
+  document.body.dataset.engine = 'failed';
+});
 client.onOutput((text) => pty.writeOutput(text));
 const splash = createSplash(document.getElementById('splash'));
 client.onPhase((phase, detail) => {
@@ -107,20 +118,45 @@ terminalBox.addEventListener('touchend', () => {
   touchScroll.lines = 0;
 });
 
-splash.loading('loading the shell');
-try {
-  await client.ready;
-  splash.done();
-  document.body.dataset.engine = 'ready';
-  await pty.refreshPrompt();
-} catch (err) {
-  splash.failed(err.message);
-  document.body.dataset.engine = 'failed';
-  pty.writeOutput(`engine error: ${err.message}\n`);
-}
-if (document.body.dataset.engine === 'ready') {
-  for (const command of params.getAll('run')) pty.runLine(command);
-}
-await pty.whenIdle();
-document.body.dataset.done = 'true';
-term.focus();
+const featureBoot = (async () => {
+  const requestCount = await globalThis.THEBIRD_FEATURE_READY.catch((error) => {
+    console.error(error);
+    return 0;
+  });
+  let totalFeatures = requestCount;
+  if (params.has('featureProgram')) {
+    try {
+      await runFeatureProgram();
+      totalFeatures += 1;
+      document.body.dataset.featureProgram = 'ready';
+    } catch (error) {
+      document.body.dataset.featureProgram = 'failed';
+      console.error(error);
+    }
+  }
+  document.body.dataset.features = String(totalFeatures);
+})();
+
+const engineBoot = (async () => {
+  splash.loading('loading the shell');
+  let engineReady = false;
+  try {
+    await client.ready;
+    splash.done();
+    engineReady = true;
+    await pty.refreshPrompt();
+  } catch (err) {
+    splash.failed(err.message);
+    pty.writeOutput(`engine error: ${err.message}\n`);
+  }
+  if (engineReady) {
+    for (const command of params.getAll('run')) pty.runLine(command);
+  }
+  await pty.whenIdle();
+})();
+
+Promise.all([featureBoot, engineBoot]).then(() => {
+  document.body.dataset.boot = 'ready';
+  document.body.dataset.done = 'true';
+  term.focus();
+});

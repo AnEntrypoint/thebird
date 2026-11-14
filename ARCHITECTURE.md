@@ -113,6 +113,10 @@ Symlinks are link entries. Reads, writes, `stat`, `readdir`, `open` and `realpat
 
 Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so the page is cross-origin isolated. A static host serving the page needs the same two headers.
 
+The canonical web host is `bin/thebird-web-host.js` over `src/web-host.js`: `npm run host` serves the built `_site/` at `http://127.0.0.1:4173/` with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Node only sends static files; txiki.js in the browser (`web/txiki-in-page.js` and `web/vendor/txiki/tjs.wasm`) is the serving/runtime path the owner asked for, including OPFS/worker state, `runTjs`, the `fx` core and the in-page builtins. `npm start` remains the source-tree development relay. `--no-isolation` is a compatibility fallback for plain static asset inspection, not the terminal runtime.
+
+`web/features.js` mounts `<aside id="features">` and exposes `window.THEBIRD_FEATURES` with `register`, `update`, `remove`, `list`, `clear`, `on` and `emit`. `web/features-bridge.js` applies the same request operations from `web/features.json` and from the `feature` builtin in `web/builtins.js`. `web/features-program.js` runs inside txiki and sends feature requests over `__thebirdBridge`; `web/features-in-txiki.js` loads it with `runTjs`, and `?featureProgram=1` invokes it at page boot. `scripts/check-web-host.mjs` verifies the pinned wasm, COOP/COEP, HTTP content types, start/stop lifecycle and headless Chromium DOM for both visible demo cards. `docs/WEB_HOSTS.md` is the runbook.
+
 ## Vendored and generated files
 
 - Committed bundles: `web/vendor/acorn.mjs`, `web/vendor/isomorphic-git.mjs` and the libfx modules in `web/vendor/fx/`. They keep their upstream comments and are not edited.
@@ -129,6 +133,7 @@ Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 - `npm run lint:comments` (`scripts/lint-comments.mjs`) lists each comment in repo-owned tracked files with its file and line, and exits non-zero when there are any. Vendored bundles with comments are reported as VENDORED when their upstream is recorded. A tracked file of an unknown type fails.
 - `npm run lint:architecture` (`scripts/lint-architecture.mjs`) checks the claims in `ARCHITECTURE.md` and `AGENTS.md` against the code and records the `cc242f5` check. Its live checks need `web/vendor/bashkit/` present, because the lint does not generate it.
 - `npm run witness` (`scripts/witness.mjs`) drives headless Chromium through `scripts/browser-driver.mjs`, using `CHROME_BIN`, and checks the in-page shell end to end.
+- `npm run host:check` (`scripts/check-web-host.mjs`) verifies the canonical isolated host, the pinned txiki wasm, HTTP status/content types/COOP+COEP, and Chromium DOM for the terminal and fx/txiki-programmed visible features.
 
 ## Fresh-tree notes
 
@@ -152,3 +157,7 @@ sqlite is built into the same wasm. `scripts/vendor-txiki.mjs` compiles the sqli
 `tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects reports `Uncaught ...` and exits non-zero.
 
 The earlier gm-backed CLI and library were removed at `0538b2c`. The later gm builtin, a stdio MCP server over a C++ WebAssembly core, was removed too; fx covers its role in the page.
+
+## Hosted webserver system
+
+`src/webserver-registry.js` owns `.thebird/webservers.json` and `.thebird/webservers/<id>/`. `bin/thebird-webserver.js` provides register/unregister/list/status commands. `src/web-host.js` adds live `/__thebird/*` and `/sites/<id>/*` APIs atop the canonical static host: registry, EventSource HMR, MCP descriptors/proxy and progress feedback. `sdk/node/index.js` and `sdk/browser/index.js` are the shared SDK. `web/webserver-shell.js` renders the responsive shell on the normal `/` page; `web/prompts.json` is the user-wide agent prompt. The contract is `docs/WEBSERVER_STANDARD.md`.

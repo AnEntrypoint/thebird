@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "scope": "user-wide",
+  "audience": "agents",
+  "title": "Set up a thebird webserver",
+  "summary": "Use normal Node, npm and bash. Register a webserver; the system gives you a folder and live routes.",
+  "commands": [
+    "node bin/thebird-webserver.js register my-app --title 'My App'",
+    "cd .thebird/webservers/my-app",
+    "npm install",
+    "npm start",
+    "node ../../bin/thebird-webserver.js list"
+  ],
+  "routes": ["/sites/my-app/", "/sites/my-app/favicon.ico", "/sites/my-app/settings", "/sites/my-app/mcp"],
+  "sdk": ["thebird/sdk/node", "thebird/sdk/browser"],
+  "live": ["/__thebird/registry", "/__thebird/events", "/__thebird/progress", "/__thebird/mcp/my-app"]
+}

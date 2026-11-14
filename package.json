@@ -4,7 +4,13 @@
   "description": "A bash terminal that runs in the browser: bashkit with in-page git, sqlite3, python3 and curl",
   "type": "module",
   "bin": {
-    "thebird-relay": "./bin/thebird-relay.js"
+    "thebird-relay": "./bin/thebird-relay.js",
+    "thebird-web-host": "./bin/thebird-web-host.js",
+    "thebird-webserver": "./bin/thebird-webserver.js"
+  },
+  "exports": {
+    "./sdk/node": "./sdk/node/index.js",
+    "./sdk/browser": "./sdk/browser/index.js"
   },
   "engines": {
     "node": ">=22"
@@ -14,6 +20,15 @@
     "lint:architecture": "node scripts/lint-architecture.mjs",
     "lint:comments": "node scripts/lint-comments.mjs",
     "start": "node bin/thebird-relay.js",
+    "host": "node bin/thebird-web-host.js start",
+    "host:serve": "node scripts/serve-web-host.mjs",
+    "host:stop": "node bin/thebird-web-host.js stop",
+    "host:status": "node bin/thebird-web-host.js status",
+    "host:check": "node scripts/check-web-host.mjs",
+    "webserver": "node bin/thebird-webserver.js",
+    "webserver:register": "node bin/thebird-webserver.js register",
+    "webserver:list": "node bin/thebird-webserver.js list",
+    "webserver:status": "node bin/thebird-webserver.js status",
     "witness": "node scripts/witness.mjs",
     "witness:shell": "node scripts/witness-shell.mjs",
     "test": "node --test test/*.test.mjs"

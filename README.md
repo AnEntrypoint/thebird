@@ -30,9 +30,25 @@ node bin/thebird-relay.js --port 8080 --host 127.0.0.1
 
 Open the URL the server prints. `--port` defaults to an OS-assigned port and `--host` to `127.0.0.1`. The server answers GET and HEAD only.
 
+## Canonical local web host
+
+The canonical serving path is the built site served with cross-origin isolation; **txiki.js in the browser is the runtime**, not a Node-side application server. Build and start it on a known localhost port:
+
+```bash
+node scripts/build-pages.mjs
+npm run host
+```
+
+Open `http://127.0.0.1:4173/`. `npm run host` sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so `web/vendor/txiki/tjs.wasm`, OPFS/worker paths, cancellation and the vendored fx core work in a normal browser URL. `npm run host:status`, `npm run host:check` and `npm run host:stop` manage that exact host; `npm run host:serve` runs the same host in the foreground. `npm start` remains the source-tree development relay, not the canonical built-site host.
+
+fx and page scripts can program visible cards through `window.THEBIRD_FEATURES` (`web/features.js`), with `register`, `update`, `remove`, `list` and `clear`. `web/features.json` registers a demo card at boot, and `?featureProgram=1` runs `web/features-program.js` inside txiki to register another through `web/features-bridge.js`. See `docs/WEB_HOSTS.md` for the API, txiki bridge and runbook.
+
+`npm run host:check` verifies the pinned txiki wasm, HTTP 200, content types, COOP/COEP headers, the terminal title/engine, and headless Chromium DOM showing both the fx-programmed and txiki-programmed feature cards.
+
 ## Query parameters
 
 - `?run=<command>` runs each `run` value in order when the page loads. The body gets `data-done="true"` when they finish. Repeat the parameter for more commands.
+- `?featureProgram=1` runs the txiki.js feature demo and adds its visible card to `window.THEBIRD_FEATURES`.
 
 ## What works
 
@@ -42,7 +58,8 @@ Open the URL the server prints. `--port` defaults to an OS-assigned port and `--
 - `python3 -c <code>` and `python3 <file>`, run by Pyodide.
 - `pip install <package>...` for pure-Python packages from PyPI.
 - `curl` and `wget`, for hosts that send CORS headers to the page.
-- `fx --version`, `fx --help` and `fx check` from fx's browser WebAssembly core. `fx ask <prompt>` needs `window.THEBIRD_FX = { apiKey, model }` and WebAssembly JSPI.
+- `fx --version`, `fx --help` and `fx check` from fx's browser WebAssembly core. `fx ask <prompt>` needs `window.THEBIRD_FX = { apiKey, model }` and WebAssembly JSPI. fx and page scripts can also register visible DOM cards through `window.THEBIRD_FEATURES`.
+- `feature '<json>'` applies a visible-feature request through the same API; txiki.js programs reach it over `__thebirdBridge`.
 - `playwriter --version`, `playwriter status`, `playwriter execute <code>` and `playwriter stdio '<json-rpc>'`. Load the Birdman extension, grant the toolbar button on the thebird tab, then `playwriter execute <code>` controls other tabs over CDP. Execute bodies run in txiki.js with `browser`, `context`, `state` and `console` in scope; no Node playwriter server or upstream browser extension is used.
 - `which`, `type` and `command -v` give the same answer for each name.
 
@@ -70,9 +87,23 @@ History is kept in localStorage under `thebird.history`. It holds the submitted 
 
 ```bash
 npm run check
+npm run host:check
 npm run lint:comments
 npm run lint:architecture
 npm run witness
 ```
 
-`npm run witness` drives headless Chromium through `scripts/browser-driver.mjs` and checks the in-page shell end to end.
+`npm run witness` drives headless Chromium through `scripts/browser-driver.mjs` and checks the in-page shell end to end. `npm run host:check` drives headless Chromium against the canonical isolated host and checks the txiki wasm pin, HTTP status/content types/COOP+COEP, the rendered terminal title and fx/txiki visible-feature DOM.
+
+## Hosted webservers
+
+thebird has a standardized, live hosted-site system. Agents use normal Node, npm and bash commands:
+
+```bash
+node bin/thebird-webserver.js register my-app --title 'My App'
+cd .thebird/webservers/my-app
+npm install
+npm start
+```
+
+Each registered server gets a normal folder scaffold and live standard routes under `http://127.0.0.1:4173/sites/my-app/`: `/`, `/favicon.ico`, `GET /settings`, `POST /settings` and `GET /mcp`. The canonical host exposes `/__thebird/registry`, `/__thebird/events` (SSE/HMR), `/__thebird/progress` and `/__thebird/mcp/<id>`. The normal `/` page includes a responsive Discord-like shell: collapsible desktop side bar and a fullscreen phone view. `window.THEBIRD_WEBSERVERS` is the browser SDK; `thebird/sdk/node` is the Node SDK. See `docs/WEBSERVER_STANDARD.md`.

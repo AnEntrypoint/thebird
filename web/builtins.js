@@ -8,8 +8,9 @@ import { nodeBuiltin } from './node-in-txiki.js';
 import { fxBuiltin } from './fx-in-page.js';
 import { playwriterBuiltin } from './playwriter-in-page.js';
 import { npmBuiltin, npxBuiltin } from './npm-in-txiki.js';
+import { applyFeatureRequest } from './features-bridge.js';
 
-export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'npm', 'npx', 'curl', 'wget', 'fx', 'playwriter'];
+export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'npm', 'npx', 'curl', 'wget', 'fx', 'playwriter', 'feature'];
 
 const RUNNERS = {
   git: ({ argv }) => gitBuiltin(argv),
@@ -25,6 +26,7 @@ const RUNNERS = {
   wget: ({ argv, cwd, signal }) => curlBuiltin('wget', argv, cwd, signal),
   fx: ({ argv, signal }) => fxBuiltin(argv, { signal }),
   playwriter: ({ argv, signal }) => playwriterBuiltin(argv, { signal }),
+  feature: async ({ argv }) => JSON.stringify(await applyFeatureRequest(JSON.parse(argv[0]))),
 };
 
 export const runBuiltin = (name, argv, { cwd, signal, timeoutMs } = {}) => RUNNERS[name]({ argv, cwd, signal, timeoutMs });
