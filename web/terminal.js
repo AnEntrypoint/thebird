@@ -10,6 +10,7 @@ import './features.js';
 import { applyFeatureRequest, loadFeatureRequests } from './features-bridge.js';
 import { runFeatureProgram } from './features-in-txiki.js';
 import './webserver-shell.js';
+import './craft-workspace.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { type: 'module' }).catch(() => {});
 const params = new URLSearchParams(location.search);

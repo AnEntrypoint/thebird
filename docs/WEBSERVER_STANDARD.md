@@ -79,3 +79,8 @@ SSE `/__thebird/events` drives live UI updates and HMR. The scaffold's `public/a
 ## User-wide prompts
 
 `web/prompts.json` is a user-wide template shown in the normal page as a feature card. It lists the exact normal commands and routes. Agents should follow that prompt; it intentionally contains no txiki-specific setup steps.
+
+
+## Lazy Craft apps
+
+GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.

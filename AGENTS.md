@@ -127,3 +127,8 @@ A bash terminal that runs in the browser. Node serves the static files and nothi
 - Use normal Node/npm/bash, not txiki-specific agent workflows. Register with `node bin/thebird-webserver.js register <id>`; edit `.thebird/webservers/<id>/`; run `npm install` and `npm start`.
 - Standard routes are `/sites/<id>/`, `/sites/<id>/favicon.ico`, `GET/POST /sites/<id>/settings`, `GET /sites/<id>/mcp`, and live `/__thebird/registry`, `/__thebird/events`, `/__thebird/progress`, `/__thebird/mcp/<id>`.
 - `sdk/node/index.js`, `sdk/browser/index.js`, `web/webserver-shell.js` and `web/prompts.json` implement the shared SDK, responsive shell and user-wide prompt. See `docs/WEBSERVER_STANDARD.md`.
+
+
+## Lazy Craft apps
+
+GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.

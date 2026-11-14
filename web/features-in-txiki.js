@@ -5,7 +5,7 @@ const PROGRAM_URL = new URL('./features-program.js', import.meta.url).href;
 
 const bridge = async (name, argv) => {
   if (name === 'feature') return applyFeatureRequest(JSON.parse(argv[0]));
-  if (name === 'webserver') { const [method, ...rest] = argv; const sdk = globalThis.THEBIRD_WEBSERVERS; if (!sdk) throw new Error('webserver sdk is not mounted'); if (method === 'mcp') return sdk.mcp(rest[0], rest[1], JSON.parse(rest[2] ?? '{}')); if (method === 'progress') return sdk.progress(JSON.parse(rest[0])); if (method === 'registry') return sdk.registry(); throw new Error('unknown webserver method ' + method); }
+  if (name === 'webserver') { const [method, ...rest] = argv; const sdk = globalThis.THEBIRD_WEBSERVERS; if (!sdk) throw new Error('webserver sdk is not mounted'); if (method === 'mcp') return sdk.mcp(rest[0], rest[1], JSON.parse(rest[2] ?? '{}')); if (method === 'progress') return sdk.progress(JSON.parse(rest[0])); if (method === 'registry') return sdk.registry(); if (method === 'craft') { const craft = globalThis.THEBIRD_CRAFT; if (!craft) throw new Error('craft workspace is not mounted'); const [op, ...args] = rest; if (op === 'apps') return craft.apps(); if (op === 'intent') return craft.intent(args[0]); if (op === 'task') return craft.task(args[0], args[1], args[2]); if (op === 'open') return craft.open(args[0], args[1]); if (op === 'call') return craft.call(args[0], args[1], JSON.parse(args[2] ?? '{}')); throw new Error('unknown craft method ' + op); } throw new Error('unknown webserver method ' + method); }
   throw new Error(`unknown builtin: ${name}`);
 };
 

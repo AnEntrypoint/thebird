@@ -161,3 +161,8 @@ The earlier gm-backed CLI and library were removed at `0538b2c`. The later gm bu
 ## Hosted webserver system
 
 `src/webserver-registry.js` owns `.thebird/webservers.json` and `.thebird/webservers/<id>/`. `bin/thebird-webserver.js` provides register/unregister/list/status commands. `src/web-host.js` adds live `/__thebird/*` and `/sites/<id>/*` APIs atop the canonical static host: registry, EventSource HMR, MCP descriptors/proxy and progress feedback. `sdk/node/index.js` and `sdk/browser/index.js` are the shared SDK. `web/webserver-shell.js` renders the responsive shell on the normal `/` page; `web/prompts.json` is the user-wide agent prompt. The contract is `docs/WEBSERVER_STANDARD.md`.
+
+
+## Lazy Craft apps
+
+GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.

@@ -45,6 +45,22 @@
           }
         ]
       }
+    },
+    {
+      "op": "register",
+      "id": "craft-workspace-prompt",
+      "source": "system",
+      "spec": {
+        "title": "Lazy craft apps",
+        "description": "GridCraft, WordCraft and PDFCraft load only for sheet/doc/PDF work.",
+        "status": "normal Node CLI + MCP",
+        "body": [
+          {
+            "type": "p",
+            "text": "Use node bin/thebird-craft.js ensure and open a document."
+          }
+        ]
+      }
     }
   ]
 }

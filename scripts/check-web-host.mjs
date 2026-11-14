@@ -102,6 +102,29 @@ try {
   check('progress API accepts live rollout status', progress.ok === true, progress.ok ?? 'missing');
   const afterRegistry = await http('/__thebird/registry');
   check('live registry updates without restart', afterRegistry.body.includes(testId), 'registered via API');
+  const craftCli = (args) => command('bin/thebird-craft.js', args);
+  const craftEnsure = await craftCli(['ensure']);
+  check('craft CLI ensure exits 0', craftEnsure.code === 0, craftEnsure.code);
+  const craftProcessesBoot = await http('/__thebird/craft/processes');
+  check('lazy craft processes absent at boot', craftProcessesBoot.body.includes('"processes":[]') && craftProcessesBoot.body.includes('"lazy":true'), craftProcessesBoot.body.slice(0, 80));
+  const craftRegistry = await http('/__thebird/craft');
+  check('lazy craft registry is live', craftRegistry.status === 200 && ['gridcraft','wordcraft','pdfcraft'].every((id) => craftRegistry.body.includes(id)), 'gridcraft/wordcraft/pdfcraft');
+  const samples = await (await fetch(base + '/__thebird/craft/samples', { method: 'POST' })).json();
+  check('craft sample documents generated', samples.ok === true && Object.values(samples.samples).filter((value) => typeof value === 'string').length >= 3, 'sheet/doc/pdf samples');
+  for (const [intent, app] of [['review sheet.xlsx','gridcraft'],['edit document.docx','wordcraft'],['render report.pdf','pdfcraft']]) {
+    const routed = await (await fetch(base + '/__thebird/craft/intent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: intent }) })).json();
+    check('MCP intent routes ' + intent, routed.app === app, routed.app ?? 'missing');
+    const descriptor = await http('/__thebird/mcp/' + app);
+    check(app + ' lazy MCP descriptor is live', descriptor.status === 200 && descriptor.body.includes('lazy') && descriptor.body.includes('tools'), descriptor.status);
+    const call = await (await fetch(base + '/__thebird/mcp/' + app, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: app + '.info', params: {} }) })).json();
+    check(app + ' MCP call activates native CLI lazily', call.ok === true && call.result?.pid > 0, 'pid ' + (call.result?.pid ?? 'missing'));
+  }
+  const craftAfter = await http('/__thebird/craft/processes');
+  check('native craft processes exit after lazy calls', craftAfter.body.includes('"processes":[]'), craftAfter.body.slice(0, 80));
+  const craftTask = await (await fetch(base + '/__thebird/craft/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'show sample.csv', file: 'sample.csv', method: 'gridcraft.cat' }) })).json();
+  check('craft task returns document output', craftTask.ok === true && craftTask.result?.stdout?.includes('alpha'), (craftTask.result?.stdout ?? '').split('\n')[0] ?? 'missing');
+  check('craft progress/HMR event is live', craftTask.ok === true, 'document SSE event');
+
   const dom = await chromium(`${base}/?featureProgram=1&hostCheck=${Date.now()}`);
   check('Chromium headless exits 0', dom.code === 0, dom.code);
   check('browser title is thebird terminal', dom.stdout.includes('<title>thebird</title>'), dom.stdout.match(/<title>[^<]*<\/title>/)?.[0] ?? 'missing');
@@ -109,11 +132,12 @@ try {
   check('fx-programmed feature card is visible', dom.stdout.includes('data-feature-id="fx-visible-demo"') && dom.stdout.includes('fx-programmed feature'), 'fx-visible-demo');
   check('txiki-programmed feature card is visible', dom.stdout.includes('data-feature-id="txiki-visible-demo"') && dom.stdout.includes('txiki.js programmed card'), 'txiki-visible-demo');
   check('feature program reports ready', dom.stdout.includes('data-feature-program="ready"'), 'data-feature-program="ready"');
-  check('feature mount has three cards', dom.stdout.includes('data-feature-count="3"'), 'data-feature-count="3"');
+  check('feature mount has four cards', dom.stdout.includes('data-feature-count="4"'), 'data-feature-count="4"');
   check('user-wide webserver prompt is visible', dom.stdout.includes('data-feature-id="agent-webserver-prompt"'), 'agent-webserver-prompt');
   check('desktop shell is present', dom.stdout.includes('id="webserver-shell"') && dom.stdout.includes('data-shell="webservers"'), 'data-shell="webservers"');
   check('browser shell lists live registered server', dom.stdout.includes('data-webserver-id="' + testId + '"'), testId);
   check('phone shell layout marker is present', dom.stdout.includes('data-layout="phone"') || dom.stdout.includes('max-width: 700px'), 'responsive shell');
+  check('document workspace is visible', dom.stdout.includes('data-workspace="documents"') && dom.stdout.includes('craft-workspace-prompt'), 'craft workspace');
   check('live HMR status is visible', dom.stdout.includes('data-hmr="live"') || dom.stdout.includes('data-webserver-hmr="ready"'), 'live HMR');
   if (dom.code !== 0) console.log(dom.stderr.slice(-1200));
   const unregistered = await wsCli(['unregister', testId]);

@@ -31,7 +31,11 @@
     "webserver:status": "node bin/thebird-webserver.js status",
     "witness": "node scripts/witness.mjs",
     "witness:shell": "node scripts/witness-shell.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "craft": "node bin/thebird-craft.js",
+    "craft:ensure": "node bin/thebird-craft.js ensure",
+    "craft:samples": "node bin/thebird-craft.js sample",
+    "craft:status": "node bin/thebird-craft.js status"
   },
   "repository": "https://github.com/AnEntrypoint/thebird.git",
   "devDependencies": {

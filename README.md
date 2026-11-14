@@ -107,3 +107,8 @@ npm start
 ```
 
 Each registered server gets a normal folder scaffold and live standard routes under `http://127.0.0.1:4173/sites/my-app/`: `/`, `/favicon.ico`, `GET /settings`, `POST /settings` and `GET /mcp`. The canonical host exposes `/__thebird/registry`, `/__thebird/events` (SSE/HMR), `/__thebird/progress` and `/__thebird/mcp/<id>`. The normal `/` page includes a responsive Discord-like shell: collapsible desktop side bar and a fullscreen phone view. `window.THEBIRD_WEBSERVERS` is the browser SDK; `thebird/sdk/node` is the Node SDK. See `docs/WEBSERVER_STANDARD.md`.
+
+
+## Lazy Craft apps
+
+GridCraft, WordCraft and PDFCraft are lazy native Node CLI adapters registered as live webservers. Use `node bin/thebird-craft.js ensure`, `sample`, `status`, `intent`, `open`, `descriptor`, and `stop`; MCP endpoints are `/__thebird/mcp/<gridcraft|wordcraft|pdfcraft>`. Sheet/doc/PDF intent selects the app, native processes start only per task, and document cards appear live through `THEBIRD_FEATURES`/SSE. See `docs/CRAFT_APPS.md`.

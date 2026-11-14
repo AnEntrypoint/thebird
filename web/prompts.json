@@ -11,7 +11,45 @@
     "npm start",
     "node ../../bin/thebird-webserver.js list"
   ],
-  "routes": ["/sites/my-app/", "/sites/my-app/favicon.ico", "/sites/my-app/settings", "/sites/my-app/mcp"],
-  "sdk": ["thebird/sdk/node", "thebird/sdk/browser"],
-  "live": ["/__thebird/registry", "/__thebird/events", "/__thebird/progress", "/__thebird/mcp/my-app"]
+  "routes": [
+    "/sites/my-app/",
+    "/sites/my-app/favicon.ico",
+    "/sites/my-app/settings",
+    "/sites/my-app/mcp"
+  ],
+  "sdk": [
+    "thebird/sdk/node",
+    "thebird/sdk/browser"
+  ],
+  "live": [
+    "/__thebird/registry",
+    "/__thebird/events",
+    "/__thebird/progress",
+    "/__thebird/mcp/my-app"
+  ],
+  "craft": {
+    "title": "Lazy craft document apps",
+    "commands": [
+      "node bin/thebird-craft.js ensure gridcraft|wordcraft|pdfcraft",
+      "node bin/thebird-craft.js sample",
+      "node bin/thebird-craft.js status",
+      "node bin/thebird-craft.js processes",
+      "node bin/thebird-craft.js intent \"review sheet.xlsx\"",
+      "node bin/thebird-craft.js open .thebird/webservers/gridcraft/documents/sample.csv",
+      "node bin/thebird-craft.js descriptor pdfcraft"
+    ],
+    "intent": {
+      "sheet/xlsx/csv": "gridcraft",
+      "doc/docx/odt/rtf": "wordcraft",
+      "pdf": "pdfcraft"
+    },
+    "mcp": [
+      "/ __thebird/craft",
+      "/ __thebird/craft/intent",
+      "/ __thebird/mcp/gridcraft",
+      "/ __thebird/mcp/wordcraft",
+      "/ __thebird/mcp/pdfcraft"
+    ],
+    "display": "Open/task calls create a visible THEBIRD_FEATURES document card and send SSE/HMR progress."
+  }
 }
