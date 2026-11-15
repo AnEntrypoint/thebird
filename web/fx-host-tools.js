@@ -2,6 +2,40 @@ const UNAVAILABLE = (tool) => `${tool} is not available on the thebird page yet`
 
 const failure = (content) => ({ content, isError: true });
 
+const THEBIRD_MCP = '/__thebird/mcp/thebird';
+
+const callThebird = async (name, args) => {
+  let reply;
+  try {
+    const response = await fetch(THEBIRD_MCP, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+    });
+    if (!response.ok) return failure(`${name}: thebird host unavailable (HTTP ${response.status}); run thebird with npm run host`);
+    reply = await response.json();
+  } catch (error) {
+    return failure(`${name}: thebird host unavailable (${error?.message ?? String(error)}); run thebird with npm run host`);
+  }
+  if (reply?.error) return failure(`${name}: ${reply.error.message}`);
+  const text = reply?.result?.content?.[0]?.text;
+  if (typeof text !== 'string') return failure(`${name}: unexpected reply from the thebird host`);
+  return { content: text, isError: reply.result.isError === true };
+};
+
+const thebirdTool = (name, description, properties) => ({
+  name,
+  description,
+  inputSchema: { type: 'object', properties, additionalProperties: false },
+  execute: (input) => callThebird(name, input ?? {}),
+});
+
+const THEBIRD_TOOLS = [
+  thebirdTool('thebird_pane', 'Read the last lines of the thebird terminal screen, read-only. Optional lines, up to 500.', { lines: { type: 'number' } }),
+  thebirdTool('thebird_run', 'Read the thebird run snapshot, read-only: busy state, current command, cwd, last exit code, engine states and fx status.', {}),
+  thebirdTool('thebird_ports', 'List the apps and open ports from the thebird Node app supervisor, read-only.', {}),
+];
+
 export function createPageHostTools(host = {}) {
   return [
     {
@@ -40,6 +74,7 @@ export function createPageHostTools(host = {}) {
         );
       },
     },
+    ...THEBIRD_TOOLS,
   ];
 }
 

@@ -8,7 +8,7 @@ export const THEBIRD_FX_CAPABILITIES = {
   webservers: ['/__thebird/registry', '/__thebird/events', '/__thebird/progress', '/__thebird/mcp', '/sites/<id>/settings'],
   craft: ['gridcraft', 'wordcraft', 'pdfcraft'],
   browserApis: ['fetch', 'EventSource', 'window.THEBIRD_WEBSERVERS', 'window.THEBIRD_CRAFT', 'window.THEBIRD_FEATURES'],
-  toolAvailability: 'bash and ask host tools are wired in-session to the live shell client and browser prompt',
+  toolAvailability: 'bash and ask host tools are wired in-session to the live shell client and browser prompt; thebird_pane, thebird_run and thebird_ports read the thebird screen, run snapshot and open ports',
 };
 
 export const THEBIRD_FX_SYSTEM_PROMPT = [
@@ -19,6 +19,7 @@ export const THEBIRD_FX_SYSTEM_PROMPT = [
   'For hosted sites use node bin/thebird-webserver.js register <id>, then normal npm and bash commands in .thebird/webservers/<id>.',
   'For sheet/doc/PDF work use live MCP intent and tools: gridcraft, wordcraft, pdfcraft under /__thebird/mcp.',
   'Use fetch/EventSource and window.THEBIRD_WEBSERVERS, THEBIRD_CRAFT and THEBIRD_FEATURES for in-session live UI and HMR.',
+  'To see what thebird shows, call the read-only thebird_pane, thebird_run and thebird_ports host tools.',
 ].join(' ');
 
 export function fxPromptFor(userPrompt) {

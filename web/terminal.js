@@ -9,6 +9,7 @@ import { runFxTui } from './fx-tui.js';
 import { createPageHostTools, hostToolExecutor } from './fx-host-tools.js';
 import { createPageAsk } from './fx-ask.js';
 import { THEBIRD_FX_CAPABILITIES, THEBIRD_FX_SYSTEM_PROMPT, assertNoHostRefusal } from './fx-capabilities.js';
+import { observeRuns, startThebirdState } from './thebird-state.js';
 import './features.js';
 import { applyFeatureRequest, loadFeatureRequests } from './features-bridge.js';
 import { runFeatureProgram } from './features-in-txiki.js';
@@ -52,7 +53,8 @@ try {
   document.body.dataset.renderer = 'dom';
 }
 
-const client = shellClient({ commandTimeoutMs: params.get('commandTimeoutMs') ?? undefined });
+const observed = observeRuns(shellClient({ commandTimeoutMs: params.get('commandTimeoutMs') ?? undefined }));
+const client = observed.client;
 globalThis.THEBIRD_FX_CAPABILITIES = THEBIRD_FX_CAPABILITIES;
 globalThis.THEBIRD_FX_SYSTEM_PROMPT = THEBIRD_FX_SYSTEM_PROMPT;
 const fxTools = createPageHostTools({
@@ -75,6 +77,7 @@ const pty = createPtyAdapter({
   },
 });
 globalThis.thebird = { term, pty, text: screenText, features: globalThis.THEBIRD_FEATURES, applyFeatureRequest, loadFeatureRequests, runFeatureProgram };
+startThebirdState({ term, current: observed.current });
 const featureRequests = loadFeatureRequests();
 globalThis.THEBIRD_FEATURE_READY = featureRequests;
 client.ready.then(() => {

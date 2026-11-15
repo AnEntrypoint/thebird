@@ -7,7 +7,7 @@ const userPrompt = (text) => [{ role: 'user', content: [{ type: 'text', text }] 
 const pageTools = PAGE_HOST_TOOLS.map(({ name, inputSchema }) => ({ name, inputSchema }));
 
 test('the page advertises exactly bash and ask, each with an object input schema', () => {
-  assert.deepEqual(PAGE_HOST_TOOL_NAMES, ['bash', 'ask']);
+  assert.deepEqual(PAGE_HOST_TOOL_NAMES, ['bash', 'ask', 'thebird_pane', 'thebird_run', 'thebird_ports']);
   for (const tool of PAGE_HOST_TOOLS) {
     assert.equal(tool.inputSchema.type, 'object');
     assert.equal(typeof tool.execute, 'function');
@@ -34,7 +34,7 @@ test('the stub rejects an unlisted name even when the request advertises it', ()
 });
 
 test('a page tool reports that it is unavailable instead of running', () => {
-  for (const tool of PAGE_HOST_TOOLS) {
+  for (const tool of PAGE_HOST_TOOLS.filter((candidate) => !candidate.name.startsWith('thebird_'))) {
     assert.match(tool.execute().content, /is not available on the thebird page yet/);
   }
 });

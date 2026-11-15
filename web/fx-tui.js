@@ -6,6 +6,28 @@ const WASM_URL = new URL('./vendor/fx/fx-term.wasm', import.meta.url).href;
 const GHOSTTY_URL = new URL('./vendor/ghostty/ghostty-vt.wasm', import.meta.url).href;
 const REVISION_CONFLICT = Object.assign(new Error('fx session revision conflict'), { code: 'FX_OAUTH_SESSION_REVISION_CONFLICT' });
 
+const tuiStatus = { state: 'idle', model: null, exitCode: null, cols: null, rows: null, updatedAt: null };
+const tuiListeners = new Set();
+
+const publishTuiStatus = (patch) => {
+  Object.assign(tuiStatus, patch, { updatedAt: new Date().toISOString() });
+  const snapshot = { ...tuiStatus };
+  for (const listener of tuiListeners) listener(snapshot);
+};
+
+export const fxTuiStatus = () => ({ ...tuiStatus });
+
+export const onFxTuiStatus = (listener) => {
+  tuiListeners.add(listener);
+  return () => tuiListeners.delete(listener);
+};
+
+const onTuiEvent = (event) => {
+  if (event.type === 'runtime.ready') publishTuiStatus({ state: 'running' });
+  else if (event.type === 'runtime.exit') publishTuiStatus({ exitCode: event.code });
+  else if (event.type === 'terminal.resize') publishTuiStatus({ cols: event.cols, rows: event.rows });
+};
+
 const memoryOauthSessionStore = () => {
   let record = null;
   let counter = 0;
@@ -64,6 +86,7 @@ export async function runFxTui(term, fx = {}, host = {}) {
   const screen = new GhosttyScreen(await loadGhosttyVt(GHOSTTY_URL), term.cols, term.rows);
   term.write("\x1b[?1049h");
   const provider = providerOf(fx);
+  publishTuiStatus({ model: fx.model ?? (provider ? DEFAULT_MODEL : null), cols: term.cols, rows: term.rows, exitCode: null });
   const app = await createFxTerminal({
     terminal: ghosttyAdapter(term, screen),
     wasm: WASM_URL,
@@ -73,6 +96,7 @@ export async function runFxTui(term, fx = {}, host = {}) {
     promptHistoryStore: memoryPromptHistoryStore(),
     ...(host.tools === undefined ? {} : { tools: host.tools }),
     ...(host.hostToolExecutor === undefined ? {} : { hostToolExecutor: host.hostToolExecutor }),
+    onEvent: onTuiEvent,
   });
   app.interactive.catch(() => {});
   try {
@@ -81,5 +105,6 @@ export async function runFxTui(term, fx = {}, host = {}) {
     app.abort();
     screen.free();
     term.write("\x1b[?1049l");
+    publishTuiStatus({ state: 'idle' });
   }
 }
