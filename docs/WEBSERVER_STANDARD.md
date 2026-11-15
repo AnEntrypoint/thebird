@@ -29,6 +29,8 @@ Every registered webserver is exposed under `/sites/<id>/`:
 | `GET /mcp` | MCP descriptor with tools, resources and prompts. |
 | `POST /__thebird/mcp/<id>` | Local MCP method proxy, e.g. `{ "method": "ping", "params": {} }`. |
 
+A registered folder with a `server.js` is a Node app: the host starts it on the first request and proxies `/sites/<id>/` and its WebSocket upgrades to it. The host's own favicon, `/settings` and `/mcp` answers keep priority over the app. A folder without `server.js` serves its `public/` files. The thebird MCP endpoints are `POST /__thebird/state` (page snapshot) and `/__thebird/mcp/thebird` (tools `thebird_pane`, `thebird_run`, `thebird_ports`).
+
 System-wide live endpoints:
 
 | Route | Contract |
