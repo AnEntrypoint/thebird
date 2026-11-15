@@ -32,7 +32,7 @@ export const validateId = (name) => {
   return id;
 };
 
-const packageJson = (id) => JSON.stringify({ name: 'thebird-site-' + id, version: '1.0.0', private: true, type: 'module', scripts: { start: 'node server.js', dev: 'node server.js' }, dependencies: { thebird: 'file:../..' } }, null, 2) + '\n';
+const packageJson = (id) => JSON.stringify({ name: 'thebird-site-' + id, version: '1.0.0', private: true, type: 'module', scripts: { start: 'node server.js', dev: 'node server.js' }, dependencies: { thebird: 'file:../../..' } }, null, 2) + '\n';
 const serverJs = (id) => [
   "import { createWebserver } from 'thebird/sdk/node';",
   'const server = createWebserver({',

@@ -26,9 +26,29 @@ const command = (script, args) => new Promise((ok) => {
   child.stdout.on('data', (data) => { output += data; });
   child.stderr.on('data', (data) => { output += data; });
   child.on('exit', (code) => ok({ code, output: output.trim() }));
+  child.on('error', (error) => ok({ code: 1, output: error.message }));
 });
 
 const cli = (args) => command('bin/thebird-web-host.js', args);
+
+const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+
+const untilServed = async (url, { deadlineMs = 120000, attemptMs = 10000, everyMs = 500 } = {}) => {
+  const deadline = Date.now() + deadlineMs;
+  let last = { status: 0, error: 'not requested' };
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(attemptMs) });
+      last = { status: response.status, error: '' };
+      await response.body?.cancel();
+      if (response.status === 200) return last;
+    } catch (error) {
+      last = { status: 0, error: `${error.name}: ${error.message}` };
+    }
+    await pause(everyMs);
+  }
+  return last;
+};
 
 const build = await command('scripts/build-pages.mjs', []);
 check('site build exits 0', build.code === 0, build.code);
@@ -84,8 +104,8 @@ try {
   check('GET live registry returns HTTP 200', registryApi.status === 200, registryApi.status);
   check('live registry names test server', registryApi.body.includes(testId), testId);
   check('live registry includes user-wide prompt', registryApi.body.includes('Use npm, bash and normal Node files'), 'user-wide prompt');
-  const sitePage = await http('/sites/' + testId + '/');
-  check('GET registered site page returns HTTP 200', sitePage.status === 200, sitePage.status);
+  const sitePage = await untilServed(base + '/sites/' + testId + '/');
+  check('GET registered site page returns HTTP 200', sitePage.status === 200, sitePage.status || sitePage.error);
   const siteIcon = await http('/sites/' + testId + '/favicon.ico');
   check('GET registered favicon returns HTTP 200', siteIcon.status === 200, siteIcon.status);
   const settings = await http('/sites/' + testId + '/settings');
@@ -132,7 +152,7 @@ try {
   check('fx-programmed feature card is visible', dom.stdout.includes('data-feature-id="fx-visible-demo"') && dom.stdout.includes('fx-programmed feature'), 'fx-visible-demo');
   check('txiki-programmed feature card is visible', dom.stdout.includes('data-feature-id="txiki-visible-demo"') && dom.stdout.includes('txiki.js programmed card'), 'txiki-visible-demo');
   check('feature program reports ready', dom.stdout.includes('data-feature-program="ready"'), 'data-feature-program="ready"');
-  check('feature mount has five cards', dom.stdout.includes('data-feature-count="5"'), 'data-feature-count="5"');
+  check('feature mount has six cards', dom.stdout.includes('data-feature-count="6"'), 'data-feature-count="6"');
   check('user-wide webserver prompt is visible', dom.stdout.includes('data-feature-id="agent-webserver-prompt"'), 'agent-webserver-prompt');
   check('fx normal-computer prompt is visible', dom.stdout.includes('data-feature-id="fx-normal-computer-prompt"') && dom.stdout.includes('terminal tools are available'), 'fx-normal-computer-prompt');
   check('fx host tools are wired in-session', dom.stdout.includes('data-fx-tools="wired"'), 'data-fx-tools="wired"');
