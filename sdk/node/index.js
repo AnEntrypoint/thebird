@@ -69,9 +69,9 @@ export function createWebserver(options = {}) {
     handler,
     descriptor: descriptorFor(id, options.mcp),
     settingsForm: formFor(settingsSpec),
-    start(port = options.port ?? 0) {
+    start(port = options.port ?? Number(process.env.PORT ?? 0), host = process.env.HOST ?? '127.0.0.1') {
       const server = createServer(handler);
-      return new Promise((ok) => server.listen(port, '127.0.0.1', () => ok({ server, url: 'http://127.0.0.1:' + server.address().port + '/', close: () => new Promise((done) => server.close(done)) })));
+      return new Promise((ok) => server.listen(port, host, () => ok({ server, url: 'http://' + host + ':' + server.address().port + '/', close: () => new Promise((done) => server.close(done)) })));
     },
   };
 }

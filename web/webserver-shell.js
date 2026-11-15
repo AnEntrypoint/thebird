@@ -34,11 +34,16 @@ const toggleShell = () => {
   applyLayout();
 };
 
+const appLabel = (app = {}) => {
+  const state = app.state ?? 'idle';
+  return app.port ? state + ' :' + app.port : state;
+};
+
 const render = (registry) => {
   const servers = registry.servers ?? [];
   shell.dataset.count = String(servers.length);
   shell.dataset.hmr = 'live';
-  shell.innerHTML = '<header class="webserver-shell-header"><strong>Webservers</strong><button data-shell-toggle aria-label="Show or hide webservers">≡</button></header><section data-webserver-list>' + servers.map((server) => '<article class="webserver-card" data-webserver-id="' + server.id + '" data-webserver-status="' + server.status + '" data-webserver-hmr="' + server.hmr + '"><img src="/sites/' + server.id + '/favicon.ico" alt="" width="24" height="24"><div><a href="/sites/' + server.id + '/">' + server.title + '</a><small>' + server.status + ' · HMR ' + server.hmr + '</small></div><a data-webserver-settings href="/sites/' + server.id + '/settings">Settings</a><span data-webserver-mcp>MCP</span></article>').join('') + '</section><footer data-webserver-prompts>Use node bin/thebird-webserver.js register &lt;id&gt;</footer>';
+  shell.innerHTML = '<header class="webserver-shell-header"><strong>Webservers</strong><button data-shell-toggle aria-label="Show or hide webservers">≡</button></header><section data-webserver-list>' + servers.map((server) => '<article class="webserver-card" data-webserver-id="' + server.id + '" data-webserver-status="' + server.status + '" data-webserver-hmr="' + server.hmr + '" data-app-state="' + (server.app?.state ?? 'idle') + '"><img src="/sites/' + server.id + '/favicon.ico" alt="" width="24" height="24"><div><a href="/sites/' + server.id + '/">' + server.title + '</a><small>' + server.status + ' · HMR ' + server.hmr + '</small><small data-webserver-app-badge>app ' + appLabel(server.app) + '</small></div><a data-webserver-settings href="/sites/' + server.id + '/settings">Settings</a><span data-webserver-mcp>MCP</span></article>').join('') + '</section><footer data-webserver-prompts>Use node bin/thebird-webserver.js register &lt;id&gt;</footer>';
   shell.querySelector('[data-shell-toggle]')?.addEventListener('click', toggleShell);
 };
 
