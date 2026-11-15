@@ -101,6 +101,19 @@ test('thebird_run merges the run snapshot and includes fx when present', async (
   }
 });
 
+test('thebird_run passes the fx payload through unchanged, nulls included', async () => {
+  const { base, close } = await serve({ now: () => 1000 });
+  try {
+    const fx = { bottomLine: null, activeRun: null, browser: null, updatedAt: '2026-11-15T10:00:00.000Z' };
+    await post(base, '/__thebird/state', { run: { busy: false }, fx });
+    assert.deepEqual(toolValue(await call(base, 'thebird_run')).fx, fx);
+    await post(base, '/__thebird/state', { run: { busy: false }, fx: null });
+    assert.equal(toolValue(await call(base, 'thebird_run')).fx, null);
+  } finally {
+    await close();
+  }
+});
+
 test('thebird_ports reports the supervisor status, and an empty list without one', async () => {
   const fixed = [{ id: 'web', port: 4001, state: 'running' }, { id: 'api', port: 4002, state: 'stopped' }];
   const withSupervisor = await serve({ supervisor: { status: () => fixed } });

@@ -71,7 +71,7 @@ export function createThebirdMcp({ supervisor, now = () => Date.now(), staleMs =
   const storeSnapshot = (value) => {
     const kept = {};
     for (const key of SNAPSHOT_KEYS) {
-      if (typeof value[key] === 'object' && value[key] !== null) kept[key] = value[key];
+      if (typeof value[key] === 'object') kept[key] = value[key];
     }
     latest = { ...kept, updatedAt: now() };
   };
