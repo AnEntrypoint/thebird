@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const webRoot = resolve(repoRoot, 'web');
+const sdkRoot = resolve(repoRoot, 'sdk');
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -21,6 +23,7 @@ function within(root, rel) {
 function staticFile(pathname) {
   if (pathname === '/') return join(webRoot, 'terminal.html');
   if (pathname.startsWith('/web/')) return within(webRoot, pathname.slice('/web/'.length));
+  if (pathname.startsWith('/sdk/')) return within(sdkRoot, pathname.slice('/sdk/'.length));
   return null;
 }
 
