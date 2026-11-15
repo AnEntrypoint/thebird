@@ -4,6 +4,9 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { readRegistry, registerServer, unregisterServer, statusServers, serverFolder, validateId } from './webserver-registry.js';
 import { ensureCraftApps, readCraftConfig, craftDescriptor, callCraft, appForFile, appForIntent, createSamples, craftStatus, craftRuntime } from './craft-registry.js';
+import { createSupervisor } from './app-supervisor.js';
+import { parseSitePath, siteBase, proxyHttp, proxyUpgrade } from './app-proxy.js';
+import { createThebirdMcp } from './thebird-mcp.js';
 
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 4173;
@@ -16,6 +19,9 @@ const json = (res, value, status = 200, isolated = true) => {
   res.writeHead(status, headers); res.end(JSON.stringify(value));
 };
 const bodyJson = async (req) => { const chunks = []; for await (const chunk of req) chunks.push(chunk); return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); };
+
+const SERVICE_UNAVAILABLE = 'HTTP/1.1 503 Service Unavailable\r\nconnection: close\r\n\r\n';
+const isolationHeaders = (isolated) => (isolated ? { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' } : {});
 
 export function resolveSiteRoot(root = DEFAULT_ROOT, cwd = process.cwd()) { return resolve(cwd, root); }
 function requestPath(url) { try { return decodeURIComponent(new URL(url, 'http://localhost').pathname); } catch { return null; } }
@@ -56,9 +62,33 @@ export async function startWebHost({ host = DEFAULT_HOST, port = DEFAULT_PORT, r
   if (!info?.isDirectory()) throw new Error('site root is not a directory: ' + siteRoot);
   if (isolated) for (const path of ['web/features.json', 'web/features.js', 'web/features-bridge.js', 'web/features-in-txiki.js', 'web/features-program.js', 'web/vendor/txiki/tjs.wasm']) { const present = await stat(join(siteRoot, path)).catch(() => null); if (!present?.isFile()) throw new Error('canonical site is stale or incomplete: ' + path + ' is missing; run node scripts/build-pages.mjs'); }
   await ensureCraftApps(projectRoot);
+  const supervisor = createSupervisor({ projectRoot });
+  const thebirdMcp = createThebirdMcp({ supervisor });
+  const hasApp = async (id) => {
+    const registry = await readRegistry(projectRoot);
+    if (!registry.servers.some((entry) => entry.id === id)) return false;
+    return stat(join(serverFolder(projectRoot, id), 'server.js')).then((info) => info.isFile(), () => false);
+  };
+  const proxyApp = async (req, res, id, isolated) => {
+    let info;
+    try {
+      info = await supervisor.ensure(id);
+    } catch (error) {
+      res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('app ' + id + ' is not available: ' + error.message);
+      return true;
+    }
+    proxyHttp(req, res, { port: info.port, basePath: siteBase(id), extraHeaders: isolationHeaders(isolated) });
+    return true;
+  };
+  const appState = (entry) => ({ state: entry?.state ?? 'idle', port: entry?.port ?? null });
   const clients = new Set();
   const broadcast = (type, payload = {}) => { const data = JSON.stringify({ type, at: new Date().toISOString(), ...payload }); for (const res of clients) res.write('event: webservers\ndata: ' + data + '\n\n'); };
-  const registrySnapshot = async () => ({ version: 1, servers: await statusServers(projectRoot), prompts: ['Use npm, bash and normal Node files. Register with: node bin/thebird-webserver.js register <id>'] });
+  const registrySnapshot = async () => {
+    const runtime = new Map(supervisor.status().map((entry) => [entry.id, entry]));
+    const servers = (await statusServers(projectRoot)).map((server) => ({ ...server, app: appState(runtime.get(server.id)) }));
+    return { version: 1, servers, prompts: ['Use npm, bash and normal Node files. Register with: node bin/thebird-webserver.js register <id>'] };
+  };
   const api = async (req, res, pathname) => {
     if (pathname === '/__thebird/registry' && req.method === 'GET') { json(res, await registrySnapshot(), 200, isolated); return true; }
     if (pathname === '/__thebird/registry' && req.method === 'POST') { const body = await bodyJson(req); const entry = await registerServer(projectRoot, body.id, body); broadcast('registered', { id: entry.id }); json(res, { ok: true, entry }, 200, isolated); return true; }
@@ -86,6 +116,7 @@ export async function startWebHost({ host = DEFAULT_HOST, port = DEFAULT_PORT, r
       if (sub === '/settings' && req.method === 'POST') { const body = await bodyJson(req); const file = join(serverFolder(projectRoot, id), 'settings.json'); const current = JSON.parse(await readFile(file, 'utf8').catch(() => '{}')); const next = { ...current, ...body }; await writeFile(file, JSON.stringify(next, null, 2) + '\n'); broadcast('settings', { id }); json(res, { ok: true, settings: next }, 200, isolated); return true; }
       if (sub === '/mcp' && req.method === 'GET') { const apps = await readCraftConfig(projectRoot); json(res, apps[id] ? await craftDescriptor(projectRoot, apps[id]) : mcpDescriptor(validateId(id)), 200, isolated); return true; }
       if (sub === '/favicon.ico' && req.method === 'GET') { const headers = { 'content-type': 'image/x-icon', 'cache-control': 'no-store' }; if (isolated) { headers['cross-origin-opener-policy'] = 'same-origin'; headers['cross-origin-embedder-policy'] = 'require-corp'; } res.writeHead(200, headers); res.end(FAVICON); return true; }
+      if (await hasApp(id)) return proxyApp(req, res, id, isolated);
       const file = await siteFile(projectRoot, id, sub); if (file) { await sendResolvedFile(req, res, file, isolated); return true; }
       const extra = safePath(serverFolder(projectRoot, id), sub); if (extra && await stat(extra).then((info) => info.isFile()).catch(() => false)) { await sendResolvedFile(req, res, extra, isolated); return true; }
       if (sub === '/' && req.method === 'GET') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end('<!doctype html><title>' + id + '</title><body data-site="' + id + '"><h1>' + id + '</h1>'); return true; }
@@ -93,14 +124,30 @@ export async function startWebHost({ host = DEFAULT_HOST, port = DEFAULT_PORT, r
     }
     return null;
   };
+  const route = async (req, res, pathname) => {
+    if (await thebirdMcp.handle(req, res, pathname)) return true;
+    return api(req, res, pathname);
+  };
   const server = createServer((req, res) => {
     if (isolated) { res.setHeader('cross-origin-opener-policy', 'same-origin'); res.setHeader('cross-origin-embedder-policy', 'require-corp'); }
     const pathname = requestPath(req.url ?? '/'); if (!pathname) { res.writeHead(400); return res.end('bad request'); }
-    api(req, res, pathname).then((handled) => { if (handled !== null) return; return sendFile(req, res, siteRoot, pathname, isolated); }).catch((error) => { console.error('thebird web host request', error); if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); if (!res.writableEnded) res.end(error.message); });
+    route(req, res, pathname).then((handled) => { if (handled !== null) return; return sendFile(req, res, siteRoot, pathname, isolated); }).catch((error) => { console.error('thebird web host request', error); if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); if (!res.writableEnded) res.end(error.message); });
   });
+  const upgradeApp = async (req, socket, head) => {
+    const site = parseSitePath(requestPath(req.url ?? '/') ?? '');
+    if (!site || !(await hasApp(site.id))) return socket.destroy();
+    let info;
+    try {
+      info = await supervisor.ensure(site.id);
+    } catch {
+      return socket.end(SERVICE_UNAVAILABLE);
+    }
+    proxyUpgrade(req, socket, head, { port: info.port, basePath: siteBase(site.id) });
+  };
+  server.on('upgrade', (req, socket, head) => { upgradeApp(req, socket, head).catch(() => socket.destroy()); });
   await new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, ok); });
   const bound = server.address().port;
-  return { host, port: bound, root: siteRoot, isolated, url: 'http://' + host + ':' + bound + '/', broadcast, registry: registrySnapshot, close: () => new Promise((ok) => { for (const client of clients) client.end(); server.closeAllConnections(); server.close(ok); }) };
+  return { host, port: bound, root: siteRoot, isolated, url: 'http://' + host + ':' + bound + '/', broadcast, registry: registrySnapshot, close: async () => { await supervisor.stopAll(); await new Promise((ok) => { for (const client of clients) client.end(); server.closeAllConnections(); server.close(ok); }); } };
 }
 
 process.on('uncaughtException', (error) => console.error('thebird web host uncaught', error));
