@@ -1876,3 +1876,16 @@ Phase A changes (committed locally, no push):
 
 - Full `npm run witness` on the final tree (after 70b9968 and 15148b7): FAIL-lines=0; PASS-lines=83; GROUPS-done=23. The three live 8793 rows PASS in this run. The rerun of `fx-builtin` (4 of 4) and `fx-approval` (6 of 6) PASS on the same tree.
 - The run then waits on the `nested` group, which is heavy (it runs python3), behind the witness load gate (loadavg under 6). Load was 17 to 58 for the rest of the job, and the job was stopped at 41 minutes, before its 60-minute bound would have ended it. The remaining groups did not run, so the full witness is not green and nothing was pushed.
+
+### Full witness made load-independent; relay answers the page thebird routes (2026-11-16, run 2026-11-16-12-42-07-45b5d6)
+
+- Choice (ledger): the load gate is removed. Heavy groups stay serialized, one at a time, because they share a cold Pyodide start, and each runs under the fixed budget `HEAVY_GROUP_BUDGET_MS` (2700000 ms). A group over budget is a FAIL. Every GROUP line records `loadavg` at its start and end, and the report quotes those values. Reason: the host ran at load 17 to 58 on 16 cores (other tenants), and the gate, which waited for load under 6, kept three full runs from starting their heavy groups. A load-dependent verdict is replaced by a budget that does not depend on load.
+
+Phase A changes (each committed locally, lanmower, no trailers):
+
+| Commit | File | Change | Row or witness needed |
+| --- | --- | --- | --- |
+| 2258fad | scripts/witness.mjs | `LOAD_CAP` and `waitForHeadroom` removed; heavy groups run under `HEAVY_GROUP_BUDGET_MS` through `within`; each GROUP line prints `load before -> after`. The fx-provider page-error check is restored to the unfiltered `HTTP`/`status of` 4xx and 5xx test (the URL filter from ac8fa8d is removed). | the full witness, every GROUP line carries its load, and no group is skipped for load |
+| 248eca5 | src/relay.js | `/__thebird/state` (POST, 204 through the thebird MCP state handler), `/__thebird/registry` (GET JSON with `statusServers`) and `/__thebird/events` (GET, SSE with a connected event) answer on the dev relay. Every other POST or PUT still gets 405. | `relay` group: `relay answers the page thebird routes: state POST 204, registry JSON 200, events text/event-stream 200`, and `relay serves files for GET and HEAD, and answers POST only at /__thebird/state` |
+| (this commit) | scripts/lint-architecture.mjs | the two relay claim labels follow the new prose (`It answers GET and HEAD for files`, `The relay answers GET and HEAD for files`) | `node scripts/lint-architecture.mjs --static`: 362 pass, 0 fail |
+| (this commit) | AGENTS.md, ARCHITECTURE.md, README.md | relay and load-gate wording updated to match the two changes above | `npm run lint:architecture` |

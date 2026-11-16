@@ -28,7 +28,7 @@ npm start
 node bin/thebird-relay.js --port 8080 --host 127.0.0.1
 ```
 
-Open the URL the server prints. `--port` defaults to an OS-assigned port and `--host` to `127.0.0.1`. The server answers GET and HEAD only.
+Open the URL the server prints. `--port` defaults to an OS-assigned port and `--host` to `127.0.0.1`. The server answers GET and HEAD for files, and the page's `/__thebird/state`, `/__thebird/registry` and `/__thebird/events` routes.
 
 ## Canonical local web host
 
