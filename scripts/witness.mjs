@@ -747,7 +747,7 @@ group('node-txiki-npm', async () => {
           pipUnknown: { stdout: pipUnknown.stdout, stderr: pipUnknown.stderr, exitCode: pipUnknown.exitCode },
         };
       })().catch((err) => { globalThis.__txikiShellRuns = { error: String(err.message ?? err) }; })`);
-      await waitFor('globalThis.__txikiShellRuns !== undefined', 300000);
+      await waitFor('globalThis.__txikiShellRuns !== undefined', COLD_START_MS);
       txikiShell.runs = JSON.parse(await evaluate('JSON.stringify(globalThis.__txikiShellRuns)'));
     },
   });
@@ -897,7 +897,7 @@ group('nested', async () => {
       await evaluate(`(async () => {
         const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
         try {
-          const run = await shell.runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done', { cwd: '/workspace', timeoutMs: 240000 });
+          const run = await shell.runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done', { cwd: '/workspace', timeoutMs: COLD_START_MS });
           globalThis.__nestedRun = { stdout: run.stdout, exitCode: run.exitCode, stderr: run.stderr };
         } catch (err) {
           globalThis.__nestedRun = { error: String(err.message ?? err) };
@@ -1417,7 +1417,7 @@ group('python-splash', async () => {
       await evaluate(`(() => { globalThis.__splashModes = []; const splash = document.getElementById('splash'); new MutationObserver(() => globalThis.__splashModes.push(splash.dataset.mode ?? 'none')).observe(splash, { attributes: true, childList: true, subtree: true }); return true; })()`);
       await type('python3 -c "print(6*7)"');
       await press('Enter');
-      await waitFor("/^42$/m.test(globalThis.thebird.text())", 240000);
+      await waitFor("/^42$/m.test(globalThis.thebird.text())", COLD_START_MS);
       await new Promise((resolve) => setTimeout(resolve, 300));
       splashRun.modes = await evaluate('[...new Set(globalThis.__splashModes)]');
       splashRun.hidden = await evaluate("document.getElementById('splash').hidden");
@@ -1431,7 +1431,7 @@ group('python-splash', async () => {
     interact: async ({ type, press, evaluate, waitFor }) => {
       await type('python3 -c "print(1)"');
       await press('Enter');
-      await waitFor("(() => { const splash = document.getElementById('splash'); return !splash.hidden && splash.dataset.mode === 'text'; })()", 240000);
+      await waitFor("(() => { const splash = document.getElementById('splash'); return !splash.hidden && splash.dataset.mode === 'text'; })()", COLD_START_MS);
       bundleFailed.splash = await evaluate("document.getElementById('splash').textContent");
       bundleFailed.out = await evaluate("globalThis.thebird.text()");
     },
@@ -1570,7 +1570,7 @@ group('python-warm', async () => {
     interact: async ({ type, press, waitFor }) => {
       await type('python3 -c "print(1)"');
       await press('Enter');
-      await waitFor("/^1$/m.test(globalThis.thebird.text())", 240000);
+      await waitFor("/^1$/m.test(globalThis.thebird.text())", COLD_START_MS);
     },
   });
   const warmStarted = performance.now();
