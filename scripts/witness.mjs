@@ -903,7 +903,7 @@ group('nested', async () => {
           globalThis.__nestedRun = { error: String(err.message ?? err) };
         }
       })()`);
-      await waitFor('globalThis.__nestedRun !== undefined', 300000);
+      await waitFor('globalThis.__nestedRun !== undefined', COLD_START_MS);
       nestedRuns.run = JSON.parse(await evaluate('JSON.stringify(globalThis.__nestedRun)'));
     },
   });
