@@ -897,7 +897,7 @@ group('nested', async () => {
       await evaluate(`(async () => {
         const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
         try {
-          const run = await shell.runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done', { cwd: '/workspace', timeoutMs: COLD_START_MS });
+          const run = await shell.runShellInTxiki('git init nest-check >/dev/null && echo git-ok && node -e "console.log(2 + 2)" && qjs -e "1 + 2" && python3 -c "print(7 * 6)" && echo done', { cwd: '/workspace', timeoutMs: ${COLD_START_MS} });
           globalThis.__nestedRun = { stdout: run.stdout, exitCode: run.exitCode, stderr: run.stderr };
         } catch (err) {
           globalThis.__nestedRun = { error: String(err.message ?? err) };
