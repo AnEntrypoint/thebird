@@ -32,7 +32,7 @@ process.on('unhandledRejection', (error) => {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GROUP_BUDGET_MS = 2700000;
-const COLD_START_MS = GROUP_BUDGET_MS;
+const COLD_START_MS = GROUP_BUDGET_MS - 120000;
 const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const haveChrome = existsSync(chrome);
