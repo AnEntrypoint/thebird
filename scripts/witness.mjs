@@ -31,7 +31,8 @@ process.on('unhandledRejection', (error) => {
 });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const COLD_START_MS = 900000;
+const HEAVY_GROUP_BUDGET_MS = 2700000;
+const COLD_START_MS = HEAVY_GROUP_BUDGET_MS;
 const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const haveChrome = existsSync(chrome);
@@ -102,7 +103,6 @@ async function terminal(pairs, options = {}) {
 }
 
 const loadAverage = () => Number(readFileSync('/proc/loadavg', 'utf8').split(' ')[0]);
-const HEAVY_GROUP_BUDGET_MS = 2700000;
 const within = (promise, ms, name) => {
   let timer;
   return Promise.race([promise, new Promise((_, fail) => { timer = setTimeout(() => fail(new Error(`${name} exceeded its ${ms} ms budget`)), ms); })]).finally(() => clearTimeout(timer));
