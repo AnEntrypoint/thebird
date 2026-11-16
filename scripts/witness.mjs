@@ -32,7 +32,6 @@ process.on('unhandledRejection', (error) => {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COLD_START_MS = 900000;
-const LOAD_CAP = 6;
 const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const haveChrome = existsSync(chrome);
@@ -103,16 +102,19 @@ async function terminal(pairs, options = {}) {
 }
 
 const loadAverage = () => Number(readFileSync('/proc/loadavg', 'utf8').split(' ')[0]);
-const waitForHeadroom = async () => {
-  while (loadAverage() >= LOAD_CAP) await new Promise((ok) => setTimeout(ok, 2000));
+const HEAVY_GROUP_BUDGET_MS = 2700000;
+const within = (promise, ms, name) => {
+  let timer;
+  return Promise.race([promise, new Promise((_, fail) => { timer = setTimeout(() => fail(new Error(`${name} exceeded its ${ms} ms budget`)), ms); })]).finally(() => clearTimeout(timer));
 };
 
 async function runGroup(entry) {
-  if (entry.heavy) await waitForHeadroom();
   const context = { name: entry.name, results: [], browserContextId: null };
   const started = performance.now();
+  const loadBefore = loadAverage();
   try {
-    await scope.run(context, entry.run);
+    const run = scope.run(context, entry.run);
+    await (entry.heavy ? within(run, HEAVY_GROUP_BUDGET_MS, entry.name) : run);
   } catch (error) {
     context.results.push({ name: `${entry.name} raised an error`, ok: false });
     console.log(`FAIL ${entry.name} raised an error: ${error.message}`);
@@ -120,7 +122,7 @@ async function runGroup(entry) {
     await disposeContext(context);
   }
   const seconds = (performance.now() - started) / 1000;
-  console.log(`GROUP ${entry.name} wall ${seconds.toFixed(1)}s`);
+  console.log(`GROUP ${entry.name} wall ${seconds.toFixed(1)}s load ${loadBefore} -> ${loadAverage()}`);
   return { name: entry.name, seconds, results: context.results };
 }
 
@@ -138,7 +140,13 @@ const isolated = await fetch(relay.url);
 check('relay sends the cross-origin isolation headers', isolated.headers.get('cross-origin-opener-policy') === 'same-origin' && isolated.headers.get('cross-origin-embedder-policy') === 'require-corp');
 check('relay serves web files', (await fetch(relay.url + 'web/terminal.js')).status === 200 && (await fetch(relay.url + 'web/shell-worker.js')).status === 200);
 check('relay refuses paths outside web', (await fetch(relay.url + 'web//etc/passwd')).status === 404 && (await fetch(relay.url + 'package.json')).status === 404 && (await fetch(relay.url + 'src/relay.js')).status === 404);
-check('relay serves only GET and HEAD', (await fetch(relay.url, { method: 'POST', body: '{}' })).status === 405 && (await fetch(relay.url + 'web/terminal.js', { method: 'PUT' })).status === 405);
+check('relay serves files for GET and HEAD, and answers POST only at /__thebird/state', (await fetch(relay.url, { method: 'POST', body: '{}' })).status === 405 && (await fetch(relay.url + 'web/terminal.js', { method: 'PUT' })).status === 405);
+const stateReply = await fetch(relay.url + '__thebird/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"run":{"busy":false}}' });
+const registryReply = await fetch(relay.url + '__thebird/registry');
+const eventsAbort = new AbortController();
+const eventsReply = await fetch(relay.url + '__thebird/events', { signal: eventsAbort.signal });
+eventsAbort.abort();
+check('relay answers the page thebird routes: state POST 204, registry JSON 200, events text/event-stream 200', stateReply.status === 204 && registryReply.status === 200 && eventsReply.status === 200 && (eventsReply.headers.get('content-type') ?? '').startsWith('text/event-stream') && Array.isArray((await registryReply.json()).servers), JSON.stringify({ state: stateReply.status, registry: registryReply.status, events: eventsReply.status }));
 });
 
 group('playwriter-hello', async () => {
@@ -429,7 +437,7 @@ group('fx-provider', async () => {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
   });
   const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
-  const errors = ask.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
+  const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
   check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
   check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
