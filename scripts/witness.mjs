@@ -31,8 +31,8 @@ process.on('unhandledRejection', (error) => {
 });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HEAVY_GROUP_BUDGET_MS = 2700000;
-const COLD_START_MS = HEAVY_GROUP_BUDGET_MS;
+const GROUP_BUDGET_MS = 2700000;
+const COLD_START_MS = GROUP_BUDGET_MS;
 const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const haveChrome = existsSync(chrome);
@@ -112,9 +112,9 @@ async function runGroup(entry) {
   const context = { name: entry.name, results: [], browserContextId: null };
   const started = performance.now();
   const loadBefore = loadAverage();
+  console.log(`START ${entry.name}${entry.heavy ? ' (heavy)' : ''} load ${loadBefore}`);
   try {
-    const run = scope.run(context, entry.run);
-    await (entry.heavy ? within(run, HEAVY_GROUP_BUDGET_MS, entry.name) : run);
+    await within(scope.run(context, entry.run), GROUP_BUDGET_MS, entry.name);
   } catch (error) {
     context.results.push({ name: `${entry.name} raised an error`, ok: false });
     console.log(`FAIL ${entry.name} raised an error: ${error.message}`);
