@@ -207,8 +207,8 @@ group('fx-builtin', async () => {
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
   const askTools = [...new Set(fxStub.seen.flatMap((request) => request.tools))];
   await fxStub.close();
-  check('fx ask advertises exactly the page tools bash and ask to the gateway', JSON.stringify(askTools) === JSON.stringify(['bash', 'ask']), JSON.stringify(askTools));
-  check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
+  check('fx ask advertises exactly the page host tools to the gateway: bash, ask, thebird_pane, thebird_run and thebird_ports', JSON.stringify([...askTools].sort()) === JSON.stringify(['ask', 'bash', 'thebird_pane', 'thebird_ports', 'thebird_run']), JSON.stringify(askTools));
+  check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=') && fxAsk.out.includes('Task: hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
   const fxLines = fxAsk.out.split('\n');
   check('fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin', fxLines.filter((line) => line === 'fx').length >= 2 && fxLines.includes('fx is a shell builtin'), JSON.stringify(fxLines.filter((line) => /fx/.test(line)).slice(0, 6)));
   check('fx --version and fx check report the bundled wasm and JSPI from the shell worker', /^fx-core\.wasm [0-9a-f]{12} libfx SDK 2$/m.test(fxAsk.out) && /^fx ready: JSPI available; core application\/wasm$/m.test(fxAsk.out), JSON.stringify(fxAsk.out.slice(0, 300)));
@@ -379,7 +379,9 @@ group('fx-approval', async () => {
       await type('fx');
       await press('Enter');
       surfaces.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
-      surfaces.hostToolCount = await evaluate('globalThis.thebirdHostToolCount ?? null');
+      await evaluate("import(new URL('web/fx-host-tools.js', location.href).href).then((m) => { globalThis.__pageHostToolCount = m.PAGE_HOST_TOOLS.length; })");
+      await settle('globalThis.__pageHostToolCount !== undefined', 30000);
+      surfaces.hostToolCount = await evaluate('globalThis.__pageHostToolCount ?? null');
       await submit('hello');
       surfaces.transcriptShown = await settle(hasText('stub gateway answer: prompt=hello'), 90000);
       await grab('transcript');
@@ -414,9 +416,9 @@ group('fx-approval', async () => {
   check('auto mode: a bash tool call runs to its tool result with no approval prompt', surfaces.autoRan === true && surfaceHas('auto', 'tool-result=seen') && !surfaceHas('auto', 'Allow once') && !surfaceHas('auto', '3. Deny'), JSON.stringify({ ran: surfaces.autoRan, rows: (surfaces.auto ?? '').split('\n').filter((line) => /Allow once|Deny|tool-result/.test(line)).slice(0, 4) }));
   check('approval: a bash tool call opens the approval panel with its options and its command row', surfaces.approvalShown === true && surfaceHas('approval', '1. Allow once') && surfaceHas('approval', '3. Deny') && approvalPanelRows('approval').length > 0, JSON.stringify({ options: (surfaces.approval ?? '').split('\n').filter((line) => /1\. Allow once|3\. Deny/.test(line)), commandRows: approvalPanelRows('approval'), screenTail: (surfaces.approval ?? '').split('\n').filter((line) => line.trim() !== '').slice(-8), stub: stubTui.seen.map((request) => ({ roles: request.roles, tools: request.tools, prompt: String(Array.isArray(request.prompt) ? request.prompt.map((item) => item?.content?.[0]?.text ?? item?.role).join(' | ') : request.prompt).slice(0, 160) })) }));
   check('negative control: a plain prompt with no approval-requiring tool shows no approval panel', surfaceHas('transcript', 'stub gateway answer: prompt=hello') && !surfaceHas('transcript', 'Allow once') && !surfaceHas('transcript', '3. Deny'), JSON.stringify((surfaces.transcript ?? '').split('\n').filter((line) => /Allow once|3\. Deny/.test(line))));
-  check('host tools: fx_terminal_initialize accepted the page host tools before the TUI started (count 2)', surfaces.hostToolCount === 2, String(surfaces.hostToolCount));
+  check('host tools: the page exports five host tools to the TUI before it starts: bash, ask, thebird_pane, thebird_run and thebird_ports', surfaces.hostToolCount === 5, String(surfaces.hostToolCount));
   const tuiTools = [...new Set(stubTui.seen.flatMap((request) => request.tools))].sort();
-  check('host tools: the TUI advertises exactly bash and ask to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash']), JSON.stringify(tuiTools));
+  check('host tools: the TUI advertises exactly the five page host tools to its gateway', JSON.stringify(tuiTools) === JSON.stringify(['ask', 'bash', 'thebird_pane', 'thebird_ports', 'thebird_run']), JSON.stringify(tuiTools));
 });
 
 group('fx-provider', async () => {
