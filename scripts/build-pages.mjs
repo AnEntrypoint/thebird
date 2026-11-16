@@ -18,6 +18,7 @@ export async function buildPages(out = join(root, '_site')) {
   cpSync(join(root, 'web'), join(out, 'web'), { recursive: true, filter: (source) => !source.startsWith(join(root, 'web', 'vendor', 'floosie')) });
   cpSync(join(root, 'sdk'), join(out, 'sdk'), { recursive: true });
   copyFileSync(join(root, 'web', 'terminal.html'), join(out, 'index.html'));
+  writeFileSync(join(out, 'package.json'), '{"sideEffects": true}\n');
   await build({
     entryPoints: [join(out, 'web', 'terminal.js')],
     bundle: true,
@@ -25,6 +26,7 @@ export async function buildPages(out = join(root, '_site')) {
     target: 'es2022',
     outfile: join(out, 'web', 'terminal.bundle.js'),
   });
+  rmSync(join(out, 'package.json'));
   writeFileSync(join(out, 'index.html'), readFileSync(join(out, 'index.html'), 'utf8').replace('src="web/terminal.js"', 'src="web/terminal.bundle.js"'));
   writeFileSync(join(out, '.nojekyll'), '');
   writeFileSync(join(out, 'sw.js'), "import './web/package-sw.js';\n");
