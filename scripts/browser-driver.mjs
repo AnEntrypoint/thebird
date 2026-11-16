@@ -254,7 +254,10 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
     };
     const until = Date.now() + timeoutMs;
     while (!(await evaluate("document.body && document.body.dataset.done === 'true'"))) {
-      if (Date.now() > until) throw new Error('terminal did not finish: ' + url);
+      if (Date.now() > until) {
+        const screen = await evaluate("globalThis.thebird ? globalThis.thebird.text().slice(-900) : 'no terminal'").catch((error) => `screen unreadable: ${error.message}`);
+        throw new Error(`terminal did not finish: ${url} — screen tail: ${JSON.stringify(screen)}`);
+      }
       if (onProgress) onProgress(await evaluate("globalThis.thebird ? globalThis.thebird.text() : ''"));
       await sleep(300);
     }
