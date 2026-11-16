@@ -2,10 +2,14 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createThebirdMcp } from './thebird-mcp.js';
+import { statusServers } from './webserver-registry.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const webRoot = resolve(repoRoot, 'web');
 const sdkRoot = resolve(repoRoot, 'sdk');
+const thebirdMcp = createThebirdMcp();
+const THEBIRD_ROUTES = new Set(['/__thebird/state', '/__thebird/registry', '/__thebird/events']);
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -27,7 +31,26 @@ function staticFile(pathname) {
   return null;
 }
 
+async function thebirdRoute(req, res, pathname) {
+  if (pathname === '/__thebird/state') return thebirdMcp.handle(req, res, pathname);
+  if (req.method !== 'GET') {
+    res.writeHead(405, { allow: 'GET' });
+    res.end('method not allowed');
+    return true;
+  }
+  if (pathname === '/__thebird/registry') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ version: 1, servers: await statusServers(repoRoot), prompts: [] }));
+    return true;
+  }
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+  res.write(`event: webservers\ndata: ${JSON.stringify({ type: 'connected', servers: await statusServers(repoRoot) })}\n\n`);
+  return true;
+}
+
 async function serve(req, res) {
+  const pathname = new URL(req.url, 'http://relay').pathname;
+  if (THEBIRD_ROUTES.has(pathname) && await thebirdRoute(req, res, pathname)) return;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { allow: 'GET, HEAD' });
     return res.end('method not allowed');
