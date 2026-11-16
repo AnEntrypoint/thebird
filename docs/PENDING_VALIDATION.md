@@ -1861,3 +1861,13 @@ Phase A changes (committed locally, no push):
 | scripts/witness.mjs (error filter in fx-provider) | the 8793 chat request returns 200 and the page logs no HTTP error | `--group=fx-provider` PASS with `statuses: ["200"], errors: []` |
 | scripts/witness.mjs (fx-tui-live reply regex and detail) | the TUI on the live 8793 gateway answers hi with a reply line below the typed hi | `--group=fx-tui-live` PASS with a real reply line after `┃ hi` |
 | docs/PENDING_VALIDATION.md | the three live rows | this section |
+
+### fx stub rows: witness expectations follow the fx tool set (2026-11-16, run 2026-11-16-11-13-45-8c582f)
+
+- The full witness run (before this section) failed four stub-gateway rows that the live 8793 fix did not touch. Cause, from their output: the page now exports five host tools to fx (bash, ask, thebird_pane, thebird_run, thebird_ports), from 8803307 (`feat(fx): give fx the thebird pane, run snapshot and ports`, 2026-11-15), and the witness still expected exactly bash and ask. `web/fx-capabilities.js` (0d53a48, 2026-11-14) also sends the capability prompt followed by `Task: <prompt>`, so the stub echoes the framed task, not `prompt=hello`. 0d53a48 also removed `globalThis.thebirdHostToolCount`, which the witness read.
+- Change in `scripts/witness.mjs`: the advertised tool sets expect the five page host tools (fx ask and the TUI); the fx ask check expects the stub prefix and `Task: hello streaming=true authorized=true`; the host-tool count is read from `PAGE_HOST_TOOLS` in `web/fx-host-tools.js` through a dynamic import, so the page count is measured, not a removed global. The product is unchanged.
+
+| File | Row | Witness needed |
+| --- | --- | --- |
+| scripts/witness.mjs (fx-builtin rows) | fx ask advertises exactly the page host tools to the gateway; fx ask hello reaches the stub gateway | `--group=fx-builtin` PASS |
+| scripts/witness.mjs (fx-approval host-tool rows) | host tools: the page exports five host tools; the TUI advertises exactly the five page host tools | `--group=fx-approval` PASS |
