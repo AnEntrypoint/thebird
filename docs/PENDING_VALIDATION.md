@@ -1871,3 +1871,8 @@ Phase A changes (committed locally, no push):
 | --- | --- | --- |
 | scripts/witness.mjs (fx-builtin rows) | fx ask advertises exactly the page host tools to the gateway; fx ask hello reaches the stub gateway | `--group=fx-builtin` PASS |
 | scripts/witness.mjs (fx-approval host-tool rows) | host tools: the page exports five host tools; the TUI advertises exactly the five page host tools | `--group=fx-approval` PASS |
+
+### Full witness after the fixes (2026-11-16, run 2026-11-16-11-13-45-8c582f): not finished
+
+- Full `npm run witness` on the final tree (after 70b9968 and 15148b7): FAIL-lines=0; PASS-lines=83; GROUPS-done=23. The three live 8793 rows PASS in this run. The rerun of `fx-builtin` (4 of 4) and `fx-approval` (6 of 6) PASS on the same tree.
+- The run then waits on the `nested` group, which is heavy (it runs python3), behind the witness load gate (loadavg under 6). Load was 17 to 58 for the rest of the job, and the job was stopped at 41 minutes, before its 60-minute bound would have ended it. The remaining groups did not run, so the full witness is not green and nothing was pushed.
