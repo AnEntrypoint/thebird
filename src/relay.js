@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createThebirdMcp } from './thebird-mcp.js';
-import { statusServers } from './webserver-registry.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const webRoot = resolve(repoRoot, 'web');
@@ -40,11 +39,11 @@ async function thebirdRoute(req, res, pathname) {
   }
   if (pathname === '/__thebird/registry') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ version: 1, servers: await statusServers(repoRoot), prompts: [] }));
+    res.end(JSON.stringify({ version: 1, servers: [], prompts: [] }));
     return true;
   }
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-  res.write(`event: webservers\ndata: ${JSON.stringify({ type: 'connected', servers: await statusServers(repoRoot) })}\n\n`);
+  res.write(`event: webservers\ndata: ${JSON.stringify({ type: 'connected', servers: [] })}\n\n`);
   return true;
 }
 
