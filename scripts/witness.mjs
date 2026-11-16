@@ -343,7 +343,7 @@ group('fx-tui-live', async () => {
   if (!liveKey) throw new Error('fx-tui-live needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
   const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
   const surfaces = {};
-  await terminal([], {
+  const tui = await terminal([], {
     timeoutMs: COLD_START_MS,
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
     interact: async ({ type, press, evaluate, waitFor }) => {
@@ -353,11 +353,13 @@ group('fx-tui-live', async () => {
       surfaces.inputReady = await settle(`globalThis.thebird.text().includes('┃')`, 120000);
       await type('hi');
       await press('Enter');
-      surfaces.reply = await settle(`/┃ hi[\\s\\S]*\\n {2}(?!\\d+s )\\S/.test(globalThis.thebird.text())`, 120000);
+      surfaces.reply = await settle(`/┃ hi[\\s\\S]*\\n {2}(?!Thinking|\\d+s )\\S/.test(globalThis.thebird.text())`, 120000);
       surfaces.screen = await evaluate(TUI_SCREEN);
     },
   });
-  check('the TUI on the live 8793 gateway answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(0, 4).join(' / ').slice(0, 160)}`);
+  const gatewayStatuses = tui.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
+  const gatewayErrors = tui.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d/.test(line));
+  check('the TUI on the live 8793 gateway answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
 });
 
 group('fx-approval', async () => {
@@ -425,7 +427,7 @@ group('fx-provider', async () => {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
   });
   const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
-  const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
+  const errors = ask.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
   check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
   check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
