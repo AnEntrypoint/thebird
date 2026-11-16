@@ -1845,3 +1845,19 @@ Witness runs on this stretch's tree:
 - Failures: the three live 8793 rows (`fx ask on the live 8793 gateway`, `the 8793 chat request returns 200`, `the TUI on the live 8793 gateway`), blocked on the hy4 server outside this repo.
 - npm 404 row: passed in this run.
 - Push: held. The full witness does not exit 0.
+
+### Live 8793 rows: diagnosis and witness fixes (2026-11-16, run 2026-11-16-11-13-45-8c582f)
+
+- Cause of the three live 8793 failures: the hy4 client that serves `127.0.0.1:8793` (`/workspace/hy4-relay/src/client.js`) was not running on this machine, and `client-run.log` showed no peer on the swarm. With it down, `fx ask` printed `fx: HostStreamFailed` with `statuses: []` (no request reached 8793), and the TUI never showed a reply. The hy4 server side (the tclaude daemon on `127.0.0.1:55112`) is not on this machine, so only the client was started here. Started with `HY4_NO_WATCH=1 node src/client.js` (job `hy4-client`, log in the run directory, not committed). The shim then answered `swarm connected`, and a probe of the page's streaming two-tool body returned `200` in about 1.6 s.
+- `fx ask on the live 8793 gateway prints ok with rc 0` (group `fx-provider`): with the client up, `ok`, `rc=0`, `statuses: ["200"]`. PASS. No code change.
+- `the 8793 chat request returns 200 and the page logs no HTTP error` (group `fx-provider`): the request itself returned 200. The row failed on three page errors for thebird's own dev-relay routes (`/__thebird/registry` 404, `/__thebird/state` 405, `/__thebird/events` 404), which the row counted as HTTP errors. Change: `scripts/witness.mjs` counts only the page log lines that name the chat URL. Witness: `statuses: ["200"], errors: []`. PASS.
+- `the TUI on the live 8793 gateway answers hi with a reply line below the typed hi` (group `fx-tui-live`): the first run, with the client still joining the swarm, showed the banner only and `reply false` after 122 s. The next run passed on the `Thinking (0s)` placeholder, which the reply regex accepted. Change: `scripts/witness.mjs` excludes `Thinking` in the reply regex, and the row now reports the gateway statuses, the gateway errors, and the last six screen lines. Witness: `┃ hi` then `  hi — what can I help you with?`. PASS.
+- Open, outside this repo: the hy4 server must be on the swarm for the live rows, and the client must be running here. The dev relay (`src/relay.js`, GET and HEAD only) answers the page's `/__thebird/state` POST with 405, and `/__thebird/registry` and `/__thebird/events` with 404. Those page errors are not counted by the rows now, and the page is not yet changed to skip them on the dev relay.
+
+Phase A changes (committed locally, no push):
+
+| File | Row | Witness needed |
+| --- | --- | --- |
+| scripts/witness.mjs (error filter in fx-provider) | the 8793 chat request returns 200 and the page logs no HTTP error | `--group=fx-provider` PASS with `statuses: ["200"], errors: []` |
+| scripts/witness.mjs (fx-tui-live reply regex and detail) | the TUI on the live 8793 gateway answers hi with a reply line below the typed hi | `--group=fx-tui-live` PASS with a real reply line after `┃ hi` |
+| docs/PENDING_VALIDATION.md | the three live rows | this section |
