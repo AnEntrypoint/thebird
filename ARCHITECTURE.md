@@ -109,7 +109,7 @@ Symlinks are link entries. Reads, writes, `stat`, `readdir`, `open` and `realpat
 
 ## Relay
 
-`src/relay.js` is a static server. It binds `127.0.0.1` by default, and `--port` and `--host` change that. It answers GET and HEAD for files; other methods get 405 with `Allow: GET, HEAD`, except POST to `/__thebird/state` (204), and GET of `/__thebird/registry` and `/__thebird/events`, which answer as the web host does. `/` serves `web/terminal.html`, `/web/*` serves files under `web/` (paths that leave `web/` are refused), and anything else is 404.
+`src/relay.js` is a static server. It binds `127.0.0.1` by default, and `--port` and `--host` change that. It answers GET and HEAD for files; other methods get 405 with `Allow: GET, HEAD`, except POST to `/__thebird/state` (204), and GET of `/__thebird/registry` and `/__thebird/events`, which answer with an empty server list, because the dev relay hosts no webservers. `/` serves `web/terminal.html`, `/web/*` serves files under `web/` (paths that leave `web/` are refused), and anything else is 404.
 
 Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so the page is cross-origin isolated. A static host serving the page needs the same two headers.
 
