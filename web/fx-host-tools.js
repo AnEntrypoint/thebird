@@ -4,6 +4,8 @@ const failure = (content) => ({ content, isError: true });
 
 const THEBIRD_MCP = '/__thebird/mcp/thebird';
 
+const THEBIRD_REGISTRY = '/__thebird/registry';
+
 const callThebird = async (name, args) => {
   let reply;
   try {
@@ -30,10 +32,43 @@ const thebirdTool = (name, description, properties) => ({
   execute: (input) => callThebird(name, input ?? {}),
 });
 
+const callRegistry = async (method, body) => {
+  let reply;
+  try {
+    const response = await fetch(THEBIRD_REGISTRY, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) return failure(`thebird registry: HTTP ${response.status}; run thebird with npm run host`);
+    reply = await response.json();
+  } catch (error) {
+    return failure(`thebird registry: ${error?.message ?? String(error)}; run thebird with npm run host`);
+  }
+  return { content: JSON.stringify(reply) };
+};
+
+const thebirdRegistryTool = (name, description, method, properties, required) => ({
+  name,
+  description,
+  inputSchema: { type: 'object', properties, required, additionalProperties: false },
+  writes: true,
+  idempotent: method === 'DELETE',
+  execute: (input) => callRegistry(method, input ?? {}),
+});
+
 const THEBIRD_TOOLS = [
   thebirdTool('thebird_pane', 'Read the last lines of the thebird terminal screen, read-only. Optional lines, up to 500.', { lines: { type: 'number' } }),
   thebirdTool('thebird_run', 'Read the thebird run snapshot, read-only: busy state, current command, cwd, last exit code, engine states and fx status.', {}),
   thebirdTool('thebird_ports', 'List the apps and open ports from the thebird Node app supervisor, read-only.', {}),
+  thebirdRegistryTool(
+    'thebird_register',
+    'Register a Node webserver with the thebird host, creating its folder under .thebird/webservers.',
+    'POST',
+    { id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' } },
+    ['id'],
+  ),
+  thebirdRegistryTool('thebird_unregister', 'Remove a registered Node webserver from the thebird host registry.', 'DELETE', { id: { type: 'string' } }, ['id']),
 ];
 
 export function createPageHostTools(host = {}) {

@@ -6,8 +6,8 @@ import { streamPlan } from '../scripts/fx-stub-gateway.mjs';
 const userPrompt = (text) => [{ role: 'user', content: [{ type: 'text', text }] }];
 const pageTools = PAGE_HOST_TOOLS.map(({ name, inputSchema }) => ({ name, inputSchema }));
 
-test('the page advertises exactly bash and ask, each with an object input schema', () => {
-  assert.deepEqual(PAGE_HOST_TOOL_NAMES, ['bash', 'ask', 'thebird_pane', 'thebird_run', 'thebird_ports']);
+test('the page advertises bash, ask and the thebird tools, each with an object input schema', () => {
+  assert.deepEqual(PAGE_HOST_TOOL_NAMES, ['bash', 'ask', 'thebird_pane', 'thebird_run', 'thebird_ports', 'thebird_register', 'thebird_unregister']);
   for (const tool of PAGE_HOST_TOOLS) {
     assert.equal(tool.inputSchema.type, 'object');
     assert.equal(typeof tool.execute, 'function');
@@ -44,6 +44,27 @@ test('a wired bash tool runs through the page shell and reports the exit status'
   const bash = tools.find((tool) => tool.name === 'bash');
   assert.deepEqual(await bash.execute({ command: 'true' }), { content: 'ok\n', isError: false });
   assert.deepEqual(await bash.execute({ command: 'false' }), { content: 'bad\n', isError: true });
+});
+
+test('thebird_register posts the webserver to the registry endpoint and thebird_unregister deletes it', async () => {
+  const original = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, method: init.method, body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({ ok: true, entry: { id: 'witness-app' } }) };
+  };
+  try {
+    const register = PAGE_HOST_TOOLS.find((tool) => tool.name === 'thebird_register');
+    const unregister = PAGE_HOST_TOOLS.find((tool) => tool.name === 'thebird_unregister');
+    assert.match((await register.execute({ id: 'witness-app' })).content, /witness-app/);
+    await unregister.execute({ id: 'witness-app' });
+    assert.deepEqual(calls, [
+      { url: '/__thebird/registry', method: 'POST', body: { id: 'witness-app' } },
+      { url: '/__thebird/registry', method: 'DELETE', body: { id: 'witness-app' } },
+    ]);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('the host tool executor dispatches by name and fails unknown tools', async () => {

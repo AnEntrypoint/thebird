@@ -1973,3 +1973,17 @@ Phase A changes (each committed locally, lanmower, no trailers):
 - Rebuilt artifacts from `b1a489d6` are kept in `runs/2026-11-17-19-58-16-7a77b7/witness/vendor-b1a489d6/` (manifest verified with `scripts/vendor-fx.mjs --verify`). They are not committed; `web/vendor/fx/` is back at the committed build, which the workspace attach does not need.
 - The narrow check (`fx-tool-bridge`) now also rejects `Unsupported tool`, so it fails on this tree and passes once a thebird tool call completes through the bridge.
 - The dev relay refuses the thebird MCP endpoint (POST `/__thebird/mcp/thebird`, HTTP 405 by design), so a thebird tool that does reach the page answers "thebird host unavailable" on the relay. The witness for a successful call needs the canonical host, `npm run host`.
+
+### fx's term path sends page host tools to the host provider (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Cause, found by reading the compiled dispatch: on WASI, `executeRequest` in `src/core/tooling/tool_runtime.zig` sent every tool call to `executeWorkspaceToolCallInner`, which accepts only the single `shell` or `Bash` command and answers `Unsupported tool: <name>` for anything else. The page's host tools never reached `executeToolCallInner`, where the `host_tool_provider` set by commit `b1a489d6` is used.
+- Change (fx commit `b03a9ffc`, local, not pushed): on WASI a call whose registered spec has `executor_kind == .host` goes to `executeToolCallInner` with the image catalog. Other WASI calls keep the workspace path. No tool is stubbed.
+- Result on the dev relay (`127.0.0.1:4190`): `[tool:thebird_run]` no longer answers `Unsupported tool`; it reaches the page's fetch and returns `thebird_run: thebird host unavailable (HTTP 405)`, the relay's answer to POST `/__thebird/mcp/thebird`. The call completes end to end on `npm run host`, which Phase B runs.
+- The fx term wasm is the rebuilt `b03a9ffc` artifact, copied into the working tree for testing. Phase B replaces it with the vendor step, `FX_COMMIT=b03a9ffc`.
+
+### fx registers webservers through POST /__thebird/registry (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Cause: the in-page `curl` only does GET and rejects `-X`, `-d` and `-H`, so fx had no way to reach the registry endpoint.
+- Change (`web/fx-host-tools.js`): two host tools, `thebird_register` (POST `/__thebird/registry` with `{id, title?, description?}`) and `thebird_unregister` (DELETE `/__thebird/registry` with `{id}`). Each returns the endpoint's JSON reply, or an error naming `npm run host` when the host answers non-OK or cannot be reached. Both are classified `writes: true`. The CLI `node bin/thebird-webserver.js register|unregister` is unchanged, and both call `registerServer` and `unregisterServer` in `src/webserver-registry.js`.
+- The endpoint's DELETE does not remove the webserver's folder under `.thebird/webservers/<id>/`; the witness removes that folder by hand after unregistering it.
+- Not yet verified: the registry tools need the canonical host, which Phase B starts.
