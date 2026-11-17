@@ -1949,3 +1949,8 @@ Phase A changes (each committed locally, lanmower, no trailers):
 - Cause: fx's wasm terminal (`web/vendor/fx/fx-term.wasm`, profile `wasm`, `js_host_workspace = true`, `tools = false`) answers every tool call through `executeToolCall` in `src/main.zig`, which returns the unavailable result when `workspaceHostInfo()` is null. That info comes only from the `workspace` option of `createFxTerminal` (`web/vendor/fx/wasm-runtime.js`, `prepareWorkspaceAdapter`). `runFxTui` passed `tools` and `hostToolExecutor` but never a `workspace`, so every tool, thebird's and fx's own `bash`, was refused.
 - Change (`web/fx-host-tools.js`, `web/terminal.js`, `web/fx-tui.js`): `pageWorkspace(bash)` builds the adapter (root, cwd and home `/workspace`, `gitAvailable: false`, `ephemeral: true`, permission `allow-sandboxed`, `exec` through the page shell in `/workspace`). The page passes it to `runFxTui` and `runFxTui` forwards it to `createFxTerminal`. No tool is stubbed.
 - Not yet verified: the thebird tools need the canonical host. The dev relay refuses POST to `/__thebird/mcp/thebird` by design (`src/relay.js`), so a thebird tool on the relay answers HTTP 405. The witness runs on `npm run host`.
+
+### fx ask gets the thebird workspace too (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Same cause as the TUI (see the entry above): `fx ask` in `web/fx-in-page.js` built its engine with the tools but no workspace, so its tool calls were refused the same way.
+- Change (`web/fx-in-page.js`): the engine gets `globalThis.THEBIRD_FX_WORKSPACE`, which `web/terminal.js` sets to the same `pageWorkspace` adapter. `createFxEngine` spreads its options into the runtime options (`web/vendor/fx/engine.js`, `runtimeOptions`), so the wasm runtime reads the `workspace` key.

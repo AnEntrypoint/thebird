@@ -52,6 +52,7 @@ const ask = async (argv, signal) => {
     ...(provider ? customEngine({ ...options, provider }) : gatewayEngine(options)),
     model: options.model ?? DEFAULT_MODEL,
     tools: globalThis.THEBIRD_FX_TOOLS ?? PAGE_HOST_TOOLS,
+    workspace: globalThis.THEBIRD_FX_WORKSPACE,
   }, wasmRuntimeFactory());
   if (signal.aborted) {
     await engine.close().catch(() => {});
