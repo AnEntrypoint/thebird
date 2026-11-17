@@ -302,7 +302,7 @@ group('fx-tool-bridge', async () => {
   } finally {
     await fxStub.close();
   }
-  check('fx started in thebird has the tool bridge: a thebird tool call is answered and never reports Tools are unavailable', bridge.ready === true && bridge.answered === true && !bridge.screen.includes('Tools are unavailable'), JSON.stringify({ ready: bridge.ready, answered: bridge.answered, tail: bridge.screen.split('\n').filter((line) => line.trim()).slice(-6) }));
+  check('fx started in thebird has the tool bridge: a thebird tool call is answered and never reports Tools are unavailable or Unsupported tool', bridge.ready === true && bridge.answered === true && !bridge.screen.includes('Tools are unavailable') && !bridge.screen.includes('Unsupported tool'),JSON.stringify({ ready: bridge.ready, answered: bridge.answered, tail: bridge.screen.split('\n').filter((line) => line.trim()).slice(-6) }));
 });
 
 group('fx-graphemes', async () => {
