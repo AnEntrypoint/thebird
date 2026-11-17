@@ -1954,3 +1954,8 @@ Phase A changes (each committed locally, lanmower, no trailers):
 
 - Same cause as the TUI (see the entry above): `fx ask` in `web/fx-in-page.js` built its engine with the tools but no workspace, so its tool calls were refused the same way.
 - Change (`web/fx-in-page.js`): the engine gets `globalThis.THEBIRD_FX_WORKSPACE`, which `web/terminal.js` sets to the same `pageWorkspace` adapter. `createFxEngine` spreads its options into the runtime options (`web/vendor/fx/engine.js`, `runtimeOptions`), so the wasm runtime reads the `workspace` key.
+
+### Narrow check: fx started in thebird has the tool bridge (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Change (`scripts/witness.mjs`, new group `fx-tool-bridge`): fx opens on the stub gateway, `[tool:thebird_ports]` is sent, and the check requires the stub's answer on the screen and no `Tools are unavailable` text. It fails on the pre-fix tree (`Failed : Tools are unavailable in the current JavaScript host.` was observed with playwriter) and holds on any host, because the row does not depend on the MCP reply.
+- Not yet run by the witness runner: this change set is run through playwriter, as the owner asked.

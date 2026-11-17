@@ -282,6 +282,29 @@ group('fx-tui', async () => {
   check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
 });
 
+group('fx-tool-bridge', async () => {
+  const fxStub = await startFxStubGateway();
+  const bridge = {};
+  try {
+    await terminal([], {
+      timeoutMs: COLD_START_MS,
+      initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`,
+      interact: async ({ type, press, evaluate, waitFor }) => {
+        await type('fx');
+        await press('Enter');
+        bridge.ready = await waitFor(`globalThis.thebird.text().includes('┃')`, 120000).then(() => true, () => false);
+        await type('[tool:thebird_ports]');
+        await press('Enter');
+        bridge.answered = await waitFor(`(${TUI_SCREEN}).includes('stub gateway answer')`, 90000).then(() => true, () => false);
+        bridge.screen = await evaluate(TUI_SCREEN);
+      },
+    });
+  } finally {
+    await fxStub.close();
+  }
+  check('fx started in thebird has the tool bridge: a thebird tool call is answered and never reports Tools are unavailable', bridge.ready === true && bridge.answered === true && !bridge.screen.includes('Tools are unavailable'), JSON.stringify({ ready: bridge.ready, answered: bridge.answered, tail: bridge.screen.split('\n').filter((line) => line.trim()).slice(-6) }));
+});
+
 group('fx-graphemes', async () => {
   const graphemes = {};
   await terminal([], {
