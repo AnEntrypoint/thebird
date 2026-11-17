@@ -114,6 +114,7 @@ term.onResize(({ cols }) => pty.resize(cols));
 const terminalBox = document.getElementById('terminal');
 new ResizeObserver(() => fit.fit()).observe(terminalBox);
 terminalBox.addEventListener('paste', (event) => {
+  if (takingOver) return;
   event.preventDefault();
   event.stopPropagation();
   pty.paste(event.clipboardData?.getData('text/plain') ?? '');
