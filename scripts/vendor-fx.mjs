@@ -37,7 +37,7 @@ export async function vendorFx() {
   if (!existsSync(wasm) || process.env.FX_REBUILD === '1') run(zig(), ['build', '-Dwasm-surface=core']);
   if (!existsSync(wasm)) throw new Error(`fx-core.wasm is missing after the build: ${wasm}`);
   const termWasm = join(fxRepo, 'zig-out', 'bin', 'fx-term.wasm');
-  if (!existsSync(termWasm) || process.env.FX_REBUILD === '1') run(zig(), ['build', 'fx-term-wasm', '-Dwasm-surface=term']);
+  if (!existsSync(termWasm) || process.env.FX_REBUILD === '1') run(zig(), ['build', 'fx-term-wasm', '-Dwasm-surface=term', '-Dremote-terminal=true']);
   if (!existsSync(termWasm)) throw new Error(`fx-term.wasm is missing after the build: ${termWasm}`);
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });

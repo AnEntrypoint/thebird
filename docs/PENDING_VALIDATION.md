@@ -1959,3 +1959,9 @@ Phase A changes (each committed locally, lanmower, no trailers):
 
 - Change (`scripts/witness.mjs`, new group `fx-tool-bridge`): fx opens on the stub gateway, `[tool:thebird_ports]` is sent, and the check requires the stub's answer on the screen and no `Tools are unavailable` text. It fails on the pre-fix tree (`Failed : Tools are unavailable in the current JavaScript host.` was observed with playwriter) and holds on any host, because the row does not depend on the MCP reply.
 - Not yet run by the witness runner: this change set is run through playwriter, as the owner asked.
+
+### fx term wasm build needs -Dremote-terminal=true (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Defect found while preparing the fx re-vendor: fx at `1863b514` refuses to build `fx-term.wasm` without `-Dremote-terminal=true` (`build.zig:237`, "the remote/browser terminal wasm is disabled"). `scripts/vendor-fx.mjs` ran `zig build fx-term-wasm -Dwasm-surface=term` without it, so a refresh from the current fx would fail at configure.
+- Change (`scripts/vendor-fx.mjs`): the term build passes `-Dremote-terminal=true`. The core build is unchanged.
+- Not yet run: the refresh itself (zig build and re-vendor) waits for swap-out to drop; the build was started once, the flag error stopped it at configure, and it was stopped before any compile.
