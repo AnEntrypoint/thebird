@@ -1937,3 +1937,8 @@ Phase A changes (each committed locally, lanmower, no trailers):
 - Defect reproduced with playwriter on the dev relay (`127.0.0.1:4190`, PID in `relay.pid`): a paste made while `fx` owned the terminal inserted the text into fx's input and also into the hidden shell line (`pty.state().line` kept `hello from paste`). After Ctrl+C twice exited fx, the prompt read `thebird /workspace> hello from paste`. Cause: the paste listener in `web/terminal.js` calls `pty.paste` even while `takingOver` blocks keystrokes.
 - Change (`web/terminal.js`): while `takingOver`, the paste listener returns without preventing the default, so fx gets the paste through its own input path and the shell line is untouched. Shell paste is unchanged.
 - Witness it needs: playwriter, paste while fx is open, press Enter, then exit fx: the shell line is empty after exit, and fx's input shows the paste before Enter.
+
+### Narrow check: Enter after a paste runs the pasted line (2026-11-17, run 2026-11-17-17-47-01-fce50d)
+
+- Change (`scripts/witness.mjs`, group `paste`): paste `echo paste-kept`, require the input to hold it before Enter, press Enter, then require the output line `paste-kept` and an empty input. It fails if Enter clears a paste without running it, or if the paste is not in the input before Enter.
+- The witness row is written for the witness runner, but this change set was run through playwriter, as the owner asked, so the runner's own row is not yet run.

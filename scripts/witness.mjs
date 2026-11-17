@@ -673,6 +673,18 @@ group('paste', async () => {
     },
   });
   check('a multi-line paste goes into the input line with each newline as a space, queues nothing and runs nothing', pasted.state?.line === 'one two three' && pasted.state.queued === 0 && pasted.output?.length === 0, JSON.stringify({ line: pasted.state?.line, queued: pasted.state?.queued, output: pasted.output }));
+  const kept = {};
+  await terminal([], {
+    interact: async ({ evaluate, press, waitFor }) => {
+      await evaluate(`(() => { const data = new DataTransfer(); data.setData('text/plain', 'echo paste-kept'); document.querySelector('.xterm-helper-textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })); })()`);
+      kept.before = await evaluate('globalThis.thebird.pty.state().line');
+      await press('Enter');
+      await waitFor("globalThis.thebird.text().split('\\n').some((line) => line === 'paste-kept')", 30000).catch(() => {});
+      kept.after = await evaluate('globalThis.thebird.pty.state().line');
+      kept.ran = await evaluate("globalThis.thebird.text().split('\\n').some((line) => line === 'paste-kept')");
+    },
+  });
+  check('Enter after a paste runs the pasted line and empties the input; a paste cleared by Enter without running fails', kept.before === 'echo paste-kept' && kept.after === '' && kept.ran === true, JSON.stringify(kept));
 });
 
 group('host-tools', async () => {
