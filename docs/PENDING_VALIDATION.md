@@ -1987,3 +1987,16 @@ Phase A changes (each committed locally, lanmower, no trailers):
 - Change (`web/fx-host-tools.js`): two host tools, `thebird_register` (POST `/__thebird/registry` with `{id, title?, description?}`) and `thebird_unregister` (DELETE `/__thebird/registry` with `{id}`). Each returns the endpoint's JSON reply, or an error naming `npm run host` when the host answers non-OK or cannot be reached. Both are classified `writes: true`. The CLI `node bin/thebird-webserver.js register|unregister` is unchanged, and both call `registerServer` and `unregisterServer` in `src/webserver-registry.js`.
 - The endpoint's DELETE does not remove the webserver's folder under `.thebird/webservers/<id>/`; the witness removes that folder by hand after unregistering it.
 - Not yet verified: the registry tools need the canonical host, which Phase B starts.
+
+### Phase B: fx term tools on the canonical host (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Vendor: `FX_REBUILD=1 FX_COMMIT=b03a9ffc ZIG=/config/.local/bin/zig node scripts/vendor-fx.mjs`, then `--verify`: `fx vendor written ... 232dd5dfb861`, `VENDOR EXIT 0`, `fx vendor verified ... 232dd5dfb861`, `VERIFY EXIT 0`. The term wasm's SHA-256 is `539006b0b62bd6391d412efea1e3515fadb582160659333eb76dd1d864e8dc81`, the same as the local fx build and the manifest's `term` entry, which names `fx b03a9ffc`.
+- Host: `npm run host` on `http://127.0.0.1:4173/` (isolation `coop-coep`), with `_site` from `scripts/build-pages.mjs` (brotli package ok, 110 files).
+- Witnesses, all from fx open in the page on the canonical host, through playwriter. Each output is the body the page's fetch received from the host:
+  - `[tool:thebird_ports]`: `POST /__thebird/mcp/thebird` 200, `{"apps":[]}`.
+  - `[tool:thebird_run]` (after the shell ran `echo witness-run`, the snapshot's trivial command; the tool takes no command argument): 200, `busy: true, command: "fx", lastExitCode: 0, cwd: "/workspace"`.
+  - `[tool:thebird_pane]`: 200, the terminal's lines (`cols 108, rows 27`).
+  - `[tool:thebird_register] [input:{"id":"witness-app","title":"witness app"}]`: `POST /__thebird/registry` 200, `{"ok":true,"entry":{"id":"witness-app", ..., "folder":"/workspace/thebird/.thebird/webservers/witness-app", ..., "created":true}}`.
+  - `[tool:thebird_unregister] [input:{"id":"witness-app"}]`: `DELETE /__thebird/registry` 200, `{"ok":true}`. The folder that the registration scaffolded was removed by hand afterwards; the CLI `node bin/thebird-webserver.js list` still lists `gridcraft`, `wordcraft` and `pdfcraft`.
+- fx-tool-bridge, playwriter equivalent on a fresh page load: fx started, `[tool:thebird_ports]` answered (`stub gateway answer ... tool-result=seen`), and the screen holds neither `Tools are unavailable` nor `Unsupported tool`. The repo's witness runner was not used for this row, since Phase B runs through playwriter.
+- Validation on this change set: `npm run check` exit 0; `npm run lint:comments` 0 comments in 131 repo-owned files; `npm test` 48 pass, 0 fail; `npm run lint:architecture` 374 claims, 0 fail, exit 0. `npm run host:check` was not run: it drives headless Chromium, which the playwriter setup replaces here.
