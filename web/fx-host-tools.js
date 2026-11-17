@@ -82,6 +82,17 @@ export const PAGE_HOST_TOOLS = createPageHostTools();
 
 export const PAGE_HOST_TOOL_NAMES = PAGE_HOST_TOOLS.map((tool) => tool.name);
 
+export function pageWorkspace(bash) {
+  return {
+    info: { version: 1, root: '/workspace', cwd: '/workspace', home: '/workspace', gitAvailable: false, ephemeral: true },
+    permission: 'allow-sandboxed',
+    exec: async ({ command }) => {
+      const result = await bash(`(cd /workspace && ${command}\n)`);
+      return { exitCode: result?.exitCode ?? 1, stdout: typeof result?.output === 'string' ? result.output : '', stderr: '' };
+    },
+  };
+}
+
 export function hostToolExecutor(tools) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
   return async (name, input) => {

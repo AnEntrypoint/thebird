@@ -96,6 +96,7 @@ export async function runFxTui(term, fx = {}, host = {}) {
     promptHistoryStore: memoryPromptHistoryStore(),
     ...(host.tools === undefined ? {} : { tools: host.tools }),
     ...(host.hostToolExecutor === undefined ? {} : { hostToolExecutor: host.hostToolExecutor }),
+    ...(host.workspace === undefined ? {} : { workspace: host.workspace }),
     onEvent: onTuiEvent,
   });
   app.interactive.catch(() => {});

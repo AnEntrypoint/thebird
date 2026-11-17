@@ -1942,3 +1942,10 @@ Phase A changes (each committed locally, lanmower, no trailers):
 
 - Change (`scripts/witness.mjs`, group `paste`): paste `echo paste-kept`, require the input to hold it before Enter, press Enter, then require the output line `paste-kept` and an empty input. It fails if Enter clears a paste without running it, or if the paste is not in the input before Enter.
 - The witness row is written for the witness runner, but this change set was run through playwriter, as the owner asked, so the runner's own row is not yet run.
+
+### fx's thebird tools reach the fx terminal (2026-11-17, run 2026-11-17-19-58-16-7a77b7)
+
+- Defect reproduced with playwriter on the dev relay (`127.0.0.1:4190`), fx open in the page on the stub gateway (`[tool:thebird_ports]`): the tool call failed with `Tools are unavailable in the current JavaScript host.`, and the stub saw `tool-result=seen`.
+- Cause: fx's wasm terminal (`web/vendor/fx/fx-term.wasm`, profile `wasm`, `js_host_workspace = true`, `tools = false`) answers every tool call through `executeToolCall` in `src/main.zig`, which returns the unavailable result when `workspaceHostInfo()` is null. That info comes only from the `workspace` option of `createFxTerminal` (`web/vendor/fx/wasm-runtime.js`, `prepareWorkspaceAdapter`). `runFxTui` passed `tools` and `hostToolExecutor` but never a `workspace`, so every tool, thebird's and fx's own `bash`, was refused.
+- Change (`web/fx-host-tools.js`, `web/terminal.js`, `web/fx-tui.js`): `pageWorkspace(bash)` builds the adapter (root, cwd and home `/workspace`, `gitAvailable: false`, `ephemeral: true`, permission `allow-sandboxed`, `exec` through the page shell in `/workspace`). The page passes it to `runFxTui` and `runFxTui` forwards it to `createFxTerminal`. No tool is stubbed.
+- Not yet verified: the thebird tools need the canonical host. The dev relay refuses POST to `/__thebird/mcp/thebird` by design (`src/relay.js`), so a thebird tool on the relay answers HTTP 405. The witness runs on `npm run host`.

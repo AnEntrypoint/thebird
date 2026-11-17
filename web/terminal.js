@@ -6,7 +6,7 @@ import { shellClient } from './shell-client.js';
 import { createPtyAdapter } from './pty-adapter.js';
 import { createSplash } from './splash.js';
 import { runFxTui } from './fx-tui.js';
-import { createPageHostTools, hostToolExecutor } from './fx-host-tools.js';
+import { createPageHostTools, hostToolExecutor, pageWorkspace } from './fx-host-tools.js';
 import { createPageAsk } from './fx-ask.js';
 import { THEBIRD_FX_CAPABILITIES, THEBIRD_FX_SYSTEM_PROMPT, assertNoHostRefusal } from './fx-capabilities.js';
 import { observeRuns, startThebirdState } from './thebird-state.js';
@@ -57,11 +57,14 @@ const observed = observeRuns(shellClient({ commandTimeoutMs: params.get('command
 const client = observed.client;
 globalThis.THEBIRD_FX_CAPABILITIES = THEBIRD_FX_CAPABILITIES;
 globalThis.THEBIRD_FX_SYSTEM_PROMPT = THEBIRD_FX_SYSTEM_PROMPT;
+const fxBash = (command) => client.tool(command);
 const fxTools = createPageHostTools({
-  bash: (command) => client.tool(command),
+  bash: fxBash,
   ask: createPageAsk(),
 });
+const fxWorkspace = pageWorkspace(fxBash);
 globalThis.THEBIRD_FX_TOOLS = fxTools;
+globalThis.THEBIRD_FX_WORKSPACE = fxWorkspace;
 globalThis.THEBIRD_WEBSERVERS = globalThis.THEBIRD_WEBSERVERS ?? null;
 globalThis.THEBIRD_CRAFT = globalThis.THEBIRD_CRAFT ?? null;
 document.body.dataset.fxTools = 'wired';
@@ -98,7 +101,7 @@ client.onTakeover(async ({ id, fx }) => {
   document.body.dataset.tui = 'fx';
   let code = 0;
   try {
-    code = await runFxTui(term, fx, { tools: fxTools, hostToolExecutor: fxHostToolExecutor });
+    code = await runFxTui(term, fx, { tools: fxTools, hostToolExecutor: fxHostToolExecutor, workspace: fxWorkspace });
   } catch (error) {
     term.write(`fx: ${error.message}\r\n`);
     code = 1;
