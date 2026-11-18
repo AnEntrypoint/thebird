@@ -836,4 +836,4 @@ try {
   status = 1;
 }
 flushOutput();
-tjs.exit(status || process.exitCode);
+if (status !== 0) tjs.exit(status);
