@@ -78,6 +78,48 @@ export async function registerServer(projectRoot, name, { title, description } =
   return { ...entry, created: true };
 }
 
+export const PUBLISH_MAX_FILES = 500;
+export const PUBLISH_MAX_BYTES = 20 * 1024 * 1024;
+
+const publishedPath = (rel) => typeof rel === 'string' && rel.length > 0 && !rel.includes('\\') && !rel.includes('\0') && !rel.startsWith('/') && rel.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+
+export function publishedFiles(files) {
+  if (!files || typeof files !== 'object' || Array.isArray(files)) throw new Error('files must map relative paths to {encoding, data}');
+  const entries = Object.entries(files);
+  if (entries.length > PUBLISH_MAX_FILES) throw new Error(`a webserver publishes at most ${PUBLISH_MAX_FILES} files`);
+  let total = 0;
+  return entries.map(([rel, file]) => {
+    if (!publishedPath(rel)) throw new Error(`file path not allowed: ${rel}`);
+    if (typeof file?.data !== 'string') throw new Error(`file has no data: ${rel}`);
+    if (file.encoding !== undefined && file.encoding !== 'utf8' && file.encoding !== 'base64') throw new Error(`file encoding not supported: ${rel}`);
+    const bytes = Buffer.from(file.data, file.encoding ?? 'utf8');
+    total += bytes.length;
+    if (total > PUBLISH_MAX_BYTES) throw new Error(`published files exceed ${PUBLISH_MAX_BYTES} bytes`);
+    return { rel, bytes };
+  });
+}
+
+export async function publishServer(projectRoot, name, { title, description, files } = {}) {
+  const id = validateId(name);
+  const published = publishedFiles(files);
+  const folder = serverFolder(projectRoot, id);
+  if (existsSync(join(folder, 'server.js'))) throw new Error(`webserver ${id} is a Node app; publish to a new id`);
+  const registry = await readRegistry(projectRoot);
+  const existing = registry.servers.find((server) => server.id === id);
+  const publicDir = join(folder, 'public');
+  await rm(publicDir, { recursive: true, force: true });
+  await mkdir(publicDir, { recursive: true });
+  for (const { rel, bytes } of published) {
+    const target = join(publicDir, ...rel.split('/'));
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, bytes);
+  }
+  const entry = { id, title: title ?? existing?.title ?? id, description: description ?? existing?.description ?? 'Published page ' + id, folder, status: 'registered', hmr: 'ready', mcp: true, source: 'page', files: published.length, createdAt: existing?.createdAt ?? iso(), updatedAt: iso() };
+  registry.servers = [...registry.servers.filter((server) => server.id !== id), entry];
+  await writeRegistry(projectRoot, registry);
+  return { ...entry, created: !existing };
+}
+
 export async function unregisterServer(projectRoot, name, { removeFolder = false } = {}) {
   const id = validateId(name);
   const registry = await readRegistry(projectRoot);

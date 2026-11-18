@@ -14,7 +14,7 @@ A bash terminal that runs in the browser. Node serves the static files, proxies 
 - Everything under `web/` is browser-only. It imports nothing from Node. `web/shims/` modules import only each other.
 - `src/relay.js` and `bin/` are Node-only.
 - Add a shim in `web/shims/` before adding a `node:` import to in-page code.
-- The relay answers GET and HEAD for files, binds `127.0.0.1` by default, and must keep sending `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Its `/__thebird/state` (POST, 204), `/__thebird/registry` (GET) and `/__thebird/events` (GET, SSE) routes answer the page's state push and feeds, with an empty server list because the dev relay hosts no webservers; every other POST or PUT gets 405.
+- The relay binds `127.0.0.1` by default, and must keep sending `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. It serves the same thebird handler as the canonical host (`createThebirdHandler` in `src/web-host.js`) on its own origin, so the page's state, MCP, registry, events, progress, sites and loopback `/__thebird/port/<port>/` requests never leave that origin. It answers GET and HEAD for static files, and any other method on a static path gets 405. On start it also starts the canonical host (`src/web-host-manager.js`), building `_site` first when it is missing.
 
 ## Comments
 

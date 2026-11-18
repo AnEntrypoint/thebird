@@ -109,7 +109,7 @@ Symlinks are link entries. Reads, writes, `stat`, `readdir`, `open` and `realpat
 
 ## Relay
 
-`src/relay.js` is a static server. It binds `127.0.0.1` by default, and `--port` and `--host` change that. It answers GET and HEAD for files; other methods get 405 with `Allow: GET, HEAD`, except POST to `/__thebird/state` (204), and GET of `/__thebird/registry` and `/__thebird/events`, which answer with an empty server list, because the dev relay hosts no webservers. `/` serves `web/terminal.html`, `/web/*` serves files under `web/` (paths that leave `web/` are refused), and anything else is 404.
+`src/relay.js` serves the page and the thebird API on one origin. It binds `127.0.0.1` by default, and `--port` and `--host` change that. The API is `createThebirdHandler` from `src/web-host.js`, the same handler the canonical host uses, so `/__thebird/state`, `/__thebird/mcp/thebird`, `/__thebird/registry` (GET, POST, DELETE), `/__thebird/events`, `/__thebird/progress`, `/sites/<id>/` and `/__thebird/port/<port>/` behave the same on both. `/` serves `web/terminal.html`, `/web/*` serves files under `web/` (paths that leave `web/` are refused), and anything else is 404. Other methods on a static path get 405 with `Allow: GET, HEAD`. On start the relay also starts the canonical host through `src/web-host-manager.js`, building `_site` first when it is missing.
 
 Every response carries `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, so the page is cross-origin isolated. A static host serving the page needs the same two headers.
 
