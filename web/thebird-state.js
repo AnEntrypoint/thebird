@@ -1,4 +1,5 @@
 import { fxTuiStatus, onFxTuiStatus } from './fx-tui.js';
+import { isPushDue } from './state-push.js';
 
 const STATE_URL = '/__thebird/state';
 const PUSH_INTERVAL_MS = 500;
@@ -79,6 +80,7 @@ const fxPayload = () => {
 
 export function startThebirdState({ term, current, body = document.body }) {
   let sent = null;
+  let sentAt = 0;
   let timer = null;
 
   const stop = () => clearInterval(timer);
@@ -87,8 +89,10 @@ export function startThebirdState({ term, current, body = document.body }) {
 
   const push = () => {
     const json = JSON.stringify(snapshot());
-    if (json === sent) return;
+    const now = Date.now();
+    if (!isPushDue({ json, sent, sentAt, now })) return;
     sent = json;
+    sentAt = now;
     fetch(STATE_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: json }).then((response) => {
       if (!response.ok) stop();
     }, stop);
