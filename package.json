@@ -19,7 +19,7 @@
     "check": "node --check bin/thebird-relay.js && node --check src/*.js && node --check scripts/*.mjs && node --check web/*.js && node --check web/shims/*.js",
     "lint:architecture": "node scripts/lint-architecture.mjs",
     "lint:comments": "node scripts/lint-comments.mjs",
-    "start": "node bin/thebird-relay.js",
+    "start": "node scripts/start-thebird.mjs",
     "host": "node bin/thebird-web-host.js start",
     "host:serve": "node scripts/serve-web-host.mjs",
     "host:stop": "node bin/thebird-web-host.js stop",

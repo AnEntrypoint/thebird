@@ -62,7 +62,7 @@ async function ensureCanonicalHost(projectRoot, log) {
   log(host.started ? `canonical host started on ${host.url} (pid ${host.pid})` : `canonical host already running on ${host.url}`);
 }
 
-export async function startRelay({ host = '127.0.0.1', port = 0, projectRoot = repoRoot, ensureHost = true, log = (line) => console.log(line) } = {}) {
+export async function startRelay({ host = '127.0.0.1', port = 0, projectRoot = repoRoot, ensureHost = false, log = (line) => console.log(line) } = {}) {
   const handler = await createThebirdHandler({ projectRoot, isolated: true });
   const server = createServer((req, res) => {
     res.setHeader('cross-origin-opener-policy', 'same-origin');
