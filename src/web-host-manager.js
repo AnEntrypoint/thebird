@@ -1,6 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { DEFAULT_HOST, DEFAULT_PORT, DEFAULT_ROOT, resolveSiteRoot } from './web-host.js';
@@ -8,11 +8,25 @@ import { DEFAULT_HOST, DEFAULT_PORT, DEFAULT_ROOT, resolveSiteRoot } from './web
 const run = promisify(execFile);
 const REQUIRED_SITE_FILES = ['web/features.json', 'web/features.js', 'web/features-bridge.js', 'web/features-in-txiki.js', 'web/features-program.js', 'web/vendor/txiki/tjs.wasm'];
 
-export async function siteProblem(siteRoot) {
+async function newestSource(projectRoot) {
+  let newest = 0;
+  for (const dir of [join(projectRoot, 'web'), join(projectRoot, 'web', 'shims')]) {
+    for (const name of await readdir(dir).catch(() => [])) {
+      const info = await stat(join(dir, name)).catch(() => null);
+      if (info?.isFile()) newest = Math.max(newest, info.mtimeMs);
+    }
+  }
+  return newest;
+}
+
+export async function siteProblem(projectRoot, siteRoot) {
   for (const path of REQUIRED_SITE_FILES) {
     const present = await stat(join(siteRoot, path)).catch(() => null);
     if (!present?.isFile()) return path;
   }
+  const built = await stat(join(siteRoot, 'thebird-package.json')).catch(() => null);
+  if (!built) return 'thebird-package.json';
+  if ((await newestSource(projectRoot)) > built.mtimeMs) return 'web sources newer than the site';
   return null;
 }
 
@@ -92,7 +106,7 @@ export async function startManagedHost(options) {
   const m = managed(options);
   const existing = await record(m);
   if (await ownsRecord(m, existing)) return { started: false, pid: existing.pid, url: existing.url, root: existing.root, log: m.logFile };
-  const problem = await siteProblem(m.siteRoot);
+  const problem = await siteProblem(m.projectRoot, m.siteRoot);
   if (problem && m.isolated) throw new Error(`canonical site is stale or incomplete: ${problem} is missing; run node scripts/build-pages.mjs`);
   await removeRecord(m);
   await mkdir(m.stateDir, { recursive: true });

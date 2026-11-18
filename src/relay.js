@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createThebirdHandler, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_ROOT, resolveSiteRoot } from './web-host.js';
-import { buildSite, siteProblem, startManagedHost } from './web-host-manager.js';
+import { buildSite, siteProblem, startManagedHost, stopManagedHost } from './web-host-manager.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const webRoot = resolve(repoRoot, 'web');
@@ -52,11 +52,13 @@ async function serve(handler, req, res) {
 }
 
 async function ensureCanonicalHost(projectRoot, log) {
-  if (await siteProblem(resolveSiteRoot(DEFAULT_ROOT, projectRoot))) {
+  const options = { projectRoot, host: DEFAULT_HOST, port: DEFAULT_PORT, root: DEFAULT_ROOT, isolated: true };
+  if (await siteProblem(projectRoot, resolveSiteRoot(DEFAULT_ROOT, projectRoot))) {
     log('building the canonical site');
+    await stopManagedHost(options);
     await buildSite(projectRoot);
   }
-  const host = await startManagedHost({ projectRoot, host: DEFAULT_HOST, port: DEFAULT_PORT, root: DEFAULT_ROOT, isolated: true });
+  const host = await startManagedHost(options);
   log(host.started ? `canonical host started on ${host.url} (pid ${host.pid})` : `canonical host already running on ${host.url}`);
 }
 
