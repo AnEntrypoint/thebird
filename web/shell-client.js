@@ -26,6 +26,7 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
   let outputSink = () => {};
   let phaseSink = () => {};
   let takeoverSink = () => {};
+  let featureSink = () => {};
 
   function onMessage({ data }) {
     if (data.output !== undefined) {
@@ -34,6 +35,10 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     }
     if (data.takeover !== undefined) {
       takeoverSink(data.takeover);
+      return;
+    }
+    if (data.feature !== undefined) {
+      featureSink(data.feature);
       return;
     }
     if (data.phase !== undefined) {
@@ -104,6 +109,7 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     ready,
     run: (command) => request({ run: command, fx: fxConfig() }, true),
     tool: (command) => request({ toolRun: command }),
+    publish: (payload) => request({ publish: payload }),
     complete: (prefix, { command = false } = {}) => request({ complete: prefix, command }),
     cwd: () => request({ query: 'cwd' }),
     cancel() {
@@ -125,6 +131,12 @@ export function shellClient({ url = new URL('./shell-worker.js', import.meta.url
     },
     finishTakeover(id, code) {
       worker.postMessage({ takeoverDone: { id, code } });
+    },
+    onFeature(sink) {
+      featureSink = sink;
+    },
+    finishFeature(reply) {
+      worker.postMessage({ featureDone: reply });
     },
     close() {
       clearTimeout(grace);

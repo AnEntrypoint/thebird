@@ -57,17 +57,36 @@ const thebirdRegistryTool = (name, description, method, properties, required) =>
   execute: (input) => callRegistry(method, input ?? {}),
 });
 
-const THEBIRD_TOOLS = [
+const registerWebserver = async (input, publish) => {
+  if (input.dir === undefined) return callRegistry('POST', input);
+  if (typeof publish !== 'function') return failure(UNAVAILABLE('thebird_register with dir'));
+  try {
+    const { id, title, description, dir } = input;
+    return { content: JSON.stringify(await publish({ id, title, description, dir })) };
+  } catch (error) {
+    return failure(`thebird_register: ${error?.message ?? String(error)}`);
+  }
+};
+
+const thebirdRegisterTool = (publish) => ({
+  name: 'thebird_register',
+  description: 'Register a Node webserver with the thebird host. With dir (for example /workspace/ha), publish the folder at dir so the page is served at /sites/<id>/; without dir, only the registry entry is created.',
+  inputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, dir: { type: 'string' } },
+    required: ['id'],
+    additionalProperties: false,
+  },
+  writes: true,
+  idempotent: false,
+  execute: (input) => registerWebserver(input ?? {}, publish),
+});
+
+const thebirdTools = (publish) => [
   thebirdTool('thebird_pane', 'Read the last lines of the thebird terminal screen, read-only. Optional lines, up to 500.', { lines: { type: 'number' } }),
   thebirdTool('thebird_run', 'Read the thebird run snapshot, read-only: busy state, current command, cwd, last exit code, engine states and fx status.', {}),
   thebirdTool('thebird_ports', 'List the apps and open ports from the thebird Node app supervisor, read-only.', {}),
-  thebirdRegistryTool(
-    'thebird_register',
-    'Register a Node webserver with the thebird host, creating its folder under .thebird/webservers.',
-    'POST',
-    { id: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' } },
-    ['id'],
-  ),
+  thebirdRegisterTool(publish),
   thebirdRegistryTool('thebird_unregister', 'Remove a registered Node webserver from the thebird host registry.', 'DELETE', { id: { type: 'string' } }, ['id']),
 ];
 
@@ -109,7 +128,7 @@ export function createPageHostTools(host = {}) {
         );
       },
     },
-    ...THEBIRD_TOOLS,
+    ...thebirdTools(host.publish),
   ];
 }
 

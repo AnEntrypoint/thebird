@@ -2,7 +2,10 @@ const API_URL = new URL('./features.json', import.meta.url).href;
 
 const call = async (payload) => {
   const features = globalThis.THEBIRD_FEATURES;
-  if (!features) throw new Error('THEBIRD_FEATURES is not mounted yet');
+  if (!features) {
+    if (typeof globalThis.THEBIRD_FEATURE_TRANSPORT === 'function') return globalThis.THEBIRD_FEATURE_TRANSPORT(payload);
+    throw new Error('THEBIRD_FEATURES is not mounted yet');
+  }
   const { op, id, spec, patch, source } = payload;
   if (op === 'register') return features.register(id, spec ?? {}, { source: source ?? 'txiki' });
   if (op === 'update') return features.update(id, patch ?? {});

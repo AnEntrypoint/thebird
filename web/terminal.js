@@ -61,6 +61,16 @@ const fxBash = (command) => client.tool(command);
 const fxTools = createPageHostTools({
   bash: fxBash,
   ask: createPageAsk(),
+  publish: (payload) => client.publish(payload),
+});
+const plain = (value) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));
+client.onFeature(async ({ id, payload }) => {
+  try {
+    const result = plain(await applyFeatureRequest(payload));
+    client.finishFeature({ id, ok: true, result });
+  } catch (error) {
+    client.finishFeature({ id, ok: false, error: error?.message ?? String(error) });
+  }
 });
 const fxWorkspace = pageWorkspace(fxBash);
 globalThis.THEBIRD_FX_TOOLS = fxTools;
