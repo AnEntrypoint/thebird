@@ -137,7 +137,8 @@ function architectureStatic() {
     'python-worker.js names micropip 0.11.1, the v314.0.7 Pyodide pin and jsDelivr',
   ));
   record('Names in the lock inside the bundle', outcome(fileHas('web/python-worker.js', 'bundledNames') && fileHas('web/python-bundle.js', 'pyodide-lock.json'), 'python-worker.js refuses names listed in pyodide-lock.json'));
-  record('Flags `-s`, `-S`, `-f`, `-L`, `-q`', outcome(fileHas('web/curl-in-page.js', "'-SL'") || fileHas('web/curl-in-page.js', 'flag not supported'), 'curl-in-page.js accepts the listed flags and refuses others'));
+  record('`parseFetchArgs` in `web/curl-in-page.js` reads short clusters', outcome(fileHas('web/curl-in-page.js', 'export function parseFetchArgs') && fileHas('web/curl-in-page.js', 'Object.hasOwn(spec.shortFlags'), 'curl-in-page.js reads the flag table'));
+  record('A flag the page cannot honour is refused with the command to use instead', outcome(fileHas('web/curl-in-page.js', 'const refuse') && fileHas('web/curl-in-page.js', 'ADVICE'), 'curl-in-page.js refuses with advice'));
   record('The page\'s shell functions', outcome(fileHas('web/shell-lookup.js', 'builtin command -v') && fileHas('web/shell-lookup.js', 'builtin type'), 'shell-lookup.js defines the functions over builtin command -v and builtin type'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', outcome(fileHas('web/bash-shell.js', 'EMULATION_NOTE') && fileHas('web/bash-shell.js', 'uname|whoami|hostname|id|ps|kill|tar'), 'bash-shell.js labels these commands as emulations'));
   record('Background jobs are refused', outcome(fileHas('web/bash-shell.js', 'hasBackgroundOperator') && fileHas('web/shell-worker.js', 'background jobs are not supported'), 'bash-shell.js detects a bare & and shell-worker.js refuses it'));
@@ -325,8 +326,8 @@ function liveRecords(blocks) {
   record('each in-page builtin reports as a builtin', P('type-t', (t) => t === 'builtin', '`type -t git` says builtin'));
   record('The page\'s shell functions', P('type-fn', (t) => /function/.test(t), '`type which` says it is a function'));
   record('Background jobs are refused', P('amp', (t) => t.includes('background jobs are not supported'), 'a bare & is refused'));
-  record('Flags `-s`, `-S`, `-f`, `-L`, `-q`', P('curl-SL', (t) => !t.includes('flag not supported'), 'combined -SL is accepted'));
-  record('Other flags are refused', P('curl-v', (t) => t.includes('flag not supported'), 'an unlisted flag is refused'));
+  record('`parseFetchArgs` in `web/curl-in-page.js` reads short clusters', P('curl-SL', (t) => !t.includes('not supported in the in-page shell'), 'combined -SL is accepted'));
+  record('A flag the page cannot honour is refused with the command to use instead', P('curl-v', (t) => t.includes('prints the body only'), 'an unhonoured flag names what to use'));
   record('| `curl`, `wget` | txiki.js fetch', P('curl-cors', (t) => t.includes('cors-host-hello'), 'curl succeeds on a CORS host'));
 }
 
