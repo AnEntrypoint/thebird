@@ -2013,3 +2013,18 @@ Phase A changes (each committed locally, lanmower, no trailers):
 - Change 6, the workspace seeds a host script (`f265742`, `web/shell-worker.js`): when `/workspace/package.json` is absent, boot writes it with `scripts.host = "node host.js"` and writes `host.js`, which reports whether the thebird host answers on the page's origin. `host.js` bakes the origin in at seed time, because the txiki fetch path was not verified for relative URLs. Witness: in the page's shell, `npm run host` prints `thebird host up: <n> webservers`. A stale origin after a port change is a known limit.
 - Change 7, fx's `thebird_register` takes `dir` (`f265742`, `web/fx-host-tools.js`): with `dir` (for example `/workspace/ha`) it publishes the folder through the worker; without it, the old registry POST runs. Witness: the fx tool call from inside the page returns the registry entry with `"files"`.
 - Phase A checks on this change set: `npm run check` 0; `npm run lint:comments` 0 comments; `npm test` 52 pass.
+
+### Phase B: witnesses on the final build (playwriter on http://127.0.0.1:4190/)
+
+- Start: `npm start -- --port 4190` (`scripts/start-thebird.mjs`) with no owner command. The canonical host came up as `canonical host started on http://127.0.0.1:4173/`, and `npm run host:status` printed `running http://127.0.0.1:4173/ ... root /workspace/thebird/_site`.
+- 405 fixed on both origins (curl): `POST /__thebird/state` 204, `GET /__thebird/registry` 200, `POST /__thebird/registry` 200 (the probe entry was then removed with `DELETE` 200), `POST /__thebird/mcp/thebird` `tools/list` 200. Checked on 4190 and 4173.
+- THEBIRD_FEATURES mounted on load: `typeof globalThis.THEBIRD_FEATURES` is `object`, with keys `clear,emit,list,mount,on,register,remove,update,version`.
+- `npm run host` in the page shell: `thebird host up: 4 webservers`, `EXIT 0`.
+- fx `[tool:thebird_ports]`: HTTP 200, JSON-RPC result `{"apps":[]}`.
+- fx `[tool:thebird_run]`: HTTP 200, result `busy: true, command: "fx", cwd: "/workspace", lastExitCode: 0, engine: {shell: ready, boot: ready, tui: fx, renderer: webgl}`. The `stale` flag was `true` in this reply; not investigated.
+- fx `[tool:thebird_register]` with `{"id":"ha","title":"ha","dir":"/workspace/ha"}`: the registry entry `ha` moved from `updatedAt` `2026-11-18T07:16:21.908Z` to `2026-11-18T07:22:40.233Z`, with `files: 1`, `source: page`, `status: ready`. `GET /sites/ha/` returns 200.
+- Registered page `/sites/ha/` in a second tab: before the click `title=ha`, `h1=ha`, `button=press`, `out=waiting`, `crossOriginIsolated=true`. After the click `out=button works`.
+- Feature card from the shell: `feature '{"op":"register",...}'` exits 0, and the card `final card` appears in `#features`.
+- Loopback through the page origin: `curl http://localhost:4310/final` prints `loopback says /final`, exit 0 (the test server listened on 127.0.0.1:4310).
+- Not fixed: `wget -qO-` is refused by the in-page shell with `flag not supported in the in-page shell`, an argument-parsing limit and not the network path. `feature list` is not a valid payload, because the builtin takes JSON.
+- Validation on the final tree: `npm run check` 0; `npm run lint:comments` 0; `npm run lint:architecture` 382 claims pass, 0 fail; `npm test` 52 of 52 pass.
