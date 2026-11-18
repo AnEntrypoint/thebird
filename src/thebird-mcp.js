@@ -66,7 +66,9 @@ const boundedLines = (lines) => {
 export function createThebirdMcp({ supervisor, now = () => Date.now(), staleMs = 5000 } = {}) {
   let latest = null;
 
-  const isStale = () => now() - latest.updatedAt > staleMs;
+  const ageMs = () => now() - latest.updatedAt;
+  const isStale = () => ageMs() > staleMs;
+  const freshness = () => ({ current: !isStale(), ageMs: ageMs(), stale: isStale() });
 
   const storeSnapshot = (value) => {
     const kept = {};
@@ -77,12 +79,12 @@ export function createThebirdMcp({ supervisor, now = () => Date.now(), staleMs =
   };
 
   const paneTool = (args) => {
-    if (latest === null) return { stale: true, lines: [] };
+    if (latest === null) return { current: false, stale: true, ageMs: null, lines: [] };
     const pane = latest.pane ?? {};
     const screen = Array.isArray(pane.lines) ? pane.lines.map(String) : [];
     return {
       updatedAt: latest.updatedAt,
-      stale: isStale(),
+      ...freshness(),
       cols: pane.cols ?? null,
       rows: pane.rows ?? null,
       cursor: pane.cursor ?? null,
@@ -91,8 +93,8 @@ export function createThebirdMcp({ supervisor, now = () => Date.now(), staleMs =
   };
 
   const runTool = () => {
-    if (latest === null) return { updatedAt: null, stale: true };
-    const base = { ...(latest.run ?? {}), updatedAt: latest.updatedAt, stale: isStale() };
+    if (latest === null) return { updatedAt: null, current: false, stale: true, ageMs: null };
+    const base = { ...(latest.run ?? {}), updatedAt: latest.updatedAt, ...freshness() };
     return latest.fx === undefined ? base : { ...base, fx: latest.fx };
   };
 

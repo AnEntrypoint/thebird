@@ -26,6 +26,8 @@ const call = (base, name, args = {}) => rpc(base, { jsonrpc: '2.0', id: 1, metho
 
 const toolValue = (reply) => JSON.parse(reply.result.content[0].text);
 
+const pick = ({ current, ageMs, stale }) => ({ current, ageMs, stale });
+
 const pane = (lines) => ({ cols: 80, rows: 24, cursor: { x: 2, y: 1 }, lines });
 
 test('a state snapshot is stored and thebird_pane returns its trailing lines', async () => {
@@ -84,8 +86,8 @@ test('the snapshot goes stale once now advances past staleMs', async () => {
 test('before any snapshot the pane is stale and empty, and the run is stale', async () => {
   const { base, close } = await serve({ now: () => 1000 });
   try {
-    assert.deepEqual(toolValue(await call(base, 'thebird_pane')), { stale: true, lines: [] });
-    assert.deepEqual(toolValue(await call(base, 'thebird_run')), { updatedAt: null, stale: true });
+    assert.deepEqual(toolValue(await call(base, 'thebird_pane')), { current: false, stale: true, ageMs: null, lines: [] });
+    assert.deepEqual(toolValue(await call(base, 'thebird_run')), { updatedAt: null, current: false, stale: true, ageMs: null });
   } finally {
     await close();
   }
@@ -95,7 +97,24 @@ test('thebird_run merges the run snapshot and includes fx when present', async (
   const { base, close } = await serve({ now: () => 1000 });
   try {
     await post(base, '/__thebird/state', { run: { busy: false, cwd: '/workspace', lastExitCode: 0 }, fx: { state: 'running', model: 'm1' } });
-    assert.deepEqual(toolValue(await call(base, 'thebird_run')), { busy: false, cwd: '/workspace', lastExitCode: 0, updatedAt: 1000, stale: false, fx: { state: 'running', model: 'm1' } });
+    assert.deepEqual(toolValue(await call(base, 'thebird_run')), { busy: false, cwd: '/workspace', lastExitCode: 0, updatedAt: 1000, current: true, ageMs: 0, stale: false, fx: { state: 'running', model: 'm1' } });
+  } finally {
+    await close();
+  }
+});
+
+test('the reply says whether the snapshot is current, with its age, and a fresh post makes it current again', async () => {
+  let clock = 1000;
+  const { base, close } = await serve({ now: () => clock, staleMs: 5000 });
+  try {
+    await post(base, '/__thebird/state', { run: { busy: true, command: 'fx' } });
+    assert.deepEqual(pick(toolValue(await call(base, 'thebird_run'))), { current: true, ageMs: 0, stale: false });
+    clock = 5000;
+    assert.deepEqual(pick(toolValue(await call(base, 'thebird_run'))), { current: true, ageMs: 4000, stale: false });
+    clock = 6001;
+    assert.deepEqual(pick(toolValue(await call(base, 'thebird_run'))), { current: false, ageMs: 5001, stale: true });
+    await post(base, '/__thebird/state', { run: { busy: true, command: 'fx' } });
+    assert.deepEqual(pick(toolValue(await call(base, 'thebird_run'))), { current: true, ageMs: 0, stale: false });
   } finally {
     await close();
   }
@@ -179,7 +198,7 @@ test('an oversized state body is refused with 413', async () => {
     assert.equal(response.status, 413);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const after = await call(base, 'thebird_pane');
-    assert.deepEqual(toolValue(after), { stale: true, lines: [] });
+    assert.deepEqual(toolValue(after), { current: false, stale: true, ageMs: null, lines: [] });
   } finally {
     await close();
   }
