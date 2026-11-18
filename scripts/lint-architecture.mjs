@@ -150,7 +150,7 @@ function architectureStatic() {
   ));
   record('It lists these in `NOT_COVERED`', outcome(fileHas('web/commit-gate.js', 'export const NOT_COVERED'), 'commit-gate.js exports NOT_COVERED'));
 
-  record('It answers GET and HEAD for files', outcome(fileHas('src/relay.js', "req.method !== 'GET' && req.method !== 'HEAD'") && fileHas('src/relay.js', '405'), 'relay.js answers 405 to other methods'));
+  record('Other methods on a static path get 405', outcome(fileHas('src/relay.js', "req.method !== 'GET' && req.method !== 'HEAD'") && fileHas('src/relay.js', '405'), 'relay.js answers 405 to other methods'));
   record('Every response carries', outcome(fileHas('src/relay.js', 'cross-origin-opener-policy') && fileHas('src/relay.js', 'cross-origin-embedder-policy'), 'relay.js sets both isolation headers'));
 
   cites('- `npm run witness` (`scripts/witness.mjs`) drives headless Chromium', ['browser terminal runs a bash line in headless Chromium']);
@@ -242,7 +242,7 @@ function agentsStatic() {
   record('`COMMAND_TIMEOUT_MS` in `web/bash-shell.js` is 900000 and is passed', outcome(fileHas('web/bash-shell.js', 'COMMAND_TIMEOUT_MS = 900000') && fileHas('web/bash-shell.js', 'timeoutMs: commandTimeoutMs'), 'bash-shell.js sets the value and passes it to Bash'));
   record('`web/commit-gate.js` is the in-page gate', outcome(fileHas('web/commit-gate.js', 'export function runCommitGate') || fileHas('web/commit-gate.js', 'export async function runCommitGate'), 'commit-gate.js exports runCommitGate'));
   record('`which`, `command -v` and `type` are defined in `web/shell-lookup.js`', outcome(fileHas('web/shell-lookup.js', 'builtin command -v'), 'shell-lookup.js defines the functions over builtin command -v'));
-  record('The relay answers GET and HEAD for files', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
+  record('It answers GET and HEAD for static files', outcome(fileHas('src/relay.js', 'HEAD') && fileHas('src/relay.js', 'GET'), 'relay.js names GET and HEAD'));
   cites('Ctrl-C ends a `curl`', ['in-page terminal Ctrl-C ends a curl waiting on a response, and the shell carries on']);
   cites('`.github/workflows/pages.yml` builds `_site/`', ['the built GitHub Pages site runs bash and python3 without COOP/COEP headers', 'pages.yml rebuilds fx from gmfx only when GMFX_TOKEN is set, and always verifies the committed fx against its manifest']);
   cites('The build job has `contents: read` only', ['pages.yml gives the build job contents read only, and the deploy job only pages and id-token write']);
