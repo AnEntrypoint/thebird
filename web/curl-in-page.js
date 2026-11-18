@@ -2,7 +2,7 @@ import * as fs from './shims/fs.js';
 import { posix } from './shims/path.js';
 import { runTjs, bytesFromBase64 } from './txiki-in-page.js';
 
-const CORS_NOTE = 'the in-page shell reaches only hosts that send CORS headers to this page';
+const CORS_NOTE = 'the in-page shell reaches hosts that send CORS headers to this page, and localhost ports through the /__thebird/port/ proxy of this page';
 const MARKER = '@@thebird-fetch ';
 
 function parse(name, argv) {

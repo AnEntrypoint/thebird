@@ -83,6 +83,21 @@ function startBuiltin(current, message) {
     );
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const PORT_PROXY = '/__thebird/port/';
+
+function proxiedUrl(raw) {
+  let target;
+  try {
+    target = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (target.protocol !== 'http:' || !LOOPBACK_HOSTS.has(target.hostname) || target.origin === location.origin) return raw;
+  const port = target.port || '80';
+  return new URL(`${PORT_PROXY}${port}${target.pathname}${target.search}`, location.origin).href;
+}
+
 function startRequest(current, message) {
   const { id } = message;
   const controller = new AbortController();
@@ -100,7 +115,7 @@ function startRequest(current, message) {
     emit(current, { id, kind: 'complete', error, reason });
   };
   (async () => {
-    const response = await fetch(message.url, init);
+    const response = await fetch(proxiedUrl(message.url), init);
     emit(current, { id, kind: 'status', status: response.status });
     emit(current, { id, kind: 'url', url: response.url });
     response.headers.forEach((value, name) => emit(current, { id, kind: 'header', name, value }));
