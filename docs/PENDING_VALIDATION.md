@@ -2908,3 +2908,16 @@ Gate: the first gate run, a loop of up to thirty tries, hit the job's 300 s limi
 
 Pushed: origin main from eb5446a to the head after this record, one push, no force. The commits are 7dbcaad (for header), 78bffcb (command substitution depth), abb1f30 (expr operators and classes), e1d9998 (chmod -R and GNU wording) and this record.
 
+
+### Change set 30l: PS4 is expanded at each trace, and LINENO is the command line, as bash does
+
+Reference: bash (`bash -c`), with every row's expected stdout and stderr generated from bash by a script run, not from this shell's output. Probed first: PS4 is expanded for parameters, defaults, arithmetic and command substitution, and the repeated first character comes from the expanded text (`PS4='$v'` with `v='>>'` traces `>>echo i`); an empty result adds no prefix; a `$(...)` inside PS4 is not itself traced; a `$` at the end of PS4 stays a `$`; `\$` gives `$`; `$LINENO` is the line where the traced command starts, including the `for` header line and the body lines of a loop.
+
+What changed in the shell: `tokenize` and `parseScript` take a first line, and every token carries its line. A simple command and a `for` node carry their line. Each simple command sets `LINENO` before its words expand, so `$LINENO` is the line of the command. A `for` pass sets `LINENO` to the `for` line before its header trace. PS4 is expanded with xtrace suspended, so a `$(...)` in PS4 is not traced, and the prefix is built from the expanded text. `commandText` parses a substitution from the outer command's line and restores the outer `LINENO` after it. An expansion error in PS4 is written to stderr and the raw PS4 text is used, as bash does.
+
+Witness: group `set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does`, 16 rows from bash, with `RESULT PASS=651 FAIL=0` after the change. One gap row, `gap (PS4 LINENO in a multi-line substitution)`, pins this shell's file-line numbers (4 and 5), where bash prints 3 and 4 inside the text. bash's numbering here is not self-consistent (an argument `$LINENO` in the same substitution gives other values), so this is recorded rather than copied.
+
+Red checks, each restored and confirmed by a green run: (1) the PS4 expansion replaced by the raw text: 14 rows red. (2) `LINENO` not set per simple command: 4 rows red. (3) the substitution's line base ignored: the gap row red. (4) xtrace not suspended during PS4 expansion: the witness process aborted with a core dump (exit 134) and named no row, because a trace inside PS4 expansion expands PS4 again without end. The suspension is therefore required for the shell to terminate, not only for the output.
+
+Gaps, recorded: prompt escapes in PS4 (`\u`, `\h` and the like) are not expanded; bash prints the login name for `\u`, this shell prints `\u`. A `${x?msg}` in PS4 fails with the shell's own `? is not supported yet` message (parameter `?` is not implemented in this shell), not bash's `script: line N: x: msg`. `LINENO` inside a multi-line substitution, in an argument, follows the file line here and bash's own, different, count there.
+

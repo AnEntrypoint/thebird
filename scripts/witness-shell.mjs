@@ -747,6 +747,41 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   check("set -x: a command substitution is traced at ++, as bash does", xt16.stdout === "sub\n" && xt16.stderr === "++ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
 });
 
+group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
+  const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
+  check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
+  const ps1 = await run(await shell({}), "PS4='$((1+2))> '; set -x; echo b; set +x");
+  check("PS4 with arithmetic is expanded at each trace, as bash does", ps1.stdout === "b\n" && ps1.stderr === "3> echo b\n3> set +x\n", JSON.stringify([ps1.stdout, ps1.stderr]));
+  const ps2 = await run(await shell({}), "PS4='$(echo P)> '; set -x; echo c; set +x");
+  check("PS4 with a command substitution is expanded and not traced itself, as bash does", ps2.stdout === "c\n" && ps2.stderr === "P> echo c\nP> set +x\n", JSON.stringify([ps2.stdout, ps2.stderr]));
+  const ps3 = await run(await shell({}), "PS4='${y:-dflt}> '; set -x; echo d; set +x");
+  check("PS4 with a default is expanded, as bash does", ps3.stdout === "d\n" && ps3.stderr === "dflt> echo d\ndflt> set +x\n", JSON.stringify([ps3.stdout, ps3.stderr]));
+  const ps4 = await run(await shell({}), "PS4='$unset_thing'; set -x; echo k; set +x");
+  check("PS4 that expands to nothing adds no prefix, as bash does", ps4.stdout === "k\n" && ps4.stderr === "echo k\nset +x\n", JSON.stringify([ps4.stdout, ps4.stderr]));
+  const ps5 = await run(await shell({}), "PS4='a$'; set -x; echo l; set +x");
+  check("PS4 with a lone trailing dollar keeps the dollar, as bash does", ps5.stdout === "l\n" && ps5.stderr === "a$echo l\na$set +x\n", JSON.stringify([ps5.stdout, ps5.stderr]));
+  const ps6 = await run(await shell({}), "PS4='$(echo \"two words\")'; set -x; echo m; set +x");
+  check("PS4 with a substitution that has spaces keeps the spaces, as bash does", ps6.stdout === "m\n" && ps6.stderr === "two wordsecho m\ntwo wordsset +x\n", JSON.stringify([ps6.stdout, ps6.stderr]));
+  const ps7 = await run(await shell({}), "PS4='[$((2*3))] '; set -x; echo n; set +x");
+  check("PS4 with arithmetic in brackets, as bash does", ps7.stdout === "n\n" && ps7.stderr === "[6] echo n\n[6] set +x\n", JSON.stringify([ps7.stdout, ps7.stderr]));
+  const ps8 = await run(await shell({}), "PS4='\\$'; set -x; echo o; set +x");
+  check("PS4 with an escaped dollar prints a dollar, as bash does", ps8.stdout === "o\n" && ps8.stderr === "$echo o\n$set +x\n", JSON.stringify([ps8.stdout, ps8.stderr]));
+  const ps9 = await run(await shell({}), "v='>>'; PS4='$v'; set -x; echo i; set +x");
+  check("PS4 whose first character is repeated for the depth, as bash does", ps9.stdout === "i\n" && ps9.stderr === ">>echo i\n>>set +x\n", JSON.stringify([ps9.stdout, ps9.stderr]));
+  const ps10 = await run(await shell({}), "PS4='a '; set -x; echo 1; PS4='b '; echo 2; set +x");
+  check("PS4 can change between traces, as bash does", ps10.stdout === "1\n2\n" && ps10.stderr === "a echo 1\na PS4='b '\nb echo 2\nb set +x\n", JSON.stringify([ps10.stdout, ps10.stderr]));
+  const ps11 = await run(await shell({}), "PS4='[$LINENO] '; set -x\necho a\nfor i in 1 2; do\n  echo $i\ndone\nset +x\necho $LINENO");
+  check("$LINENO on a command is the line of that command, and set -x traces it, as bash does", ps11.stdout === "a\n1\n2\n7\n" && ps11.stderr === "[2] echo a\n[3] for i in 1 2\n[4] echo 1\n[3] for i in 1 2\n[4] echo 2\n[6] set +x\n", JSON.stringify([ps11.stdout, ps11.stderr]));
+  const ps12 = await run(await shell({}), "PS4='[$LINENO] '; set -x\nfor i in 1; do :; done\nset +x");
+  check("$LINENO in a for header is the line of the for, as bash does", ps12.stdout === "" && ps12.stderr === "[2] for i in 1\n[2] :\n[3] set +x\n", JSON.stringify([ps12.stdout, ps12.stderr]));
+  const ps13 = await run(await shell({}), "PS4='[$LINENO] '\necho $(\nset -x\necho q\nset +x\n)");
+  check("gap (PS4 LINENO in a multi-line substitution): bash numbers these trace lines inside the text, 3 and 4; this shell prints the file lines, 4 and 5", ps13.stdout === "q\n" && ps13.stderr === "[[4] echo q\n[[5] set +x\n", JSON.stringify([ps13.stdout, ps13.stderr]));
+  const ps14 = await run(await shell({}), "PS4='$(echo P)> '; echo $(set -x; echo q; set +x)");
+  check("a command substitution inside PS4 adds to the depth, as bash does", ps14.stdout === "q\n" && ps14.stderr === "PP> echo q\nPP> set +x\n", JSON.stringify([ps14.stdout, ps14.stderr]));
+  const ps15 = await run(await shell({}), "PS4='[$LINENO] '; echo a $(echo b)\nset -x; echo c; set +x");
+  check("the trace of a command substitution keeps its line, as bash does", ps15.stdout === "a b\nc\n" && ps15.stderr === "[2] echo c\n[2] set +x\n", JSON.stringify([ps15.stdout, ps15.stderr]));
+});
+
 group('set -x: a for loop traces its header before each pass, as bash does', async () => {
   const fh0 = await run(await shell({}), "set -x; for i in a b c; do :; done; set +x");
   check("set -x: a for loop traces its header before each pass, with the words as written", fh0.stdout === "" && fh0.stderr === "+ for i in a b c\n+ :\n+ for i in a b c\n+ :\n+ for i in a b c\n+ :\n+ set +x\n", JSON.stringify([fh0.stdout, fh0.stderr]));

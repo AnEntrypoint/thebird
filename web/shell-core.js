@@ -213,15 +213,21 @@ function readHeredocBody(src, start, doc) {
   return i;
 }
 
-export function tokenize(src) {
+export function tokenize(src, firstLine = 1) {
   const tokens = [];
   const heredocs = [];
+  let lineNo = firstLine;
+  let lineScan = 0;
+  const lineAt = (at) => {
+    for (; lineScan < at; lineScan++) if (src[lineScan] === '\n') lineNo++;
+    return lineNo;
+  };
   let i = 0;
   while (i < src.length) {
     const c = src[i];
     if (c === ' ' || c === '\t' || c === '\r') i++;
     else if (c === '\n') {
-      tokens.push({ op: ';' });
+      tokens.push({ op: ';', line: lineAt(i) });
       i++;
       while (heredocs.length) i = readHeredocBody(src, i, heredocs.shift());
     } else if (c === '#') {
@@ -229,19 +235,19 @@ export function tokenize(src) {
     } else {
       const op = OPERATORS.find((candidate) => src.startsWith(candidate, i));
       if (op) {
-        const opToken = { op };
+        const opToken = { op, line: lineAt(i) };
         tokens.push(opToken);
         i += op.length;
         if (op === '<<') {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
-          tokens.push({ parts: word.parts });
+          tokens.push({ parts: word.parts, line: lineAt(i) });
           heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted) });
           i = word.end;
         }
       } else {
         const word = readParts(src, i, BREAKS);
-        tokens.push({ parts: word.parts, text: src.slice(i, word.end) });
+        tokens.push({ parts: word.parts, text: src.slice(i, word.end), line: lineAt(i) });
         i = word.end;
       }
     }
@@ -273,6 +279,7 @@ function parse(tokens) {
   };
 
   const parseSimple = () => {
+    const line = tokens[pos]?.line;
     const assigns = [];
     const words = [];
     const redirects = [];
@@ -288,7 +295,7 @@ function parse(tokens) {
       else break;
     }
     if (!assigns.length && !words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
-    return { type: 'simple', assigns, words, redirects };
+    return { type: 'simple', assigns, words, redirects, line };
   };
 
   const parseTrailingRedirects = () => {
@@ -323,6 +330,7 @@ function parse(tokens) {
   };
 
   const parseFor = () => {
+    const line = tokens[pos]?.line;
     const token = tokens[pos++];
     if (!token?.parts || token.parts.length !== 1 || token.parts[0].k !== 'lit') throw syntaxError("expected a name after 'for'");
     const name = token.parts[0].s;
@@ -341,7 +349,7 @@ function parse(tokens) {
     expectWord('do');
     const body = parseSequence(['done']);
     expectWord('done');
-    return { type: 'for', name, words, wordText, body, redirects: parseTrailingRedirects() };
+    return { type: 'for', name, words, wordText, body, line, redirects: parseTrailingRedirects() };
   };
 
   const parseWhile = (negate) => {
@@ -466,8 +474,8 @@ function parse(tokens) {
   return list;
 }
 
-export function parseScript(src) {
-  return parse(tokenize(src));
+export function parseScript(src, firstLine) {
+  return parse(tokenize(src, firstLine));
 }
 
 const ok = (out) => ({ code: 0, out, err: '' });
@@ -1223,9 +1231,25 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   let errexit = saved?.errexit ?? false;
   let xtrace = saved?.xtrace ?? false;
   let substDepth = 0;
-  const tracePrefix = () => {
+  const expandTrace = async (ps4, sink) => {
+    const traced = xtrace;
+    const scratch = { out: '', err: '', signal: sink.signal };
+    xtrace = false;
+    try {
+      return await expandText(readBodyParts(ps4), scratch);
+    } catch (err) {
+      scratch.err += err.message + '\n';
+      return ps4;
+    } finally {
+      xtrace = traced;
+      sink.err += scratch.err;
+    }
+  };
+  const tracePrefix = async (sink) => {
     const ps4 = vars.get('PS4') ?? '+ ';
-    return ps4 === '' ? '' : ps4[0].repeat(substDepth + 1) + ps4.slice(1);
+    if (ps4 === '') return '';
+    const expanded = await expandTrace(ps4, sink);
+    return expanded === '' ? '' : expanded[0].repeat(substDepth + 1) + expanded.slice(1);
   };
   let errexitSuspended = 0;
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
@@ -2141,13 +2165,15 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
 
   async function commandText(src, sink) {
     const sub = { out: '', err: '', signal: sink.signal };
+    const outerLine = vars.get('LINENO');
     substDepth++;
     try {
-      await runSequence(parseScript(src), '', sub);
+      await runSequence(parseScript(src, Number(outerLine) || 1), '', sub);
     } catch (err) {
       if (!(err instanceof ShellExit)) throw err;
     } finally {
       substDepth--;
+      if (outerLine !== undefined) vars.set('LINENO', outerLine);
     }
     sink.err += sub.err;
     return sub.out.replace(/\n+$/, '');
@@ -2268,10 +2294,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   };
 
   async function runSimple(node, stdin, sink) {
+    vars.set('LINENO', String(node.line));
     const argv = await expandWords(node.words, sink);
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
-    const trace = xtrace ? traceLines(assigned, argv, tracePrefix()) : '';
+    const trace = xtrace ? traceLines(assigned, argv, await tracePrefix(sink)) : '';
     sink.err += trace;
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
@@ -2469,7 +2496,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const value of values) {
         await yieldTurn();
         setVariable(node.name, value);
-        if (xtrace) inner.err += tracePrefix() + 'for ' + node.name + ' in ' + (node.wordText ? node.wordText.join(' ') : '"$@"') + '\n';
+        vars.set('LINENO', String(node.line));
+        if (xtrace) inner.err += (await tracePrefix(inner)) + 'for ' + node.name + ' in ' + (node.wordText ? node.wordText.join(' ') : '"$@"') + '\n';
         try {
           code = await runSequence(node.body, stdin, inner);
         } catch (err) {
