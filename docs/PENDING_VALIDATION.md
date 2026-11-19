@@ -3103,3 +3103,18 @@ Red checks, each restored and confirmed green: (1) the unset test disabled (`if 
 
 Gaps, recorded: (a) the `unset` builtin is missing (`unset: command not found`), a reachable gap. (b) A failing expansion exits with status 2, the shell's generic error status; bash exits 1 for a script and 127 under `bash -c`, so the status is not matched. The witness compares stdout and stderr only. (c) `${x+word}`, `${x=word}` and `${x-}`-style forms other than `-`, `:-`, `?` and `:?` are still `is not supported yet`.
 
+
+### Change set 30x: PS4 prompt escapes \u, \h and \H expand to the shell's own identity, as bash expands its own
+
+Reference: `bash -c` in this sandbox (login name `abc`, host `dev4`). Expectations are generated from its output (`/tmp/gen-ps4esc.mjs`), and the sandbox's login name and host are mapped to the shell's identity in the expected text: `abc` to `user`, `dev4` to `thebird`, the values `whoami` and `hostname` print in this shell.
+
+The decision, made here and not held for an owner: bash's `\u` does not read `$USER`. The probe `USER=zed bash -c 'PS4="\u> "; set -x; :'` printed `abc> :`, so bash takes the login name from the passwd entry. This shell has no `USER` variable, and its identity is the one `whoami` prints. So `\u` expands to `user` (the constant `SHELL_USER`), and `\h` and `\H` to `thebird` (`SHELL_HOST`), the constants `whoami` and `hostname` now also print. `\h` and `\H` are the same here because the host name has no domain part, so no short/full split is implemented.
+
+What changed: `tracePrefix` decodes the prompt escapes in PS4 before expanding it, as bash does. `\\` stays two characters so the existing double-quote reading turns it into one backslash, and the decoded text is what the error path keeps as its literal. The `whoami` and `hostname` commands use the same constants.
+
+Witness: group `set -x: PS4 prompt escapes for the user and host names expand to the shell identity, as bash expands its own`, 7 rows, `RESULT PASS=731 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) decoding removed: 6 rows red (the user, short host, full host, mixed, for-loop, and failing-expansion rows); the escaped-backslash row stays green, which is expected because the two characters read the same either way. (2) the `\\` case read as a code: 1 row red (the escaped backslash row). (3) the host escape pointed at the user name: 3 rows red. The for-loop row first ran without `set -x`, so it traced nothing and could not fail; the red check caught that, and the row now sets `set -x`.
+
+Gaps, recorded: `\h` and `\H` are not split at a domain dot (not needed for this host). Other prompt escapes (`\s`, `\w`, `\$`, `\n`, `\t`, `\d`) are not implemented; PS4 in bash decodes them too, so a PS4 with one of them still differs from bash. The username and host are fixed constants, not read from a configured identity.
+

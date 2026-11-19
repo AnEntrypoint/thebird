@@ -77,6 +77,9 @@ function matchParen(src, start) {
   throw unterminated('command substitution');
 }
 
+const SHELL_USER = 'user';
+const SHELL_HOST = 'thebird';
+
 function parameterPart(text) {
   const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:(:?[-+=?])(.*))?$/s.exec(text);
   if (!m) throw syntaxError(`bad substitution ${text}`);
@@ -1263,8 +1266,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       sink.err += scratch.err;
     }
   };
+  const promptEscapes = (ps4) => ps4.replace(/\\\\|\\[uhH]/g, (token) => (token === '\\\\' ? token : token[1] === 'u' ? SHELL_USER : SHELL_HOST));
   const tracePrefix = async (sink) => {
-    const ps4 = vars.get('PS4') ?? '+ ';
+    const ps4 = promptEscapes(vars.get('PS4') ?? '+ ');
     if (ps4 === '') return '';
     const expanded = await expandTrace(ps4, sink);
     return expanded === '' ? '' : expanded[0].repeat(substDepth + 1) + expanded.slice(1);
@@ -1659,8 +1663,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return ok(text + '\n');
     },
     uname: () => ok('Linux\n'),
-    whoami: () => ok('user\n'),
-    hostname: () => ok('thebird\n'),
+    whoami: () => ok(SHELL_USER + '\n'),
+    hostname: () => ok(SHELL_HOST + '\n'),
     id: () => ok('uid=1000(user) gid=1000(user) groups=1000(user)\n'),
     grep: ({ argv, stdin = '' }) => {
       const isFlags = (arg) => /^-[a-zA-Z]+$/.test(arg);

@@ -827,6 +827,23 @@ group('expansion: ${name?word} and ${name:?word} stop a command with the message
   check("set -x: a failing ${qx?word} in PS4 is reported and the literal PS4 is traced, as bash does", xq6.stdout === "after\n" && xq6.stderr === "thebird: qx: no qx\n${qx?no qx} :\nthebird: qx: no qx\n${qx?no qx} echo after\n", JSON.stringify([xq6.stdout, xq6.stderr]));
 });
 
+group('set -x: PS4 prompt escapes for the user and host names expand to the shell identity, as bash expands its own', async () => {
+  const ps0 = await run(await shell({}), "PS4='\\u> '; set -x; :");
+  check("set -x: PS4 \\u expands to the name whoami prints, as bash expands its login name", ps0.stdout === "" && ps0.stderr === "user> :\n", JSON.stringify([ps0.stdout, ps0.stderr]));
+  const ps1 = await run(await shell({}), "PS4='\\h> '; set -x; :");
+  check("set -x: PS4 \\h expands to the short host name, as bash does", ps1.stdout === "" && ps1.stderr === "thebird> :\n", JSON.stringify([ps1.stdout, ps1.stderr]));
+  const ps2 = await run(await shell({}), "PS4='\\H> '; set -x; :");
+  check("set -x: PS4 \\H expands to the full host name, as bash does", ps2.stdout === "" && ps2.stderr === "thebird> :\n", JSON.stringify([ps2.stdout, ps2.stderr]));
+  const ps3 = await run(await shell({}), "PS4='[\\u@\\h] '; set -x; echo hi");
+  check("set -x: PS4 expands the user and host escapes between literal text, as bash does", ps3.stdout === "hi\n" && ps3.stderr === "[user@thebird] echo hi\n", JSON.stringify([ps3.stdout, ps3.stderr]));
+  const ps4 = await run(await shell({}), "PS4='\\\\u> '; set -x; :");
+  check("set -x: PS4 keeps an escaped backslash as a literal backslash, as bash does", ps4.stdout === "" && ps4.stderr === "\\u> :\n", JSON.stringify([ps4.stdout, ps4.stderr]));
+  const ps5 = await run(await shell({}), "PS4='\\h+ '; set -x; for i in 1; do echo $i; done");
+  check("set -x: PS4 escapes are expanded at each for loop trace, as bash does", ps5.stdout === "1\n" && ps5.stderr === "thebird+ for i in 1\nthebird+ echo 1\n", JSON.stringify([ps5.stdout, ps5.stderr]));
+  const ps6 = await run(await shell({}), "PS4='\\u ${qx?no} '; set -x; :; echo after");
+  check("set -x: PS4 escapes are expanded before a failing expansion in PS4 is traced as its literal, as bash does", ps6.stdout === "after\n" && ps6.stderr === "thebird: qx: no\nuser ${qx?no} :\nthebird: qx: no\nuser ${qx?no} echo after\n", JSON.stringify([ps6.stdout, ps6.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
