@@ -409,6 +409,18 @@ group('awk: fields, patterns, actions and errors', async () => {
   check('awk: a missing file is reported, the rest are read, and the exit is 2', missing.exitCode === 2 && missing.stdout === 'one\nthree\n' && missing.stderr === "awk: can't open file nope.txt\n", JSON.stringify(missing));
 });
 
+group('loops: while and until run their body while the condition holds', async () => {
+  const sh = await shell({});
+  const counted = await run(sh, 'n=0; while [ $n -lt 3 ]; do echo w$n; n=$((n+1)); done');
+  check('loops: while repeats its body while the condition is 0', counted.stdout === 'w0\nw1\nw2\n', JSON.stringify(counted.stdout));
+  const never = await run(sh, 'while false; do echo never; done; echo after');
+  check('loops: a while whose condition is false never runs its body, and the status is 0', never.stdout === 'after\n' && never.exitCode === 0, JSON.stringify(never.stdout));
+  const until = await run(sh, 'n=0; until [ $n -ge 2 ]; do echo u$n; n=$((n+1)); done');
+  check('loops: until repeats its body while the condition is not 0', until.stdout === 'u0\nu1\n', JSON.stringify(until.stdout));
+  const endless = await run(sh, 'while true; do true; done', { timeoutMs: 200 });
+  check('loops: a while that never ends is stopped by the command timeout with exit 124', endless.exitCode === 124 && /timed out/.test(endless.stderr), `exit ${endless.exitCode}`);
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

@@ -2307,3 +2307,37 @@ Witnesses, each once:
 - `npm run host:check`, second run: `RESULT PASS=77 FAIL=0`, wall 209 s, exit 0 (log `/tmp/pb6-host2.log`).
 
 The first `host:check` run (`/tmp/pb6-host.log`, wall 214 s) exited 1 with 9 FAILs: `canonical host status reports running: stopped`, the 404s for `tjs.wasm` and `features.json`, the live registry 404, and `fetch failed` at the site page (`ECONNREFUSED 127.0.0.1:4173`). Cause: port 4173 was held by another tenant's server during that run. The host's own start printed `listening`, then its status said `stopped`, and `GET /` answered 200 while `tjs.wasm` answered 404. The tenant's process was gone before the rerun, and port 4173 answered `000` before the rerun. The untilServed change is not implicated: its failing rows are the port conflict. The rerun passed.
+
+### Item 5: the shell on txiki, ranked sub-steps (grammar first, then the executor, then the witness)
+
+Where it stands. `web/shell-core.js` already has a tokenizer, a parser and `createShell`, and `web/shell-in-txiki.js` runs it inside the txiki engine. The witness calls it in two browser groups (`scripts/witness.mjs`, the `runShellInTxiki` rows). The page's shell is still bashkit (`web/bash-shell.js`). `AGENTS.md` says bashkit stays the shell, so the page switch is held (H1). A Node probe of `shell-core.js` (`/tmp/shell-probe/probe.mjs`, 45 commands and forms) gave the gap list below.
+
+Grammar scope:
+- G1. `while` and `until` loops, with the endless loop stopped by `timeoutMs` (Phase A, this change set, done). Witness: `witness-shell.mjs` group `loops`, 4 rows.
+- G2. `break` and `continue` inside `for`, `while` and `until` (`break` is `command not found` now; a `for` with `break` runs every item). Witness: a row for `break` after the first item, and `continue` skipping one.
+- G3. `case word in pattern) ...;; esac` with `|` alternatives and `*` (`syntax error` now). Witness: a `case` that picks the matching arm and the `*` default.
+- G4. here-string `<<<` and heredoc `<<EOF` with variable expansion (`syntax error` now). Witness: `tr a-z A-Z <<< hi` prints `HI`; a heredoc body expands `$x`.
+- G5. `&>` and `&>>` (both streams to a file; `syntax error` now). Witness: `echo y &> f; cat f` prints `y`.
+- G6. tilde and brace expansion (`~` and `{a,b}` are printed unchanged now). Witness after a parity check against bashkit (see W2).
+
+Executor:
+- E1. the shell builtins `:`, `shift`, `set --`, `read`, `eval` and `source` (all `command not found` now). Witness: one row each.
+- E2. file commands `cp`, `mv`, `touch`, `tee`, `basename`, `dirname`, `seq` (`command not found` now). Witness: one row each, with the bash output.
+- E3. text commands `head`, `tail`, `sort`, `cut`, `uniq`, `xargs`, `expr`, `yes`. Witness: one row each.
+- E4. `env`, `printenv`, `stat`, `realpath`, `chmod`, `md5sum`, `base64`, `diff`. Witness: one row each.
+- E5. the `for` loop yields to the event loop per item, as `while` now does. A long `for` with no awaits holds the timer, so `timeoutMs` cannot stop it. Witness: `for i in $(seq 1 100000); do :; done` under `timeoutMs: 200` exits 124.
+
+Witness:
+- W1. each sub-step's rows in `scripts/witness-shell.mjs` (Node side, bash-expected output), run by `npm run witness:shell`.
+- W2. parity: the same script set run through the page shell (bashkit) and the txiki path (`runShellInTxiki`) in a browser witness group, to find the forms where they differ. Held until G1 to E5 are in, because most rows would fail on the txiki side for now.
+
+Held:
+- H1. the page shell switches from bashkit to the txiki shell. `AGENTS.md` records "bashkit stays the shell" as a decision, so the switch is for the owner, not this pass.
+
+### Change set 7: G1, while and until loops (Phase A)
+
+`web/shell-core.js`: `parseWhile(negate)` (the `while` and `until` keywords; the condition stops at `do`, the body at `done`), `runWhile` (repeats while the condition status is 0, or until it is not 0), and the dispatch in `runStage`. Each iteration yields to the event loop with `setTimeout(0)`. Without the yield, a `while true; do true; done` never returned to the timer, so `timeoutMs` never fired: the probe ran until an outer `timeout 20` killed it (exit 124 from `timeout`, not from the shell). With the yield the same script stops at 201 ms with exit 124 and `timeout: command timed out`.
+
+`scripts/witness-shell.mjs`: group `loops` with 4 rows: `while` repeats while the condition is 0 (`w0 w1 w2`); a false `while` never runs its body and exits 0 (`after`); `until` repeats until the condition is 0 (`u0 u1`); an endless `while` ends at its `timeoutMs` with exit 124 and `timed out`.
+
+Witness, Phase A, under the swap gate (`GATE_OPEN try=1 si=516 so=0 KB/s`): `node scripts/witness-shell.mjs` `RESULT PASS=112 FAIL=0`, wall 782 ms, exit 0 (log `/tmp/ws-gate-a.log`). The earlier 108 rows are unchanged and pass.

@@ -277,6 +277,14 @@ function parse(tokens) {
     return { type: 'for', name, words, body, redirects: parseTrailingRedirects() };
   };
 
+  const parseWhile = (negate) => {
+    const cond = parseSequence(['do']);
+    expectWord('do');
+    const body = parseSequence(['done']);
+    expectWord('done');
+    return { type: 'while', negate, cond, body, redirects: parseTrailingRedirects() };
+  };
+
   const parseCommand = () => {
     const token = tokens[pos];
     if (!token) throw syntaxError('unexpected end of input');
@@ -287,6 +295,10 @@ function parse(tokens) {
     if (isWord(token, 'for')) {
       pos++;
       return parseFor();
+    }
+    if (isWord(token, 'while') || isWord(token, 'until')) {
+      pos++;
+      return parseWhile(isWord(token, 'until'));
     }
     if (token.op === '(') {
       pos++;
@@ -1206,6 +1218,18 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
+  async function runWhile(node, stdin, sink) {
+    const inner = { out: '', err: '', signal: sink.signal };
+    let code = 0;
+    for (;;) {
+      await new Promise((done) => setTimeout(done, 0));
+      const status = await runSequence(node.cond, stdin, inner);
+      if ((status === 0) === node.negate) break;
+      code = await runSequence(node.body, stdin, inner);
+    }
+    return { code, out: inner.out, err: inner.err };
+  }
+
   async function callFunction(body, args, stdin, signal) {
     const savedPositional = positional;
     positional = args;
@@ -1232,6 +1256,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (cmd.type === 'group') return runGroup(cmd, stdin, sink);
     if (cmd.type === 'if') return runIf(cmd, stdin, sink);
     if (cmd.type === 'for') return runFor(cmd, stdin, sink);
+    if (cmd.type === 'while') return runWhile(cmd, stdin, sink);
     return runSimple(cmd, stdin, sink);
   }
 
