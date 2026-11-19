@@ -624,6 +624,25 @@ group('stat: stat reports the name, size, type and mode of a file', async () => 
   check('stat: %% in the format is one percent sign', percent.stdout === '2%\n', JSON.stringify(percent.stdout));
 });
 
+group('realpath: realpath resolves .., relative names and symbolic links', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /rp; echo x > /rp/f; echo y > /rp/t; ln -s /rp/t /rp/l; ln -s /rp/l /rp/l2');
+  const plain = await run(sh, 'realpath /rp/f');
+  check('realpath: an absolute name is printed as it is', plain.stdout === '/rp/f\n', JSON.stringify(plain.stdout));
+  const relative = await run(sh, 'cd /rp; realpath f');
+  check('realpath: a relative name is taken from the current directory', relative.stdout === '/rp/f\n', JSON.stringify(relative.stdout));
+  const dots = await run(sh, 'realpath /rp/../rp/./f');
+  check('realpath: .. and . are resolved', dots.stdout === '/rp/f\n', JSON.stringify(dots.stdout));
+  const link = await run(sh, 'realpath /rp/l');
+  check('realpath: a symbolic link is followed to its target', link.stdout === '/rp/t\n', JSON.stringify(link.stdout));
+  const chained = await run(sh, 'realpath /rp/l2');
+  check('realpath: a chain of links is followed to the end', chained.stdout === '/rp/t\n', JSON.stringify(chained.stdout));
+  const missing = await run(sh, 'realpath /rp/none; echo rc=$?');
+  check('realpath: a missing name gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes('realpath: /rp/none: No such file or directory'), JSON.stringify(missing.stderr));
+  const loop = await run(sh, 'ln -s /rp/b2 /rp/b1; ln -s /rp/b1 /rp/b2; realpath /rp/b1; echo rc=$?');
+  check('realpath: a loop of links is refused with status 1', loop.stdout === 'rc=1\n' && loop.stderr.includes('Too many levels of symbolic links'), JSON.stringify(loop.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

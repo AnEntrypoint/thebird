@@ -2456,3 +2456,13 @@ Known gaps: the default output is a short form, not the full GNU layout (no bloc
 `scripts/witness-shell.mjs`: group `stat: stat reports the name, size, type and mode of a file`, 7 rows: `-c` name, size and type (`/st/f 6 regular file`); a directory is 755 by default; a file is 644 by default; a missing file gives the message and status 1; a symbolic link is reported as itself (`symbolic link`); with no `-c` the three-line form; `%%` (`2%`).
 
 Red check (done), each restored and confirmed by an edit that applied: the size made to 0: `RESULT PASS=190 FAIL=3` (the three size rows). The missing-file status made 0: `RESULT PASS=192 FAIL=1` (the missing-file row). The default mode made 000: `RESULT PASS=191 FAIL=2` (the two mode rows). The green run after all three restores is `RESULT PASS=193 FAIL=0`.
+
+### Change set 18, E4c: realpath (Phase A)
+
+`web/shell-core.js`: `realPath` normalizes the name, then walks its components and replaces the first symbolic link with its target (relative targets are taken from the link directory), and repeats until no link is left, up to 40 hops. A name that does not exist gives `realpath: NAME: No such file or directory` with status 1; a loop of links gives `Too many levels of symbolic links` with status 1. Options (any argument starting with a dash) are ignored.
+
+Known gap: `realpath -m` (names that do not exist) and `-e`/`-s` modes are not implemented; a missing name is always an error.
+
+`scripts/witness-shell.mjs`: group `realpath: realpath resolves .., relative names and symbolic links`, 8 rows: an absolute name; a relative name taken from the current directory after `cd`; `..` and `.` resolved; a symbolic link followed to its target; a chain of two links followed to the end; a missing name (status 1, the message); a loop of links (status 1, the message).
+
+Red check (done), each restored and confirmed by an edit that applied: links not followed: `RESULT PASS=197 FAIL=3` (the link, chain and loop rows). Missing name made status 0: `RESULT PASS=199 FAIL=1` (the missing row). The green run after both restores is `RESULT PASS=200 FAIL=0`.

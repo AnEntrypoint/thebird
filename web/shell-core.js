@@ -695,6 +695,26 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { type: dir ? 'directory' : 'regular file', size: info?.size ?? 0, mode: modes.get(path) ?? (dir ? '755' : '644') };
   };
 
+  const realPath = (path) => {
+    let current = normalize(path);
+    for (let hops = 0; hops < 40; hops++) {
+      const parts = current.split('/').filter(Boolean);
+      let prefix = '';
+      let linked = false;
+      for (let i = 0; i < parts.length && !linked; i++) {
+        prefix += '/' + parts[i];
+        if (host.lstat(prefix)?.link) {
+          const target = host.readlink(prefix);
+          const base = target.startsWith('/') ? target : parentOf(prefix) + '/' + target;
+          current = normalize([base, ...parts.slice(i + 1)].join('/'));
+          linked = true;
+        }
+      }
+      if (!linked) return current;
+    }
+    return null;
+  };
+
   const expandStat = (format, name, info) => format.replace(/%(.)/g, (whole, code) => {
     if (code === 'n') return name;
     if (code === 's') return String(info.size);
@@ -1092,6 +1112,25 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
+    },
+    realpath: ({ argv }) => {
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const name of argv.filter((arg) => !arg.startsWith('-'))) {
+        const path = resolvePath(name);
+        if (!host.lstat(path) && !host.stat(path)) {
+          err += 'realpath: ' + name + ': No such file or directory\n';
+          code = 1;
+          continue;
+        }
+        const resolved = realPath(path);
+        if (resolved === null) {
+          err += 'realpath: ' + name + ': Too many levels of symbolic links\n';
+          code = 1;
+        } else out += resolved + '\n';
+      }
+      return { code, out, err };
     },
     stat: ({ argv }) => {
       const flagAt = argv.indexOf('-c');
