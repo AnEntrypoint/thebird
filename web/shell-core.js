@@ -666,6 +666,52 @@ function bytesToText(bytes) {
     return String.fromCharCode(...bytes);
   }
 }
+function lineDiff(a, b) {
+  const n = a.length;
+  const m = b.length;
+  const table = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  }
+  const hunks = [];
+  let hunk = null;
+  const open = (i, j) => {
+    if (!hunk) hunk = { a0: i, a1: i, b0: j, b1: j };
+  };
+  const close = () => {
+    if (hunk) hunks.push(hunk);
+    hunk = null;
+  };
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      close();
+      i++;
+      j++;
+    } else if (j >= m || (i < n && table[i + 1][j] >= table[i][j + 1])) {
+      open(i, j);
+      i++;
+      hunk.a1 = i;
+    } else {
+      open(i, j);
+      j++;
+      hunk.b1 = j;
+    }
+  }
+  close();
+  const range = (start, end) => (end - start === 1 ? String(start + 1) : (start + 1) + ',' + end);
+  let out = '';
+  for (const h of hunks) {
+    const dels = a.slice(h.a0, h.a1).map((line) => '< ' + line + '\n').join('');
+    const ins = b.slice(h.b0, h.b1).map((line) => '> ' + line + '\n').join('');
+    if (dels && ins) out += range(h.a0, h.a1) + 'c' + range(h.b0, h.b1) + '\n' + dels + '---\n' + ins;
+    else if (dels) out += range(h.a0, h.a1) + 'd' + h.b0 + '\n' + dels;
+    else out += h.a0 + 'a' + range(h.b0, h.b1) + '\n' + ins;
+  }
+  return out;
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1227,6 +1273,26 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       let out = '';
       for (let i = 0; i < encoded.length; i += width) out += encoded.slice(i, i + width) + '\n';
       return { code: input.code, out, err: input.err };
+    },
+    diff: ({ argv, stdin = '' }) => {
+      const names = argv.filter((arg) => arg === '-' || !arg.startsWith('-'));
+      if (names.length !== 2) return { code: 2, out: '', err: 'diff: two files are needed\n' };
+      const texts = [];
+      let err = '';
+      for (const name of names) {
+        if (name === '-') {
+          texts.push(stdin);
+          continue;
+        }
+        try {
+          texts.push(host.read(resolvePath(name)));
+        } catch {
+          err += 'diff: ' + name + ': No such file or directory\n';
+        }
+      }
+      if (err) return { code: 2, out: '', err };
+      const out = lineDiff(linesOf(texts[0]), linesOf(texts[1]));
+      return { code: out ? 1 : 0, out, err: '' };
     },
     md5sum: ({ argv, stdin = '' }) => {
       const names = argv.filter((arg) => !arg.startsWith('-'));

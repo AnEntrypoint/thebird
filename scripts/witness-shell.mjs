@@ -695,6 +695,29 @@ group('base64: base64 encodes and decodes stdin, and wraps its output', async ()
   check('base64: empty input gives no output and status 0', empty.stdout === 'rc=0\n', JSON.stringify(empty.stdout));
 });
 
+group('diff: diff prints the normal-format changes between two files', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /df');
+  const same = await run(sh, 'printf "a\\n" > /df/a1; printf "a\\n" > /df/a2; diff /df/a1 /df/a2; echo rc=$?');
+  check('diff: identical files print nothing and exit 0', same.stdout === 'rc=0\n', JSON.stringify(same.stdout));
+  await run(sh, 'printf "1\\n2\\n3\\n" > /df/c1; printf "1\\nX\\n3\\n" > /df/c2');
+  const change = await run(sh, 'diff /df/c1 /df/c2; echo rc=$?');
+  check('diff: a changed line is a c hunk with < and > lines', change.stdout === '2c2\n< 2\n---\n> X\nrc=1\n', JSON.stringify(change.stdout));
+  await run(sh, 'printf "1\\n" > /df/d1; printf "0\\n1\\n" > /df/d2');
+  const added = await run(sh, 'diff /df/d1 /df/d2; echo rc=$?');
+  check('diff: an added line is an a hunk', added.stdout === '0a1\n> 0\nrc=1\n', JSON.stringify(added.stdout));
+  await run(sh, 'printf "1\\n2\\n" > /df/e1; printf "1\\n" > /df/e2');
+  const removed = await run(sh, 'diff /df/e1 /df/e2; echo rc=$?');
+  check('diff: a removed line is a d hunk', removed.stdout === '2d1\n< 2\nrc=1\n', JSON.stringify(removed.stdout));
+  await run(sh, 'printf "a\\nb\\nc\\nd\\ne\\n" > /df/f1; printf "a\\nB\\nc\\nd\\nE\\n" > /df/f2');
+  const several = await run(sh, 'diff /df/f1 /df/f2; echo rc=$?');
+  check('diff: two separate changes give two hunks in order', several.stdout === '2c2\n< b\n---\n> B\n5c5\n< e\n---\n> E\nrc=1\n', JSON.stringify(several.stdout));
+  const stdin = await run(sh, 'printf "1\\n3\\n" | diff - /df/c2; echo rc=$?');
+  check('diff: - reads the first file from stdin', stdin.stdout === '1a2\n> X\nrc=1\n', JSON.stringify(stdin.stdout));
+  const missing = await run(sh, 'diff /df/none /df/c1; echo rc=$?');
+  check('diff: a missing file gives a message and status 2', missing.stdout === 'rc=2\n' && missing.stderr.includes('diff: /df/none: No such file or directory'), JSON.stringify(missing.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
