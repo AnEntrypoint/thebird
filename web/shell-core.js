@@ -740,6 +740,8 @@ function exprEval(argv) {
   return { code: truthy(text) ? 0 : 1, out: text + '\n', err: '' };
 }
 
+const SEQ_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1323,6 +1325,23 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code: out ? 1 : 0, out, err: '' };
     },
     expr: ({ argv }) => exprEval(argv),
+    seq: ({ argv }) => {
+      if (!argv.length) return { code: 1, out: '', err: 'seq: missing operand\n' };
+      if (argv.length > 3) return { code: 1, out: '', err: "seq: extra operand '" + argv[3] + "'\n" };
+      const bad = argv.find((arg) => !SEQ_NUMBER.test(arg));
+      if (bad !== undefined) return { code: 1, out: '', err: "seq: invalid floating point argument: '" + bad + "'\n" };
+      const [first, step, last] = argv.length === 1 ? ['1', '1', argv[0]] : argv.length === 2 ? [argv[0], '1', argv[1]] : argv;
+      const start = Number(first);
+      const increment = Number(step);
+      const end = Number(last);
+      if (increment === 0) return { code: 1, out: '', err: "seq: invalid Zero increment value: '" + step + "'\n" };
+      const count = Math.floor((end - start) / increment + 1e-9);
+      if (count > 1000000) return { code: 1, out: '', err: 'seq: too many values\n' };
+      const decimals = Math.max(...[first, step, last].map((text) => (text.split('.')[1] ?? '').length));
+      let out = '';
+      for (let k = 0; k <= count; k++) out += (start + k * increment).toFixed(decimals) + '\n';
+      return { code: 0, out, err: '' };
+    },
     md5sum: ({ argv, stdin = '' }) => {
       const names = argv.filter((arg) => !arg.startsWith('-'));
       if (!names.length) return ok(md5Hex(utf8Bytes(stdin)) + '  -\n');

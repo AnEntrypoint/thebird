@@ -742,6 +742,30 @@ group('expr: expr computes arithmetic, comparisons and length, and sets the stat
   check('expr: a longer expression is refused with status 2, not evaluated', chained.stdout === 'rc=2\n' && chained.stderr.includes('only one operator is supported'), JSON.stringify(chained.stderr));
 });
 
+group('seq: seq counts from first to last by step, and refuses bad arguments', async () => {
+  const sh = await shell({});
+  const last = await run(sh, 'seq 3');
+  check('seq: one argument counts from 1 to it', last.stdout === '1\n2\n3\n', JSON.stringify(last.stdout));
+  const empty = await run(sh, 'seq 0; echo rc=$?');
+  check('seq: an empty range prints nothing and exits 0', empty.stdout === 'rc=0\n', JSON.stringify(empty.stdout));
+  const decimal = await run(sh, 'seq 1 0.5 3');
+  check('seq: decimals keep the widest number of places', decimal.stdout === '1.0\n1.5\n2.0\n2.5\n3.0\n', JSON.stringify(decimal.stdout));
+  const down = await run(sh, 'seq 5 -2 1');
+  check('seq: a negative step counts down', down.stdout === '5\n3\n1\n', JSON.stringify(down.stdout));
+  const range = await run(sh, 'seq 2 4');
+  check('seq: two arguments give the first and last', range.stdout === '2\n3\n4\n', JSON.stringify(range.stdout));
+  const oneDecimal = await run(sh, 'seq 1.5 2');
+  check('seq: a single decimal step past the end is not printed', oneDecimal.stdout === '1.5\n', JSON.stringify(oneDecimal.stdout));
+  const word = await run(sh, 'seq x; echo rc=$?');
+  check('seq: a non-number gives a message and status 1', word.stdout === 'rc=1\n' && word.stderr.includes("seq: invalid floating point argument: 'x'"), JSON.stringify(word.stderr));
+  const zeroStep = await run(sh, 'seq 1 0 3; echo rc=$?');
+  check('seq: a zero step gives a message and status 1', zeroStep.stdout === 'rc=1\n' && zeroStep.stderr.includes("seq: invalid Zero increment value: '0'"), JSON.stringify(zeroStep.stderr));
+  const none = await run(sh, 'seq; echo rc=$?');
+  check('seq: no operand gives a message and status 1', none.stdout === 'rc=1\n' && none.stderr.includes('seq: missing operand'), JSON.stringify(none.stderr));
+  const extra = await run(sh, 'seq 1 2 3 4; echo rc=$?');
+  check('seq: a fourth argument gives a message and status 1', extra.stdout === 'rc=1\n' && extra.stderr.includes("seq: extra operand '4'"), JSON.stringify(extra.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
