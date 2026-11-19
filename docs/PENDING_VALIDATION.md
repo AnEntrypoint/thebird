@@ -2542,3 +2542,11 @@ Measured cost (this is the trade-off, not a fault in the witness): a `for` loop 
 `scripts/witness-shell.mjs`: group `loops: a for loop yields per item, so timeoutMs stops a long for loop`, 3 rows: a for over 100000 items is stopped at timeoutMs 300 with exit 124; the stop comes within 5000 ms, not after the whole list; a short for loop still runs every item (`1 2 3`).
 
 Red check (done), restored and confirmed by an edit that applied: the yield removed from runFor: `RESULT PASS=259 FAIL=1`, the long-loop row red with exit 0 (the loop completed). The restore is confirmed (`yieldTurn` appears in two places again), and the green run is `RESULT PASS=260 FAIL=0`.
+
+### Phase B for change sets 16 to 26 (`ec77ee1` to `349d8c0`)
+
+Swap gate: opened at try 38, `GATE_OPEN try=38 si=748 so=0 KB/s`, read immediately before the jobs (earlier tries were above the limit).
+Build check: `npm run check` exit 0, wall 2049 ms (`/tmp/pb12-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=260 FAIL=0`, exit 0, wall 1709 ms (`/tmp/pb12-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
+
