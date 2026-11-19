@@ -1420,7 +1420,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return null;
   };
 
-  const expandStat = (format, name, info) => format.replace(/%(.)/g, (whole, code) => {
+  const quoteName = (text) => (text.includes("'") ? '"' + text + '"' : "'" + text + "'");
+const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (whole, code) => {
+    if (code === 'N') return info.type === 'symbolic link' ? quoteName(name) + ' -> ' + quoteName(linkTarget) : quoteName(name);
     if (code === 'n') return name;
     if (code === 's') return String(info.size);
     if (code === 'F') return info.type;
@@ -2091,7 +2093,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
           err += "stat: cannot statx '" + name + "': No such file or directory\n";
           code = 1;
         } else if (format === null) out += '  File: ' + name + '\n  Size: ' + info.size + '\n  Type: ' + info.type + '\n';
-        else out += expandStat(format, name, info) + '\n';
+        else out += expandStat(format, name, info, info.type === 'symbolic link' ? host.readlink(walk.real) : null) + '\n';
       }
       return { code, out, err };
     },

@@ -3346,3 +3346,23 @@ Witness: group `stat -L: a symbolic link operand is followed to its target, and 
 Red checks, each restored and confirmed by a green run: (1) `follow` not passed to the walk (always the literal link): 7 rows red (every `-L` row that follows a link). (2) `-L` not removed from the operands: 7 rows red (every `-L` row, which now reports `-L` as a missing operand). The restored file matches its backup, and the green run gives `RESULT PASS=870 FAIL=0`.
 
 Gaps, recorded: `stat -L` with `-c` and `%N` (the quoted link name and target, which GNU prints) is not implemented and not probed. Absolute symbolic link targets are not witnessed, as in 30ag. The default `stat` output (without `-c`) is not witnessed for `-L`.
+
+### Change set 30ak: stat -c %N prints the quoted operand name, and a symbolic link adds its immediate target, as GNU stat does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) under LC_ALL=C as the sandbox identity `abc`, through a PATH shim named `stat`. Rows are generated from GNU; each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU):
+- A plain file and a directory print their quoted operand name: `'f'`, `'sub'`.
+- A file symbolic link prints the name and its immediate target: `'lk' -> 'f'`. A dangling link prints its target too: `'dl' -> 'nope'`. A link in a directory keeps the operand as typed and the target as stored: `'d/lk' -> 'f'`, and `'d/lk' -> '../f'` for a dot-dot target.
+- A chain prints only the first hop: `'lk2' -> 'lk'`. A link to a directory prints `'dl2' -> 'sub'`.
+- `-L` follows the link, so `stat -L -c %N` prints only the quoted name: `'lk'`.
+- A name with a space is single-quoted: `'my l' -> 'my f'`.
+- A name with an apostrophe is double-quoted: `"it's"` (GNU prints `"it's"` for the file `it's`).
+
+What changed in the shell: `expandStat` has a `%N` branch. `quoteName` wraps a name in single quotes, or in double quotes when it contains an apostrophe. A symbolic link adds ` -> ` and the target from `host.readlink` on the walked path, which is the link itself when the walk does not follow the last component. A `-L` walk already follows the link, so its info is the target's type and the branch prints only the quoted name.
+
+Witness: group `stat -c %N: a plain or linked operand prints its quoted name, and a symbolic link adds its immediate target, as GNU stat does on Linux`, 11 rows from GNU (plain file, file link, dangling link, `-L`, directory, chain, link to a directory, name with a space, relative target in a directory, dot-dot target, apostrophe). The apostrophe row was red at first (single quotes), which the GNU probe above corrected. Last full run: `RESULT PASS=881 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by a green run: (1) the `%N` branch removed: 11 rows red (`PASS=870 FAIL=11`, every row). (2) the link target dropped (a link prints only its quoted name): 7 rows red, the seven symbolic-link rows (`PASS=874 FAIL=7`). A first attempt at (2) left a dangling ternary and failed to load (79 red); it was discarded and redone with a valid replacement, and the restored file matches its backup.
+
+Gaps, recorded: a name with both an apostrophe and a double quote is not probed, so its quoting is not claimed. Control characters and non-ASCII names in `%N` are not probed. The default `stat` output (without `-c`) does not print a `%N` line, and is not changed here.

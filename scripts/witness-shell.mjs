@@ -1312,6 +1312,31 @@ group("stat -L: a symbolic link operand is followed to its target, and a danglin
   check("stat -L -c reports the type of a symbolic link to a regular file, as GNU stat does on Linux", gr7.stdout === "regular file lk\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
 });
 
+group("stat -c %N: a plain or linked operand prints its quoted name, and a symbolic link adds its immediate target, as GNU stat does on Linux", async () => {
+  const gr0 = await run(await shell({}), "echo a > f && stat -c \"%N\" f; echo rc=$?");
+  check("stat -c %N prints the quoted name of a plain file, as GNU stat does on Linux", gr0.stdout === "'f'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > f && ln -s f lk && stat -c \"%N\" lk; echo rc=$?");
+  check("stat -c %N prints a file symbolic link with its immediate target, as GNU stat does on Linux", gr1.stdout === "'lk' -> 'f'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "ln -s nope dl && stat -c \"%N\" dl; echo rc=$?");
+  check("stat -c %N prints a dangling symbolic link with its target, as GNU stat does on Linux", gr2.stdout === "'dl' -> 'nope'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "echo a > f && ln -s f lk && stat -L -c \"%N\" lk; echo rc=$?");
+  check("stat -L -c %N prints only the quoted name of a followed symbolic link, as GNU stat does on Linux", gr3.stdout === "'lk'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "mkdir sub && stat -c \"%N\" sub; echo rc=$?");
+  check("stat -c %N prints the quoted name of a directory, as GNU stat does on Linux", gr4.stdout === "'sub'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "echo a > f && ln -s f lk && ln -s lk lk2 && stat -c \"%N\" lk2; echo rc=$?");
+  check("stat -c %N prints only the first hop of a chain of symbolic links, as GNU stat does on Linux", gr5.stdout === "'lk2' -> 'lk'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "mkdir sub && ln -s sub dl2 && stat -c \"%N\" dl2; echo rc=$?");
+  check("stat -c %N prints a symbolic link to a directory with its target, as GNU stat does on Linux", gr6.stdout === "'dl2' -> 'sub'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  const gr7 = await run(await shell({}), "echo a > \"my f\" && ln -s \"my f\" \"my l\" && stat -c \"%N\" \"my l\"; echo rc=$?");
+  check("stat -c %N quotes a name with a space, as GNU stat does on Linux", gr7.stdout === "'my l' -> 'my f'\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+  const gr8 = await run(await shell({}), "mkdir d && echo a > d/f && ln -s f d/lk && stat -c \"%N\" d/lk; echo rc=$?");
+  check("stat -c %N prints a link in a directory with its relative target, as GNU stat does on Linux", gr8.stdout === "'d/lk' -> 'f'\nrc=0\n" && gr8.stderr === "", JSON.stringify([gr8.stdout, gr8.stderr]));
+  const gr9 = await run(await shell({}), "mkdir d && echo a > f && ln -s ../f d/lk && stat -c \"%N\" d/lk; echo rc=$?");
+  check("stat -c %N prints a link whose target has a dot-dot unchanged, as GNU stat does on Linux", gr9.stdout === "'d/lk' -> '../f'\nrc=0\n" && gr9.stderr === "", JSON.stringify([gr9.stdout, gr9.stderr]));
+  const gr10 = await run(await shell({}), "echo a > \"it's\" && stat -c \"%N\" \"it's\"; echo rc=$?");
+  check("stat -c %N quotes a name with an apostrophe, as GNU stat does on Linux", gr10.stdout === "\"it's\"\nrc=0\n" && gr10.stderr === "", JSON.stringify([gr10.stdout, gr10.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));
