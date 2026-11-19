@@ -3582,3 +3582,26 @@ Witness: group `quoting: a backslash-newline inside a command substitution in do
 Red check, run in the same window and restored with `cmp`: the unquoted word branch that skips a backslash-newline (from change set 30ar) removed from `web/shell-core.js`: `RESULT PASS=955 FAIL=5`. The five red rows are the command-substitution rows (two of the 7), the unquoted heredoc delimiter row, the two-substitution row, and the LINENO continuation row from 30ar.
 
 Gap closed: the backslash-newline inside a command substitution within double quotes, and inside a heredoc delimiter word, from ranked gap 1 of change set 30at. Still open, not probed: a backslash-newline inside a double-quoted heredoc delimiter word after the closing quote, and a backslash-newline inside an arithmetic expansion.
+
+### Change set 30av: a backslash-newline inside arithmetic expansion is removed before the expression is read, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Probed shapes (bash stdout), each matched by the rows in the group `arithmetic: a backslash-newline inside $(( )) is removed before the expression is read, as bash does`:
+- `echo $((1+\` newline `2))` prints `3`.
+- `echo $((1 \` newline `+ 2))` prints `3`.
+- `x=$((\` newline `5*2)); echo $x` prints `10`.
+- `echo $((2\` newline `*3))` prints `6`.
+- `echo "$((4\` newline `*5))"` prints `20`.
+- `echo $((\` newline `7))` prints `7`.
+- `echo $((1\\` newline `+2))` is a syntax error in bash (exit 1, stdout empty): the doubled backslash is not a continuation.
+
+Before the change, the six rows that begin with a continuation failed: our expression reader kept the backslash and newline, and the tokenizer rejected them with `arithmetic: bad expression`. The doubled-backslash row already failed the same way on both sides, and the two heredoc rows (a closing quote before the backslash-newline in a delimiter word, and a delimiter word with quoted and unquoted parts) already matched bash, so they are regression coverage.
+
+Rule: a backslash followed by a newline is removed from the expression text before whitespace is removed and the expression is tokenized. A doubled backslash before a newline is not a continuation, so the expression stays invalid.
+
+What changed in the shell: `evaluateArithmetic` strips backslash-newline pairs before it removes whitespace.
+
+Witness: 9 rows (6 that changed, 1 error row, 2 heredoc regression rows). Final in the window: `RESULT PASS=969 FAIL=0`. The 960 rows before this change plus these 9 give 969.
+
+Red check, run in the same window and restored with `cmp` (the file matched the good copy again, and `git status` showed only the intended files): the one-line change removed from `web/shell-core.js`. Result: `RESULT PASS=963 FAIL=6`, with the six continuation rows red and the doubled-backslash and heredoc rows unchanged.
+
+Gaps still open, not probed: a backslash-newline inside a heredoc body that is itself an arithmetic expansion, and inside a `(( ))` command.

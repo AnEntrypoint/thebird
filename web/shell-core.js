@@ -1285,7 +1285,7 @@ function applyOperator(op, left, right) {
 }
 
 export function evaluateArithmetic(src, lookup) {
-  const compact = src.replace(/\s+/g, '');
+  const compact = src.replace(/\\\n/g, '').replace(/\s+/g, '');
   const tokens = compact.match(/\d+|[A-Za-z_]\w*|<=|>=|==|!=|&&|\|\||[-+*/%<>()!]/g) ?? [];
   if (tokens.join('') !== compact) throw new Error(`arithmetic: bad expression '${src.trim()}'`);
   let pos = 0;

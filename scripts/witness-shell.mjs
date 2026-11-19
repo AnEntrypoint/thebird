@@ -1518,6 +1518,27 @@ group('quoting: a backslash-newline inside a command substitution in double quot
   check('quoting: two command substitutions in one word each join their own backslash-newlines, as bash does', cs6.stdout === 'ab\ncd\n' && cs6.stderr === '', JSON.stringify([cs6.stdout, cs6.stderr]));
 });
 
+group('arithmetic: a backslash-newline inside $(( )) is removed before the expression is read, as bash does', async () => {
+  const ar0 = await run(await shell({}), 'echo $((1+\\\n2))');
+  check('arithmetic: a backslash-newline between operands is removed, as bash does', ar0.stdout === '3\n' && ar0.stderr === '', JSON.stringify([ar0.stdout, ar0.stderr]));
+  const ar1 = await run(await shell({}), 'echo $((1 \\\n+ 2))');
+  check('arithmetic: a backslash-newline after an operand and a space is removed, as bash does', ar1.stdout === '3\n' && ar1.stderr === '', JSON.stringify([ar1.stdout, ar1.stderr]));
+  const ar2 = await run(await shell({}), 'x=$((\\\n5*2)); echo $x');
+  check('arithmetic: a backslash-newline right after the opening parentheses is removed, as bash does', ar2.stdout === '10\n' && ar2.stderr === '', JSON.stringify([ar2.stdout, ar2.stderr]));
+  const ar3 = await run(await shell({}), 'echo $((2\\\n*3))');
+  check('arithmetic: a backslash-newline before an operator is removed, as bash does', ar3.stdout === '6\n' && ar3.stderr === '', JSON.stringify([ar3.stdout, ar3.stderr]));
+  const ar4 = await run(await shell({}), 'echo "$((4\\\n*5))"');
+  check('arithmetic: a backslash-newline inside $(( )) within double quotes is removed, as bash does', ar4.stdout === '20\n' && ar4.stderr === '', JSON.stringify([ar4.stdout, ar4.stderr]));
+  const ar5 = await run(await shell({}), 'echo $((\\\n7))');
+  check('arithmetic: a backslash-newline before the only operand is removed, as bash does', ar5.stdout === '7\n' && ar5.stderr === '', JSON.stringify([ar5.stdout, ar5.stderr]));
+  const ar6 = await run(await shell({}), 'echo $((1\\\\\n+2))');
+  check('arithmetic: a doubled backslash before a newline is not removed, and the expression is a syntax error, as bash does', ar6.stdout === '' && ar6.stderr !== '', JSON.stringify([ar6.stdout, ar6.stderr]));
+  const hd0 = await run(await shell({}), 'cat <<"E"\\\nF\na\\\nb\nEF');
+  check('quoting: a backslash-newline after a closing quote in a heredoc delimiter word leaves the quoted body unchanged, as bash does', hd0.stdout === 'a\\\nb\n' && hd0.stderr === '', JSON.stringify([hd0.stdout, hd0.stderr]));
+  const hd1 = await run(await shell({}), 'cat <<E"F"\\\nG\na\nEFG');
+  check('quoting: a backslash-newline after an unquoted and a quoted part of a heredoc delimiter word joins the lines, as bash does', hd1.stdout === 'a\n' && hd1.stderr === '', JSON.stringify([hd1.stdout, hd1.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
