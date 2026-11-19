@@ -468,6 +468,35 @@ export function parseScript(src) {
 const ok = (out) => ({ code: 0, out, err: '' });
 const basenameOf = (name) => name.split('/').filter(Boolean).pop() ?? name;
 const parentOf = (path) => path.slice(0, path.lastIndexOf('/')) || '/';
+const linesOf = (text) => {
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+};
+const joinLines = (lines) => lines.map((line) => line + '\n').join('');
+function argsOf(argv, valued) {
+  const flags = new Map();
+  const operands = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const attached = valued.find((flag) => arg.startsWith(flag) && arg.length > flag.length);
+    if (valued.includes(arg)) flags.set(arg, argv[++i] ?? '');
+    else if (attached) flags.set(attached, arg.slice(attached.length));
+    else if (/^-\d+$/.test(arg)) flags.set('-n', arg.slice(1));
+    else if (/^-[a-zA-Z]+$/.test(arg)) for (const ch of arg.slice(1)) flags.set('-' + ch, true);
+    else operands.push(arg);
+  }
+  return { flags, operands };
+}
+function fieldPicks(spec) {
+  return spec.split(',').map((part) => {
+    const dash = part.indexOf('-');
+    if (dash < 0) return [Number(part), Number(part)];
+    const from = part.slice(0, dash) === '' ? 1 : Number(part.slice(0, dash));
+    const to = part.slice(dash + 1) === '' ? Infinity : Number(part.slice(dash + 1));
+    return [from, to];
+  });
+}
 
 function globRegExp(pattern, caseInsensitive = false) {
   const body = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
@@ -847,6 +876,58 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         host.write(path, prior + (stdin ?? ''));
       }
       return { code, out: stdin ?? '', err };
+    },
+    head: ({ argv, stdin = '' }) => {
+      const { flags, operands } = argsOf(argv, ['-n']);
+      const count = Number(flags.get('-n') ?? 10);
+      if (!Number.isInteger(count)) return { code: 1, out: '', err: 'head: invalid number of lines\n' };
+      const input = textInputs('head', operands, stdin);
+      return { code: input.code, out: joinLines(linesOf(input.text).slice(0, count)), err: input.err };
+    },
+    tail: ({ argv, stdin = '' }) => {
+      const { flags, operands } = argsOf(argv, ['-n']);
+      const raw = flags.get('-n') ?? '10';
+      const fromLine = raw.startsWith('+') ? Number(raw.slice(1)) : null;
+      const count = Number(raw);
+      if (fromLine === null ? !Number.isInteger(count) : !Number.isInteger(fromLine)) return { code: 1, out: '', err: 'tail: invalid number of lines\n' };
+      const input = textInputs('tail', operands, stdin);
+      const lines = linesOf(input.text);
+      const picked = fromLine !== null ? lines.slice(Math.max(fromLine - 1, 0)) : count === 0 ? [] : lines.slice(-count);
+      return { code: input.code, out: joinLines(picked), err: input.err };
+    },
+    sort: ({ argv, stdin = '' }) => {
+      const { flags, operands } = argsOf(argv, []);
+      const input = textInputs('sort', operands, stdin);
+      const compare = flags.has('-n') ? (a, b) => (Number.parseFloat(a) || 0) - (Number.parseFloat(b) || 0) : (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+      let lines = linesOf(input.text).sort(compare);
+      if (flags.has('-r')) lines.reverse();
+      if (flags.has('-u')) lines = lines.filter((line, i) => i === 0 || line !== lines[i - 1]);
+      return { code: input.code, out: joinLines(lines), err: input.err };
+    },
+    uniq: ({ argv, stdin = '' }) => {
+      const { flags, operands } = argsOf(argv, []);
+      const input = textInputs('uniq', operands, stdin);
+      const groups = [];
+      for (const line of linesOf(input.text)) {
+        const last = groups.at(-1);
+        if (last && last.line === line) last.count++;
+        else groups.push({ line, count: 1 });
+      }
+      const out = groups.map(({ line, count }) => (flags.has('-c') ? String(count).padStart(7) + ' ' : '') + line + '\n').join('');
+      return { code: input.code, out, err: input.err };
+    },
+    cut: ({ argv, stdin = '' }) => {
+      const { flags, operands } = argsOf(argv, ['-d', '-f']);
+      if (!flags.has('-f')) return { code: 1, out: '', err: 'cut: you must specify the list of fields\n' };
+      const delim = flags.get('-d') ?? '\t';
+      const picks = fieldPicks(flags.get('-f'));
+      if (picks.some(([from, to]) => !(from >= 1) || Number.isNaN(to))) return { code: 1, out: '', err: 'cut: fields are numbered from 1\n' };
+      const input = textInputs('cut', operands, stdin);
+      const out = joinLines(linesOf(input.text).map((line) => {
+        if (!line.includes(delim)) return line;
+        return line.split(delim).filter((_, i) => picks.some(([from, to]) => i + 1 >= from && i + 1 <= to)).join(delim);
+      }));
+      return { code: input.code, out, err: input.err };
     },
     readlink: ({ argv }) => {
       const operands = argv.filter((arg) => !arg.startsWith('-'));
@@ -1426,6 +1507,26 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const inner = { out: '', err: '', signal: sink.signal };
     const code = await runSequence(node.list, stdin, inner);
     return { code, out: inner.out, err: inner.err };
+  }
+
+  function textInputs(verb, names, stdin) {
+    if (!names.length) return { text: stdin, err: '', code: 0 };
+    let text = '';
+    let err = '';
+    let code = 0;
+    for (const name of names) {
+      if (name === '-') {
+        text += stdin;
+        continue;
+      }
+      try {
+        text += host.read(resolvePath(name));
+      } catch {
+        err += verb + ': ' + name + ': No such file or directory\n';
+        code = 1;
+      }
+    }
+    return { text, err, code };
   }
 
   function copyOrMove(verb, argv) {

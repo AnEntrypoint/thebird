@@ -558,6 +558,36 @@ group('files: cp, mv, touch and tee copy, move, create and write files', async (
   check('files: mv of a file onto itself is refused', same.stdout === 'rc=1\n' && same.stderr.includes("mv: '/e2/v' and '/e2/v' are the same file"), JSON.stringify(same.stderr));
 });
 
+group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
+  const sh = await shell({});
+  const sorted = await run(sh, 'printf "b\na\nc\n" | sort');
+  check('text: sort puts the lines in order', sorted.stdout === 'a\nb\nc\n', JSON.stringify(sorted.stdout));
+  const numeric = await run(sh, 'printf "3\n1\n2\n" | sort -n');
+  check('text: sort -n compares the lines as numbers', numeric.stdout === '1\n2\n3\n', JSON.stringify(numeric.stdout));
+  const reversed = await run(sh, 'printf "b\na\nb\n" | sort -ru');
+  check('text: sort -ru reverses the order and keeps one of each line', reversed.stdout === 'b\na\n', JSON.stringify(reversed.stdout));
+  const counted = await run(sh, 'printf "a\na\nb\n" | uniq -c');
+  check('text: uniq -c counts each run of equal lines', counted.stdout === '      2 a\n      1 b\n', JSON.stringify(counted.stdout));
+  const head = await run(sh, 'printf "1\n2\n3\n4\n" | head -n 2');
+  check('text: head -n keeps the first lines', head.stdout === '1\n2\n', JSON.stringify(head.stdout));
+  const headDigits = await run(sh, 'printf "1\n2\n3\n4\n" | head -2');
+  check('text: head -N is the same as head -n N', headDigits.stdout === '1\n2\n', JSON.stringify(headDigits.stdout));
+  const tail = await run(sh, 'printf "1\n2\n3\n4\n" | tail -n 2');
+  check('text: tail -n keeps the last lines', tail.stdout === '3\n4\n', JSON.stringify(tail.stdout));
+  const tailFrom = await run(sh, 'printf "1\n2\n3\n4\n5\n" | tail -n +4');
+  check('text: tail -n +N starts at line N', tailFrom.stdout === '4\n5\n', JSON.stringify(tailFrom.stdout));
+  const field = await run(sh, 'printf "a:b:c\nd:e:f\n" | cut -d: -f2');
+  check('text: cut -d -f keeps one field of each line', field.stdout === 'b\ne\n', JSON.stringify(field.stdout));
+  const fields = await run(sh, 'printf "a:b:c\n" | cut -d: -f1,3');
+  check('text: cut keeps a list of fields in line order', fields.stdout === 'a:c\n', JSON.stringify(fields.stdout));
+  const noDelim = await run(sh, 'printf "abc\n" | cut -f1');
+  check('text: cut passes a line with no tab through whole', noDelim.stdout === 'abc\n', JSON.stringify(noDelim.stdout));
+  const missing = await run(sh, 'cut -d: -f1 /e3/nope; echo rc=$?');
+  check('text: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes('cut: /e3/nope: No such file or directory'), JSON.stringify(missing.stderr));
+  const noFields = await run(sh, 'cut -d:; echo rc=$?');
+  check('text: cut without -f is refused with status 1', noFields.stdout === 'rc=1\n' && noFields.stderr.includes('you must specify the list of fields'), JSON.stringify(noFields.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
