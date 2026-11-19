@@ -3118,3 +3118,16 @@ Red checks, each restored and confirmed green: (1) decoding removed: 6 rows red 
 
 Gaps, recorded: `\h` and `\H` are not split at a domain dot (not needed for this host). Other prompt escapes (`\s`, `\w`, `\$`, `\n`, `\t`, `\d`) are not implemented; PS4 in bash decodes them too, so a PS4 with one of them still differs from bash. The username and host are fixed constants, not read from a configured identity.
 
+
+### Phase B record: change sets 30t to 30x
+
+Gate: `vmstat 1 2`, last line: swap-in 24 KB/s, swap-out 0 KB/s, both under 1000, so the gate was open.
+
+`npm run check`: exit 0, wall 0.31 s.
+
+`npm run witness:shell`: exit 0, `RESULT PASS=731 FAIL=0`, wall 1.55 s.
+
+Runaway-loop rows: `timeout: a command past timeoutMs ends with exit 124`, `loops: a while that never ends is stopped by the command timeout with exit 124`, `loops: a for over a large list is stopped by timeoutMs with exit 124`, and `loops: the stop comes at the timeout, not after the whole list` (300 ms) all PASS, so each stops at its timeoutMs.
+
+Pushed in this Phase B, once, as `6ba21ab..HEAD`: e817934, 5dd020b, a050362, 20679b0, 83eac31, ee88f21, 08523c9, 21f33c9, 8f7e001, 449b8dd, 57988ef, and this record.
+
