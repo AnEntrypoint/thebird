@@ -6,7 +6,7 @@ import { runAwk } from './shell-awk.js';
 export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
-const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', '>>', '>', '<', '|', '(', ')', ';', '&'];
+const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', ';;', '>>', '>', '<', '|', '(', ')', ';', '&'];
 const REDIRECTS = new Set(['>', '>>', '<', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
@@ -292,6 +292,35 @@ function parse(tokens) {
     return { type: 'while', negate, cond, body, redirects: parseTrailingRedirects() };
   };
 
+  const parseCase = () => {
+    const word = tokens[pos];
+    if (!word?.parts) throw syntaxError("expected a word after 'case'");
+    pos++;
+    expectWord('in');
+    const arms = [];
+    while (pos < tokens.length && !isWord(tokens[pos], 'esac')) {
+      if (tokens[pos].op === '(') pos++;
+      const patterns = [];
+      for (;;) {
+        const token = tokens[pos];
+        if (!token?.parts) throw syntaxError('expected a pattern');
+        patterns.push(token.parts);
+        pos++;
+        if (tokens[pos]?.op !== '|') break;
+        pos++;
+      }
+      if (tokens[pos]?.op !== ')') throw syntaxError("expected ')'");
+      pos++;
+      const body = parseSequence(['esac']);
+      arms.push({ patterns, body });
+      if (tokens[pos]?.op === ';;') pos++;
+      else if (!isWord(tokens[pos], 'esac')) throw syntaxError("expected ';;'");
+    }
+    if (!isWord(tokens[pos], 'esac')) throw syntaxError("expected 'esac'");
+    pos++;
+    return { type: 'case', word: word.parts, arms, redirects: parseTrailingRedirects() };
+  };
+
   const parseCommand = () => {
     const token = tokens[pos];
     if (!token) throw syntaxError('unexpected end of input');
@@ -306,6 +335,10 @@ function parse(tokens) {
     if (isWord(token, 'while') || isWord(token, 'until')) {
       pos++;
       return parseWhile(isWord(token, 'until'));
+    }
+    if (isWord(token, 'case')) {
+      pos++;
+      return parseCase();
     }
     if (token.op === '(') {
       pos++;
@@ -341,7 +374,7 @@ function parse(tokens) {
     return { cmds };
   };
 
-  const atCloser = (stops) => tokens[pos].op === ')' || stops.some((word) => isWord(tokens[pos], word));
+  const atCloser = (stops) => tokens[pos].op === ')' || tokens[pos].op === ';;' || stops.some((word) => isWord(tokens[pos], word));
 
   const parseSequence = (stops) => {
     const items = [];
@@ -1245,6 +1278,22 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
+  const caseRegExp = (chars) => new RegExp(`^${chars.map((ch) => (isWildcard(ch) ? (ch.c === '*' ? '.*' : '.') : ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m))).join('')}$`);
+
+  async function runCase(node, stdin, sink) {
+    const inner = { out: '', err: '', signal: sink.signal };
+    const value = (await expandChars(node.word, false, inner)).map((ch) => ch.c).join('');
+    for (const arm of node.arms) {
+      for (const pattern of arm.patterns) {
+        if (caseRegExp(await expandChars(pattern, false, inner)).test(value)) {
+          const code = await runSequence(arm.body, stdin, inner);
+          return { code, out: inner.out, err: inner.err };
+        }
+      }
+    }
+    return { code: 0, out: inner.out, err: inner.err };
+  }
+
   async function runWhile(node, stdin, sink) {
     const inner = { out: '', err: '', signal: sink.signal };
     let code = 0;
@@ -1296,6 +1345,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (cmd.type === 'if') return runIf(cmd, stdin, sink);
     if (cmd.type === 'for') return runFor(cmd, stdin, sink);
     if (cmd.type === 'while') return runWhile(cmd, stdin, sink);
+    if (cmd.type === 'case') return runCase(cmd, stdin, sink);
     return runSimple(cmd, stdin, sink);
   }
 

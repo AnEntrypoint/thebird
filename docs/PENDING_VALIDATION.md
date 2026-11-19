@@ -2356,3 +2356,13 @@ Not run in this pass: the browser witness groups that call `runShellInTxiki` (`s
 `scripts/witness-shell.mjs`: group `loops: break leaves its loop, continue starts its next item, and both take a count`, 6 rows: `break` in a for loop (`1 after`); `continue` skips one item (`1 3`); `break` in a while loop (`n=3`, with `timeoutMs: 2000` so a broken `break` fails in 2 s and does not hang the witness); `break 2` (`done`); `continue 2` (`end`); `break` outside a loop (`after-break`, with the message).
 
 Red check (done): the in-loop path was replaced by a no-op once. `RESULT PASS=113 FAIL=5`, with the five in-loop rows red: `break in a for loop`, `continue skips`, `break in a while loop`, `break 2`, `continue 2`. The outside-loop row stays green, which is correct because that path is unchanged. The first red attempt hung: the `while true` row had no time limit, so a no-op `break` looped forever and the run was killed. That is why the row now has `timeoutMs: 2000`. The line was restored (`grep` finds the throw) and the green run is `RESULT PASS=118 FAIL=0`.
+
+### Change set 9, G3: case (Phase A)
+
+`web/shell-core.js`: the tokenizer emits `;;` as an operator; `parseSequence` stops at `;;` as it stops at `)` and the closing words; `parseCase` reads `case word in`, then arms of `pattern | pattern ) list ;;`, ending at `esac`, with an optional `(` before the patterns. `runCase` expands the word and each pattern (`expandChars`, so a pattern is not filename-globbed), builds a regex from its characters (unquoted `*` and `?` are wildcards, every other character is literal), and runs the first arm that matches. The status is the arm's status, or 0 when nothing matches.
+
+Escaping note: the regex escapes every character outside `A-Za-z0-9_` with `String.fromCharCode(92)`. An earlier attempt wrote the backslashes wrong, so `case '*'` threw `Invalid regular expression: /^*$/`; the probe caught it before the commit.
+
+`scripts/witness-shell.mjs`: group `case: the first matching arm runs, with | alternatives, glob patterns and a default`, 9 rows: the arm that matches runs (`X`); a glob pattern matches the expanded word (`starts-h`); `*` is the default (`default`); `|` alternatives (`ab`); no match runs nothing, status 0, shell goes on (`after`); a quoted `*` matches only a literal star (`literal`); a quoted `*` does not match other text (`glob`); every command in the arm runs (`one uno`); the status is the arm's status (`rc=1`).
+
+Red check (done): the matching arm's body was replaced by `const code = 0`. `RESULT PASS=119 FAIL=8`, all 8 case rows that need output red. The no-match row stays green, which is correct. The line was restored; the green run is `RESULT PASS=127 FAIL=0`.

@@ -437,6 +437,28 @@ group('loops: break leaves its loop, continue starts its next item, and both tak
   check('loops: break outside a loop prints a message, and the shell goes on with status 0', outside.stdout === 'after-break\n' && /only meaningful in a loop/.test(outside.stderr) && outside.exitCode === 0, JSON.stringify(outside.stderr));
 });
 
+group('case: the first matching arm runs, with | alternatives, glob patterns and a default', async () => {
+  const sh = await shell({});
+  const first = await run(sh, 'case x in a) echo A;; x) echo X;; esac');
+  check('case: the arm whose pattern matches runs, and the others do not', first.stdout === 'X\n', JSON.stringify(first.stdout));
+  const glob = await run(sh, 'v=hello; case $v in h*) echo starts-h;; *) echo other;; esac');
+  check('case: a glob pattern matches the expanded word', glob.stdout === 'starts-h\n', JSON.stringify(glob.stdout));
+  const fallback = await run(sh, 'case zz in a|b) echo ab;; *) echo default;; esac');
+  check('case: a * arm is the default when nothing else matches', fallback.stdout === 'default\n', JSON.stringify(fallback.stdout));
+  const alternative = await run(sh, 'case b in a|b) echo ab;; esac');
+  check('case: an arm with | alternatives matches any of them', alternative.stdout === 'ab\n', JSON.stringify(alternative.stdout));
+  const none = await run(sh, 'case q in a) echo a;; esac; echo after');
+  check('case: with no match nothing runs, the status is 0, and the shell goes on', none.stdout === 'after\n' && none.exitCode === 0, JSON.stringify(none.stdout));
+  const quoted = await run(sh, "case '*' in '*') echo literal;; *) echo glob;; esac");
+  check('case: a quoted * in a pattern matches only a literal star', quoted.stdout === 'literal\n', JSON.stringify(quoted.stdout));
+  const notQuoted = await run(sh, "case xyz in '*') echo literal;; *) echo glob;; esac");
+  check('case: a quoted * does not match other text', notQuoted.stdout === 'glob\n', JSON.stringify(notQuoted.stdout));
+  const several = await run(sh, 'case 1 in 1) echo one; echo uno;; esac');
+  check('case: every command in the matching arm runs', several.stdout === 'one\nuno\n', JSON.stringify(several.stdout));
+  const status = await run(sh, 'case a in a) false;; esac; echo rc=$?');
+  check('case: the status is the status of the arm that ran', status.stdout === 'rc=1\n', JSON.stringify(status.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
