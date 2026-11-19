@@ -2219,6 +2219,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const unset = part.op?.startsWith(':') ? !value : value === undefined;
     if (part.op === null) return value ?? '';
     if (part.op === ':-' || part.op === '-') return unset ? await expandText(part.word, sink) : value;
+    if (part.op === '?' || part.op === ':?') {
+      if (!unset) return value;
+      const word = part.word.length ? await expandText(part.word, sink) : part.op === '?' ? 'parameter not set' : 'parameter null or not set';
+      throw new Error('thebird: ' + part.name + ': ' + word);
+    }
     throw new Error(`${part.name}${part.op} is not supported yet`);
   }
 

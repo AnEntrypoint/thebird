@@ -3088,3 +3088,18 @@ Red checks, each restored and confirmed green: (1) the dangling wording disabled
 
 Gaps, recorded: the tree fixture for the `-vR --dereference` row has no sibling symlink to a file. With one, GNU reports which of the two entries is changed and which retained, in readdir order, and our walk is sorted (the 30m ordering gap), so that case is not pinned. The cycle rows are pinned with a link to the directory itself only.
 
+
+### Change set 30w: ${name?word} and ${name:?word} stop a command with bash's message, and a set name passes through
+
+Reference: `bash -c` (the sandbox bash), with its `bash: line 1: ` prefix mapped to `thebird: ` as the other thebird messages drop the line number. Expectations are generated from its output (`/tmp/gen-paramq.mjs`). The variable names in the rows are `qx`, which is never set, because this shell has no `unset` builtin (recorded as a gap below).
+
+What was wrong: `?` and `:?` threw `is not supported yet`. That is the message the PS4 error path printed in place of the prompt (`expandTrace` keeps the literal PS4 on an error), so a PS4 that fails to expand showed this shell's wording instead of bash's.
+
+What changed: `?` fails when the name is unset, `:?` when it is unset or empty; a set name returns its value. The message is `thebird: NAME: WORD`, or `parameter not set` (`?`) and `parameter null or not set` (`:?`) when no word is given. A failing expansion outside PS4 stops the command list, as bash does for a script; the output before it is kept. Inside PS4 the error is printed, the literal PS4 is traced, and the command still runs, as bash does.
+
+Witness: group `expansion: ${name?word} and ${name:?word} stop a command with the message bash gives, and a set name passes through`, 7 rows, `RESULT PASS=724 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) the unset test disabled (`if (true)`): 5 rows red, the unset `?` and `:?` rows and the PS4 row, plus the null `:?` row. (2) the default words swapped: 2 rows red (the `?` with no word, and the `:?` null). (3) the operator dispatch disabled: 7 rows red, including the set-value rows, which then reach `x:? is not supported yet`.
+
+Gaps, recorded: (a) the `unset` builtin is missing (`unset: command not found`), a reachable gap. (b) A failing expansion exits with status 2, the shell's generic error status; bash exits 1 for a script and 127 under `bash -c`, so the status is not matched. The witness compares stdout and stderr only. (c) `${x+word}`, `${x=word}` and `${x-}`-style forms other than `-`, `:-`, `?` and `:?` are still `is not supported yet`.
+

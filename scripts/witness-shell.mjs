@@ -810,6 +810,23 @@ group('redirects: a compound command sends its output and takes its input throug
   check("redirects: a group from a missing input file is refused, as dash does", cp8.stdout === "rc=2\n" && cp8.stderr === "thebird: cannot open /nofile-cr: No such file\n", JSON.stringify([cp8.stdout, cp8.stderr]));
 });
 
+group('expansion: ${name?word} and ${name:?word} stop a command with the message bash gives, and a set name passes through', async () => {
+  const xq0 = await run(await shell({}), "echo ${qx?no qx}; echo after");
+  check("expansion: ${qx?word} stops a command when qx is unset, with the message bash gives", xq0.stdout === "" && xq0.stderr === "thebird: qx: no qx\n", JSON.stringify([xq0.stdout, xq0.stderr]));
+  const xq1 = await run(await shell({}), "echo ${qx?}; echo after");
+  check("expansion: ${qx?} with no word reports parameter not set, as bash does", xq1.stdout === "" && xq1.stderr === "thebird: qx: parameter not set\n", JSON.stringify([xq1.stdout, xq1.stderr]));
+  const xq2 = await run(await shell({}), "x=; echo ${x:?}; echo after");
+  check("expansion: ${x:?} reports a null name as parameter null or not set, as bash does", xq2.stdout === "" && xq2.stderr === "thebird: x: parameter null or not set\n", JSON.stringify([xq2.stdout, xq2.stderr]));
+  const xq3 = await run(await shell({}), "x=; echo ${x?}; echo after");
+  check("expansion: ${x?} passes a set but empty name through, as bash does", xq3.stdout === "\nafter\n" && xq3.stderr === "", JSON.stringify([xq3.stdout, xq3.stderr]));
+  const xq4 = await run(await shell({}), "x=v; echo ${x:?no}; echo after");
+  check("expansion: ${x:?word} returns a set name, as bash does", xq4.stdout === "v\nafter\n" && xq4.stderr === "", JSON.stringify([xq4.stdout, xq4.stderr]));
+  const xq5 = await run(await shell({}), "echo start; echo ${qx?msg here}; echo after");
+  check("expansion: output before a failing ${qx?word} is kept, and the rest of the list stops", xq5.stdout === "start\n" && xq5.stderr === "thebird: qx: msg here\n", JSON.stringify([xq5.stdout, xq5.stderr]));
+  const xq6 = await run(await shell({}), "PS4='${qx?no qx} '; set -x; :; echo after");
+  check("set -x: a failing ${qx?word} in PS4 is reported and the literal PS4 is traced, as bash does", xq6.stdout === "after\n" && xq6.stderr === "thebird: qx: no qx\n${qx?no qx} :\nthebird: qx: no qx\n${qx?no qx} echo after\n", JSON.stringify([xq6.stdout, xq6.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
