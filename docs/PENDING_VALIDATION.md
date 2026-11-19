@@ -3562,3 +3562,23 @@ Witness: group `quoting: a backslash-newline is removed inside double quotes and
 Red checks, run in the same window, each restored from a backup and confirmed with `cmp`: (1) the double-quote branch removed: `RESULT PASS=950 FAIL=3` (the three double-quoted shapes with a newline). (2) the heredoc branch removed: `RESULT PASS=952 FAIL=1`.
 
 Gaps still open, not probed: a backslash-newline inside a command substitution within double quotes, and a backslash-newline inside a heredoc delimiter word.
+
+### Change set 30au: a backslash-newline inside a command substitution in double quotes, and in a heredoc delimiter word, joins the lines, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Rows are written from bash's output. Probed shapes (bash stdout; ours matched all of them before any change):
+- `echo "$(echo a\` newline `b)"` prints `ab`.
+- `echo "$(echo "x\` newline `y")"` prints `xy`.
+- `echo "$(printf '%s' x\` newline `y)"` prints `xy`.
+- `cat <<E\` newline `F`, body `a`, then `EF`, prints `a`: the unquoted delimiter word joins to `EF`.
+- `cat <<"E\` newline `F"`, body `a\` newline `b`, then `EF`, prints `a\` newline `b`: the quoted delimiter word keeps the body as written.
+- `echo "$(cat <<E` newline `p\` newline `q` newline `E` newline `)"` prints `pq`.
+- `echo "$(echo a\` newline `b; echo "c\` newline `d")"` prints `ab` and `cd` on two lines.
+- Not witnessed: `echo "$(echo x\\` newline `y)"` (bash reports `y: command not found` on stderr; the stdout is `x\` and a newline, and the rule is the same as the double-quote rule).
+
+Result: no change to web/shell-core.js was needed. The unquoted word reader from change set 30ar, the double-quote and heredoc-body branches from change set 30at, and the command-substitution path that re-tokenizes the text inside a substitution already give bash's output for every shape above.
+
+Witness: group `quoting: a backslash-newline inside a command substitution in double quotes, and in a heredoc delimiter word, joins the lines, as bash does`, 7 rows, written from the bash output above. Final in the window: `RESULT PASS=960 FAIL=0`.
+
+Red check, run in the same window and restored with `cmp`: the unquoted word branch that skips a backslash-newline (from change set 30ar) removed from `web/shell-core.js`: `RESULT PASS=955 FAIL=5`. The five red rows are the command-substitution rows (two of the 7), the unquoted heredoc delimiter row, the two-substitution row, and the LINENO continuation row from 30ar.
+
+Gap closed: the backslash-newline inside a command substitution within double quotes, and inside a heredoc delimiter word, from ranked gap 1 of change set 30at. Still open, not probed: a backslash-newline inside a double-quoted heredoc delimiter word after the closing quote, and a backslash-newline inside an arithmetic expansion.

@@ -1501,6 +1501,23 @@ group('quoting: a backslash-newline is removed inside double quotes and in an un
   check("quoting: a backslash-newline inside single quotes is kept, as bash does", sq.stdout === "a\\\nb\n" && sq.stderr === "", JSON.stringify([sq.stdout, sq.stderr]));
 });
 
+group('quoting: a backslash-newline inside a command substitution in double quotes, and in a heredoc delimiter word, joins the lines, as bash does', async () => {
+  const cs0 = await run(await shell({}), 'echo "$(echo a\\\nb)"');
+  check('quoting: a backslash-newline inside a command substitution in double quotes joins the lines, as bash does', cs0.stdout === 'ab\n' && cs0.stderr === '', JSON.stringify([cs0.stdout, cs0.stderr]));
+  const cs1 = await run(await shell({}), 'echo "$(echo "x\\\ny")"');
+  check('quoting: a backslash-newline inside a quoted word of a command substitution joins the lines, as bash does', cs1.stdout === 'xy\n' && cs1.stderr === '', JSON.stringify([cs1.stdout, cs1.stderr]));
+  const cs2 = await run(await shell({}), "echo \"$(printf '%s' x\\\ny)\"");
+  check('quoting: a backslash-newline between words of a command substitution joins the lines, as bash does', cs2.stdout === 'xy\n' && cs2.stderr === '', JSON.stringify([cs2.stdout, cs2.stderr]));
+  const cs3 = await run(await shell({}), 'cat <<E\\\nF\na\nEF');
+  check('quoting: a backslash-newline in an unquoted heredoc delimiter word joins the lines, as bash does', cs3.stdout === 'a\n' && cs3.stderr === '', JSON.stringify([cs3.stdout, cs3.stderr]));
+  const cs4 = await run(await shell({}), 'cat <<"E\\\nF"\na\\\nb\nEF');
+  check('quoting: a backslash-newline in a double-quoted heredoc delimiter word leaves the body unchanged, as bash does', cs4.stdout === 'a\\\nb\n' && cs4.stderr === '', JSON.stringify([cs4.stdout, cs4.stderr]));
+  const cs5 = await run(await shell({}), 'echo "$(cat <<E\np\\\nq\nE\n)"');
+  check('quoting: a heredoc inside a command substitution in double quotes joins a backslash-newline, as bash does', cs5.stdout === 'pq\n' && cs5.stderr === '', JSON.stringify([cs5.stdout, cs5.stderr]));
+  const cs6 = await run(await shell({}), 'echo "$(echo a\\\nb; echo "c\\\nd")"');
+  check('quoting: two command substitutions in one word each join their own backslash-newlines, as bash does', cs6.stdout === 'ab\ncd\n' && cs6.stderr === '', JSON.stringify([cs6.stdout, cs6.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
