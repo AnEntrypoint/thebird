@@ -591,6 +591,19 @@ group('errexit: set -e stops at a failing command with its status, and set +e tu
   }
 });
 
+group('cp -r: a directory is copied with its tree, and a link is copied as a link, as GNU cp does', async () => {
+  const tree = await run(await shell({}), 'mkdir -p /cp/a/b; echo x > /cp/a/b/f; echo y > /cp/a/g; cp -r /cp/a /cp/c; cat /cp/c/b/f /cp/c/g; echo rc=$?');
+  check('cp -r: a directory is copied with its files and subdirectories', tree.stdout === 'x\ny\nrc=0\n', JSON.stringify(tree.stdout));
+  const into = await run(await shell({}), 'mkdir -p /cp/a/b; echo x > /cp/a/b/f; mkdir -p /cp/t; cp -r /cp/a /cp/t; cat /cp/t/a/b/f; echo rc=$?');
+  check('cp -r: a directory copied into a directory lands inside it', into.stdout === 'x\nrc=0\n', JSON.stringify(into.stdout));
+  const plain = await run(await shell({}), 'mkdir -p /cp/a; cp /cp/a /cp/z; echo rc=$?');
+  check('cp: a directory without -r is omitted with status 1, as GNU cp', plain.stdout === 'rc=1\n' && plain.stderr === "cp: -r not specified; omitting directory '/cp/a'\n", JSON.stringify(plain));
+  const link = await run(await shell({}), 'echo t > /cp/tt; ln -s /cp/tt /cp/ll; mkdir -p /cp/d; cp -r /cp/ll /cp/d; test -L /cp/d/ll && echo link-kept');
+  check('cp -r: a link is copied as a link', link.stdout === 'link-kept\n', JSON.stringify(link.stdout));
+  const self = await run(await shell({}), 'mkdir -p /cp/m/n; echo k > /cp/m/n/f; cp -r /cp/m /cp/m; echo rc=$?');
+  check('cp -r: a directory cannot be copied into itself', self.stdout === 'rc=1\n' && self.stderr === "cp: cannot copy a directory, '/cp/m', into itself, '/cp/m/m'\n", JSON.stringify(self));
+});
+
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
   const sh = await shell({});
   const sorted = await run(sh, 'printf "b\na\nc\n" | sort');

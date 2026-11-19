@@ -1967,9 +1967,22 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { text, err, code };
   }
 
+  function copyTree(src, dst) {
+    if (host.lstat(src)?.link) {
+      host.symlink(host.readlink(src), dst);
+      return;
+    }
+    if (!host.stat(src)?.dir) {
+      host.write(dst, host.read(src));
+      return;
+    }
+    host.mkdir(dst, true);
+    for (const entry of host.list(src).sort()) copyTree(src + '/' + entry, dst + '/' + entry);
+  }
+
   function copyOrMove(verb, argv) {
     const names = argv.filter((arg) => !arg.startsWith('-'));
-    if (argv.some((arg) => arg.startsWith('-') && /[rR]/.test(arg))) return { code: 1, out: '', err: verb + ': directory copy is not supported\n' };
+    const recursive = verb === 'cp' && argv.some((arg) => arg.startsWith('-') && /[rR]/.test(arg));
     if (names.length < 2) return { code: 1, out: '', err: verb + ': missing file operand\n' };
     const target = names.pop();
     const targetPath = resolvePath(target);
@@ -1985,7 +1998,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         code = 1;
         continue;
       }
-      if (info.dir) {
+      if (info.dir && !recursive) {
         err += verb + ": -r not specified; omitting directory '" + name + "'\n";
         code = 1;
         continue;
@@ -2002,7 +2015,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         code = 1;
         continue;
       }
-      host.write(dst, host.read(src));
+      if (info.dir && verb === 'cp' && (dst === src || dst.startsWith(src + '/'))) {
+        err += "cp: cannot copy a directory, '" + name + "', into itself, '" + dst + "'\n";
+        code = 1;
+        continue;
+      }
+      copyTree(src, dst);
       if (verb === 'mv') host.remove(src, false);
     }
     return { code, out: '', err };

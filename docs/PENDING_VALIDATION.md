@@ -2686,3 +2686,14 @@ Held, with the evidence that would reopen each:
 - Pyodide bundle licence, vendored licence notices, removal of `web/vendor/tte-js`. Reopen on the owner's licence decision.
 
 Correction to change set 28i, item E: `stat -c %F` on a symbolic link is not a gap. The witness row `stat: a symbolic link is reported as itself` passes. The scan saw a failure only because its host had no symlink support.
+
+### Change set 29a: cp -r copies a directory tree
+
+`cp -r SRC DST` (also `-R`) copies a directory with its files, subdirectories and links, as GNU cp does: into DST when DST is a directory, or as DST when it is not. A link inside the tree is copied as a link, not followed. `cp` without `-r` still omits the directory with status 1 and the GNU message. A copy into itself is refused with status 1 (`cp: cannot copy a directory, 'm', into itself, 'm/m'`), as GNU does. The copy is implemented in `copyTree`, which `mv` also uses for files, so a link moved by `mv` stays a link.
+
+Expectations: each row was run with GNU cp in the sandbox (`cp -r a c` gives `x` and `y`, `cp -r ll d` keeps the link, `cp -r m m` gives status 1 and the message).
+
+Witness rows, group `cp -r: a directory is copied with its tree, and a link is copied as a link, as GNU cp does`: the tree copy, the copy into an existing directory, the omitted directory without `-r`, the link copy, and the copy into itself. The existing `cp` rows still pass; the parity row `mkdir /e2/dd; cp /e2/dd /e2/x; echo rc=$?` passes too.
+
+Red checks, on this tree: (1) the recursion into the entries removed: two rows red (the tree copy and the copy into a directory). (2) the `!recursive` guard disabled, so a directory copies without `-r`: three rows red (`files: cp of a directory without -r is refused with status 1`, the GNU `cp -r not specified` row, and the parity row). (3) the into-itself check removed: the row goes red with `Maximum call stack size exceeded`, which is the recursion the check stops. Each restored by the reverse edit; the green run is `RESULT PASS=473 FAIL=0`.
+
