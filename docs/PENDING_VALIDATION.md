@@ -2400,3 +2400,13 @@ The witness escape rows first failed because a backslash in the witness source i
 `scripts/witness-shell.mjs`: group `redirects: &> sends stdout and stderr to a file, &>> appends to it`, 4 rows: stdout goes to the file (`out`) and stderr stays empty; stderr goes to the file (`cat: /nope/x: No such file or directory`); `&>>` appends stdout and stderr (`a`, `b`); `&>` leaves neither stream on the shell.
 
 Red check (done), each restored: the file write dropping stderr: `RESULT PASS=144 FAIL=1`, the stderr row red. `&>>` made to ignore the prior contents: `RESULT PASS=144 FAIL=1`, the append row red. The green run after both restores is `RESULT PASS=145 FAIL=0`.
+
+### Change set 13, G6: tilde and brace expansion (Phase A)
+
+`web/shell-core.js`: `braceExpand` (top level) expands the first top-level `{...}` of a word into its items, recursing for the rest: a comma list (top-level commas only, so nested lists work), a numeric range (`{1..3}`, `{3..1}`, zero-padded when an end has a leading zero), or a letter range (`{a..c}`). A single item (`{a}`) stays literal. `braceWords` applies it only to a word made entirely of unquoted literal text, so quoted braces and braces beside `$` are left alone. `tildeWord` replaces a leading unquoted `~` (alone or before `/`) with `HOME` when `HOME` is set. `expandWords` runs brace expansion first, then tilde, then the existing word expansion.
+
+Known gap: with `HOME` unset, bash takes the tilde from the passwd file, and this shell keeps the `~` literal, because there is no user database. A `~name` form is also left literal.
+
+`scripts/witness-shell.mjs`: group `expansion: brace lists, ranges and tilde expand before the command runs`, 9 rows: a list (`a b c`); a prefix and suffix (`x1y x2y`); a numeric or letter range, counting down too (`1 2 3 3 2 1 a b c`); a nested list and a padded range (`a b1 b2 01 02 03`); quoted braces and a single item stay as written (`{a,b} {a}`); a brace range feeds a for loop (`1 2 3`); a tilde is literal with no `HOME` (`~`); a leading tilde becomes `HOME` (`/h /h/x`); a quoted tilde, a tilde with a name, and a mid-word tilde stay literal (`~ ~x a~`).
+
+Red check (done), each restored: brace expansion disabled: `RESULT PASS=149 FAIL=5`, the five brace rows red and the tilde rows green. Tilde expansion disabled: `RESULT PASS=153 FAIL=1`, the leading-tilde row red. The green run after both restores is `RESULT PASS=154 FAIL=0`.

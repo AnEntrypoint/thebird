@@ -472,6 +472,72 @@ function globRegExp(pattern, caseInsensitive = false) {
   return new RegExp(`^${body}$`, caseInsensitive ? 'i' : '');
 }
 
+function padNumber(n, width) {
+  const digits = String(Math.abs(n)).padStart(width - (n < 0 ? 1 : 0), '0');
+  return n < 0 ? '-' + digits : digits;
+}
+
+function braceRange(inner) {
+  const numeric = /^(-?\d+)\.\.(-?\d+)$/.exec(inner);
+  if (numeric) {
+    const [a, b] = [numeric[1], numeric[2]];
+    const width = /^-?0\d/.test(a) || /^-?0\d/.test(b) ? Math.max(a.length, b.length) : 0;
+    const from = Number(a);
+    const to = Number(b);
+    const step = from <= to ? 1 : -1;
+    const values = [];
+    for (let n = from; step > 0 ? n <= to : n >= to; n += step) values.push(padNumber(n, width));
+    return values;
+  }
+  const letters = /^([a-zA-Z])\.\.([a-zA-Z])$/.exec(inner);
+  if (letters) {
+    const from = letters[1].charCodeAt(0);
+    const to = letters[2].charCodeAt(0);
+    const step = from <= to ? 1 : -1;
+    const values = [];
+    for (let c = from; step > 0 ? c <= to : c >= to; c += step) values.push(String.fromCharCode(c));
+    return values;
+  }
+  return null;
+}
+
+function splitTopCommas(inner) {
+  const pieces = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === ',' && depth === 0) {
+      pieces.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  pieces.push(inner.slice(start));
+  return pieces;
+}
+
+function braceExpand(text) {
+  const open = text.indexOf('{');
+  if (open < 0) return [text];
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < text.length && close < 0; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}' && --depth === 0) close = i;
+  }
+  if (close < 0) return [text];
+  const pre = text.slice(0, open);
+  const post = text.slice(close + 1);
+  const inner = text.slice(open + 1, close);
+  const range = braceRange(inner);
+  if (range) return range.flatMap((alt) => braceExpand(pre + alt + post));
+  const alts = splitTopCommas(inner);
+  if (alts.length < 2) return braceExpand(inner).flatMap((mid) => braceExpand(post).map((rest) => pre + '{' + mid + '}' + rest));
+  return alts.flatMap((alt) => braceExpand(pre + alt + post));
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1173,9 +1239,25 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return words;
   }
 
+  const braceWords = (parts) => {
+    if (!parts.length || !parts.every((part) => part.k === 'lit')) return [parts];
+    return braceExpand(parts.map((part) => part.s).join('')).map((text) => [{ k: 'lit', s: text }]);
+  };
+
+  const tildeWord = (parts) => {
+    const home = vars.get('HOME');
+    const first = parts[0];
+    if (home === undefined || first?.k !== 'lit' || first.s[0] !== '~') return parts;
+    const tildeOnly = first.s.length === 1 && parts.length === 1;
+    if (!tildeOnly && first.s[1] !== '/') return parts;
+    return [{ k: 'lit', s: home + first.s.slice(1) }, ...parts.slice(1)];
+  };
+
   async function expandWords(words, sink) {
     const argv = [];
-    for (const word of words) argv.push(...(await expandWord(word, sink)));
+    for (const word of words) {
+      for (const variant of braceWords(word)) argv.push(...(await expandWord(tildeWord(variant), sink)));
+    }
     return argv;
   }
 

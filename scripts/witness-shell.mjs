@@ -507,6 +507,28 @@ group('redirects: &> sends stdout and stderr to a file, &>> appends to it', asyn
   check('redirects: &> leaves neither stdout nor stderr on the shell', quiet.stdout === '' && quiet.stderr === '', JSON.stringify(quiet.stdout));
 });
 
+group('expansion: brace lists, ranges and tilde expand before the command runs', async () => {
+  const sh = await shell({});
+  const list = await run(sh, 'echo {a,b,c}');
+  check('expansion: a brace list makes one word per item', list.stdout === 'a b c\n', JSON.stringify(list.stdout));
+  const affixes = await run(sh, 'echo x{1,2}y');
+  check('expansion: a prefix and a suffix are kept around each item', affixes.stdout === 'x1y x2y\n', JSON.stringify(affixes.stdout));
+  const range = await run(sh, 'echo {1..3} {3..1} {a..c}');
+  check('expansion: a numeric or letter range counts up or down', range.stdout === '1 2 3 3 2 1 a b c\n', JSON.stringify(range.stdout));
+  const nested = await run(sh, 'echo {a,b{1,2}} {01..03}');
+  check('expansion: a nested list expands, and a padded range keeps its zeros', nested.stdout === 'a b1 b2 01 02 03\n', JSON.stringify(nested.stdout));
+  const quoted = await run(sh, "echo '{a,b}' {a}");
+  check('expansion: quoted braces and a single item are left as written', quoted.stdout === '{a,b} {a}\n', JSON.stringify(quoted.stdout));
+  const loop = await run(sh, 'for i in {1..3}; do echo $i; done');
+  check('expansion: a brace range feeds a for loop', loop.stdout === '1\n2\n3\n', JSON.stringify(loop.stdout));
+  const bare = await run(sh, 'echo ~');
+  check('expansion: a tilde stays literal while HOME is unset', bare.stdout === '~\n', JSON.stringify(bare.stdout));
+  const home = await run(sh, 'HOME=/h; echo ~ ~/x');
+  check('expansion: a leading tilde becomes HOME', home.stdout === '/h /h/x\n', JSON.stringify(home.stdout));
+  const notTilde = await run(sh, "HOME=/h; echo '~' ~x a~");
+  check('expansion: a quoted tilde, a tilde with a name, and a tilde mid-word stay literal', notTilde.stdout === '~ ~x a~\n', JSON.stringify(notTilde.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
