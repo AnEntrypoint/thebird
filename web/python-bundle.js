@@ -41,12 +41,28 @@ const CACHE_NAME = 'thebird-python-bundle-1';
 
 const openCache = () => globalThis.caches?.open(CACHE_NAME).catch(() => null) ?? Promise.resolve(null);
 
-async function downloadBundle(cache, signal) {
+const RETRY_DELAYS_MS = [1000, 3000];
+
+async function fetchBundleOnce(cache, signal) {
   const response = await fetch(BUNDLE_URL, { signal });
   if (!response.ok) throw new Error(`Python bundle: HTTP ${response.status}`);
   const compressed = new Uint8Array(await response.arrayBuffer());
   await cache?.put(BUNDLE_URL, new Response(compressed.slice())).catch(() => {});
   return compressed;
+}
+
+async function downloadBundle(cache, signal) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetchBundleOnce(cache, signal);
+    } catch (err) {
+      const delay = RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !(err instanceof TypeError) || signal?.aborted) throw err;
+      console.warn(`Python bundle: download attempt ${attempt + 1} failed with a network error (${err.message}); retry ${attempt + 1} of ${RETRY_DELAYS_MS.length} in ${delay} ms`);
+      await new Promise((done) => setTimeout(done, delay));
+      if (signal?.aborted) throw err;
+    }
+  }
 }
 
 async function cachedBundle(cache) {
