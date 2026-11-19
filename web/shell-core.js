@@ -6,8 +6,8 @@ import { runAwk } from './shell-awk.js';
 export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
-const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', ';;', '>>', '>', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '2>', '2>>', '2>&1']);
+const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
@@ -169,8 +169,53 @@ function readParts(src, start, breaks) {
   return { parts, end: i };
 }
 
+const textOf = (part) => (part.k === 'dq' ? part.parts.map(textOf).join('') : part.s ?? '');
+
+const isQuoted = (part) => part.k === 'sq' || part.k === 'dq';
+
+function readBodyParts(text) {
+  const parts = [];
+  let lit = '';
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '\\' && '$`\\'.includes(text[i + 1] ?? '')) {
+      lit += text[i + 1];
+      i += 2;
+    } else if (c === '$') {
+      if (lit) parts.push({ k: 'lit', s: lit });
+      lit = '';
+      const r = readDollar(text, i);
+      parts.push(r.part);
+      i = r.end;
+    } else {
+      lit += c;
+      i++;
+    }
+  }
+  if (lit) parts.push({ k: 'lit', s: lit });
+  return parts;
+}
+
+function readHeredocBody(src, start, doc) {
+  const lines = [];
+  let i = start;
+  while (i < src.length) {
+    const end = src.indexOf('\n', i);
+    const next = end < 0 ? src.length : end;
+    const line = src.slice(i, next);
+    i = next + 1;
+    if (line === doc.delim) break;
+    lines.push(line);
+  }
+  const text = lines.map((line) => line + '\n').join('');
+  doc.token.body = doc.quoted ? [{ k: 'sq', s: text }] : readBodyParts(text);
+  return i;
+}
+
 export function tokenize(src) {
   const tokens = [];
+  const heredocs = [];
   let i = 0;
   while (i < src.length) {
     const c = src[i];
@@ -178,13 +223,22 @@ export function tokenize(src) {
     else if (c === '\n') {
       tokens.push({ op: ';' });
       i++;
+      while (heredocs.length) i = readHeredocBody(src, i, heredocs.shift());
     } else if (c === '#') {
       while (i < src.length && src[i] !== '\n') i++;
     } else {
       const op = OPERATORS.find((candidate) => src.startsWith(candidate, i));
       if (op) {
-        tokens.push({ op });
+        const opToken = { op };
+        tokens.push(opToken);
         i += op.length;
+        if (op === '<<') {
+          while (src[i] === ' ' || src[i] === '\t') i++;
+          const word = readParts(src, i, BREAKS);
+          tokens.push({ parts: word.parts });
+          heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted) });
+          i = word.end;
+        }
       } else {
         const word = readParts(src, i, BREAKS);
         tokens.push({ parts: word.parts });
@@ -209,12 +263,13 @@ function parse(tokens) {
   let pos = 0;
 
   const parseRedirect = () => {
-    const { op } = tokens[pos++];
+    const opToken = tokens[pos++];
+    const { op } = opToken;
     if (op === '2>&1') return { op };
     const target = tokens[pos];
     if (!target?.parts) throw syntaxError(`expected a file after '${op}'`);
     pos++;
-    return { op, target: target.parts };
+    return { op, target: target.parts, body: opToken.body };
   };
 
   const parseSimple = () => {
@@ -1124,6 +1179,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return argv;
   }
 
+  const bodyText = async (parts, sink) => (await expandChars(parts, false, sink)).map((ch) => ch.c).join('');
+
   const wordPath = async (parts, sink) => resolvePath((await expandWord(parts, sink))[0] ?? '');
 
   const describePart = (part) => {
@@ -1193,7 +1250,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   async function runCommand(node, argv, stdin, sink) {
     let input = stdin;
     for (const redirect of node.redirects) {
-      if (redirect.op === '<') {
+      if (redirect.op === '<<') input = await bodyText(redirect.body, sink);
+      else if (redirect.op === '<<<') input = (await expandWord(redirect.target, sink)).join(' ') + '\n';
+      else if (redirect.op === '<') {
         try {
           const path = await wordPath(redirect.target, sink);
           input = path === NULL_DEVICE ? '' : host.read(path);

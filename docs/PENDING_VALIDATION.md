@@ -2382,3 +2382,13 @@ Build check: `npm run check` exit 0, wall 1176 ms (`/tmp/pb10-check.log`).
 Shell witness, once: `npm run witness:shell` `RESULT PASS=135 FAIL=0`, exit 0, wall 788 ms (`/tmp/pb10-shell.log`).
 Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
 
+
+### Change set 11, G4: here-strings and heredocs (Phase A)
+
+`web/shell-core.js`: `<<<` and `<<` are operators. For `<<`, the tokenizer reads the delimiter word and queues the operator token; at the next newline it reads the body lines up to the delimiter, and attaches it to the operator token as `body`. A quoted delimiter (any single or double quote in it) makes the body literal; an unquoted one expands `$` words and takes `\$`, backquote and backslash as escapes. `runCommand` feeds the body to stdin for `<<`, and the expanded word plus a newline for `<<<`. A compound command does not take these redirects yet (as with `<`).
+
+`scripts/witness-shell.mjs`: group `redirects: here-strings and heredocs feed their text to the command`, 6 rows: an unquoted heredoc expands `$v` (`hello world`); a quoted delimiter keeps `$v` (`hello $v`); a here-string (`one two`); a heredoc piped into `tr` and the shell going on (`ABC`, `after`); the backslash escapes (`back$x` then one backslash); two heredocs on one line read their bodies in order (`a`, `b`).
+
+Red check (done), each restored: the heredoc body set to an empty list: `RESULT PASS=136 FAIL=5`, the five heredoc rows red and the here-string row green. The here-string output dropped its newline: `RESULT PASS=140 FAIL=1`, the here-string row red. The green run after both restores is `RESULT PASS=141 FAIL=0`.
+
+The witness escape rows first failed because a backslash in the witness source is consumed by the JavaScript string before the shell sees it. The rows now write `\\$x` and so on, so the shell gets one escape for each.

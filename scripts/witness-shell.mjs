@@ -479,6 +479,22 @@ group('builtins: :, shift and set move and read the positional parameters', asyn
   check('builtins: a bare set lists the shell variables', listed.stdout === 'v=1\n', JSON.stringify(listed.stdout));
 });
 
+group('redirects: here-strings and heredocs feed their text to the command', async () => {
+  const sh = await shell({});
+  const expanded = await run(sh, 'v=world; cat <<EOF\nhello $v\nEOF\n');
+  check('redirects: an unquoted heredoc expands its $ words', expanded.stdout === 'hello world\n', JSON.stringify(expanded.stdout));
+  const quoted = await run(sh, "v=world; cat <<'EOF'\nhello $v\nEOF\n");
+  check('redirects: a quoted delimiter keeps the body literal', quoted.stdout === 'hello $v\n', JSON.stringify(quoted.stdout));
+  const herestring = await run(sh, 'cat <<< "one two"');
+  check('redirects: a here-string feeds one line to stdin', herestring.stdout === 'one two\n', JSON.stringify(herestring.stdout));
+  const piped = await run(sh, 'cat <<EOF | tr a-z A-Z\nabc\nEOF\necho after\n');
+  check('redirects: a heredoc feeds a pipeline and the shell goes on', piped.stdout === 'ABC\nafter\n', JSON.stringify(piped.stdout));
+  const escapes = await run(sh, 'cat <<EOF\nback\\$x \\\\ \nEOF\n');
+  check('redirects: an unquoted heredoc keeps a literal $ and reads \\\ as one backslash', escapes.stdout === 'back$x \\ \n', JSON.stringify(escapes.stdout));
+  const twice = await run(sh, 'cat <<EOF\na\nEOF\ncat <<EOF\nb\nEOF\n');
+  check('redirects: two heredocs on one line read their bodies in order', twice.stdout === 'a\nb\n', JSON.stringify(twice.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
