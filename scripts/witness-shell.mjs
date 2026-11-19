@@ -559,6 +559,13 @@ group('files: cp, mv, touch and tee copy, move, create and write files', async (
   check('files: mv of a file onto itself is refused', same.stdout === 'rc=1\n' && same.stderr.includes("mv: '/e2/v' and '/e2/v' are the same file"), JSON.stringify(same.stderr));
 });
 
+group('mv: a file moved onto itself stays in place, as GNU mv leaves it', async () => {
+  const kept = await run(await shell({}), 'echo a > /workspace/k; mv /workspace/k /workspace/k; cat /workspace/k');
+  check('mv: a file moved onto itself is unchanged', kept.stdout === 'a\n' && kept.exitCode === 0, JSON.stringify(kept.stdout));
+  const status = await run(await shell({}), 'echo a > /workspace/k; mv /workspace/k /workspace/k; echo rc=$?');
+  check('mv: the same-file refusal exits 1', status.stdout === 'rc=1\n' && status.stderr === "mv: '/workspace/k' and '/workspace/k' are the same file\n", JSON.stringify(status));
+});
+
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
   const sh = await shell({});
   const sorted = await run(sh, 'printf "b\na\nc\n" | sort');

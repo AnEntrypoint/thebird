@@ -2568,3 +2568,12 @@ Build check: `npm run check` exit 0, wall 758 ms (`/tmp/pb13-check.log`).
 Shell witness, once: `npm run witness:shell` `RESULT PASS=438 FAIL=0`, exit 0, wall 2553 ms (`/tmp/pb13-shell.log`).
 Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
 
+
+### Change set 28a: mv of a file onto itself
+
+GNU `mv a a` prints `mv: 'a' and 'a' are the same file`, exits 1 and leaves the file in place. The txiki shell already did this. The brief asked for exit 0 and silence, which is bashkit's behaviour and not GNU's, so the txiki shell keeps GNU and the parity group keeps this command out of the set (bashkit differs; this is the one decision that departs from the brief's wording).
+
+Witness rows: `files: mv of a file onto itself is refused` (existing), `mv: a file moved onto itself is unchanged` (the file is still `a` after the move), `mv: the same-file refusal exits 1` (the message and status). Expectations from GNU mv, run in the sandbox.
+
+Red check: the same-file branch in `copyOrMove` replaced with `if (false)`. Three rows went red (`files: mv of a file onto itself is refused`, `mv: a file moved onto itself is unchanged`, `mv: the same-file refusal exits 1`). Restored by the reverse edit; the green run is `RESULT PASS=440 FAIL=0`.
+
