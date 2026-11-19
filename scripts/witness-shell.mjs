@@ -621,9 +621,9 @@ group('text: sort, uniq, head, tail and cut read lines and pick from them', asyn
 
 group('env: env and printenv show only the exported variables', async () => {
   const exportedOnly = await run(await shell({}), 'export A=1; B=2; env');
-  check('env: env lists exported variables and not plain ones', exportedOnly.stdout === 'A=1\n', JSON.stringify(exportedOnly.stdout));
+  check('env: env lists exported variables, PWD among them, and not plain ones', exportedOnly.stdout === 'A=1\nPWD=/workspace\n', JSON.stringify(exportedOnly.stdout));
   const markedLater = await run(await shell({}), 'export C; C=3; env');
-  check('env: a name exported before it is set is listed with its value', markedLater.stdout === 'C=3\n', JSON.stringify(markedLater.stdout));
+  check('env: a name exported before it is set is listed with its value', markedLater.stdout === 'C=3\nPWD=/workspace\n', JSON.stringify(markedLater.stdout));
   const plain = await run(await shell({}), 'X=1; printenv X; echo rc=$?');
   check('env: printenv of a plain variable prints nothing and exits 1', plain.stdout === 'rc=1\n', JSON.stringify(plain.stdout));
   const named = await run(await shell({}), 'export X=2; printenv X; echo rc=$?');
@@ -631,11 +631,15 @@ group('env: env and printenv show only the exported variables', async () => {
   const several = await run(await shell({}), 'export P=1; export Q=2; printenv P Q');
   check('env: printenv takes several names', several.stdout === '1\n2\n', JSON.stringify(several.stdout));
   const withAssign = await run(await shell({}), 'export Y=3; env Z=4');
-  check('env: an assignment on env is added to the listing', withAssign.stdout === 'Y=3\nZ=4\n', JSON.stringify(withAssign.stdout));
+  check('env: an assignment on env is added to the listing', withAssign.stdout === 'PWD=/workspace\nY=3\nZ=4\n', JSON.stringify(withAssign.stdout));
   const command = await run(await shell({}), 'env A=1 printenv A; printenv A; echo rc=$?');
   check('env: env runs a command with the assignment set, and the assignment does not stay', command.stdout === '1\nrc=1\n', JSON.stringify(command.stdout));
   const missing = await run(await shell({}), 'env nosuchcmd; echo rc=$?');
   check('env: a command env cannot find exits 127, as in bash', missing.stdout === 'rc=127\n', JSON.stringify(missing.stdout));
+  const start = await run(await shell({}), 'printenv PWD');
+  check('env: PWD is the working directory when the shell starts, as in bash', start.stdout === '/workspace\n', JSON.stringify(start.stdout));
+  const pwd = await run(await shell({}), 'mkdir -p /pw; cd /pw; printenv PWD');
+  check('env: PWD is exported and follows cd, as in bash', pwd.stdout === '/pw\n', JSON.stringify(pwd.stdout));
 });
 
 group('stat: stat reports the name, size, type and mode of a file', async () => {
@@ -850,6 +854,10 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "export A=1; B=2; env",
+    "export C; C=3; env",
+    "export Y=3; env Z=4",
+    "mkdir -p /pw; cd /pw; printenv PWD",
     "env ls; echo rc=$?",
     "env A=1 printenv A; printenv A; echo rc=$?",
     "HOME=/home/sandbox; export HOME; echo ~",

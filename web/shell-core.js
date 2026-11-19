@@ -870,6 +870,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const exported = new Set(saved?.exported ?? []);
   let errexit = saved?.errexit ?? false;
   let errexitSuspended = 0;
+  if (!vars.has('PWD')) vars.set('PWD', state.cwd);
+  exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
@@ -919,10 +921,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return whole;
   });
 
+  const byName = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
   const environmentLines = (extra) => {
     const entries = new Map([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)]));
     for (const [name, value] of extra) entries.set(name, value);
-    return [...entries].map(([name, value]) => name + '=' + value + '\n').join('');
+    return [...entries].sort(byName).map(([name, value]) => name + '=' + value + '\n').join('');
   };
 
   const resolvePath = (name) => normalize(name.startsWith('/') ? name : state.cwd + '/' + name);
@@ -997,6 +1000,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const target = resolvePath(argv[0] ?? '/workspace');
       if (!host.exists(target)) return { code: 1, out: '', err: `cd: ${argv[0]}: No such file or directory\n` };
       state.cwd = target;
+      vars.set('PWD', target);
       return ok('');
     },
     pwd: () => ok(state.cwd + '\n'),
@@ -1524,7 +1528,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return ok('');
     },
     set: ({ argv }) => {
-      if (!argv.length) return ok([...vars].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, value]) => `${name}=${value}\n`).join(''));
+      if (!argv.length) return ok([...vars].sort(byName).map(([name, value]) => `${name}=${value}\n`).join(''));
       for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--') {
           positional = argv.slice(i + 1);

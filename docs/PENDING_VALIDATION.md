@@ -2624,3 +2624,12 @@ A command env cannot find exits 127, as in bash. Witness rows: `env: env runs a 
 
 Red check: `env` no longer dispatches its command (returns 125). Four rows red: the two `env:` command rows and the two parity rows. Restored by the reverse edit; the green run is below.
 
+
+### Change set 28g: PWD in the environment, and sorted env output
+
+Bash exports `PWD`: `env` and `printenv` list it, and `cd` updates it. The txiki shell now sets `PWD` to the working directory when the shell is created, exports it, and `cd` sets it to the new directory. The listing of `env` (and `printenv` with no names) is sorted by name. Bash lists in insertion order, not sorted, and GNU's order is unspecified; the sort is deterministic and is what bashkit produces, so the parity rows compare equal. The sort is shared with the bare `set` listing, which was already sorted.
+
+Witness rows: the three existing `env:` listing rows updated to include `PWD=/workspace` in sorted position; `env: PWD is the working directory when the shell starts, as in bash`; `env: PWD is exported and follows cd, as in bash` (`/pw` after `cd /pw`). Parity rows reinstated: `export A=1; B=2; env`, `export C; C=3; env`, `export Y=3; env Z=4`, and `mkdir -p /pw; cd /pw; printenv PWD`.
+
+Red checks: (1) the PWD export removed (`exported.has('PWD')`): nine rows red, the three updated listing rows, the two `PWD` rows and four parity rows. (2) the sort removed: four rows red, the two listing rows and two parity rows that depend on order. Both restored by the reverse edit; the green run is `RESULT PASS=467 FAIL=0`.
+
