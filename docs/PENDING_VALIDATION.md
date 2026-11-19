@@ -2697,3 +2697,14 @@ Witness rows, group `cp -r: a directory is copied with its tree, and a link is c
 
 Red checks, on this tree: (1) the recursion into the entries removed: two rows red (the tree copy and the copy into a directory). (2) the `!recursive` guard disabled, so a directory copies without `-r`: three rows red (`files: cp of a directory without -r is refused with status 1`, the GNU `cp -r not specified` row, and the parity row). (3) the into-itself check removed: the row goes red with `Maximum call stack size exceeded`, which is the recursion the check stops. Each restored by the reverse edit; the green run is `RESULT PASS=473 FAIL=0`.
 
+
+### Change set 29b: mv of a directory tree
+
+`mv SRC DST` moves a directory with its tree, as GNU mv does. The tree is copied by `copyTree` and the source removed recursively. A directory needs no flag for `mv`, as in GNU. A move into the directory's own subdirectory is refused with status 1 (`mv: cannot move '/mv/p' to a subdirectory of itself, '/mv/p/q/p'`), as GNU does, so the copy cannot recurse into itself. Moving a directory onto an existing directory puts it inside, as for files.
+
+Expectations: each row was run with GNU mv in the sandbox (`mv d2 e` leaves `e/s/f` and removes `d2`, `mv p p/q` gives status 1 and the message).
+
+Witness rows, group `mv: a directory is moved with its tree, and not into itself, as GNU mv does`: the move with the source gone, the move into an existing directory, and the move into its own subdirectory.
+
+Red checks, on this tree: (1) the source removal made non-recursive: the move row goes red because `test -d` still sees the source. (2) the subdirectory check disabled: the `cp -r` into-itself row and the `mv` into-subdirectory row both go red with `Maximum call stack size exceeded`. (3) the `mv` needs-no-flag rule removed, so a directory needs `-r`: three rows red. Each restored by the reverse edit; the green run is `RESULT PASS=476 FAIL=0`.
+

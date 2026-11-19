@@ -1982,7 +1982,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
 
   function copyOrMove(verb, argv) {
     const names = argv.filter((arg) => !arg.startsWith('-'));
-    const recursive = verb === 'cp' && argv.some((arg) => arg.startsWith('-') && /[rR]/.test(arg));
+    const recursive = verb === 'mv' || argv.some((arg) => arg.startsWith('-') && /[rR]/.test(arg));
     if (names.length < 2) return { code: 1, out: '', err: verb + ': missing file operand\n' };
     const target = names.pop();
     const targetPath = resolvePath(target);
@@ -2015,13 +2015,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         code = 1;
         continue;
       }
-      if (info.dir && verb === 'cp' && (dst === src || dst.startsWith(src + '/'))) {
-        err += "cp: cannot copy a directory, '" + name + "', into itself, '" + dst + "'\n";
+      if (info.dir && (dst === src || dst.startsWith(src + '/'))) {
+        err += (verb === 'mv' ? "mv: cannot move '" + name + "' to a subdirectory of itself, '" + dst + "'" : "cp: cannot copy a directory, '" + name + "', into itself, '" + dst + "'") + "\n";
         code = 1;
         continue;
       }
       copyTree(src, dst);
-      if (verb === 'mv') host.remove(src, false);
+      if (verb === 'mv') host.remove(src, info.dir);
     }
     return { code, out: '', err };
   }

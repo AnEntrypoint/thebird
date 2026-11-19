@@ -604,6 +604,15 @@ group('cp -r: a directory is copied with its tree, and a link is copied as a lin
   check('cp -r: a directory cannot be copied into itself', self.stdout === 'rc=1\n' && self.stderr === "cp: cannot copy a directory, '/cp/m', into itself, '/cp/m/m'\n", JSON.stringify(self));
 });
 
+group('mv: a directory is moved with its tree, and not into itself, as GNU mv does', async () => {
+  const moved = await run(await shell({}), 'mkdir -p /mv/d2/s; echo q > /mv/d2/s/f; mv /mv/d2 /mv/e; cat /mv/e/s/f; test -d /mv/d2; echo rc=$?');
+  check('mv: a directory is moved with its tree and the source is gone', moved.stdout === 'q\nrc=1\n', JSON.stringify(moved.stdout));
+  const into = await run(await shell({}), 'mkdir -p /mv/x/y; echo r > /mv/x/y/f; mkdir -p /mv/dst; mv /mv/x /mv/dst; cat /mv/dst/x/y/f; echo rc=$?');
+  check('mv: a directory moved into a directory lands inside it', into.stdout === 'r\nrc=0\n', JSON.stringify(into.stdout));
+  const self = await run(await shell({}), 'mkdir -p /mv/p/q; mv /mv/p /mv/p/q; echo rc=$?');
+  check('mv: a directory cannot be moved into its own subdirectory', self.stdout === 'rc=1\n' && self.stderr === "mv: cannot move '/mv/p' to a subdirectory of itself, '/mv/p/q/p'\n", JSON.stringify(self));
+});
+
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
   const sh = await shell({});
   const sorted = await run(sh, 'printf "b\na\nc\n" | sort');
