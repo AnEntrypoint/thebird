@@ -16,6 +16,7 @@ export const TJS_TIMED_OUT = 124;
 export const TJS_CANCELLED = 130;
 const TICK_MS = 5;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const monotonicMs = () => performance.timeOrigin + performance.now();
 
 export function setCancelWord(word) {
   cancelWord = word;
@@ -403,7 +404,7 @@ refreshStorage();
       globalThis.crypto.getRandomValues(bytesAt(ptr, len));
     },
     tjs_now_ms() {
-      return Date.now();
+      return monotonicMs();
     },
   };
   const instance = await WebAssembly.instantiate(module, { ...wasi.imports, env: host });
@@ -472,7 +473,7 @@ export async function runTjs(source, dir = '/workspace', { signal, timeoutMs, bu
   signal?.addEventListener('abort', cancel, { once: true });
   let status;
   try {
-    exports.tjs_browser_set_deadline(timeoutMs ? Date.now() + timeoutMs : 0);
+    exports.tjs_browser_set_deadline(timeoutMs ? monotonicMs() + timeoutMs : 0);
     status = callEval(exports, source, name);
     while (status === TJS_WAITING || (status === 0 && (current.controllers.size > 0 || current.calls.size > 0 || current.events.length > 0))) {
       if (current.events.length) status = resumeWith(exports, current.events.shift());

@@ -2230,3 +2230,37 @@ Python groups after the fixes, alone (`--group=python,python-splash,python-warm,
 Full witness after the fixes (`/tmp/witness-full5.log`, started 09:46:44 local): `totals: PASS 229 FAIL 3 GROUPS 64 WALL 689.1s`. The only failures are the three live 8793 rows, which stay open. Load was 14 to 36 during the run, so the group walls are high. Slowest groups: `fx-approval` 421.3 s, `fx-ask` 270.7 s, `site` 188.9 s, `command-table` 138.0 s. The `WITNESS_EXIT` line is missing because my wrapper used `exec`, which replaced the shell before its `echo` ran; the witness printed `3 check(s) failed`, so its exit status was non-zero.
 
 Phase B: the local commits since 2f3285f (939691a, 100a91f, b637b74, 017b7b1, 63d7269 and this one) go to origin main in one push, with no force. The fx ask-mode approval stays with fx's owner.
+
+### Ranked open rows and the top reachable item (clock source of the txiki deadline)
+
+Open rows now, read from `docs/PENDING_VALIDATION.md` and the last full witness (`/tmp/witness-full5.log`, `PASS 229 FAIL 3`). The `Open rows waiting on fx` section (fx stretch 4a, palette resize) is stale: its four rows pass in the full run, so they are not listed.
+
+Owner decision or external service, not reachable here:
+1. Three live 8793 rows: `fx ask on the live 8793 gateway prints ok with rc 0`, `the 8793 chat request returns 200 and the page logs no HTTP error`, `the TUI on the live 8793 gateway answers hi with a reply line below the typed hi`. The hy4 gateway is outside this repo.
+2. fx ask-mode approval on the page `ask` tool (`writes: false` is declared). fx's owner decides whether it prompts.
+3. Ctrl-C on the Pages site without cross-origin isolation (Blocked table). Owner decides between accepting the restart and isolating with a service worker.
+4. `.npmrc` `_authToken` through the browser (npm defect 7): the registry's CORS preflight refuses `Authorization`. Owner picks a registry or a same-origin proxy.
+5. Owner-held from the earlier ranked list: transcript and ask with a real provider; browser-agent proxy with the owner's key; `AnEntrypoint/gmfx` private to the Pages workflow; Pyodide bundle licence; vendored licence notices; removal of `web/vendor/tte-js`; the gm import handoff channel; `scripts/esbuild-pin.mjs` content (unrecoverable earlier content).
+
+Needs changes in the fx repo, not reachable from thebird: palette header `Results 50` vs `Commands 49`; sign-in choices for Codex and Grok; vendored core is not libfx 0.0.16 npm (`fx_http_stream_retry_after`).
+
+Reachable without an owner decision, ranked:
+1. (top, done in this pass) The txiki command deadline and the engine clock read the wall clock (`Date.now()` in `web/txiki-in-page.js`). A forward step during a `tjs -e`, `node`, `curl` or `sqlite3` run ended it with status 124. Fixed below.
+2. The WASI shim's `clock_time_get` reads `now()` for every clock id, and `createWasi` defaults `now` to `Date.now()` (`web/shims/wasi-preview1.js:12,58`, called without `now` at `web/txiki-in-page.js:148`). So libuv timers still follow the wall clock: after a forward step, pending `setTimeout` calls fire early. Fix: pass `now: monotonicMs` at `web/txiki-in-page.js:148`. It is in the same units (ms since the epoch), so `Date` values stay correct without a step. Not applied in this pass: it changes engine timing and needs its own witness.
+3. Witness elapsed values use `Date.now()`: `scripts/witness.mjs` lines 921/924 (spinning Ctrl-C), 1087/1090 (cancelled), 1198/1201 (held cancel). They are checked against 10 s and 40 s bounds, so a step can false-fail them. Fix: `performance.now()`.
+4. Duration measures and a host loop with `Date.now()`: `scripts/witness-shell.mjs` 175/179, `scripts/check-web-host.mjs` 37/39 (the wait loop). Small; same fix.
+5. Shell on txiki (bash-subset parser and its witness). Large, separate piece of work (AGENTS.md, Shell on txiki).
+
+Stale line closed: AGENTS.md's `Open, flaky` note said `send` had no timeout. `send` runs under `withTimeout` with `CDP_TIMEOUT_MS` (60 s) in `scripts/browser-driver.mjs`, so the note is corrected to say the stall is bounded now. The stall was seen once and is not reproduced.
+
+### Change set 4: the txiki command deadline on the monotonic clock
+
+Change 8, `web/txiki-in-page.js` (Phase A): `monotonicMs = () => performance.timeOrigin + performance.now()`. The engine clock `tjs_now_ms` and the per-run deadline (`tjs_browser_set_deadline(monotonicMs() + timeoutMs)`) both use it. The C side keeps its single `tjs_now_ms` import, which is also the sqlite VFS's current-time source (`scripts/txiki/browser/sqlite-vfs.c:166,175`), so no C change and no wasm rebuild: the pin does not move. For sqlite's date functions the value equals wall time absent a clock step.
+
+Witness row, `loops` group (Phase A): a page init script steps `Date.now` by one hour 1.5 s in; a `tjs -e` run waits 3 s on a timer with `timeoutMs: 900000`. Red on the old code (`loops` group `PASS 4 FAIL 1`, `FAIL a wall-clock step during a tjs -e run does not cut it at the timeout: the run finishes with status 0 — {"output":"","status":124}`, log `/tmp/loops-red.log`). Green after Change 8 (`PASS 5 FAIL 0`, wall 20.2 s, `{"output":"after-step\n","status":0}`, log `/tmp/loops-green.log`). The existing timeout rows (synchronous loop 124, pending timer 124, abort 130, tjs and qjs timeout text) still pass.
+
+Docs (Phase A): AGENTS.md `Open, flaky` note corrected (see above); ARCHITECTURE.md's deadline sentence now says the deadline and the engine clock read the monotonic clock.
+
+Lints after the change: `npm run lint:architecture` `398 claims: 398 pass, 0 fail, 0 unverified`; `npm run lint:comments` 0 comments in repo-owned files.
+
+Not changed: `bin/thebird-relay.js` (mode change, not mine). Residuals are items 2 to 4 above.

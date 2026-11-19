@@ -905,6 +905,19 @@ group('loops', async () => {
   check('a pending timer does not hold the engine past the timeout: status 124 well before the 60 s timer', loops.runs?.waiting?.status === 124 && loops.runs.waiting.elapsed < 5000, JSON.stringify(loops.runs?.waiting));
   check('an abort cancels a waiting engine run at the next tick and reports status 130', loops.runs?.aborted?.status === 130 && loops.runs.aborted.elapsed < 5000, JSON.stringify(loops.runs?.aborted));
   check('tjs and qjs report the timeout as a timeout error', loops.runs?.tjs?.error === 'timeout: command timed out' && loops.runs?.qjs?.error === 'timeout: command timed out', JSON.stringify({ tjs: loops.runs?.tjs?.error, qjs: loops.runs?.qjs?.error }));
+  const stepped = {};
+  await terminal([], {
+    initScript: "(() => { const real = Date.now.bind(Date); let offset = 0; Date.now = () => real() + offset; setTimeout(() => { offset = 3600000; }, 1500); })();",
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const txiki = await import(new URL('web/txiki-in-page.js', location.href).href);
+        globalThis.__steppedRun = await txiki.runTjs("await new Promise((done) => setTimeout(done, 3000)); console.log('after-step');", '/workspace', { timeoutMs: 900000 });
+      })().catch((err) => { globalThis.__steppedRun = { error: String(err.message ?? err) }; })`);
+      await waitFor('globalThis.__steppedRun !== undefined', 120000);
+      stepped.run = JSON.parse(await evaluate('JSON.stringify(globalThis.__steppedRun)'));
+    },
+  });
+  check('a wall-clock step during a tjs -e run does not cut it at the timeout: the run finishes with status 0', stepped.run?.status === 0 && /after-step/.test(stepped.run?.output ?? ''), JSON.stringify(stepped.run));
 });
 
 group('spin', async () => {
