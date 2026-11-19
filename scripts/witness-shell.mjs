@@ -632,8 +632,10 @@ group('env: env and printenv show only the exported variables', async () => {
   check('env: printenv takes several names', several.stdout === '1\n2\n', JSON.stringify(several.stdout));
   const withAssign = await run(await shell({}), 'export Y=3; env Z=4');
   check('env: an assignment on env is added to the listing', withAssign.stdout === 'Y=3\nZ=4\n', JSON.stringify(withAssign.stdout));
-  const command = await run(await shell({}), 'env ls; echo rc=$?');
-  check('env: running a command is refused with status 125', command.stdout === 'rc=125\n' && command.stderr.includes('running a command is not supported'), JSON.stringify(command.stderr));
+  const command = await run(await shell({}), 'env A=1 printenv A; printenv A; echo rc=$?');
+  check('env: env runs a command with the assignment set, and the assignment does not stay', command.stdout === '1\nrc=1\n', JSON.stringify(command.stdout));
+  const missing = await run(await shell({}), 'env nosuchcmd; echo rc=$?');
+  check('env: a command env cannot find exits 127, as in bash', missing.stdout === 'rc=127\n', JSON.stringify(missing.stdout));
 });
 
 group('stat: stat reports the name, size, type and mode of a file', async () => {
@@ -848,6 +850,8 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "env ls; echo rc=$?",
+    "env A=1 printenv A; printenv A; echo rc=$?",
     "HOME=/home/sandbox; export HOME; echo ~",
     "set -e; echo rc=$?",
     "set -- a; shift 2; echo rc=$?",

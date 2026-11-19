@@ -1460,14 +1460,29 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       return { code, out, err };
     },
-    env: ({ argv }) => {
+    env: async ({ argv, stdin, signal }) => {
       const assigns = new Map();
-      for (const arg of argv) {
-        const eq = arg.indexOf('=');
-        if (eq <= 0) return { code: 125, out: '', err: 'env: running a command is not supported\n' };
-        assigns.set(arg.slice(0, eq), arg.slice(eq + 1));
+      let at = 0;
+      for (; at < argv.length && argv[at].indexOf('=') > 0; at++) {
+        const eq = argv[at].indexOf('=');
+        assigns.set(argv[at].slice(0, eq), argv[at].slice(eq + 1));
       }
-      return ok(environmentLines(assigns));
+      if (argv[at]?.startsWith('-')) return { code: 125, out: '', err: `env: unsupported option ${argv[at]}\n` };
+      if (at === argv.length) return ok(environmentLines(assigns));
+      const restore = [...assigns.keys()].map((name) => [name, vars.get(name), exported.has(name)]);
+      for (const [name, value] of assigns) {
+        setVariable(name, value);
+        exported.add(name);
+      }
+      try {
+        return await dispatch(argv.slice(at), stdin, signal);
+      } finally {
+        for (const [name, value, wasExported] of restore) {
+          if (value === undefined) vars.delete(name);
+          else setVariable(name, value);
+          if (!wasExported) exported.delete(name);
+        }
+      }
     },
     printenv: ({ argv }) => {
       if (!argv.length) return ok(environmentLines(new Map()));

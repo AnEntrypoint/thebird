@@ -2615,3 +2615,12 @@ HOME unset, recorded: the txiki shell keeps `~` literal (witness row `expansion:
 
 Red check: the `tildeWord` guard replaced with `if (true) return parts;`, which disables expansion. Rows red: `expansion: a leading tilde becomes HOME` and the parity row `HOME=/home/sandbox; export HOME; echo ~`. Restored; green run below.
 
+
+### Change set 28f: env with a command
+
+`env NAME=VALUE... COMMAND [ARG...]` runs COMMAND with the assignments set in the environment, as GNU env does. The assignments are visible to the command (`env A=1 printenv A` prints `1`) and are undone when it ends (`printenv A` after it exits 1). `env` with no command still lists the environment. An option, such as `-i`, is refused with status 125 and a message, as before; `-i` and the other options are not implemented.
+
+A command env cannot find exits 127, as in bash. Witness rows: `env: env runs a command with the assignment set, and the assignment does not stay`, `env: a command env cannot find exits 127, as in bash`. Parity rows reinstated: `env ls; echo rc=$?` (bashkit runs ls too, with status 0) and `env A=1 printenv A; printenv A; echo rc=$?`.
+
+Red check: `env` no longer dispatches its command (returns 125). Four rows red: the two `env:` command rows and the two parity rows. Restored by the reverse edit; the green run is below.
+
