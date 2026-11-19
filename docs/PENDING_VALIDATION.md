@@ -3016,3 +3016,14 @@ Red check, restored and confirmed by a green run: with the rewrite line removed,
 
 Gaps, recorded: under `en_US.UTF-8`, GNU matches accented letters with their base letter (`é` matches `[[=e=]]`, measured as 1), and this shell does not, because no collation table is kept. Multi-character equivalence classes (`[=ab=]`) and non-alphanumeric collating symbols are still refused.
 
+
+### Phase B record: change sets 30p to 30r
+
+Gate: `vmstat 1 2`, last line, swap-in 140 KB/s and swap-out 0 KB/s, both below 1000 KB/s. The gate was open.
+
+`npm run check`: exit 0, wall 0s.
+
+`npm run witness:shell`: exit 0, wall 2s, `RESULT PASS=687 FAIL=0`. The runaway-loop rows still stop at their timeouts: `timeout: a command past timeoutMs ends with exit 124 and a timed-out message` (PASS), `loops: a while that never ends is stopped by the command timeout with exit 124` (PASS), and `loops: a for over a large list is stopped by timeoutMs with exit 124` (PASS).
+
+Not pushed: e817934, 5dd020b and a050362 are local, on top of 6ba21ab, which is the single push of this queue. The remote head is 6ba21ab.
+
