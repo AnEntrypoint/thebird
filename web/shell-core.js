@@ -742,6 +742,25 @@ function exprEval(argv) {
 
 const SEQ_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
 
+function baseName(name) {
+  const trimmed = name.replace(/\/+$/, '');
+  if (trimmed === '' && name.startsWith('/')) return '/';
+  return trimmed.slice(trimmed.lastIndexOf('/') + 1);
+}
+
+function stripSuffix(base, suffix) {
+  return suffix && base !== suffix && base.endsWith(suffix) ? base.slice(0, -suffix.length) : base;
+}
+
+function dirOf(name) {
+  const trimmed = name.replace(/\/+$/, '');
+  if (trimmed === '') return name.startsWith('/') ? '/' : '.';
+  const slash = trimmed.lastIndexOf('/');
+  if (slash < 0) return '.';
+  const head = trimmed.slice(0, slash).replace(/\/+$/, '');
+  return head === '' ? '/' : head;
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1341,6 +1360,28 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       let out = '';
       for (let k = 0; k <= count; k++) out += (start + k * increment).toFixed(decimals) + '\n';
       return { code: 0, out, err: '' };
+    },
+    basename: ({ argv }) => {
+      let suffix = null;
+      let multi = false;
+      const operands = [];
+      for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '-s') {
+          suffix = argv[++i] ?? '';
+          multi = true;
+        } else if (argv[i] === '-a') multi = true;
+        else operands.push(argv[i]);
+      }
+      if (!operands.length) return { code: 1, out: '', err: 'basename: missing operand\n' };
+      if (!multi && operands.length > 2) return { code: 1, out: '', err: "basename: extra operand '" + operands[2] + "'\n" };
+      if (!multi && operands.length === 2) suffix = operands[1];
+      const names = multi ? operands : [operands[0]];
+      return { code: 0, out: names.map((name) => stripSuffix(baseName(name), suffix) + '\n').join(''), err: '' };
+    },
+    dirname: ({ argv }) => {
+      const names = argv.filter((arg) => !arg.startsWith('-'));
+      if (!names.length) return { code: 1, out: '', err: 'dirname: missing operand\n' };
+      return { code: 0, out: names.map((name) => dirOf(name) + '\n').join(''), err: '' };
     },
     md5sum: ({ argv, stdin = '' }) => {
       const names = argv.filter((arg) => !arg.startsWith('-'));

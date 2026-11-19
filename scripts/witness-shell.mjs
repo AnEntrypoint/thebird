@@ -766,6 +766,32 @@ group('seq: seq counts from first to last by step, and refuses bad arguments', a
   check('seq: a fourth argument gives a message and status 1', extra.stdout === 'rc=1\n' && extra.stderr.includes("seq: extra operand '4'"), JSON.stringify(extra.stderr));
 });
 
+group('basename and dirname: basename gives the last name, dirname the directory part', async () => {
+  const sh = await shell({});
+  const base = await run(sh, 'basename /a/b/c.txt');
+  check('basename: the last part of a path', base.stdout === 'c.txt\n', JSON.stringify(base.stdout));
+  const suffix = await run(sh, 'basename /a/b/c.txt .txt');
+  check('basename: a suffix argument is removed', suffix.stdout === 'c\n', JSON.stringify(suffix.stdout));
+  const trailing = await run(sh, 'basename /a/b/; basename /; basename name.txt name.txt');
+  check('basename: trailing slashes are dropped, / stays /, a suffix equal to the name is kept', trailing.stdout === 'b\n/\nname.txt\n', JSON.stringify(trailing.stdout));
+  const several = await run(sh, 'basename -s .txt /a/x.txt /a/y.txt');
+  check('basename: -s gives each name without the suffix', several.stdout === 'x\ny\n', JSON.stringify(several.stdout));
+  const all = await run(sh, 'basename -a /p/q /r/s');
+  check('basename: -a treats each argument as a name', all.stdout === 'q\ns\n', JSON.stringify(all.stdout));
+  const none = await run(sh, 'basename; echo rc=$?');
+  check('basename: no operand gives a message and status 1', none.stdout === 'rc=1\n' && none.stderr.includes('basename: missing operand'), JSON.stringify(none.stderr));
+  const dir = await run(sh, 'dirname /a/b/c.txt');
+  check('dirname: the directory part of a path', dir.stdout === '/a/b\n', JSON.stringify(dir.stdout));
+  const bare = await run(sh, 'dirname c.txt; dirname /c.txt; dirname /');
+  check('dirname: a bare name is ., a top-level name is /, / stays /', bare.stdout === '.\n/\n/\n', JSON.stringify(bare.stdout));
+  const slashes = await run(sh, 'dirname a/b/; dirname //a//b//');
+  check('dirname: trailing slashes are dropped and leading ones kept', slashes.stdout === 'a\n//a\n', JSON.stringify(slashes.stdout));
+  const pair = await run(sh, 'dirname /a/b /x');
+  check('dirname: each argument gets its own line', pair.stdout === '/a\n/\n', JSON.stringify(pair.stdout));
+  const noneDir = await run(sh, 'dirname; echo rc=$?');
+  check('dirname: no operand gives a message and status 1', noneDir.stdout === 'rc=1\n' && noneDir.stderr.includes('dirname: missing operand'), JSON.stringify(noneDir.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
