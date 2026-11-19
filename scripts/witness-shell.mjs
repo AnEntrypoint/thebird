@@ -421,6 +421,22 @@ group('loops: while and until run their body while the condition holds', async (
   check('loops: a while that never ends is stopped by the command timeout with exit 124', endless.exitCode === 124 && /timed out/.test(endless.stderr), `exit ${endless.exitCode}`);
 });
 
+group('loops: break leaves its loop, continue starts its next item, and both take a count', async () => {
+  const sh = await shell({});
+  const broke = await run(sh, 'for i in 1 2 3; do echo $i; break; done; echo after');
+  check('loops: break in a for loop leaves it after the first item', broke.stdout === '1\nafter\n', JSON.stringify(broke.stdout));
+  const skipped = await run(sh, 'for i in 1 2 3; do if [ $i = 2 ]; then continue; fi; echo $i; done');
+  check('loops: continue skips the rest of one item and runs the next', skipped.stdout === '1\n3\n', JSON.stringify(skipped.stdout));
+  const whileBreak = await run(sh, 'n=0; while true; do n=$((n+1)); if [ $n -eq 3 ]; then break; fi; done; echo n=$n', { timeoutMs: 2000 });
+  check('loops: break in a while loop ends it', whileBreak.stdout === 'n=3\n', JSON.stringify(whileBreak.stdout));
+  const twoLevels = await run(sh, 'for i in 1 2; do for j in a b; do break 2; done; echo never; done; echo done');
+  check('loops: break 2 leaves both loops', twoLevels.stdout === 'done\n', JSON.stringify(twoLevels.stdout));
+  const continueOuter = await run(sh, 'for i in 1 2; do for j in a b; do continue 2; done; echo never; done; echo end');
+  check('loops: continue 2 starts the next item of the outer loop', continueOuter.stdout === 'end\n', JSON.stringify(continueOuter.stdout));
+  const outside = await run(sh, 'break; echo after-break');
+  check('loops: break outside a loop prints a message, and the shell goes on with status 0', outside.stdout === 'after-break\n' && /only meaningful in a loop/.test(outside.stderr) && outside.exitCode === 0, JSON.stringify(outside.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

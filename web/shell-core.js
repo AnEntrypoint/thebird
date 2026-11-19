@@ -27,6 +27,13 @@ class ReturnSignal {
   }
 }
 
+class LoopSignal {
+  constructor(kind, levels) {
+    this.kind = kind;
+    this.levels = levels;
+  }
+}
+
 class Signalled {
   constructor(signo) {
     this.signo = signo;
@@ -490,10 +497,18 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   let runSink = null;
   const frames = [];
   let positional = [];
+  let loopDepth = 0;
 
   const resolvePath = (name) => normalize(name.startsWith('/') ? name : state.cwd + '/' + name);
 
+  const loopControl = (kind, argv) => {
+    if (loopDepth === 0) return { code: 0, out: '', err: `${kind}: only meaningful in a loop\n` };
+    throw new LoopSignal(kind, Math.min(Number(argv[0] ?? 1) || 1, loopDepth));
+  };
+
   const commands = {
+    break: ({ argv }) => loopControl('break', argv),
+    continue: ({ argv }) => loopControl('continue', argv),
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
@@ -1211,9 +1226,21 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const inner = { out: '', err: '', signal: sink.signal };
     const values = node.words ? await expandWords(node.words, inner) : positional;
     let code = 0;
-    for (const value of values) {
-      setVariable(node.name, value);
-      code = await runSequence(node.body, stdin, inner);
+    loopDepth++;
+    try {
+      for (const value of values) {
+        setVariable(node.name, value);
+        try {
+          code = await runSequence(node.body, stdin, inner);
+        } catch (err) {
+          if (!(err instanceof LoopSignal)) throw err;
+          if (err.levels > 1) throw new LoopSignal(err.kind, err.levels - 1);
+          code = 0;
+          if (err.kind === 'break') break;
+        }
+      }
+    } finally {
+      loopDepth--;
     }
     return { code, out: inner.out, err: inner.err };
   }
@@ -1221,11 +1248,23 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   async function runWhile(node, stdin, sink) {
     const inner = { out: '', err: '', signal: sink.signal };
     let code = 0;
-    for (;;) {
-      await new Promise((done) => setTimeout(done, 0));
-      const status = await runSequence(node.cond, stdin, inner);
-      if ((status === 0) === node.negate) break;
-      code = await runSequence(node.body, stdin, inner);
+    loopDepth++;
+    try {
+      for (;;) {
+        await new Promise((done) => setTimeout(done, 0));
+        const status = await runSequence(node.cond, stdin, inner);
+        if ((status === 0) === node.negate) break;
+        try {
+          code = await runSequence(node.body, stdin, inner);
+        } catch (err) {
+          if (!(err instanceof LoopSignal)) throw err;
+          if (err.levels > 1) throw new LoopSignal(err.kind, err.levels - 1);
+          code = 0;
+          if (err.kind === 'break') break;
+        }
+      }
+    } finally {
+      loopDepth--;
     }
     return { code, out: inner.out, err: inner.err };
   }

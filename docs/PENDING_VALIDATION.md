@@ -2348,3 +2348,11 @@ Swap gate: `GATE_OPEN try=1 si=324 so=0 KB/s`, read immediately before the job.
 Build check: `npm run check` exit 0, wall 345 ms (log `/tmp/pb7-check.log`).
 Shell witness, once: `npm run witness:shell` `RESULT PASS=112 FAIL=0`, exit 0, wall 797 ms (log `/tmp/pb7-shell.log`). The four `loops` rows pass: `w0 w1 w2`; a false `while` runs no body and prints `after` with exit 0; `until` prints `u0 u1`; the endless `while true; do true; done` is stopped at its 200 ms `timeoutMs` with exit 124.
 Not run in this pass: the browser witness groups that call `runShellInTxiki` (`scripts/witness.mjs`). The change reaches them through `shell-core.js`, so they are the next check before the txiki shell is used for anything else.
+
+### Change set 8, G2: break and continue (Phase A)
+
+`web/shell-core.js`: a `LoopSignal(kind, levels)` thrown by the `break` and `continue` builtins, and a `loopDepth` counter in `createShell`. `runFor` and `runWhile` count their depth around the loop and catch the signal: a count above 1 is passed out with one level less; a `break` ends the loop; a `continue` starts the next item. `break` or `continue` outside a loop prints `break: only meaningful in a loop` and exits 0. The count is clamped to the loop depth, so `break 9` in one loop leaves that loop.
+
+`scripts/witness-shell.mjs`: group `loops: break leaves its loop, continue starts its next item, and both take a count`, 6 rows: `break` in a for loop (`1 after`); `continue` skips one item (`1 3`); `break` in a while loop (`n=3`, with `timeoutMs: 2000` so a broken `break` fails in 2 s and does not hang the witness); `break 2` (`done`); `continue 2` (`end`); `break` outside a loop (`after-break`, with the message).
+
+Red check (done): the in-loop path was replaced by a no-op once. `RESULT PASS=113 FAIL=5`, with the five in-loop rows red: `break in a for loop`, `continue skips`, `break in a while loop`, `break 2`, `continue 2`. The outside-loop row stays green, which is correct because that path is unchanged. The first red attempt hung: the `while true` row had no time limit, so a no-op `break` looped forever and the run was killed. That is why the row now has `timeoutMs: 2000`. The line was restored (`grep` finds the throw) and the green run is `RESULT PASS=118 FAIL=0`.
