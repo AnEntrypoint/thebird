@@ -779,6 +779,20 @@ function formatMode(bits) {
   return bits.toString(8);
 }
 
+function symbolicMode(bits) {
+  return [6, 3, 0].map((shift, index) => {
+    const special = bits & [0o4000, 0o2000, 0o1000][index];
+    const run = (bits >> shift) & 1;
+    const execute = index < 2 ? ['S', 's'] : ['T', 't'];
+    const x = special ? (run ? execute[1] : execute[0]) : run ? 'x' : '-';
+    return ((bits >> shift) & 4 ? 'r' : '-') + ((bits >> shift) & 2 ? 'w' : '-') + x;
+  }).join('');
+}
+
+function octalModeText(bits) {
+  return bits.toString(8).padStart(4, '0') + ' (' + symbolicMode(bits) + ')';
+}
+
 function applySymbolicMode(bits, spec, isDir) {
   for (const clause of spec.split(',')) {
     const who = /^[ugoa]*/.exec(clause)[0];
@@ -1832,34 +1846,43 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code, out, err };
     },
     chmod: ({ argv }) => {
-      const recursive = argv.some((arg) => arg === '-R' || arg === '--recursive');
-      const [mode, ...names] = argv.filter((arg) => arg !== '-R' && arg !== '--recursive');
+      const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : /^-[Rvc]+$/.test(arg) ? arg.slice(1) : '')).join('');
+      const recursive = flagLetters.includes('R');
+      const verbose = flagLetters.includes('v');
+      const changes = flagLetters.includes('c');
+      const [mode, ...names] = argv.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes)$/.test(arg));
       const usage = "Try 'chmod --help' for more information.\n";
       if (mode === undefined) return { code: 1, out: '', err: 'chmod: missing operand\n' + usage };
       if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
       const octal = /^[0-7]{1,4}$/.test(mode);
       if (!octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
-      const digits = octal ? parseInt(mode, 8).toString(8) : '';
       const changeOne = (path) => {
-        if (octal) modes.set(path, digits);
-        else {
-          const dir = host.stat(path)?.dir === true;
-          const current = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
-          modes.set(path, formatMode(applySymbolicMode(current, mode, dir).bits));
-        }
+        const dir = host.stat(path)?.dir === true;
+        const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
+        const after = octal ? parseInt(mode, 8) : applySymbolicMode(before, mode, dir).bits;
+        modes.set(path, formatMode(after));
+        return { before, after };
       };
+      const report = (shown, before, after) => {
+        if (before !== after) return verbose || changes ? "mode of '" + shown + "' changed from " + octalModeText(before) + ' to ' + octalModeText(after) + '\n' : '';
+        return verbose ? "mode of '" + shown + "' retained as " + octalModeText(after) + '\n' : '';
+      };
+      let out = '';
       let err = '';
       let code = 0;
       const visit = (path, shown) => {
-        changeOne(path);
+        const { before, after } = changeOne(path);
+        out += report(shown, before, after);
         if (!recursive || host.stat(path)?.dir !== true) return;
         const owner = parseInt(modes.get(path) ?? '755', 8) & 0o100;
         for (const entry of host.list(path).sort()) {
           const child = (path === '/' ? '' : path) + '/' + entry;
-          if (host.lstat(child)?.link) continue;
           if (!owner) {
             err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
             code = 1;
+            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+          } else if (host.lstat(child)?.link) {
+            if (verbose) out += "neither symbolic link '" + shown + '/' + entry + "' nor referent has been changed\n";
           } else visit(child, shown + '/' + entry);
         }
       };
@@ -1869,7 +1892,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
           code = 1;
         } else visit(resolvePath(name), name);
       }
-      return { code, out: '', err };
+      return { code, out, err };
     },
     stat: ({ argv }) => {
       const flagAt = argv.indexOf('-c');
