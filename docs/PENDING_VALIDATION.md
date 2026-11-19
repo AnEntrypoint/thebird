@@ -3176,3 +3176,10 @@ Red checks, each restored and confirmed green: (1) trailing field spaces kept: 1
 
 Gaps, recorded: `-p`, `-d`, `-n`, `-N`, `-a`, `-s`, `-t`, `-u` are not implemented, so they are refused as invalid options where bash accepts them. A command other than read sees the rest of the stream but does not consume it, so two such commands on one stream both see the same text (bash gives the second one nothing). A read inside a command substitution gets no input (bash inherits the stream). None was probed against bash for the unimplemented options.
 
+
+### Phase B gate reading, closed: change sets 30y to 30z
+
+Gate: `vmstat 1 2`, last line: swap-in 9068 KB/s and swap-out 55492 KB/s. Both are above the 1000 KB/s limit, so the gate was closed. Phase B did not run: `npm run check` and `npm run witness:shell` were not run for this stretch as a Phase B pass, the runaway-loop rows were not re-run, and nothing was pushed. The remote stays at `581b3b2`.
+
+Local commits not pushed: `e7f87cc`, `cc686c4`, `29ad0d8`, and this record. The witness at `29ad0d8` last ran green at `RESULT PASS=779 FAIL=0`, in the Phase A run before the gate was read.
+
