@@ -3366,3 +3366,18 @@ Witness: group `stat -c %N: a plain or linked operand prints its quoted name, an
 Red checks, each restored from a backup and confirmed by a green run: (1) the `%N` branch removed: 11 rows red (`PASS=870 FAIL=11`, every row). (2) the link target dropped (a link prints only its quoted name): 7 rows red, the seven symbolic-link rows (`PASS=874 FAIL=7`). A first attempt at (2) left a dangling ternary and failed to load (79 red); it was discarded and redone with a valid replacement, and the restored file matches its backup.
 
 Gaps, recorded: a name with both an apostrophe and a double quote is not probed, so its quoting is not claimed. Control characters and non-ASCII names in `%N` are not probed. The default `stat` output (without `-c`) does not print a `%N` line, and is not changed here.
+
+### Phase B record: change sets 30ai to 30ak
+
+Gate: `vmstat 1 2`, last line (the second sample), read at 22:18:11: swap-in 704 KB/s and swap-out 0 KB/s, both below 1000 KB/s. The heavy-job check at the same moment found no zig, cargo, rustc, cc1plus, Chromium renderer over 1 GB, or gm-core worker above 20% CPU. The gate was open and Phase B ran.
+
+Earlier readings in the same wait, all closed: 3048 and 4756 KB/s at 22:11:08, 9352 and 0 at 22:14:25.
+
+Runs, each once, from the checkout at `46dfd51`, which holds 30ai, 30aj and 30ak:
+
+- `npm run check`: exit 0, wall 1.12 s.
+- `npm run witness:shell`: exit 0, wall 1.87 s, `RESULT PASS=881 FAIL=0`. The runaway rows still stop at their timeouts: `timeout: a command past timeoutMs ends with exit 124 and a timed-out message` (PASS, exit 124), `loops: a while that never ends is stopped by the command timeout with exit 124` (PASS, exit 124), and `loops: a for over a large list is stopped by timeoutMs with exit 124` (PASS, exit 124).
+
+The rows of 30ai (stat and chmod refuse a lookup through a directory without owner search), 30aj (stat -L) and 30ak (stat -c %N) pass in this run. Their red checks are recorded in their own sections above.
+
+Pushed: `9eb4652..46dfd51` to `origin main`, one push, which carried 7375665, d83f083, 6d3ddad, e574d63 and 46dfd51.
