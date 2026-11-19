@@ -789,6 +789,27 @@ group('expr: equivalence classes and collating symbols of one character match it
   check("expr: an equivalence class does not match an accented letter in the C locale", eq4.stdout === "0\nrc=1\n" && eq4.stderr === "", JSON.stringify([eq4.stdout, eq4.stderr]));
 });
 
+group('redirects: a compound command sends its output and takes its input through its redirects, as bash and dash do', async () => {
+  const cp0 = await run(await shell({}), "mkdir -p /cr; for i in 1 2; do echo $i; done > /cr/f; cat /cr/f");
+  check("redirects: a for loop sends its output to the file, as bash does", cp0.stdout === "1\n2\n" && cp0.stderr === "", JSON.stringify([cp0.stdout, cp0.stderr]));
+  const cp1 = await run(await shell({}), "mkdir -p /cr; { echo a; echo b; } > /cr/g; cat /cr/g; echo rc=$?");
+  check("redirects: a group sends its output to the file, as bash does", cp1.stdout === "a\nb\nrc=0\n" && cp1.stderr === "", JSON.stringify([cp1.stdout, cp1.stderr]));
+  const cp2 = await run(await shell({}), "mkdir -p /cr; if true; then echo y; fi >> /cr/h; if true; then echo z; fi >> /cr/h; cat /cr/h");
+  check("redirects: an if appends to the file, as bash does", cp2.stdout === "y\nz\n" && cp2.stderr === "", JSON.stringify([cp2.stdout, cp2.stderr]));
+  const cp3 = await run(await shell({}), "mkdir -p /cr; echo p > /cr/in; echo q >> /cr/in; { cat; } < /cr/in > /cr/o; cat /cr/o");
+  check("redirects: a group reads its input from a file and writes to another, as bash does", cp3.stdout === "p\nq\n" && cp3.stderr === "", JSON.stringify([cp3.stdout, cp3.stderr]));
+  const cp4 = await run(await shell({}), "mkdir -p /cr; case x in x) echo hit;; esac > /cr/c; cat /cr/c");
+  check("redirects: a case sends its output to the file, as bash does", cp4.stdout === "hit\n" && cp4.stderr === "", JSON.stringify([cp4.stdout, cp4.stderr]));
+  const cp5 = await run(await shell({}), "mkdir -p /cr; { echo a; cat /nope-cr/x; } 2> /cr/err; cat /cr/err");
+  check("redirects: a group 2> sends its stderr to the file, as bash does", cp5.stdout === "a\ncat: /nope-cr/x: No such file or directory\n" && cp5.stderr === "", JSON.stringify([cp5.stdout, cp5.stderr]));
+  const cp6 = await run(await shell({}), "mkdir -p /cr; { echo x; cat /nope-cr/y; } &> /cr/both; cat /cr/both");
+  check("redirects: a group &> sends both streams to the file, as bash does", cp6.stdout === "x\ncat: /nope-cr/y: No such file or directory\n" && cp6.stderr === "", JSON.stringify([cp6.stdout, cp6.stderr]));
+  const cp7 = await run(await shell({}), "for i in 1; do echo x; done > /nodir-cr/f; echo rc=$?");
+  check("redirects: a compound command into a missing directory is refused before it runs, as dash does", cp7.stdout === "rc=2\n" && cp7.stderr === "thebird: cannot create /nodir-cr/f: Directory nonexistent\n", JSON.stringify([cp7.stdout, cp7.stderr]));
+  const cp8 = await run(await shell({}), "{ cat; } < /nofile-cr; echo rc=$?");
+  check("redirects: a group from a missing input file is refused, as dash does", cp8.stdout === "rc=2\n" && cp8.stderr === "thebird: cannot open /nofile-cr: No such file\n", JSON.stringify([cp8.stdout, cp8.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));

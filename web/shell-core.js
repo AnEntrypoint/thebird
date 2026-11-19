@@ -2375,12 +2375,33 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (path !== NULL_DEVICE) host.write(path, text);
   }
 
-  async function runCommand(node, argv, stdin, sink) {
-    for (const redirect of node.redirects) {
+  async function refuseMissingOutputDir(redirects, sink) {
+    for (const redirect of redirects) {
       if (!OUTPUT_REDIRECTS.has(redirect.op)) continue;
       const path = await wordPath(redirect.target, sink);
       if (path !== NULL_DEVICE && host.stat(parentOf(resolvePath(path)))?.dir !== true) return { code: 2, out: '', err: 'thebird: cannot create ' + path + ': Directory nonexistent\n' };
     }
+    return null;
+  }
+
+  async function withRedirects(node, stdin, sink, run) {
+    if (!node.redirects.length) return run(node, stdin, sink);
+    const refused = await refuseMissingOutputDir(node.redirects, sink);
+    if (refused) return refused;
+    let input = stdin;
+    for (const redirect of node.redirects) {
+      if (redirect.op !== '<') continue;
+      const path = await wordPath(redirect.target, sink);
+      if (path !== NULL_DEVICE && !host.exists(path)) return { code: 2, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
+      input = path === NULL_DEVICE ? '' : host.read(path);
+    }
+    const result = await run(node, input, sink);
+    return { code: result.code, ...(await applyOutputRedirects(node.redirects, result.out, result.err, sink)) };
+  }
+
+  async function runCommand(node, argv, stdin, sink) {
+    const refused = await refuseMissingOutputDir(node.redirects, sink);
+    if (refused) return refused;
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op === '<<') input = await bodyText(redirect.body, sink);
@@ -2395,8 +2416,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
     }
     const result = await dispatch(argv, input, sink.signal);
-    let { out, err } = result;
-    for (const redirect of node.redirects) {
+    const applied = await applyOutputRedirects(node.redirects, result.out, result.err, sink);
+    return { code: result.code, ...applied };
+  }
+
+  async function applyOutputRedirects(redirects, out, err, sink) {
+    for (const redirect of redirects) {
       if (redirect.op === '2>&1') {
         out += err;
         err = '';
@@ -2418,7 +2443,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         err = '';
       }
     }
-    return { code: result.code, out, err };
+    return { out, err };
   }
 
   async function runSubshell(node, stdin, sink) {
@@ -2635,12 +2660,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       functions.set(cmd.name, cmd.body);
       return ok('');
     }
-    if (cmd.type === 'subshell') return runSubshell(cmd, stdin, sink);
-    if (cmd.type === 'group') return runGroup(cmd, stdin, sink);
-    if (cmd.type === 'if') return runIf(cmd, stdin, sink);
-    if (cmd.type === 'for') return runFor(cmd, stdin, sink);
-    if (cmd.type === 'while') return runWhile(cmd, stdin, sink);
-    if (cmd.type === 'case') return runCase(cmd, stdin, sink);
+    if (cmd.type === 'subshell') return withRedirects(cmd, stdin, sink, runSubshell);
+    if (cmd.type === 'group') return withRedirects(cmd, stdin, sink, runGroup);
+    if (cmd.type === 'if') return withRedirects(cmd, stdin, sink, runIf);
+    if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor);
+    if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile);
+    if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase);
     return runSimple(cmd, stdin, sink);
   }
 

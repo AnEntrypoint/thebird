@@ -3027,3 +3027,16 @@ Gate: `vmstat 1 2`, last line, swap-in 140 KB/s and swap-out 0 KB/s, both below 
 
 Not pushed: e817934, 5dd020b and a050362 are local, on top of 6ba21ab, which is the single push of this queue. The remote head is 6ba21ab.
 
+
+### Change set 30s: a compound command sends its output and takes its input through its redirects
+
+Reference: bash (`bash -c`) for the rows that write files, with expectations generated from its output (`/tmp/gen-compound.mjs`); dash (`/usr/bin/dash`, the sandbox `sh`) for the two refusals, with its `sh: 1: ` prefix mapped to `thebird: `, as in 30p.
+
+What was wrong: `runStage` sent a compound command (`for`, `if`, `while`, `case`, a group `{ }`, a subshell `( )`) to its runner without applying its `redirects`, so `for ... done > f` printed to stdout and wrote nothing, and `{ cat; } < f` read no input. What changed: `withRedirects` wraps those runners. It refuses a missing output directory with the 30p message before the command runs, and it refuses a missing `<` input file with `thebird: cannot open PATH: No such file` and status 2, as dash does. It runs the compound with the input, then applies the output redirects to its output with `applyOutputRedirects`. That function is the loop `runCommand` already used, moved out so simple and compound commands share it.
+
+Witness: group `redirects: a compound command sends its output and takes its input through its redirects, as bash and dash do`, 9 rows (7 from bash, 2 from dash), with `RESULT PASS=696 FAIL=0` after the change.
+
+Red checks, each restored and confirmed by a green run: (1) the group wrapper bypassed: 5 rows red (the group output, input, `2>`, `&>`, and the missing input file). (2) the compound missing-directory check removed: 1 row red (the `for` into `/nodir-cr`, which ran and printed `x`). (3) the compound missing-input check removed: 1 row red (the group from `/nofile-cr` gave a Node error, `ENOENT`, not dash's message).
+
+Gaps, recorded: a compound command that ends by a thrown signal, such as `exit` or `return` inside `{ ...; } > f`, does not apply its output redirect, so its output is lost. This was not probed against bash. The `read` builtin does not exist (`while read x` gives `read: command not found`), so a `while read` loop is not covered; this is a separate missing builtin, not part of this change. The `<` input is applied to a compound command only, not to a function call.
+
