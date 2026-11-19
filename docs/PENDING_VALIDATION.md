@@ -2796,3 +2796,14 @@ The env row now checks stdout (`rc=127`) and stderr exactly, under the title `en
 
 Red checks, on this tree: (1) message reverted to the generic `command not found`: one row red. (2) status changed to 1: one row red. (3) existence check bypassed: one row red. Each restored by the reverse edit; the green run is `RESULT PASS=556 FAIL=0`.
 
+
+### Phase B record: change sets 30a to 30f
+
+Gate: `vmstat 1 2 | tail -n 1 | awk '{print $7, $8}'` read swap-in 0 KB/s and swap-out 0 KB/s on the first try, so the gate opened (script `/tmp/gate-pb30.sh`, 30 tries allowed).
+
+`npm run check`: exit 0, wall 0s (syntax checks over bin, src, scripts, web and the shims; `bin/thebird-relay.js` is checked for syntax only, and it is not committed).
+
+`npm run witness:shell`: exit 0, wall 2s, `RESULT PASS=556 FAIL=0`. The runaway-loop rows still stop at timeoutMs: `timeout: a command past timeoutMs ends with exit 124 and a timed-out message` and `loops: a for over a large list is stopped by timeoutMs with exit 124`, both PASS.
+
+Pushed: origin main from afb21d8 to the head after this record, one push, no force. The commits pushed are 60b573e, 56ae6e3, 6755d17, f0613b4, efc0936, 04a76f4 and this record.
+
