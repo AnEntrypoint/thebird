@@ -3073,3 +3073,18 @@ Red check: the `u` flag removed from `matchString`: 5 rows red (`a.` gave 1 wher
 
 Gap, recorded: the translator in `breToJs` now compiles under `u`, so an escape it does not emit a valid `u`-mode form for would throw at compile time. None was found in the current `expr` rows; a bracket expression with an escaped range is not probed.
 
+
+### Change set 30v: a dangling symlink, a missing operand and a symlink cycle are reported with GNU chmod's wording
+
+Reference: `/bin/gnuchmod` (GNU coreutils 9.7) through the `/tmp/gnubin` shim, run on a fixture; expectations are generated from its output, with `gnuchmod:` mapped to `chmod:`.
+
+What was wrong: a dangling operand fell through to `cannot access ... No such file or directory`, and a dangling link inside a `-R --dereference` tree had its missing target's mode written. Under `-v`, a failed operand printed no stdout line, though GNU prints `'NAME' could not be accessed`. The cause of the second is that `statInfo` is lstat-like, so a dangling link looked present; the fix tests the referent with `referentOf`.
+
+What changed: a failed operand prints `chmod: cannot operate on dangling symlink 'NAME'` when it is a link, and `cannot access` otherwise; under `-v` it prints `'NAME' could not be accessed` on stdout, as GNU does. A dangling link met in a `-R --dereference` tree prints `chmod: cannot dereference 'PATH': No such file or directory`, status 1, and under `-v` the stdout line. Without `--dereference` such a link is still skipped quietly. A symlink cycle needed no change: the existing `seen` guard matches GNU, and the rows pin it.
+
+Witness: group `chmod: a dangling symlink, a missing operand and a symlink cycle are reported with GNU wording`, 8 rows, `RESULT PASS=717 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) the dangling wording disabled: 2 rows red (the operand with and without `-v`). (2) the tree dangling branch disabled: 2 rows red (the `-R` and `-vR` `--dereference` tree rows). (3) the operand `-v` stdout line disabled: 2 rows red (the dangling `-v` row and the missing-operand `-v` row).
+
+Gaps, recorded: the tree fixture for the `-vR --dereference` row has no sibling symlink to a file. With one, GNU reports which of the two entries is changed and which retained, in readdir order, and our walk is sorted (the 30m ordering gap), so that case is not pinned. The cycle rows are pinned with a link to the directory itself only.
+

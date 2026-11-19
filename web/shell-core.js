@@ -1911,6 +1911,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
             err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
             code = 1;
             if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+          } else if (host.lstat(child)?.link && dereference && !statInfo(referentOf(child))) {
+            err += "chmod: cannot dereference '" + shown + '/' + entry + "': No such file or directory\n";
+            code = 1;
+            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
           } else if (host.lstat(child)?.link && !dereference) {
             if (verbose) out += "neither symbolic link '" + shown + '/' + entry + "' nor referent has been changed\n";
           } else visit(referentOf(child), shown + '/' + entry);
@@ -1919,8 +1923,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const name of names) {
         if (noDereference && host.lstat(resolvePath(name))?.link) {
           if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
-        } else if (!statInfo(resolvePath(name))) {
-          err += "chmod: cannot access '" + name + "': No such file or directory\n";
+        } else if (!statInfo(referentOf(resolvePath(name)))) {
+          if (verbose) out += "'" + name + "' could not be accessed\n";
+          err += host.lstat(resolvePath(name))?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";
           code = 1;
         } else {
           walked = new Set();
