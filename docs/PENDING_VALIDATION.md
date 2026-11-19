@@ -2214,3 +2214,19 @@ Rows 2 and 3 are open. Cause not established; no retry added, no code change mad
 Phase B: not pushed. The push gate is the full witness and the Python row both settled. The Python row is settled (five of five pass). The full witness is not: run 4 has two Python failures that did not reproduce, with no established cause, and three live rows that are open outside the repo. The push is held for the owner's decision.
 
 Still open for the owner: the fx ask-mode approval prompt on the page `ask` tool; the three live 8793 rows; the Python rows 2 and 3 above; Ctrl-C on the Pages site (left alone).
+
+### Change set 3: the two Python flakes, and the full witness before the push
+
+Clock check for run 4 (`/tmp/witness-full4.log`). The file was created at 08:30:10 local and last written at 09:27:05 local, a wall-clock span of 3535.5 s. The witness's own total for that run, from `performance.now()` (monotonic), was 796.8 s. About 2738 s of wall-clock time passed without the process's monotonic clock advancing. That is longer than the 2580 s `COLD_START_MS` wait, so a forward wall-clock step, or a suspend (which also stops the monotonic clock on Linux), during `python-warm` explains its expiry at 62.4 s exactly: `waitFor` compared `Date.now()` with its deadline. The system logs cannot say which of the two happened: there is no journal (`journalctl` returns no entries) and no `dmesg` clock messages. Run 5 had no step: its file span was 691.9 s against a monotonic total of 689.1 s.
+
+Change 6, `scripts/browser-driver.mjs` (commit 017b7b1): every deadline (`waitFor`, the terminal wait in `runTerminal`, and the DevTools port wait) uses `performance.now()` instead of `Date.now()`. A wall-clock step can no longer shorten a wait. The wait lengths are unchanged.
+
+Change 7, `web/python-bundle.js` and `test/python-bundle-retry.test.mjs` (commit 63d7269): the bundle download (`downloadBundle`) retries a network error (a `TypeError`, which is what `fetch` throws as "Failed to fetch") up to twice, after 1 s and 3 s. Each retry logs a warning with the attempt number, the error text and the delay. An HTTP error, a decode error or an abort is not retried. The test stubs `fetch`: a network error gives three calls, two logged retries and the error; an HTTP 503 gives one call and no retry. `npm test`: `tests 66 pass 66 fail 0`. The witness row is unchanged; no retry was added to it.
+
+Cause of the `files survive a browser restart` failure (run 4). The bundle fetch threw `Failed to fetch`, the network-level failure. The same window contained the clock step above, so the likely cause is a host pause that broke the open connection. That is not confirmed by a system log. The retry covers a short network failure, not a pause longer than about 4 s.
+
+Python groups after the fixes, alone (`--group=python,python-splash,python-warm,python-files`): `totals: PASS 12 FAIL 0 GROUPS 4 WALL 95.6s`, rc 0.
+
+Full witness after the fixes (`/tmp/witness-full5.log`, started 09:46:44 local): `totals: PASS 229 FAIL 3 GROUPS 64 WALL 689.1s`. The only failures are the three live 8793 rows, which stay open. Load was 14 to 36 during the run, so the group walls are high. Slowest groups: `fx-approval` 421.3 s, `fx-ask` 270.7 s, `site` 188.9 s, `command-table` 138.0 s. The `WITNESS_EXIT` line is missing because my wrapper used `exec`, which replaced the shell before its `echo` ran; the witness printed `3 check(s) failed`, so its exit status was non-zero.
+
+Phase B: the local commits since 2f3285f (939691a, 100a91f, b637b74, 017b7b1, 63d7269 and this one) go to origin main in one push, with no force. The fx ask-mode approval stays with fx's owner.
