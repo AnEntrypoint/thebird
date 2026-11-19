@@ -3003,3 +3003,16 @@ Red checks, each restored and confirmed by a green run: (1) `length` back to UTF
 
 Gaps, recorded: `:` and `match` still match in UTF-16 units (`.` in the JavaScript regex is one unit), so a pattern that consumes an astral character reports a different length than GNU's. The `:` and `match` operators with astral characters are not covered by a row.
 
+
+### Change set 30r: expr equivalence classes and collating symbols of one character match it, as GNU expr does in the C locale
+
+Reference: GNU expr (`/bin/gnuexpr`, 9.7) under `LC_ALL=C`, the locale the earlier expr rows (30j) were generated under, rows generated from its output (`/tmp/gen-equiv.mjs`). Probed: `expr e : '[[=e=]]'` is 1, `expr x : '[[=e=]]'` is 0 with status 1, `expr e : '[[.e.]]'` is 1, `expr e : '[^[=e=]]'` is 0, and `expr é : '[[=e=]]'` is 0 under C (the é is two bytes there).
+
+What was wrong: 30j refused `[=` and `[.` with a `not supported` message, and a gap row pinned that refusal. What changed: `breToJs` rewrites `[=c=]` and `[.c.]`, for one ASCII letter or digit, to the character itself before the bracket is converted, so `[[=e=]]` becomes `[e]`. Other equivalence classes and collating symbols (multi-character, or non-alphanumeric) are still refused with the 30j message. The gap row is replaced by the five rows below.
+
+Witness: group `expr: equivalence classes and collating symbols of one character match it, as GNU expr does in the C locale`, 5 rows from GNU, with `RESULT PASS=687 FAIL=0` after the change. The gap row `expr (gap, equivalence classes)` is removed, because its refusal is no longer the behaviour.
+
+Red check, restored and confirmed by a green run: with the rewrite line removed, 5 rows go red, all with the refusal message. That is the expected failure, since the refusal path is the one the rewrite replaces.
+
+Gaps, recorded: under `en_US.UTF-8`, GNU matches accented letters with their base letter (`é` matches `[[=e=]]`, measured as 1), and this shell does not, because no collation table is kept. Multi-character equivalence classes (`[=ab=]`) and non-alphanumeric collating symbols are still refused.
+

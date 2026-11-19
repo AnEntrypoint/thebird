@@ -907,6 +907,7 @@ function characterClass(name) {
 }
 
 function breToJs(pattern) {
+  pattern = pattern.replace(/\[([=.])([A-Za-z0-9])\1\]/g, '$2');
   let out = '';
   let groups = 0;
   let depth = 0;

@@ -776,6 +776,19 @@ group('expr: length, substr and index count characters in a UTF-8 locale, as GNU
   check("expr index of an astral character is at position 2", ex6.stdout === "2\nrc=0\n" && ex6.stderr === "", JSON.stringify([ex6.stdout, ex6.stderr]));
 });
 
+group('expr: equivalence classes and collating symbols of one character match it, as GNU expr does in the C locale', async () => {
+  const eq0 = await run(await shell({}), "expr e : '[[=e=]]'; echo rc=$?");
+  check("expr: an equivalence class [=c=] matches the character itself, as GNU expr does in the C locale", eq0.stdout === "1\nrc=0\n" && eq0.stderr === "", JSON.stringify([eq0.stdout, eq0.stderr]));
+  const eq1 = await run(await shell({}), "expr x : '[[=e=]]'; echo rc=$?");
+  check("expr: an equivalence class [=c=] does not match another character", eq1.stdout === "0\nrc=1\n" && eq1.stderr === "", JSON.stringify([eq1.stdout, eq1.stderr]));
+  const eq2 = await run(await shell({}), "expr e : '[[.e.]]'; echo rc=$?");
+  check("expr: a collating symbol [.c.] matches the character itself", eq2.stdout === "1\nrc=0\n" && eq2.stderr === "", JSON.stringify([eq2.stdout, eq2.stderr]));
+  const eq3 = await run(await shell({}), "expr e : '[^[=e=]]'; echo rc=$?");
+  check("expr: a negated equivalence class does not match its own character", eq3.stdout === "0\nrc=1\n" && eq3.stderr === "", JSON.stringify([eq3.stdout, eq3.stderr]));
+  const eq4 = await run(await shell({}), "expr 'é' : '[[=e=]]'; echo rc=$?");
+  check("expr: an equivalence class does not match an accented letter in the C locale", eq4.stdout === "0\nrc=1\n" && eq4.stderr === "", JSON.stringify([eq4.stdout, eq4.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
@@ -1256,8 +1269,6 @@ group('expr: match, :, substr, index and length take the GNU values, with the re
 group('expr: POSIX character classes in a bracket expression match GNU expr', async () => {
   const sh = await shell({});
 
-  const xeq = await run(sh, "expr a : '[[=a=]]'; echo rc=$?");
-  check('expr (gap, equivalence classes): [=a=] is refused with status 2, where GNU matches it; cause: no equivalence-class table', xeq.stdout === 'rc=2\n' && xeq.stderr === 'expr: equivalence classes and collating symbols are not supported\n', JSON.stringify([xeq.stdout, xeq.stderr]));
   const xc0 = await run(sh, "expr abc1 : '[[:alpha:]]*'; echo rc=$?");
   check("expr: a POSIX class in a bracket expression matches its characters", xc0.stdout === "3\nrc=0\n" && xc0.stderr === "", JSON.stringify([xc0.stdout, xc0.stderr]));
   const xc1 = await run(sh, "expr a1 : '[[:digit:]]'; echo rc=$?");
