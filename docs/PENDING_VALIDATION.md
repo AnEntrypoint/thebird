@@ -2577,3 +2577,12 @@ Witness rows: `files: mv of a file onto itself is refused` (existing), `mv: a fi
 
 Red check: the same-file branch in `copyOrMove` replaced with `if (false)`. Three rows went red (`files: mv of a file onto itself is refused`, `mv: a file moved onto itself is unchanged`, `mv: the same-file refusal exits 1`). Restored by the reverse edit; the green run is `RESULT PASS=440 FAIL=0`.
 
+
+### Change set 28b: base64 -w 0 prints no final newline
+
+GNU `base64 -w 0` prints the encoding with no newline at all. The brief asked for the final newline to be printed; GNU does not print it, bashkit does not print it, and the txiki shell printed one, so the txiki shell now matches GNU and bashkit. The brief's wording is departed from here for the same reason as 28a.
+
+Code: `base64` returns the encoding without a newline when the wrap width is 0. Witness rows: `base64: -w 0 prints one line with no final newline, as GNU does` (exact expectation `YWJjCg==`), `base64: -w 0 on empty input prints nothing but the status` (`rc=0`), and the parity row `echo abc | base64 -w 0`, reinstated: it was excluded because of this difference.
+
+Red check: the early return changed to append a newline. Rows red: `base64: -w 0 prints one line with no final newline, as GNU does`, `bash parity: printf ... base64 -w 0`, and the parity row `echo abc | base64 -w 0` (the parity group is compared against bashkit). Restored; green run below.
+

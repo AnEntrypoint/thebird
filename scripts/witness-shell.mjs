@@ -692,7 +692,9 @@ group('base64: base64 encodes and decodes stdin, and wraps its output', async ()
   const wrapped = await run(sh, 'echo abc | base64 -w 4');
   check('base64: -w sets the line width', wrapped.stdout === 'YWJj\nCg==\n', JSON.stringify(wrapped.stdout));
   const unwrapped = await run(sh, 'echo abc | base64 -w 0');
-  check('base64: -w 0 keeps the output on one line', unwrapped.stdout === 'YWJjCg==\n', JSON.stringify(unwrapped.stdout));
+  check('base64: -w 0 prints one line with no final newline, as GNU does', unwrapped.stdout === 'YWJjCg==', JSON.stringify(unwrapped.stdout));
+  const emptyWrap = await run(await shell({}), "printf '' | base64 -w 0; echo rc=$?");
+  check('base64: -w 0 on empty input prints nothing but the status', emptyWrap.stdout === 'rc=0\n', JSON.stringify(emptyWrap.stdout));
   const unicode = await run(sh, 'echo café | base64');
   check('base64: a non-ASCII input is encoded as UTF-8 bytes', unicode.stdout === 'Y2Fmw6kK\n', JSON.stringify(unicode.stdout));
   const decoded = await run(sh, 'printf "aGk=" | base64 -d');
@@ -823,6 +825,7 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "echo abc | base64 -w 0",
     "echo one; echo two && echo three || echo four",
     "false || echo or-ran",
     "echo abc | tr a-z A-Z",

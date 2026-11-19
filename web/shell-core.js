@@ -1319,7 +1319,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         return { code: input.code, out: bytesToText(bytes), err: input.err };
       }
       const encoded = base64Encode(utf8Bytes(input.text));
-      const width = wrapAt || encoded.length;
+      if (wrapAt === 0) return { code: input.code, out: encoded, err: input.err };
+      const width = wrapAt;
       let out = '';
       for (let i = 0; i < encoded.length; i += width) out += encoded.slice(i, i + width) + '\n';
       return { code: input.code, out, err: input.err };
