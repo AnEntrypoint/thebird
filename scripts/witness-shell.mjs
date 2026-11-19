@@ -643,6 +643,21 @@ group('realpath: realpath resolves .., relative names and symbolic links', async
   check('realpath: a loop of links is refused with status 1', loop.stdout === 'rc=1\n' && loop.stderr.includes('Too many levels of symbolic links'), JSON.stringify(loop.stderr));
 });
 
+group('chmod: chmod sets an octal mode that stat reports', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /cm; echo x > /cm/f');
+  const set = await run(sh, 'chmod 600 /cm/f; stat -c %a /cm/f');
+  check('chmod: an octal mode is recorded and reported by stat', set.stdout === '600\n', JSON.stringify(set.stdout));
+  const leading = await run(sh, 'chmod 0755 /cm/f; stat -c %a /cm/f');
+  check('chmod: a leading zero is allowed and dropped', leading.stdout === '755\n', JSON.stringify(leading.stdout));
+  const several = await run(sh, 'echo a > /cm/p; echo b > /cm/q; chmod 700 /cm/p /cm/q; stat -c %a /cm/p /cm/q');
+  check('chmod: one mode is set on each named file', several.stdout === '700\n700\n', JSON.stringify(several.stdout));
+  const missing = await run(sh, 'chmod 644 /cm/none; echo rc=$?');
+  check('chmod: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes("chmod: cannot access '/cm/none': No such file or directory"), JSON.stringify(missing.stderr));
+  const symbolic = await run(sh, 'chmod u+x /cm/f; echo rc=$?');
+  check('chmod: a symbolic mode is refused with status 1, not ignored', symbolic.stdout === 'rc=1\n' && symbolic.stderr.includes("chmod: unsupported mode 'u+x'"), JSON.stringify(symbolic.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

@@ -1132,6 +1132,22 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       return { code, out, err };
     },
+    chmod: ({ argv }) => {
+      const [mode, ...names] = argv;
+      if (mode === undefined || !names.length) return { code: 1, out: '', err: 'chmod: missing operand\n' };
+      if (!/^[0-7]{3,4}$/.test(mode)) return { code: 1, out: '', err: "chmod: unsupported mode '" + mode + "'\n" };
+      const digits = mode.replace(/^0+/, '').padStart(3, '0');
+      let err = '';
+      let code = 0;
+      for (const name of names) {
+        const path = resolvePath(name);
+        if (!statInfo(path)) {
+          err += "chmod: cannot access '" + name + "': No such file or directory\n";
+          code = 1;
+        } else modes.set(path, digits);
+      }
+      return { code, out: '', err };
+    },
     stat: ({ argv }) => {
       const flagAt = argv.indexOf('-c');
       const format = flagAt >= 0 ? argv[flagAt + 1] ?? '' : null;

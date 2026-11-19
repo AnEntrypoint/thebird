@@ -2466,3 +2466,11 @@ Known gap: `realpath -m` (names that do not exist) and `-e`/`-s` modes are not i
 `scripts/witness-shell.mjs`: group `realpath: realpath resolves .., relative names and symbolic links`, 8 rows: an absolute name; a relative name taken from the current directory after `cd`; `..` and `.` resolved; a symbolic link followed to its target; a chain of two links followed to the end; a missing name (status 1, the message); a loop of links (status 1, the message).
 
 Red check (done), each restored and confirmed by an edit that applied: links not followed: `RESULT PASS=197 FAIL=3` (the link, chain and loop rows). Missing name made status 0: `RESULT PASS=199 FAIL=1` (the missing row). The green run after both restores is `RESULT PASS=200 FAIL=0`.
+
+### Change set 19, E4d: chmod (Phase A)
+
+`web/shell-core.js`: `chmod MODE NAME...` takes an octal mode of three or four digits (a leading zero is dropped) and records it in the `modes` map that `stat -c %a` reads. The host keeps no permission bits, so the mode is a record in the shell, not a change to the file system: it survives in the shell snapshot, and nothing else reads it. A symbolic mode such as `u+x` is refused with `chmod: unsupported mode` and status 1, so a script that tests the bit cannot be misled by a silent no-op. A missing name gives `chmod: cannot access` with the name in quotes and status 1.
+
+`scripts/witness-shell.mjs`: group `chmod: chmod sets an octal mode that stat reports`, 5 rows: an octal mode is recorded and reported (`600`); a leading zero is dropped (`755`); one mode is set on each of two files (`700`, `700`); a missing file (status 1, the message); a symbolic mode (status 1, the message).
+
+Red check (done), each restored and confirmed by an edit that applied: the mode not recorded: `RESULT PASS=202 FAIL=3` (the three rows that read a changed mode). The missing-name status made 0: `RESULT PASS=204 FAIL=1` (the missing row). The green run after both restores is `RESULT PASS=205 FAIL=0`.
