@@ -16,7 +16,8 @@ import { buildPages } from './build-pages.mjs';
 import { startFxStubGateway, FX_STUB_KEY } from './fx-stub-gateway.mjs';
 import { PAGE_HOST_TOOL_NAMES } from '../web/fx-host-tools.js';
 
-const FX_TUI_TOOLS = [...PAGE_HOST_TOOL_NAMES, 'shell'].sort();
+const PAGE_TOOLS = [...PAGE_HOST_TOOL_NAMES].sort();
+const FX_TUI_TOOLS = [...PAGE_TOOLS, 'shell'].sort();
 
 const reapBrowserTrees = (reason) => {
   const closed = closeBrowserTrees();
@@ -218,7 +219,7 @@ group('fx-builtin', async () => {
   const fxAsk = await terminal([['run', 'fx --version'], ['run', 'fx check'], ['run', 'fx ask hello'], ['run', 'which fx; command -v fx; type fx']], { initScript: fxInit });
   const askTools = [...new Set(fxStub.seen.flatMap((request) => request.tools))];
   await fxStub.close();
-  check(`fx ask advertises exactly the page host tools and the fx shell tool to the gateway: ${FX_TUI_TOOLS.join(', ')}`, JSON.stringify([...askTools].sort()) === JSON.stringify(FX_TUI_TOOLS), JSON.stringify(askTools));
+  check(`fx ask advertises exactly the page host tools to the gateway: ${PAGE_TOOLS.join(', ')}`, JSON.stringify([...askTools].sort()) === JSON.stringify(PAGE_TOOLS), JSON.stringify(askTools));
   check('fx ask hello reaches the stub gateway with the page key and prints its answer', fxAsk.out.includes('stub gateway answer: prompt=') && fxAsk.out.includes('Task: hello streaming=true authorized=true'), JSON.stringify(fxAsk.out.slice(-300)));
   const fxLines = fxAsk.out.split('\n');
   check('fx is a registered shell builtin: which and command -v print fx, and type says it is a shell builtin', fxLines.filter((line) => line === 'fx').length >= 2 && fxLines.includes('fx is a shell builtin'), JSON.stringify(fxLines.filter((line) => /fx/.test(line)).slice(0, 6)));
