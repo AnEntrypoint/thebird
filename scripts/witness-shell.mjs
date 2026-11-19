@@ -476,8 +476,8 @@ group('builtins: :, shift and set move and read the positional parameters', asyn
   check('builtins: a shift past the parameters fails with status 1 and is silent, as in bash', tooMany.stdout === 'rc=1\n' && tooMany.stderr === '', JSON.stringify(tooMany.stderr));
   const numeric = await run(sh, 'set -- a; shift x; echo rc=$?');
   check('builtins: a non-numeric shift count is an error with status 2', numeric.stdout === 'rc=2\n' && /numeric argument required/.test(numeric.stderr), JSON.stringify(numeric.stderr));
-  const unsupported = await run(sh, 'set -x; echo rc=$?');
-  check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -x/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
+  const unsupported = await run(sh, 'set -u; echo rc=$?');
+  check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -u/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
   const listed = await run(sh, 'v=1; set | grep "^v="');
   check('builtins: a bare set lists the shell variables', listed.stdout === 'v=1\n', JSON.stringify(listed.stdout));
 });
@@ -708,6 +708,41 @@ group('chmod: symbolic modes match the sandbox chmod, and octal modes still work
   check("chmod: a clause with no operator is refused with status 1", e3.stdout === "rc=1\n644\n" && e3.stderr === "chmod: invalid mode (u)\n", JSON.stringify([e3.stdout, e3.stderr]));
   const e4 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \",u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: an empty clause is refused with status 1", e4.stdout === "rc=1\n644\n" && e4.stderr === "chmod: invalid mode ()\n", JSON.stringify([e4.stdout, e4.stderr]));
+});
+
+group('set -x: tracing matches bash for simple commands, and the gaps are rows with their cause', async () => {
+  const xt0 = await run(await shell({}), "echo a; set -x; echo hi; set +x; echo b");
+  check("set -x: a simple command is traced with + and its expanded words", xt0.stdout === "a\nhi\nb\n" && xt0.stderr === "+ echo hi\n+ set +x\n", JSON.stringify([xt0.stdout, xt0.stderr]));
+  const xt1 = await run(await shell({}), "set -x; x=5; echo $x \"a b\" \"q\"; set +x");
+  check("set -x: an assignment is traced, then the command with the expanded variable", xt1.stdout === "5 a b q\n" && xt1.stderr === "+ x=5\n+ echo 5 'a b' q\n+ set +x\n", JSON.stringify([xt1.stdout, xt1.stderr]));
+  const xt2 = await run(await shell({}), "set -x; echo a | cat; set +x");
+  check("set -x: each stage of a pipeline is traced", xt2.stdout === "a\n" && xt2.stderr === "+ echo a\n+ cat\n+ set +x\n", JSON.stringify([xt2.stdout, xt2.stderr]));
+  const xt3 = await run(await shell({}), "f() { echo in; }; set -x; f; set +x");
+  check("set -x: a function call is traced, then the commands in its body", xt3.stdout === "in\n" && xt3.stderr === "+ f\n+ echo in\n+ set +x\n", JSON.stringify([xt3.stdout, xt3.stderr]));
+  const xt4 = await run(await shell({}), "set -x; if true; then echo y; fi; set +x");
+  check("set -x: the condition of an if is traced as a simple command", xt4.stdout === "y\n" && xt4.stderr === "+ true\n+ echo y\n+ set +x\n", JSON.stringify([xt4.stdout, xt4.stderr]));
+  const xt5 = await run(await shell({}), "set -x; echo ''; set +x");
+  check("set -x: an empty word is traced as two quotes", xt5.stdout === "\n" && xt5.stderr === "+ echo ''\n+ set +x\n", JSON.stringify([xt5.stdout, xt5.stderr]));
+  const xt6 = await run(await shell({}), "set -x; false; echo rc=$?; set +x");
+  check("set -x: a failing command is traced and the status is kept", xt6.stdout === "rc=1\n" && xt6.stderr === "+ false\n+ echo rc=1\n+ set +x\n", JSON.stringify([xt6.stdout, xt6.stderr]));
+  const xt7 = await run(await shell({}), "set -x; a=1 echo hi; set +x");
+  check("set -x: prefix assignments are traced on their own lines before the command", xt7.stdout === "hi\n" && xt7.stderr === "+ a=1\n+ echo hi\n+ set +x\n", JSON.stringify([xt7.stdout, xt7.stderr]));
+  const xt8 = await run(await shell({}), "set -x; x='a b'; echo x='a b'; y=\"it's\"; echo \"$y\"; set +x");
+  check("set -x: a value with a space or a quote is quoted, as bash quotes it", xt8.stdout === "x=a b\nit's\n" && xt8.stderr === "+ x='a b'\n+ echo 'x=a b'\n+ y='it'\\''s'\n+ echo 'it'\\''s'\n+ set +x\n", JSON.stringify([xt8.stdout, xt8.stderr]));
+  const xt9 = await run(await shell({}), "set -x; a=1 b=2; set +x");
+  check("set -x: assignments with no command are traced one per line", xt9.stdout === "" && xt9.stderr === "+ a=1\n+ b=2\n+ set +x\n", JSON.stringify([xt9.stdout, xt9.stderr]));
+  const xt10 = await run(await shell({}), "set -x; e=; echo \"[$e]\"; set +x");
+  check("set -x: an empty assignment is traced with no quotes", xt10.stdout === "[]\n" && xt10.stderr === "+ e=\n+ echo '[]'\n+ set +x\n", JSON.stringify([xt10.stdout, xt10.stderr]));
+  const xt11 = await run(await shell({}), "set -ex; echo ee; set +ex");
+  check("set -ex: the combined letters -e and -x both take effect", xt11.stdout === "ee\n" && xt11.stderr === "+ echo ee\n+ set +ex\n", JSON.stringify([xt11.stdout, xt11.stderr]));
+  const xt12 = await run(await shell({}), "set -x; echo 'a\\b'; set +x");
+  check("set -x: a word with a backslash is single-quoted", xt12.stdout === "a\\b\n" && xt12.stderr === "+ echo 'a\\b'\n+ set +x\n", JSON.stringify([xt12.stdout, xt12.stderr]));
+  const xt13 = await run(await shell({}), "set -x; for i in 1 2; do echo $i; done; set +x");
+  check("set -x (gap, compound headers): a for-loop header is not traced, bash prints + for i in 1 2 before each pass; cause: the for executor emits no trace line", xt13.stdout === "1\n2\n" && xt13.stderr === "+ echo 1\n+ echo 2\n+ set +x\n", JSON.stringify([xt13.stdout, xt13.stderr]));
+  const xt14 = await run(await shell({}), "PS4='>> '; set -x; echo p; set +x");
+  check("set -x (gap, PS4): PS4 is not read, bash prints >> and this shell prints +; cause: the trace prefix is fixed", xt14.stdout === "p\n" && xt14.stderr === "+ echo p\n+ set +x\n", JSON.stringify([xt14.stdout, xt14.stderr]));
+  const xt15 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
+  check("set -x (gap, nested): a command substitution is traced at depth one, bash prints ++; cause: trace depth is not tracked through substitutions", xt15.stdout === "sub\n" && xt15.stderr === "+ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {

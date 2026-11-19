@@ -845,6 +845,20 @@ function contextDiff(a, b, width, headers) {
   return out;
 }
 
+const TRACE_SAFE = /^[\w@%+=:,./-]+$/;
+
+function traceWord(word) {
+  if (TRACE_SAFE.test(word)) return word;
+  return "'" + word.replaceAll("'", "'\\''") + "'";
+}
+
+function traceLines(assigned, argv) {
+  let text = '';
+  for (const [name, value] of assigned) text += '+ ' + name + '=' + (value === '' ? '' : traceWord(value)) + '\n';
+  if (argv.length) text += '+ ' + argv.map(traceWord).join(' ') + '\n';
+  return text;
+}
+
 class ExprFailure extends Error {}
 
 function exprEval(argv) {
@@ -1062,6 +1076,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const vars = new Map(saved?.vars ?? []);
   const exported = new Set(saved?.exported ?? []);
   let errexit = saved?.errexit ?? false;
+  let xtrace = saved?.xtrace ?? false;
   let errexitSuspended = 0;
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
   exported.add('PWD');
@@ -1756,8 +1771,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
           positional = argv.slice(i + 1);
           return ok('');
         }
-        if (!/^[-+]e+$/.test(argv[i])) return { code: 2, out: '', err: `set: unsupported option ${argv[i]}\n` };
-        errexit = argv[i][0] === '-';
+        if (!/^[-+][ex]+$/.test(argv[i])) return { code: 2, out: '', err: `set: unsupported option ${argv[i]}\n` };
+        for (const letter of argv[i].slice(1)) {
+          if (letter === 'e') errexit = argv[i][0] === '-';
+          else xtrace = argv[i][0] === '-';
+        }
       }
       return ok('');
     },
@@ -2084,14 +2102,16 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const argv = await expandWords(node.words, sink);
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
+    const trace = xtrace ? traceLines(assigned, argv) : '';
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
-      return ok('');
+      return { ...ok(''), err: trace };
     }
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
     for (const [name, value] of assigned) setVariable(name, value);
     try {
-      return await runCommand(node, argv, stdin, sink);
+      const result = await runCommand(node, argv, stdin, sink);
+      return { ...result, err: trace + result.err };
     } finally {
       for (const [name, value] of saved) {
         if (value === undefined) vars.delete(name);
@@ -2453,6 +2473,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid, errexit }),
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid, errexit, xtrace }),
   };
 }

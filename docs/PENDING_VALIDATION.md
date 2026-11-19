@@ -2769,3 +2769,19 @@ Red checks, on this tree: (1) precedence flattened, with `+` taking a bare opera
 
 Gap, recorded: `expr` does not implement `:` (regex match), `substr`, `index`, `match`, or the `length` form with more than one operand; those are refused as before (the unary form is unchanged).
 
+
+### Change set 30e: set -x tracing
+
+`set -x` (and `set +x`, and combined letters such as `-ex`) turns on a trace: before each simple command runs, its expanded words go to stderr as `+ ` followed by the words, one line per command. Prefix assignments are traced on their own lines, before the command; a bare assignment is traced one per line. A word that needs quoting is single-quoted, with an embedded quote written as `'\''`, and an assignment quotes only its value (`x='a b'`, `e=` with no quotes for an empty value). `set +x` is itself traced before it turns the trace off, as bash does, and `set -x` is not traced when it turns the trace on. The trace goes to stderr even when the command redirects its own stderr, because it is written by the simple-command runner before redirections apply. Other `set` options are still refused with status 2 (`set: unsupported option -u`).
+
+Reference: bash in the sandbox. The thirteen supported rows (group `set -x: tracing matches bash for simple commands`) take their expectations from `bash -c` output, stdout and stderr compared exactly.
+
+Gaps, with their cause, kept as rows that pin this shell's current output and name bash's output in the title:
+- Compound headers: a `for` header is not traced. bash prints `+ for i in 1 2` before each pass; this shell prints nothing for the header, because the for executor emits no trace line.
+- PS4: bash reads PS4 for the prefix (`>> `); this shell always prints `+ `, because the trace prefix is fixed and PS4 is not read.
+- Command substitution: bash prints the substitution's commands at depth two (`++ echo sub`); this shell prints them at depth one, because trace depth is not tracked through substitutions.
+
+Red checks, on this tree: (1) quoting removed: five rows red (the assignment-and-expansion row, the empty word, the space-and-quote value, the empty assignment, the backslash word). (2) `set +x` does not turn tracing off (`xtrace = true`): one row red, the first simple-command row. (3) assignments not traced (`traceLines([], argv)`): five rows red. Each restored by the reverse edit; the green run is `RESULT PASS=556 FAIL=0`.
+
+Also changed: the row `builtins: an unsupported set option is refused` now refuses `set -u`, since `-x` is supported. The unsupported-option refusal is still tested.
+
