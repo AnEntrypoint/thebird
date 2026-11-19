@@ -1256,6 +1256,17 @@ group("chmod through a symbolic link: every directory the lookup passes through 
   check("chmod -R without --dereference leaves a symlink whose target is in a directory without owner search alone, as GNU chmod does on Linux", lk11.stdout === "rc=0\n" && lk11.stderr === "", JSON.stringify([lk11.stdout, lk11.stderr]));
 });
 
+group("chmod through a link with .. resolves the link first, and the directory lookup needs owner search, as GNU chmod does on Linux", async () => {
+  const lk0 = await run(await shell({}), "mkdir d d/e && echo one > d/x && echo two > x && ln -s d/e lnk && chmod 600 lnk/../x; echo rc=$?; stat -c \"%a %n\" d/x x");
+  check("chmod through a link with .. changes the file the physical path names, as GNU chmod does on Linux", lk0.stdout === "rc=0\n600 d/x\n644 x\n" && lk0.stderr === "", JSON.stringify([lk0.stdout, lk0.stderr]));
+  const lk1 = await run(await shell({}), "mkdir d d/e && echo one > d/x && ln -s d/e lnk && chmod 600 lnk/..; echo rc=$?; stat -c \"%a %n\" d .");
+  check("chmod through a link with .. changes the directory the physical path names, as GNU chmod does on Linux", lk1.stdout === "rc=0\n600 d\n755 .\n" && lk1.stderr === "", JSON.stringify([lk1.stdout, lk1.stderr]));
+  const lk2 = await run(await shell({}), "mkdir d d/e && echo one > d/e/y && ln -s d/e lnk && chmod -vR 600 lnk/..; echo rc=$?; stat -c \"%a %n\" d");
+  check("chmod -vR through a link with .. reports the directory it cannot read once its mode removes the search it needs, as GNU chmod does on Linux", lk2.stdout === "mode of 'lnk/..' changed from 0755 (rwxr-xr-x) to 0600 (rw-------)\n'lnk/..' could not be accessed\nrc=1\n600 d\n" && lk2.stderr === "chmod: cannot read directory 'lnk/..': Permission denied\n", JSON.stringify([lk2.stdout, lk2.stderr]));
+  const lk3 = await run(await shell({}), "mkdir d d/e && echo one > d/x && chmod 000 d && ln -s d/e lnk; chmod 600 lnk/../x; echo rc=$?");
+  check("chmod through a link with .. into a directory without owner search is refused, as GNU chmod does on Linux", lk3.stdout === "rc=1\n" && lk3.stderr === "chmod: cannot access 'lnk/../x': Permission denied\n", JSON.stringify([lk3.stdout, lk3.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

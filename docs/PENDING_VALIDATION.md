@@ -3292,3 +3292,19 @@ Witness: group `chmod through a symbolic link: every directory the lookup passes
 Red checks, each restored and confirmed by a green run: (1) the walk not following links (`depth < 0`): 8 rows red (the link rows, and the operand rows that depend on a followed link). (2) the dereferencing child check removed: 2 rows red (the `--dereference` rows). (3) the operand check removed: 12 rows red (the 4 older operand rows and the link operand rows). The restored file matches its backup, and the green run gives `RESULT PASS=848 FAIL=0`.
 
 Gaps, recorded: `resolvePath` collapses `..` lexically before the link walk runs, so an operand such as `lnk/../x`, where `lnk` is a link, is resolved as `x` (POSIX resolves the link first). Absolute link targets are not witnessed. The shell's `stat` does not refuse a path through a blocked directory (GNU refuses it with `stat: cannot statx`), and the rows do not stat such a path.
+
+### Change set 30ah: chmod resolves a path with .. physically, after the links it passes through, as GNU chmod does on Linux
+
+Reference: GNU chmod (`/bin/gnuchmod`, 9.7) and GNU stat (`/bin/gnustat`) run as the sandbox identity `abc` under LC_ALL=C, through PATH shims named `chmod` and `stat`. Rows are generated from GNU, each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU): with `lnk` a link to `d/e`, `chmod 600 lnk/../x` changes `d/x` and leaves the base's `x` at 644: the link is resolved before the `..`. `chmod 600 lnk/..` changes `d` (not the base). `chmod -vR 600 lnk/..` changes `d` to 0600, then fails with `chmod: cannot read directory 'lnk/..': Permission denied` (status 1) and the stdout line `'lnk/..' could not be accessed`: reaching `d/e` through `lnk` needs search on `d`, and the mode that was just set removed it. `chmod 600 lnk/../x` with `d` at 000 is refused with `cannot access 'lnk/../x': Permission denied`.
+
+What was wrong: `resolvePath` collapsed `..` lexically before the link walk, so `lnk/../x` named the base's `x`, and `lnk/..` named the base. Change set 30ag only walked the name as written.
+
+What changed in the shell: `searchedDirectories(path, followLast, depth)` takes a `followLast` flag. The operand loop works on the raw absolute name: `walk` (the last component followed) gives the operand's physical path and the directories its lookup needs; `named` (the last component not followed) is the literal link for `-h` and for the dangling-symlink message. The top-level operand of a recursive walk is passed with its raw name as `access`, and the walk refuses the listing with `cannot read directory` when a directory on that lookup path lacks owner search, which covers the change made to the operand itself. Nothing else changed; the diff is confined to chmod.
+
+Witness: group `chmod through a link with .. resolves the link first, and the directory lookup needs owner search, as GNU chmod does on Linux`, 4 rows from GNU. Last full run after the change: `RESULT PASS=852 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the operand taken lexically (`resolvePath(name)`) instead of physically: 4 rows red (both physical-path rows, the recursive row, and the refused row). (2) the top-level access check removed from the walk: 1 row red (the `-vR lnk/..` row). The restored file matches its backup, and the green run gives `RESULT PASS=852 FAIL=0`.
+
+Gaps, recorded: `stat` with a path that has `..` after a link is not probed here, and the rows do not stat such a path. Absolute link targets are not witnessed, as in 30ag.

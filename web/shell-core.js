@@ -1972,7 +1972,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
       if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
       const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
-      const searchedDirectories = (path, depth = 0) => {
+      const searchedDirectories = (path, followLast = true, depth = 0) => {
         const parts = path.split('/').filter((part) => part !== '' && part !== '.');
         const searched = [];
         let current = '/';
@@ -1983,9 +1983,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
             continue;
           }
           const candidate = (current === '/' ? '' : current) + '/' + parts[i];
-          if (host.lstat(candidate)?.link && depth < 40) {
+          if (host.lstat(candidate)?.link && depth < 40 && (followLast || i < parts.length - 1)) {
             const target = host.readlink(candidate);
-            const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, depth + 1);
+            const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, true, depth + 1);
             searched.push(...inner.searched);
             current = inner.real;
           } else current = candidate;
@@ -2016,13 +2016,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         return current;
       };
       let walked = new Set();
-      const visit = (path, shown) => {
+      const visit = (path, shown, access = null) => {
         const seen = walked.has(path);
         walked.add(path);
         const { before, after } = changeOne(path);
         out += report(shown, before, after);
         if (seen || !recursive || host.stat(path)?.dir !== true) return;
-        if (!(ownerBits(path) & 4)) {
+        if (!(ownerBits(path) & 4) || (access !== null && searchedDirectories(access).searched.some((dir) => !(ownerBits(dir) & 1)))) {
           err += "chmod: cannot read directory '" + shown + "': Permission denied\n";
           code = 1;
           if (verbose) out += "'" + shown + "' could not be accessed\n";
@@ -2049,19 +2049,22 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       };
       for (const name of names) {
-        if (blockedAncestor(resolvePath(name))) {
+        const rawPath = name.startsWith('/') ? name : state.cwd + '/' + name;
+        const walk = searchedDirectories(rawPath, true);
+        const named = searchedDirectories(rawPath, false).real;
+        if (walk.searched.some((dir) => !(ownerBits(dir) & 1))) {
           if (verbose) out += "'" + name + "' could not be accessed\n";
           err += "chmod: cannot access '" + name + "': Permission denied\n";
           code = 1;
-        } else if (noDereference && host.lstat(resolvePath(name))?.link) {
+        } else if (noDereference && host.lstat(named)?.link) {
           if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
-        } else if (!statInfo(referentOf(resolvePath(name)))) {
+        } else if (!statInfo(walk.real)) {
           if (verbose) out += "'" + name + "' could not be accessed\n";
-          err += host.lstat(resolvePath(name))?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";
+          err += host.lstat(named)?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";
           code = 1;
         } else {
           walked = new Set();
-          visit(referentOf(resolvePath(name)), name);
+          visit(walk.real, name, rawPath);
         }
       }
       return { code, out, err };
