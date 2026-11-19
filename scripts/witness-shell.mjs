@@ -1370,6 +1370,33 @@ group("stat -c %N: a control character, a non-ASCII byte and a double quote are 
   check("stat -c %N quotes a name with a double quote and no apostrophe, as GNU stat does on Linux", gr14.stdout === "'x\"y'\nrc=0\n" && gr14.stderr === "", JSON.stringify([gr14.stdout, gr14.stderr]));
 });
 
+group("stat -c %N: a name with a control character or a non-ASCII byte and a quote is quoted as GNU stat quotes it in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"it's\tx\" && stat -c \"%N\" \"it's\tx\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe with a tab, as GNU stat does on Linux", gr0.stdout === "'it'\\''s'$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > 'x\"\ty' && stat -c \"%N\" 'x\"\ty'; echo rc=$?");
+  check("stat -c %N quotes a double quote with a tab, as GNU stat does on Linux", gr1.stdout === "'x\"'$'\\t''y'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "echo a > \"café's\" && stat -c \"%N\" \"café's\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe with a non-ASCII character, as GNU stat does on Linux", gr2.stdout === "'caf'$'\\303\\251'\\''s'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "echo a > \"it's \\\"é\\\"\" && stat -c \"%N\" \"it's \\\"é\\\"\"; echo rc=$?");
+  check("stat -c %N quotes a name with both quote kinds and a non-ASCII character, as GNU stat does on Linux", gr3.stdout === "'it'\\''s \"'$'\\303\\251''\"'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "echo a > 'x\"é' && stat -c \"%N\" 'x\"é'; echo rc=$?");
+  check("stat -c %N quotes a double quote with a non-ASCII character, as GNU stat does on Linux", gr4.stdout === "'x\"'$'\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "echo a > f && ln -s f \"l'\tk\" && stat -c \"%N\" \"l'\tk\"; echo rc=$?");
+  check("stat -c %N quotes a symbolic link whose name has an apostrophe and a tab, as GNU stat does on Linux", gr5.stdout === "'l'\\'''$'\\t''k' -> 'f'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "echo a > \"f'\tg\" && ln -s \"f'\tg\" lk && stat -c \"%N\" lk; echo rc=$?");
+  check("stat -c %N quotes a symbolic link whose target has an apostrophe and a tab, as GNU stat does on Linux", gr6.stdout === "'lk' -> 'f'\\'''$'\\t''g'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+});
+
+group("stat -c %N: a name that starts with an apostrophe before a control character is quoted as GNU stat quotes it in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"'\tx\" && stat -c \"%N\" \"'\tx\"; echo rc=$?");
+  check("stat -c %N quotes a name that starts with an apostrophe before a tab, as GNU stat does on Linux", gr0.stdout === "''\\'''$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+});
+
+group("stat -c %N: a name that starts with a tab is quoted as GNU stat quotes it in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"\tx\" && stat -c \"%N\" \"\tx\"; echo rc=$?");
+  check("stat -c %N quotes a name that starts with a tab, as GNU stat does on Linux", gr0.stdout === "''$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

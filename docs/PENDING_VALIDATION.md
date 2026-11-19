@@ -3400,3 +3400,25 @@ Witness: group `stat -c %N: a control character, a non-ASCII byte and a double q
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the named-escape map emptied: 7 rows red (tab, newline, BEL, BS, FF, CR, VT), `RESULT PASS=889 FAIL=7`. (2) the both-quotes branch removed: 1 row red, `RESULT PASS=895 FAIL=1`. (3) the split narrowed to control characters only: 2 rows red (the two non-ASCII rows), `RESULT PASS=894 FAIL=2`. A narrower check, the BEL key alone removed from the map, also gave 1 red row; (1) is the stronger check.
 
 Gaps, recorded: a name that has a control character or a non-ASCII byte together with a quote is not probed. Its output is not claimed; the plain runs are single-quoted, so an apostrophe inside them is not escaped there. The UTF-8 locales are not claimed (see the superseded probes above). The default stat output without `-c` is not witnessed.
+
+### Change set 30am: stat -c %N quotes a control character or non-ASCII byte together with a quote in one pass, as GNU stat does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) under LC_ALL=C as the sandbox identity `abc`, through a PATH shim named `stat`. Rows are generated from GNU with the real bytes of each name: the generator passes the JavaScript string to `sh`. Each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU, real bytes), with the quoted form GNU printed:
+- An apostrophe in a run with a tab: `'it'\''s'$'\t''x'`. A run that ends in an apostrophe, before a tab: `'l'\'''$'\t''k'` (a link name), and `'f'\'''$'\t''g'` (a link target).
+- An apostrophe after a non-ASCII byte is written without an opening quote: `'caf'$'\303\251'\''s'`.
+- A double quote in a run with a non-ASCII byte: `'it'\''s "'$'\303\251''"'`.
+- A name that starts with an apostrophe before a tab: `''\'''$'\t''x'`. A name that starts with a tab: `''$'\t''x'`.
+
+Rule: one pass over the name, with one flag for whether a single-quoted run is open. The name starts with a run open (the first quote is written first). An apostrophe inside an open run is written as `'\''`; outside, as `\'`. A control or non-ASCII character closes an open run, and is written as `$'...'` (named escapes for the seven named controls, octal bytes otherwise). Any other character opens a run when none is open. The run is closed at the end.
+
+Earlier state, corrected here: 92ee97c wrapped each plain run of a control-character name in single quotes without the apostrophe rule, so an apostrophe next to a control character was printed wrong (for example `'it's'$'\t''x'`). No witness row covered it, since 92ee97c had no quote together with a control character. This change set corrects the output and adds the rows.
+
+What changed in the shell: the control and non-ASCII branch of `quoteName` is the one pass above. The branch for names with no such character is unchanged.
+
+Witness: three groups, 9 rows from GNU. Seven rows: an apostrophe with a tab, a double quote with a tab, an apostrophe with a non-ASCII byte, both quote kinds with a non-ASCII byte, a double quote with a non-ASCII byte, a symbolic link whose name has an apostrophe and a tab, and a symbolic link whose target has an apostrophe and a tab. Then one row for a name that starts with an apostrophe before a tab, and one for a name that starts with a tab. Red during the work: 5 rows with the first form, 1 after the non-ASCII form, 2 after the leading-quote form, and 1 after the per-run form; each time the probed form was the target. Final: `RESULT PASS=905 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the flag starts closed (no opening quote at the start of the name): 2 rows red, the apostrophe-led name and the tab-led name, `RESULT PASS=903 FAIL=2`. (2) an apostrophe inside an open run written as a bare `\'`: 5 rows red, `RESULT PASS=900 FAIL=5`.
+
+Gaps, recorded: a name with a control character and a non-ASCII byte in the same name, a name that starts with a non-ASCII byte, and a name with a double quote next to a control character are not probed; no witness row claims them. The UTF-8 locales are not claimed. The default stat output without `-c` is not witnessed.

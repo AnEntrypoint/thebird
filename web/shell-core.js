@@ -1427,7 +1427,30 @@ const ansiEscape = (ch) => {
 };
 const quoteName = (text) => {
   const pieces = text.split(/([\x00-\x1f\x7f]|[^\x20-\x7e])/u);
-  if (pieces.length > 1) return pieces.map((piece, i) => (i % 2 ? "$'" + ansiEscape(piece) + "'" : piece === '' ? '' : "'" + piece + "'")).join('');
+  if (pieces.length > 1) {
+    let out = "'";
+    let inside = true;
+    pieces.forEach((piece, i) => {
+      if (i % 2) {
+        if (inside) out += "'";
+        inside = false;
+        out += "$'" + ansiEscape(piece) + "'";
+        return;
+      }
+      for (const ch of piece) {
+        if (ch === "'") {
+          out += inside ? "'\\''" : "\\'";
+        } else {
+          if (!inside) {
+            out += "'";
+            inside = true;
+          }
+          out += ch;
+        }
+      }
+    });
+    return inside ? out + "'" : out;
+  }
   if (text.includes("'") && text.includes('"')) return "'" + text.replace(/'/g, "'\\''") + "'";
   if (text.includes("'")) return '"' + text + '"';
   return "'" + text + "'";
