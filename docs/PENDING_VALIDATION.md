@@ -2264,3 +2264,13 @@ Docs (Phase A): AGENTS.md `Open, flaky` note corrected (see above); ARCHITECTURE
 Lints after the change: `npm run lint:architecture` `398 claims: 398 pass, 0 fail, 0 unverified`; `npm run lint:comments` 0 comments in repo-owned files.
 
 Not changed: `bin/thebird-relay.js` (mode change, not mine). Residuals are items 2 to 4 above.
+
+### Change set 5: pending timers on the monotonic clock (WASI clock)
+
+Change 9, `web/txiki-in-page.js:148` (Phase A): `createWasi` takes `now: () => Math.floor(monotonicMs())`. The shim's `clock_time_get` reads `now()` for every clock id, and libuv timers are driven by it, so a pending `setTimeout` no longer fires early after a forward wall-clock step. `Math.floor` is required: the shim converts with `BigInt(now())`, which throws on a fractional millisecond. The unit is still ms since the epoch, so `Date` values stay correct without a step. No C change, no wasm rebuild, the pin does not move.
+
+Witness row, `loops` group: a page init script steps `Date.now` by one hour 1.5 s in; a `tjs -e` run waits on a 4 s timer and is timed on the page's monotonic clock. Red on the previous code: `FAIL a pending timer keeps its 4 s due time across a forward wall-clock step … {"output":"timer-done\n","status":0,"elapsed":597.7}` (log `/tmp/loops-timer-red.log`). Green after Change 9: `PASS … {"output":"timer-done\n","status":0,"elapsed":4170.3}`, `loops` group `PASS 6 FAIL 0`, wall 15.2 s (log `/tmp/loops-timer-green.log`).
+
+Docs: ARCHITECTURE.md's clock sentence now names the WASI clock too. Residual from the ranked list, now closed: item 2 (engine timers on the wall clock). Still open: items 3 and 4 (witness and host-check `Date.now()` durations).
+
+Not changed: `bin/thebird-relay.js`.

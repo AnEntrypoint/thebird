@@ -918,6 +918,21 @@ group('loops', async () => {
     },
   });
   check('a wall-clock step during a tjs -e run does not cut it at the timeout: the run finishes with status 0', stepped.run?.status === 0 && /after-step/.test(stepped.run?.output ?? ''), JSON.stringify(stepped.run));
+  const timers = {};
+  await terminal([], {
+    initScript: "(() => { const real = Date.now.bind(Date); let offset = 0; Date.now = () => real() + offset; setTimeout(() => { offset = 3600000; }, 1500); })();",
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const txiki = await import(new URL('web/txiki-in-page.js', location.href).href);
+        const started = performance.now();
+        const run = await txiki.runTjs("await new Promise((done) => setTimeout(done, 4000)); console.log('timer-done');", '/workspace', { timeoutMs: 900000 });
+        globalThis.__timerRun = { ...run, elapsed: performance.now() - started };
+      })().catch((err) => { globalThis.__timerRun = { error: String(err.message ?? err) }; })`);
+      await waitFor('globalThis.__timerRun !== undefined', 120000);
+      timers.run = JSON.parse(await evaluate('JSON.stringify(globalThis.__timerRun)'));
+    },
+  });
+  check('a pending timer keeps its 4 s due time across a forward wall-clock step: it does not fire before 3.5 s of monotonic time', timers.run?.status === 0 && /timer-done/.test(timers.run?.output ?? '') && timers.run?.elapsed >= 3500, JSON.stringify(timers.run));
 });
 
 group('spin', async () => {

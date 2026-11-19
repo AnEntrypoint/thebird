@@ -145,7 +145,7 @@ function compiled() {
 async function instantiate() {
   const module = await compiled();
   const slot = { stdout: [], stderr: [], cwd: '/workspace', session: null, memory: null, exports: null };
-  const wasi = createWasi({ args: ['tjs'], stdout: (chunk) => slot.stdout.push(chunk), stderr: (chunk) => slot.stderr.push(chunk) });
+  const wasi = createWasi({ args: ['tjs'], stdout: (chunk) => slot.stdout.push(chunk), stderr: (chunk) => slot.stderr.push(chunk), now: () => Math.floor(monotonicMs()) });
   const bytesAt = (ptr, len) => new Uint8Array(slot.memory.buffer, ptr, len);
 let storage = null;
 const refreshStorage = () => {
