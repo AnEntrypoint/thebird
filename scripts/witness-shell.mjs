@@ -1421,6 +1421,32 @@ group("stat -c %N: an apostrophe after a non-ASCII character, at the end of a na
   check("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux", gr1.stdout === "''$'\\303\\251'\\'''\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
 });
 
+group("expr: an equivalence class of a non-Latin letter matches the letters of its class, and a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", async () => {
+  const gr0 = await run(await shell({}), "expr 'α' : '[[=α=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek letter matches the letter itself, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "expr 'ά' : '[[=α=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek letter matches its accented form, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "expr 'β' : '[[=α=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek letter does not match another Greek letter, as GNU expr does in a UTF-8 locale", gr2.stdout === "0\nrc=1\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "expr 'ω' : '[[=Ω=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek capital matches the small letter, as GNU expr does in a UTF-8 locale", gr3.stdout === "1\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "expr 'й' : '[[=и=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Cyrillic letter does not match its breve form, as GNU expr does in a UTF-8 locale", gr4.stdout === "0\nrc=1\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "expr 'ё' : '[[=е=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Cyrillic letter matches the diaeresis form, as GNU expr does in a UTF-8 locale", gr5.stdout === "1\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "expr 'ab' : '[[.ab.]]'; echo rc=$?");
+  check("expr: a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", gr6.stdout === "rc=2\n" && gr6.stderr === "expr: Invalid collation character\n", JSON.stringify([gr6.stdout, gr6.stderr]));
+  const gr7 = await run(await shell({}), "expr 'a' : '[[.a.]]'; echo rc=$?");
+  check("expr: a collating symbol of one letter inside a bracket matches that letter, as GNU expr does in a UTF-8 locale", gr7.stdout === "1\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+});
+
+group("expr: a breve above a Latin letter matches its base letter, as GNU expr does in a UTF-8 locale", async () => {
+  const gr0 = await run(await shell({}), "expr 'ă' : '[[=a=]]'; echo rc=$?");
+  check("expr: a Latin letter with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "expr 'ğ' : '[[=g=]]'; echo rc=$?");
+  check("expr: a Latin g with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

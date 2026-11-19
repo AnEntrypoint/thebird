@@ -3444,3 +3444,26 @@ Witness: 9 rows from GNU. Seven rows in the group `stat -c %N: a name with a non
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) adjacent escape characters each get their own $-segment (the merge removed): 4 rows red, `RESULT PASS=910 FAIL=4`. (2) an apostrophe after a $-segment written as a bare `\'` with no reopen: 5 rows red, `RESULT PASS=909 FAIL=5`.
 
 Gaps, recorded: three or more adjacent apostrophes next to escape characters are not probed. A name that contains both an apostrophe and a double quote with a non-ASCII character outside that run is covered only by the rows of 30al. The UTF-8 locales are not claimed. The default stat output without `-c` is not witnessed.
+
+### Change set 30ao: expr equivalence classes cover Greek and Cyrillic letters, a Cyrillic letter with a breve stands alone, and a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale
+
+Reference: GNU expr (`/bin/gnuexpr`, 9.7) under LC_ALL=en_US.UTF-8 as the sandbox identity `abc`, through a PATH shim named `expr`. Rows are generated from GNU with the real bytes of each argument; the generator passes the JavaScript string to `sh`.
+
+Probed first (GNU, en_US.UTF-8):
+- A Greek letter with an accent matches the plain letter's class: `expr 'ά' : '[[=α=]]'` prints 1. A Greek letter does not match another Greek letter: `expr 'β' : '[[=α=]]'` prints 0.
+- A Greek capital matches the small letter's class: `expr 'ω' : '[[=Ω=]]'` prints 1.
+- A Cyrillic letter with a diaeresis matches its plain letter: `expr 'ё' : '[[=е=]]'` prints 1. A Cyrillic letter with a breve does not match its base letter: `expr 'й' : '[[=и=]]'` prints 0.
+- A Latin letter with a breve matches its base letter: `expr 'ă' : '[[=a=]]'` and `expr 'ğ' : '[[=g=]]'` print 1.
+- A multi-character collating symbol is refused with status 2: `expr 'ab' : '[[.ab.]]'` prints nothing on stdout and `expr: Invalid collation character` on stderr. A one-letter collating symbol still matches its letter: `expr 'a' : '[[.a.]]'` prints 1.
+
+Two of my own titles for these rows were wrong before the probe (they said the Latin breve rows do not match, and that the Cyrillic breve row matches). The titles are corrected to match GNU; the expected values were generated from GNU and are unchanged.
+
+Rule: the equivalence base is unchanged for Latin and Greek letters (the first letter of the NFD form, with the stroked table for the Latin letters that do not decompose). The candidate search now also covers the Greek range U+0370–U+03FF and the Cyrillic range U+0400–U+04FF. A Cyrillic letter whose NFD form has a breve is its own letter, and matches only its own case. Any collating symbol that is not one character is refused with `Invalid collation character` and status 2. The earlier message for a multi-character `.` symbol, `equivalence classes and collating symbols are not supported`, was not GNU's; it is replaced.
+
+What changed in the shell: `equivalenceBase` returns the letter itself for a Cyrillic letter with a breve; `equivalenceItems` adds the two ranges; `collatingEnd` refuses any collating symbol that is not one character with the one message.
+
+Witness: two groups, 10 rows from GNU: 8 rows (Greek, Cyrillic, the multi-character symbol, the one-letter symbol) and 2 Latin breve rows. Before the change, 3 of the 8 failed (the accented Greek, the diaeresis and the multi-character symbol), and the breve rows failed under the first global breve rule; after the change, the full run is `RESULT PASS=924 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the Greek range removed: 1 row red, `RESULT PASS=923 FAIL=1`. (2) the Cyrillic breve condition removed, so every breve is its own letter, or none is: 2 rows red (the Latin breve rows), `RESULT PASS=922 FAIL=2`. (3) the old multi-character message restored: 2 rows red, `RESULT PASS=922 FAIL=2`. (4) the Cyrillic range removed: 1 row red (the diaeresis row), `RESULT PASS=923 FAIL=1`.
+
+Gaps, recorded: other Cyrillic letters with a breve (ў) are not probed; the rule for them is the same, but no witness row claims it. Greek letters outside U+0370–U+03FF (the Greek extended block) are not probed. Other scripts are not covered. Collating symbols that are one ASCII non-alphanumeric character are unchanged and unprobed by this change set.

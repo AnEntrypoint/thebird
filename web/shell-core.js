@@ -964,14 +964,16 @@ function characterClass(name) {
 const STROKED_BASE = { 'ø': 'o', 'ǿ': 'o', 'ſ': 's', 'ẛ': 's', 'ŀ': 'l', 'ł': 'l', 'ð': 'd', 'đ': 'd' };
 const equivalenceBase = (letter) => {
   const folded = letter.toLowerCase();
-  return STROKED_BASE[folded] ?? Array.from(folded.normalize('NFD'))[0];
+  const decomposed = Array.from(folded.normalize('NFD'));
+  if (decomposed.includes('\u0306') && /^[\u0400-\u04ff]/u.test(folded)) return folded;
+  return STROKED_BASE[folded] ?? decomposed[0];
 };
 const equivalenceClasses = new Map();
 const equivalenceItems = (letter) => {
   const base = equivalenceBase(letter);
   if (!equivalenceClasses.has(base)) {
     const members = new Set([base, base.toUpperCase()].filter((member) => Array.from(member).length === 1));
-    for (const [start, end] of [[0xc0, 0x24f], [0x1e00, 0x1eff]]) {
+    for (const [start, end] of [[0xc0, 0x24f], [0x370, 0x3ff], [0x400, 0x4ff], [0x1e00, 0x1eff]]) {
       for (let cp = start; cp <= end; cp++) {
         const candidate = String.fromCodePoint(cp);
         if (equivalenceBase(candidate) === base) members.add(candidate);
@@ -986,8 +988,7 @@ const collatingEnd = (pattern, start) => {
   const end = pattern.indexOf(kind + ']', start + 2);
   if (end < 0) throw new ExprFailure('Unmatched [, [^, [:, [., or [=');
   const symbol = Array.from(pattern.slice(start + 2, end));
-  if (kind === '=' && symbol.length !== 1) throw new ExprFailure('Invalid collation character');
-  if (kind === '.' && symbol.length !== 1) throw new ExprFailure('equivalence classes and collating symbols are not supported');
+  if (symbol.length !== 1) throw new ExprFailure('Invalid collation character');
   if (kind === '.' && !/^[A-Za-z0-9]$/.test(symbol[0])) throw new ExprFailure(symbol[0].codePointAt(0) > 127 ? 'Invalid collation character' : 'equivalence classes and collating symbols are not supported');
   return end + 2;
 };
