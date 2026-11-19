@@ -2292,3 +2292,7 @@ Not run in this pass: the full witness. The change sits under every engine timer
 ### Change set 6, item 4a: the shell abort row on the monotonic clock (Phase A)
 
 `scripts/witness-shell.mjs`: the Ctrl-C abort group (`sleep 30` ends within 2 s) measures its elapsed time with `performance.now()`, not `Date.now()`. Witness after the change: Phase B, below.
+
+### Change set 6, item 4b: the host-check wait on the monotonic clock (Phase A)
+
+`scripts/check-web-host.mjs`: `untilServed` (its 120 s deadline, which polls the site until it serves) takes its deadline and its loop test from `performance.now()`, not `Date.now()`. The cache-buster in `hostCheck=${Date.now()}` stays: it is a unique query string, not a timer. Witness after the change: Phase B, below.

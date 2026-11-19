@@ -34,9 +34,9 @@ const cli = (args) => command('bin/thebird-web-host.js', args);
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 const untilServed = async (url, { deadlineMs = 120000, attemptMs = 10000, everyMs = 500 } = {}) => {
-  const deadline = Date.now() + deadlineMs;
+  const deadline = performance.now() + deadlineMs;
   let last = { status: 0, error: 'not requested' };
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(attemptMs) });
       last = { status: response.status, error: '' };
