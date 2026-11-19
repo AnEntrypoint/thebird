@@ -3327,3 +3327,22 @@ Witness: group `stat and chmod: a lookup through a directory without owner searc
 Red checks, each restored and confirmed by a green run: (1) the stat lookup refusal replaced by `if (false)`: 6 rows red (the refused stat rows, including the two-operand and repeated-operand rows). (2) `.` dropped from the walk again: 2 rows red (`stat -c d/.` and `chmod 700 d/.`). (3) `stat` naming the lexical path again: 1 row red (`lnk/..` reports 755, not 750). The restored file matches its backup, and the green run gives `RESULT PASS=862 FAIL=0`.
 
 Gaps, recorded: `stat -L` (following the last link) is not implemented, and not probed. The default `stat` output (without `-c`) is not witnessed for a refused path; its rows use `-c` only. Absolute symbolic link targets are not witnessed, as in 30ag.
+
+### Change set 30aj: stat -L follows a symbolic link operand to its target, and refuses a dangling target or one behind a directory without owner search, as GNU stat does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) run as the sandbox identity `abc` under LC_ALL=C, through a PATH shim named `stat`. Rows are generated from GNU, each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU):
+- `stat -L -c "%a %n" lk` (`lk` a link to a file at 600) prints `600 lk`; without `-L` the same link prints `777 lk`, the link itself.
+- A chain of two links is followed to the end: `lk2` to `lk` to a file at 640 prints `640 lk2`.
+- `stat -L -c "%F %n"` reports the target's type: `directory dl2` for a link to a directory, `regular file lk` for a link to a file.
+- A dangling link with `-L` is refused: `stat: cannot statx 'dl': No such file or directory`, status 1.
+- A link whose target is in a directory without owner search is refused with `-L`: `stat: cannot statx 'lk': Permission denied`, status 1.
+
+What changed in the shell: `stat` reads `-L` as `follow`, drops it from the operands, and passes `follow` as the `followLast` flag of the same walk (`searchedDirectories`) that change set 30ai added. A dangling target gives the existing `No such file or directory` message through `statInfo` on the physical target; a blocked target gives the existing `cannot statx ... Permission denied` message. Without `-L` the behaviour is unchanged.
+
+Witness: group `stat -L: a symbolic link operand is followed to its target, and a dangling or blocked target is refused, as GNU stat does on Linux`, 8 rows from GNU (the four `-L` rows above, the non-`-L` row for the same link, the plain-and-link pair, the file type of a link, and the directory type). Last full run after the change: `RESULT PASS=870 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) `follow` not passed to the walk (always the literal link): 7 rows red (every `-L` row that follows a link). (2) `-L` not removed from the operands: 7 rows red (every `-L` row, which now reports `-L` as a missing operand). The restored file matches its backup, and the green run gives `RESULT PASS=870 FAIL=0`.
+
+Gaps, recorded: `stat -L` with `-c` and `%N` (the quoted link name and target, which GNU prints) is not implemented and not probed. Absolute symbolic link targets are not witnessed, as in 30ag. The default `stat` output (without `-c`) is not witnessed for `-L`.

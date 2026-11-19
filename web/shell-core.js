@@ -2073,13 +2073,14 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     stat: ({ argv }) => {
       const flagAt = argv.indexOf('-c');
       const format = flagAt >= 0 ? argv[flagAt + 1] ?? '' : null;
-      const names = flagAt >= 0 ? argv.filter((arg, i) => i !== flagAt && i !== flagAt + 1) : argv;
+      const follow = argv.includes('-L');
+      const names = (flagAt >= 0 ? argv.filter((arg, i) => i !== flagAt && i !== flagAt + 1) : argv).filter((arg) => arg !== '-L');
       if (!names.length) return { code: 1, out: '', err: 'stat: missing operand\n' };
       let out = '';
       let err = '';
       let code = 0;
       for (const name of names) {
-        const walk = searchedDirectories(name.startsWith('/') ? name : state.cwd + '/' + name, false);
+        const walk = searchedDirectories(name.startsWith('/') ? name : state.cwd + '/' + name, follow);
         if (walk.searched.some((dir) => !(ownerBits(dir) & 1))) {
           err += "stat: cannot statx '" + name + "': Permission denied\n";
           code = 1;

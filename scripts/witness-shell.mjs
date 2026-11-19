@@ -1293,6 +1293,25 @@ group("stat -c: a dot-dot after a symbolic link names the physical directory, as
   check("stat -c with a dot-dot after a directory symbolic link reports the directory the physical path names, as GNU stat does on Linux", sq0.stdout === "750 lnk/..\nrc=0\n" && sq0.stderr === "", JSON.stringify([sq0.stdout, sq0.stderr]));
 });
 
+group("stat -L: a symbolic link operand is followed to its target, and a dangling or blocked target is refused, as GNU stat does on Linux", async () => {
+  const gr0 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" lk; echo rc=$?");
+  check("stat -L -c reports the target of a file symbolic link, as GNU stat does on Linux", gr0.stdout === "600 lk\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -c \"%a %n\" lk; echo rc=$?");
+  check("stat -c without -L reports a symbolic link as the link, as GNU stat does on Linux", gr1.stdout === "777 lk\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "ln -s nope dl && stat -L -c \"%a %n\" dl; echo rc=$?");
+  check("stat -L -c refuses a dangling symbolic link, as GNU stat does on Linux", gr2.stdout === "rc=1\n" && gr2.stderr === "stat: cannot statx 'dl': No such file or directory\n", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a lk && chmod 000 d && stat -L -c \"%a %n\" lk; echo rc=$?");
+  check("stat -L -c refuses a symbolic link whose target is in a directory without owner search, as GNU stat does on Linux", gr3.stdout === "rc=1\n" && gr3.stderr === "stat: cannot statx 'lk': Permission denied\n", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "echo a > f && chmod 640 f && ln -s f lk && ln -s lk lk2 && stat -L -c \"%a %n\" lk2; echo rc=$?");
+  check("stat -L -c follows a chain of symbolic links to its end, as GNU stat does on Linux", gr4.stdout === "640 lk2\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "mkdir sub && ln -s sub dl2 && stat -L -c \"%F %n\" dl2; echo rc=$?");
+  check("stat -L -c reports the type of a symbolic link to a directory as directory, as GNU stat does on Linux", gr5.stdout === "directory dl2\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" f lk; echo rc=$?");
+  check("stat -L -c reports a plain file and a link to it together, as GNU stat does on Linux", gr6.stdout === "600 f\n600 lk\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  const gr7 = await run(await shell({}), "echo a > f && ln -s f lk && stat -L -c \"%F %n\" lk; echo rc=$?");
+  check("stat -L -c reports the type of a symbolic link to a regular file, as GNU stat does on Linux", gr7.stdout === "regular file lk\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));
