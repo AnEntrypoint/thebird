@@ -792,6 +792,17 @@ group('basename and dirname: basename gives the last name, dirname the directory
   check('dirname: no operand gives a message and status 1', noneDir.stdout === 'rc=1\n' && noneDir.stderr.includes('dirname: missing operand'), JSON.stringify(noneDir.stderr));
 });
 
+group('loops: a for loop yields per item, so timeoutMs stops a long for loop', async () => {
+  const sh = await shell({});
+  const started = Date.now();
+  const long = await run(sh, 'for i in {1..100000}; do :; done', { timeoutMs: 300 });
+  const elapsed = Date.now() - started;
+  check('loops: a for over a large list is stopped by timeoutMs with exit 124', long.exitCode === 124, 'exit ' + long.exitCode);
+  check('loops: the stop comes at the timeout, not after the whole list', elapsed < 5000, elapsed + ' ms');
+  const short = await run(sh, 'for i in 1 2 3; do echo $i; done');
+  check('loops: a short for loop still runs every item', short.stdout === '1\n2\n3\n', JSON.stringify(short.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

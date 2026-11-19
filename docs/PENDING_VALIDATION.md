@@ -2532,3 +2532,13 @@ Both commands are one witness group, so they are one commit.
 `scripts/witness-shell.mjs`: group `basename and dirname: basename gives the last name, dirname the directory part`, 11 rows: the last part of a path (`c.txt`); a suffix argument (`c`); trailing slashes and the root, and a suffix equal to the whole name kept (`b`, `/`, `name.txt`); `-s` over two names (`x`, `y`); `-a` (`q`, `s`); no operand (status 1, the message); the directory part (`/a/b`); a bare name, a top-level name and the root (`.`, `/`, `/`); trailing slashes and leading slashes kept (`a`, `//a`); two arguments give two lines (`/a`, `/`); no operand for dirname (status 1, the message). The values were checked against GNU.
 
 Red check (done), each restored and confirmed by an edit that applied: the root case of basename made empty: `RESULT PASS=256 FAIL=1` (the trailing-slash row). The top-level dirname case made empty: `RESULT PASS=255 FAIL=2` (the bare-name row and the two-argument row). The suffix guard removed: `RESULT PASS=256 FAIL=1` (the trailing-slash row, through the equal-name case). The green run after all three restores is `RESULT PASS=257 FAIL=0`.
+
+### Change set 26, E5: a for loop yields per item (Phase A)
+
+`web/shell-core.js`: `yieldTurn` (a `setTimeout(0)` promise, shared with the `while` loop) runs at the top of each item of `runFor`, so `timeoutMs` can fire during a long `for` loop and stop it with exit 124. `runWhile` now uses the same helper.
+
+Measured cost (this is the trade-off, not a fault in the witness): a `for` loop over 2000 items took 56 ms before this change and 2726 ms after; over 20000 items, 247 ms before and 26945 ms after. Each yield is a timer tick (Node clamps `setTimeout(0)` to about 1 ms, and browsers clamp it to 4 ms after nesting), so every item costs about 1.3 ms. The `while` loop already pays this cost per iteration (change set 7). A time-sliced yield (yield only after about 5 ms of work) would keep the stop and remove most of the cost; that is not done here, because the design was to yield once per item.
+
+`scripts/witness-shell.mjs`: group `loops: a for loop yields per item, so timeoutMs stops a long for loop`, 3 rows: a for over 100000 items is stopped at timeoutMs 300 with exit 124; the stop comes within 5000 ms, not after the whole list; a short for loop still runs every item (`1 2 3`).
+
+Red check (done), restored and confirmed by an edit that applied: the yield removed from runFor: `RESULT PASS=259 FAIL=1`, the long-loop row red with exit 0 (the loop completed). The restore is confirmed (`yieldTurn` appears in two places again), and the green run is `RESULT PASS=260 FAIL=0`.

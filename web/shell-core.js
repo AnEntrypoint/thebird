@@ -473,6 +473,7 @@ const linesOf = (text) => {
   if (lines.at(-1) === '') lines.pop();
   return lines;
 };
+const yieldTurn = () => new Promise((done) => setTimeout(done, 0));
 const joinLines = (lines) => lines.map((line) => line + '\n').join('');
 function argsOf(argv, valued) {
   const flags = new Map();
@@ -2010,6 +2011,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     loopDepth++;
     try {
       for (const value of values) {
+        await yieldTurn();
         setVariable(node.name, value);
         try {
           code = await runSequence(node.body, stdin, inner);
@@ -2048,7 +2050,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     loopDepth++;
     try {
       for (;;) {
-        await new Promise((done) => setTimeout(done, 0));
+        await yieldTurn();
         const status = await runSequence(node.cond, stdin, inner);
         if ((status === 0) === node.negate) break;
         try {
