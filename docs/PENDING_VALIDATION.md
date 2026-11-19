@@ -3247,3 +3247,15 @@ Witness: group `stat -c: the owner and group names are the shell identity, as GN
 Red checks, each restored and confirmed by a green run: (1) `%G` returns a different name: 3 rows red. (2) `%U` returns a different name: 3 rows red. The restored file matches its backup, and the green run gives `RESULT PASS=836 FAIL=0`.
 
 Gaps, recorded: `%u`, `%g`, `%G` for a group other than the identity's, and the other stat formats of GNU, are not implemented here.
+
+### Change set 30af: the chmod -R walk order is closed: the shell keeps sorted order, and no witness can pin GNU's readdir order
+
+Decision: closed with no code change. The shell visits each directory's entries in sorted order, and that order stays.
+
+Why: GNU chmod -R visits entries in the order readdir returns them, which the file system and the host decide. Probed on this host (GNU, LC_ALL=C, as the identity abc), a directory made by creating `zeta mu alpha beta gamma delta` and then `sub` (holding `q` and `b`) is walked as `mu alpha zeta sub gamma delta beta`: neither sorted nor creation order. A different host, file system or mount can give another order, so a row that pins GNU's order passes only where it was generated. No witness can pin readdir order across hosts.
+
+What the rows do instead: the rows that cover the walk compare sorted output (the `sort` in the 30m, 30o and 30v fixtures), so they check which entries are changed and reported, not the order in which they are reached. The sorted order is the shell's own order and is not claimed to match GNU's.
+
+Witness: none added, because no code changed. The existing sorted-output rows in 30m, 30o and 30v cover the entries, and the last full run is `RESULT PASS=836 FAIL=0`.
+
+Gap, recorded as closed: the order of reports and errors from a recursive chmod on a host other than the one probed is not claimed.
