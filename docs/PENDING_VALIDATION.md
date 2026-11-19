@@ -2860,3 +2860,12 @@ Also found while closing this: `break` was not traced, because the trace was att
 
 Gap, recorded: none for the for header itself. The `set -x` `++` depth inside command substitution is the next item (30i).
 
+
+### Change set 30i: set -x adds a + per command substitution level
+
+The trace prefix repeats the first character of PS4 once for each command-substitution level plus one, then the rest of PS4: `+ ` at the top level, `++ ` inside one substitution, `+++ ` inside two, and `>>> ` for PS4 `>> ` inside one. A subshell `( )` is not a substitution and adds no level. The depth is counted in `commandText`, so the commands inside `$(...)` (including a function called there) and the for header are traced at the depth of their substitution, and the outer command is traced at its own depth.
+
+Reference: bash in the sandbox. Seven rows in group `set -x: a command substitution adds a + to the trace prefix, as bash does` take bash's output as their expectation, and one guard row (the subshell) passes before and after. The old gap row `set -x (gap, nested)` pinned the depth-one output; it now asserts bash's `++ echo sub` and is renamed `set -x: a command substitution is traced at ++, as bash does`.
+
+Red checks, on this tree: (1) depth ignored in the prefix (`repeat(substDepth + 1)` replaced by one `+`): eight rows red. (2) depth never counted (the increment and decrement removed): eight rows red. Each restored by the reverse edit. Note: the second restore first failed, because its sabotage text was empty and could not be reversed by edit; the two lines were put back by hand in `commandText` and checked with a green run (`RESULT PASS=572 FAIL=0`), and the grep for `substDepth` now shows the increment, the decrement, the counter and the prefix.
+

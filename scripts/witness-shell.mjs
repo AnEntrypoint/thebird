@@ -744,7 +744,7 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   const xt15 = await run(await shell({}), "PS4=''; set -x; echo p; set +x");
   check("set -x: an empty PS4 gives no text before each trace line, as bash does", xt15.stdout === "p\n" && xt15.stderr === "echo p\nset +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
   const xt16 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
-  check("set -x (gap, nested): a command substitution is traced at depth one, bash prints ++; cause: trace depth is not tracked through substitutions", xt16.stdout === "sub\n" && xt16.stderr === "+ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
+  check("set -x: a command substitution is traced at ++, as bash does", xt16.stdout === "sub\n" && xt16.stderr === "++ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
 });
 
 group('set -x: a for loop traces its header before each pass, as bash does', async () => {
@@ -762,6 +762,25 @@ group('set -x: a for loop traces its header before each pass, as bash does', asy
   check("set -x: a for with an empty list runs no pass and prints no header", fh5.stdout === "" && fh5.stderr === "+ set +x\n", JSON.stringify([fh5.stdout, fh5.stderr]));
   const fh6 = await run(await shell({}), "set -x; for i in 1 2; do for j in x; do echo $i$j; done; done; set +x");
   check("set -x: nested for loops print each header before its own passes", fh6.stdout === "1x\n2x\n" && fh6.stderr === "+ for i in 1 2\n+ for j in x\n+ echo 1x\n+ for i in 1 2\n+ for j in x\n+ echo 2x\n+ set +x\n", JSON.stringify([fh6.stdout, fh6.stderr]));
+});
+
+group('set -x: a command substitution adds a + to the trace prefix, as bash does', async () => {
+  const sd0 = await run(await shell({}), "set -x; x=$(echo a); set +x");
+  check("set -x: a command substitution is traced one level deeper, with ++ before its commands", sd0.stdout === "" && sd0.stderr === "++ echo a\n+ x=a\n+ set +x\n", JSON.stringify([sd0.stdout, sd0.stderr]));
+  const sd1 = await run(await shell({}), "set -x; echo $(echo $(echo a)); set +x");
+  check("set -x: nested command substitutions are traced at +++ and ++", sd1.stdout === "a\n" && sd1.stderr === "+++ echo a\n++ echo a\n+ echo a\n+ set +x\n", JSON.stringify([sd1.stdout, sd1.stderr]));
+  const sd2 = await run(await shell({}), "PS4='>> '; set -x; echo $(echo a); set +x");
+  check("set -x: PS4 repeats its first character for each substitution level", sd2.stdout === "a\n" && sd2.stderr === ">>> echo a\n>> echo a\n>> set +x\n", JSON.stringify([sd2.stdout, sd2.stderr]));
+  const sd3 = await run(await shell({}), "set -x; echo \"$(echo a)\" \"$(echo b)\"; set +x");
+  check("set -x: two command substitutions in one command are each traced at ++", sd3.stdout === "a b\n" && sd3.stderr === "++ echo a\n++ echo b\n+ echo a b\n+ set +x\n", JSON.stringify([sd3.stdout, sd3.stderr]));
+  const sd4 = await run(await shell({}), "f() { echo in; }; set -x; echo $(f); set +x");
+  check("set -x: a function called in a substitution is traced at ++, with its body at ++", sd4.stdout === "in\n" && sd4.stderr === "++ f\n++ echo in\n+ echo in\n+ set +x\n", JSON.stringify([sd4.stdout, sd4.stderr]));
+  const sd5 = await run(await shell({}), "set -x; if [ \"$(echo a)\" = a ]; then echo y; fi; set +x");
+  check("set -x: a substitution in an if condition is traced at ++, and the if test at +", sd5.stdout === "y\n" && sd5.stderr === "++ echo a\n+ '[' a = a ']'\n+ echo y\n+ set +x\n", JSON.stringify([sd5.stdout, sd5.stderr]));
+  const sd6 = await run(await shell({}), "set -x; for i in $(echo a b); do echo $i; done; set +x");
+  check("set -x: a substitution in a for list is traced before the for header", sd6.stdout === "a\nb\n" && sd6.stderr === "++ echo a b\n+ for i in $(echo a b)\n+ echo a\n+ for i in $(echo a b)\n+ echo b\n+ set +x\n", JSON.stringify([sd6.stdout, sd6.stderr]));
+  const sd7 = await run(await shell({}), "set -x; ( echo sub ); set +x");
+  check("set -x: a subshell is not a substitution, so its commands are traced at +", sd7.stdout === "sub\n" && sd7.stderr === "+ echo sub\n+ set +x\n", JSON.stringify([sd7.stdout, sd7.stderr]));
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {

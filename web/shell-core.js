@@ -1082,6 +1082,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const exported = new Set(saved?.exported ?? []);
   let errexit = saved?.errexit ?? false;
   let xtrace = saved?.xtrace ?? false;
+  let substDepth = 0;
+  const tracePrefix = () => {
+    const ps4 = vars.get('PS4') ?? '+ ';
+    return ps4 === '' ? '' : ps4[0].repeat(substDepth + 1) + ps4.slice(1);
+  };
   let errexitSuspended = 0;
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
   exported.add('PWD');
@@ -1982,10 +1987,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
 
   async function commandText(src, sink) {
     const sub = { out: '', err: '', signal: sink.signal };
+    substDepth++;
     try {
       await runSequence(parseScript(src), '', sub);
     } catch (err) {
       if (!(err instanceof ShellExit)) throw err;
+    } finally {
+      substDepth--;
     }
     sink.err += sub.err;
     return sub.out.replace(/\n+$/, '');
@@ -2109,7 +2117,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const argv = await expandWords(node.words, sink);
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
-    const trace = xtrace ? traceLines(assigned, argv, vars.get('PS4') ?? '+ ') : '';
+    const trace = xtrace ? traceLines(assigned, argv, tracePrefix()) : '';
     sink.err += trace;
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
@@ -2307,7 +2315,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const value of values) {
         await yieldTurn();
         setVariable(node.name, value);
-        if (xtrace) inner.err += '+ for ' + node.name + ' in ' + (node.wordText ? node.wordText.join(' ') : '"$@"') + '\n';
+        if (xtrace) inner.err += tracePrefix() + 'for ' + node.name + ' in ' + (node.wordText ? node.wordText.join(' ') : '"$@"') + '\n';
         try {
           code = await runSequence(node.body, stdin, inner);
         } catch (err) {
