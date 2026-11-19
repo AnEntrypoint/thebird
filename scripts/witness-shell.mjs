@@ -605,6 +605,25 @@ group('env: env and printenv show only the exported variables', async () => {
   check('env: running a command is refused with status 125', command.stdout === 'rc=125\n' && command.stderr.includes('running a command is not supported'), JSON.stringify(command.stderr));
 });
 
+group('stat: stat reports the name, size, type and mode of a file', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /st');
+  const fields = await run(sh, 'echo hello > /st/f; stat -c "%n %s %F" /st/f');
+  check('stat: -c reports the name, size and type', fields.stdout === '/st/f 6 regular file\n', JSON.stringify(fields.stdout));
+  const dir = await run(sh, 'mkdir /st/d; stat -c "%F %a" /st/d');
+  check('stat: a directory is a directory with mode 755 by default', dir.stdout === 'directory 755\n', JSON.stringify(dir.stdout));
+  const mode = await run(sh, 'echo x > /st/g; stat -c %a /st/g');
+  check('stat: a file is 644 by default', mode.stdout === '644\n', JSON.stringify(mode.stdout));
+  const missing = await run(sh, 'stat /st/none; echo rc=$?');
+  check('stat: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes("stat: cannot statx '/st/none': No such file or directory"), JSON.stringify(missing.stderr));
+  const link = await run(sh, 'echo x > /st/t; ln -s /st/t /st/l; stat -c %F /st/l');
+  check('stat: a symbolic link is reported as itself', link.stdout === 'symbolic link\n', JSON.stringify(link.stdout));
+  const plain = await run(sh, 'echo hi > /st/h; stat /st/h');
+  check('stat: with no -c it prints the file, size and type', plain.stdout === '  File: /st/h\n  Size: 3\n  Type: regular file\n', JSON.stringify(plain.stdout));
+  const percent = await run(sh, 'echo x > /st/p; stat -c "%s%%" /st/p');
+  check('stat: %% in the format is one percent sign', percent.stdout === '2%\n', JSON.stringify(percent.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

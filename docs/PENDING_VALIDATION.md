@@ -2446,3 +2446,13 @@ Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends i
 `scripts/witness-shell.mjs`: group `env: env and printenv show only the exported variables`, 7 rows: env lists an exported variable and not a plain one (`A=1`); a name exported before it is set is listed with its value (`C=3`); printenv of a plain variable prints nothing and exits 1; printenv of an exported variable prints it (`2`, then status 0); printenv takes several names (`1`, `2`); an assignment on env is added to the listing (`Y=3`, `Z=4`); env with a command exits 125 with the message.
 
 Red check (done), each restored and confirmed by an edit that applied: the listing made to include every variable: `RESULT PASS=185 FAIL=1` (the plain-variable row). printenv never printing: `RESULT PASS=184 FAIL=2`. export not recording the name: `RESULT PASS=181 FAIL=5`. The green run after all three restores is `RESULT PASS=186 FAIL=0`.
+
+### Change set 17, E4b: stat (Phase A)
+
+`web/shell-core.js`: `statInfo` gives a type (`regular file`, `directory`, `symbolic link`), a size and a mode for a path, without following a link. The mode comes from a `modes` map, which the snapshot keeps; the default is 644 for a file and 755 for a directory, and 777 for a link. `stat -c FORMAT` expands `%n` (the name as given), `%s` (size), `%F` (type), `%a` (mode in octal) and `%%`; any other `%x` is kept as written. With no `-c` it prints the name, the size and the type, on three lines. A missing file gives `stat: cannot statx` with the name in quotes and status 1.
+
+Known gaps: the default output is a short form, not the full GNU layout (no blocks, no access or modify times); `%` codes beyond those listed are not expanded; `stat -f` (file system) is not supported.
+
+`scripts/witness-shell.mjs`: group `stat: stat reports the name, size, type and mode of a file`, 7 rows: `-c` name, size and type (`/st/f 6 regular file`); a directory is 755 by default; a file is 644 by default; a missing file gives the message and status 1; a symbolic link is reported as itself (`symbolic link`); with no `-c` the three-line form; `%%` (`2%`).
+
+Red check (done), each restored and confirmed by an edit that applied: the size made to 0: `RESULT PASS=190 FAIL=3` (the three size rows). The missing-file status made 0: `RESULT PASS=192 FAIL=1` (the missing-file row). The default mode made 000: `RESULT PASS=191 FAIL=2` (the two mode rows). The green run after all three restores is `RESULT PASS=193 FAIL=0`.

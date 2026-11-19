@@ -675,6 +675,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
   const vars = new Map(saved?.vars ?? []);
   const exported = new Set(saved?.exported ?? []);
+  const modes = new Map(saved?.modes ?? []);
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
   const jobs = new Map();
@@ -684,6 +685,24 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const frames = [];
   let positional = [];
   let loopDepth = 0;
+
+  const statInfo = (path) => {
+    const link = host.lstat(path);
+    if (!link && !host.stat(path)) return null;
+    if (link?.link) return { type: 'symbolic link', size: link.size ?? 0, mode: modes.get(path) ?? '777' };
+    const info = host.stat(path);
+    const dir = info?.dir === true;
+    return { type: dir ? 'directory' : 'regular file', size: info?.size ?? 0, mode: modes.get(path) ?? (dir ? '755' : '644') };
+  };
+
+  const expandStat = (format, name, info) => format.replace(/%(.)/g, (whole, code) => {
+    if (code === 'n') return name;
+    if (code === 's') return String(info.size);
+    if (code === 'F') return info.type;
+    if (code === 'a') return info.mode;
+    if (code === '%') return '%';
+    return whole;
+  });
 
   const environmentLines = (extra) => {
     const entries = new Map([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)]));
@@ -1073,6 +1092,24 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
+    },
+    stat: ({ argv }) => {
+      const flagAt = argv.indexOf('-c');
+      const format = flagAt >= 0 ? argv[flagAt + 1] ?? '' : null;
+      const names = flagAt >= 0 ? argv.filter((arg, i) => i !== flagAt && i !== flagAt + 1) : argv;
+      if (!names.length) return { code: 1, out: '', err: 'stat: missing operand\n' };
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const name of names) {
+        const info = statInfo(resolvePath(name));
+        if (!info) {
+          err += "stat: cannot statx '" + name + "': No such file or directory\n";
+          code = 1;
+        } else if (format === null) out += '  File: ' + name + '\n  Size: ' + info.size + '\n  Type: ' + info.type + '\n';
+        else out += expandStat(format, name, info) + '\n';
+      }
+      return { code, out, err };
     },
     env: ({ argv }) => {
       const assigns = new Map();
@@ -1790,6 +1827,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], functions: [...functions], nextPid, lastPid }),
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid }),
   };
 }
