@@ -3183,3 +3183,10 @@ Gate: `vmstat 1 2`, last line: swap-in 9068 KB/s and swap-out 55492 KB/s. Both a
 
 Local commits not pushed: `e7f87cc`, `cc686c4`, `29ad0d8`, and this record. The witness at `29ad0d8` last ran green at `RESULT PASS=779 FAIL=0`, in the Phase A run before the gate was read.
 
+
+### Phase B gate reading, closed: change sets 30y to 30z, second reading
+
+Gate: `vmstat 1 2`, last line, at 20:51: swap-in 2464 KB/s and swap-out 0 KB/s. Swap-in is above the 1000 KB/s limit, so the gate was closed. Phase B did not run: no `npm run check`, no `npm run witness:shell` pass for Phase B, no runaway-row run, and no push. The remote stays at `581b3b2`.
+
+Local commits not pushed: `e7f87cc`, `cc686c4`, `29ad0d8`, `0420049`, and this record.
+
