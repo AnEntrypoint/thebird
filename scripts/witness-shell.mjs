@@ -786,7 +786,56 @@ group('expr: equivalence classes and collating symbols of one character match it
   const eq3 = await run(await shell({}), "expr e : '[^[=e=]]'; echo rc=$?");
   check("expr: a negated equivalence class does not match its own character", eq3.stdout === "0\nrc=1\n" && eq3.stderr === "", JSON.stringify([eq3.stdout, eq3.stderr]));
   const eq4 = await run(await shell({}), "expr 'é' : '[[=e=]]'; echo rc=$?");
-  check("expr: an equivalence class does not match an accented letter in the C locale", eq4.stdout === "0\nrc=1\n" && eq4.stderr === "", JSON.stringify([eq4.stdout, eq4.stderr]));
+  check("expr: an equivalence class matches an accented letter with its base letter, as GNU expr does in a UTF-8 locale", eq4.stdout === "1\nrc=0\n" && eq4.stderr === "", JSON.stringify([eq4.stdout, eq4.stderr]));
+});
+
+group("expr: an equivalence class matches the accented letters of its base letter, and a collating symbol of one is refused, as GNU expr does in a UTF-8 locale", async () => {
+  const eu1 = await run(await shell({}), "expr 'E' : '[[=e=]]'; echo rc=$?");
+  check("expr: an equivalence class matches the base letter in upper case, and an upper-case class matches a lower-case letter", eu1.stdout === "1\nrc=0\n" && eu1.stderr === "", JSON.stringify([eu1.stdout, eu1.stderr]));
+  const eu2 = await run(await shell({}), "expr 'e' : '[[=E=]]'; echo rc=$?");
+  check("expr: an upper-case equivalence class matches a lower-case letter", eu2.stdout === "1\nrc=0\n" && eu2.stderr === "", JSON.stringify([eu2.stdout, eu2.stderr]));
+  const eu3 = await run(await shell({}), "expr 'É' : '[[=e=]]'; echo rc=$?");
+  check("expr: an upper-case accented letter matches the base letter's class", eu3.stdout === "1\nrc=0\n" && eu3.stderr === "", JSON.stringify([eu3.stdout, eu3.stderr]));
+  const eu4 = await run(await shell({}), "expr 'ẽ' : '[[=e=]]'; echo rc=$?");
+  check("expr: a tilde and a macron above a letter match its base letter's class", eu4.stdout === "1\nrc=0\n" && eu4.stderr === "", JSON.stringify([eu4.stdout, eu4.stderr]));
+  const eu5 = await run(await shell({}), "expr 'ḗ' : '[[=e=]]'; echo rc=$?");
+  check("expr: a macron with an acute accent matches the base letter's class", eu5.stdout === "1\nrc=0\n" && eu5.stderr === "", JSON.stringify([eu5.stdout, eu5.stderr]));
+  const eu6 = await run(await shell({}), "expr 'é' : '[[=é=]]'; echo rc=$?");
+  check("expr: an accented letter matches its own equivalence class", eu6.stdout === "1\nrc=0\n" && eu6.stderr === "", JSON.stringify([eu6.stdout, eu6.stderr]));
+  const eu7 = await run(await shell({}), "expr 'e' : '[[=é=]]'; echo rc=$?");
+  check("expr: a base letter matches the equivalence class of an accented letter", eu7.stdout === "1\nrc=0\n" && eu7.stderr === "", JSON.stringify([eu7.stdout, eu7.stderr]));
+  const eu8 = await run(await shell({}), "expr 'é' : '[[=E=]]'; echo rc=$?");
+  check("expr: an accented letter matches an upper-case base class", eu8.stdout === "1\nrc=0\n" && eu8.stderr === "", JSON.stringify([eu8.stdout, eu8.stderr]));
+  const eu9 = await run(await shell({}), "expr 'é' : '[^[=e=]]'; echo rc=$?");
+  check("expr: a negated equivalence class excludes an accented letter of its base", eu9.stdout === "0\nrc=1\n" && eu9.stderr === "", JSON.stringify([eu9.stdout, eu9.stderr]));
+  const eu10 = await run(await shell({}), "expr 'x' : '[^[=e=]]'; echo rc=$?");
+  check("expr: a negated equivalence class matches a letter outside its base", eu10.stdout === "1\nrc=0\n" && eu10.stderr === "", JSON.stringify([eu10.stdout, eu10.stderr]));
+  const eu11 = await run(await shell({}), "expr 'eé' : '[[=e=]]*'; echo rc=$?");
+  check("expr: an equivalence class with a repeat counts accented letters of its base", eu11.stdout === "2\nrc=0\n" && eu11.stderr === "", JSON.stringify([eu11.stdout, eu11.stderr]));
+  const eu12 = await run(await shell({}), "expr 'é' : '[[=e=]x]'; echo rc=$?");
+  check("expr: an equivalence class with another character in the bracket matches both", eu12.stdout === "1\nrc=0\n" && eu12.stderr === "", JSON.stringify([eu12.stdout, eu12.stderr]));
+  const eu13 = await run(await shell({}), "expr 'x' : '[[=e=]x]'; echo rc=$?");
+  check("expr: an equivalence class with another character in the bracket matches that character", eu13.stdout === "1\nrc=0\n" && eu13.stderr === "", JSON.stringify([eu13.stdout, eu13.stderr]));
+  const eu14 = await run(await shell({}), "expr 'é' : '[[=e=][x]]'; echo rc=$?");
+  check("expr: a bracket with an equivalence class and a bracket inside ends at the first close bracket", eu14.stdout === "0\nrc=1\n" && eu14.stderr === "", JSON.stringify([eu14.stdout, eu14.stderr]));
+  const eu15 = await run(await shell({}), "expr 'é]' : '[[=e=][x]]'; echo rc=$?");
+  check("expr: a bracket with an equivalence class and a bracket inside matches the bracket and the close bracket after it", eu15.stdout === "2\nrc=0\n" && eu15.stderr === "", JSON.stringify([eu15.stdout, eu15.stderr]));
+  const eu16 = await run(await shell({}), "expr '-' : '[[=-=]]'; echo rc=$?");
+  check("expr: a hyphen as an equivalence class matches itself", eu16.stdout === "1\nrc=0\n" && eu16.stderr === "", JSON.stringify([eu16.stdout, eu16.stderr]));
+  const eu17 = await run(await shell({}), "expr 'ø' : '[[=o=]]'; echo rc=$?");
+  check("expr: an o with a stroke matches the base letter o's class, as GNU expr does", eu17.stdout === "1\nrc=0\n" && eu17.stderr === "", JSON.stringify([eu17.stdout, eu17.stderr]));
+  const eu18 = await run(await shell({}), "expr 'ł' : '[[=l=]]'; echo rc=$?");
+  check("expr: an l with a stroke matches the base letter l's class, as GNU expr does", eu18.stdout === "1\nrc=0\n" && eu18.stderr === "", JSON.stringify([eu18.stdout, eu18.stderr]));
+  const eu19 = await run(await shell({}), "expr 'ß' : '[[=s=]]'; echo rc=$?");
+  check("expr: a sharp s does not match the base letter s's class, as GNU expr does", eu19.stdout === "0\nrc=1\n" && eu19.stderr === "", JSON.stringify([eu19.stdout, eu19.stderr]));
+  const eu20 = await run(await shell({}), "expr 'é' : '[[.é.]]'; echo rc=$?");
+  check("expr: a collating symbol of an accented letter is refused with status 2", eu20.stdout === "rc=2\n" && eu20.stderr === "expr: Invalid collation character\n", JSON.stringify([eu20.stdout, eu20.stderr]));
+  const eu21 = await run(await shell({}), "expr 'é' : '[[.e.]]'; echo rc=$?");
+  check("expr: a collating symbol of a base letter matches the accented letter's base, as GNU expr does", eu21.stdout === "0\nrc=1\n" && eu21.stderr === "", JSON.stringify([eu21.stdout, eu21.stderr]));
+  const eu22 = await run(await shell({}), "expr 'é' : '[[=ab=]]'; echo rc=$?");
+  check("expr: an equivalence class of two characters is refused with status 2", eu22.stdout === "rc=2\n" && eu22.stderr === "expr: Invalid collation character\n", JSON.stringify([eu22.stdout, eu22.stderr]));
+  const eu23 = await run(await shell({}), "expr 'e' : '[[=é=]x]'; echo rc=$?");
+  check("expr: an equivalence class with a class after it matches the class's letter", eu23.stdout === "1\nrc=0\n" && eu23.stderr === "", JSON.stringify([eu23.stdout, eu23.stderr]));
 });
 
 group('redirects: a compound command sends its output and takes its input through its redirects, as bash and dash do', async () => {

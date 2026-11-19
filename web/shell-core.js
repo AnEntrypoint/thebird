@@ -960,8 +960,37 @@ function characterClass(name) {
   return CHARACTER_CLASSES[name];
 }
 
+const STROKED_BASE = { 'ø': 'o', 'ǿ': 'o', 'ſ': 's', 'ẛ': 's', 'ŀ': 'l', 'ł': 'l', 'ð': 'd', 'đ': 'd' };
+const equivalenceBase = (letter) => {
+  const folded = letter.toLowerCase();
+  return STROKED_BASE[folded] ?? Array.from(folded.normalize('NFD'))[0];
+};
+const equivalenceClasses = new Map();
+const equivalenceItems = (letter) => {
+  const base = equivalenceBase(letter);
+  if (!equivalenceClasses.has(base)) {
+    const members = new Set([base, base.toUpperCase()].filter((member) => Array.from(member).length === 1));
+    for (const [start, end] of [[0xc0, 0x24f], [0x1e00, 0x1eff]]) {
+      for (let cp = start; cp <= end; cp++) {
+        const candidate = String.fromCodePoint(cp);
+        if (equivalenceBase(candidate) === base) members.add(candidate);
+      }
+    }
+    equivalenceClasses.set(base, [...members].map((member) => '\\u{' + member.codePointAt(0).toString(16) + '}').join(''));
+  }
+  return equivalenceClasses.get(base);
+};
+const collatingEnd = (pattern, start) => {
+  const kind = pattern[start + 1];
+  const end = pattern.indexOf(kind + ']', start + 2);
+  if (end < 0) throw new ExprFailure('Unmatched [, [^, [:, [., or [=');
+  const symbol = Array.from(pattern.slice(start + 2, end));
+  if (kind === '=' && symbol.length !== 1) throw new ExprFailure('Invalid collation character');
+  if (kind === '.' && symbol.length !== 1) throw new ExprFailure('equivalence classes and collating symbols are not supported');
+  if (kind === '.' && !/^[A-Za-z0-9]$/.test(symbol[0])) throw new ExprFailure(symbol[0].codePointAt(0) > 127 ? 'Invalid collation character' : 'equivalence classes and collating symbols are not supported');
+  return end + 2;
+};
 function breToJs(pattern) {
-  pattern = pattern.replace(/\[([=.])([A-Za-z0-9])\1\]/g, '$2');
   let out = '';
   let groups = 0;
   let depth = 0;
@@ -1015,14 +1044,14 @@ function breToJs(pattern) {
       if (pattern[j] === '^') j++;
       if (pattern[j] === ']') j++;
       while (j < pattern.length && pattern[j] !== ']') {
-        if (pattern.startsWith('[=', j) || pattern.startsWith('[.', j)) throw new ExprFailure('equivalence classes and collating symbols are not supported');
-        if (pattern.startsWith('[:', j) && pattern.includes(':]', j + 2)) j = pattern.indexOf(':]', j + 2) + 2;
+        if (pattern.startsWith('[=', j) || pattern.startsWith('[.', j)) j = collatingEnd(pattern, j);
+        else if (pattern.startsWith('[:', j) && pattern.includes(':]', j + 2)) j = pattern.indexOf(':]', j + 2) + 2;
         else j++;
       }
       if (j >= pattern.length) throw new ExprFailure('Unmatched [, [^, [:, [., or [=');
       const body = pattern.slice(i + 1, j);
       const negate = body.startsWith('^');
-      const items = (negate ? body.slice(1) : body).replace(/\\/g, '\\\\').replace(/\[:(\w+):\]/g, (_, name) => characterClass(name)).replace(/^\]/, '\\]');
+      const items = (negate ? body.slice(1) : body).replace(/\\/g, '\\\\').replace(/\[=(.)=\]/gu, (_, letter) => equivalenceItems(letter)).replace(/\[\.([A-Za-z0-9])\.\]/g, '$1').replace(/\[:(\w+):\]/g, (_, name) => characterClass(name)).replace(/^\]/, '\\]');
       out += '[' + (negate ? '^' : '') + items + ']';
       i = j;
       atStart = false;

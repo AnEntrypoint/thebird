@@ -3014,7 +3014,7 @@ Witness: group `expr: equivalence classes and collating symbols of one character
 
 Red check, restored and confirmed by a green run: with the rewrite line removed, 5 rows go red, all with the refusal message. That is the expected failure, since the refusal path is the one the rewrite replaces.
 
-Gaps, recorded: under `en_US.UTF-8`, GNU matches accented letters with their base letter (`é` matches `[[=e=]]`, measured as 1), and this shell does not, because no collation table is kept. Multi-character equivalence classes (`[=ab=]`) and non-alphanumeric collating symbols are still refused.
+Gaps, recorded: under `en_US.UTF-8`, GNU matches accented letters with their base letter (`é` matches `[[=e=]]`, measured as 1), and this shell does not, because no collation table is kept. Closed by change set 30ac. Multi-character equivalence classes (`[=ab=]`) and non-alphanumeric collating symbols are still refused.
 
 
 ### Phase B record: change sets 30p to 30r
@@ -3203,3 +3203,19 @@ Witness: group `LINENO: a multi-line substitution numbers each command by the fi
 Red checks, each restored and confirmed by a green run: (1) the substitution flag set to `false`: 10 rows red (the newline rule is not applied). (2) the first-word rule replaced by the first token's start line: 4 rows red (the assignment rows, whose first word ends on a later line). The restored file matches its backup, and the green run gives `RESULT PASS=797 FAIL=0`.
 
 Gaps, recorded: none known for `LINENO` in a substitution. The rule is taken from the probes above; a shape not in those probes is not claimed.
+
+### Change set 30ac: an equivalence class matches the accented letters of its base letter, as GNU expr does in a UTF-8 locale
+
+Reference: GNU expr (`/bin/gnuexpr`, 9.7) under `LC_ALL=en_US.UTF-8`, the locale the browser reports and the one this sandbox uses. Rows were generated from GNU through a PATH shim named `expr` (so the program name in stderr is `expr`), not from memory.
+
+Probed first: under en_US.UTF-8, `[[=e=]]` matches `e`, `E`, `é`, `É`, `è`, `ê`, `ë`, `ē`, `ẽ`, `ḗ`, and `[[=E=]]` matches `e` and `é`. A negated class excludes every member. `[[=e=]x]` matches the class and `x`. `[[=e=][x]]` closes at the first `]` after `[x`, so `é]` matches two characters and `é` alone does not. `[[=-=]]` and `[[=1=]]` match themselves. `[[=ab=]]` and `[[.é.]]` are refused with `Invalid collation character` and status 2, while `[[.e.]]` matches `e`. A scan of U+00C0–U+024F and U+1E00–U+1EFF against 16 base letters found the membership equal to the NFD base letter, case-insensitively, except for 14 letters that do not decompose: `Ø ø Ǿ ǿ` (o), `ſ ẛ` (s), `Ŀ ŀ Ł ł` (l) and `Ð ð Đ đ` (d). `ß` is not a member of `s`.
+
+What changed in the shell: the pre-pass that turned `[=c=]` into `c` for an ASCII letter or digit is removed. In a bracket body, `[=c=]` expands to every member of its class, as `\u{…}` code points, and `[.c.]` for an ASCII letter or digit is the character itself. `equivalenceBase` takes the lower-case NFD base letter, with `STROKED_BASE` for the 14 non-decomposing letters. `equivalenceItems` builds each class once, from the two ranges above. `collatingEnd` skips a `[=…=]` or `[.…​.]` in the bracket scanner, and refuses a multi-character `[=…=]` and a non-ASCII `[.…​.]` with GNU's wording.
+
+Locale: the shell has no locale model, and the other expr rows (length, substr, match, 30u and 30j) already count characters as UTF-8. Equivalence now follows that. One C-locale row changes: `expr 'é' : '[[=e=]]'` was 0 under the C locale (30r, `an equivalence class does not match an accented letter in the C locale`); it is now 1 under UTF-8, and the row is renamed. The other 30r rows are ASCII and unchanged.
+
+Witness: group `expr: an equivalence class matches the accented letters of its base letter, and a collating symbol of one is refused, as GNU expr does in a UTF-8 locale`, 23 rows from GNU, plus the renamed row. Last full run after the change: `RESULT PASS=820 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the stroked-letter table removed: 2 rows red (`ø`, `ł`). (2) the class members limited to the base letter itself: 12 rows red (every accented-letter class row and the bracket rows that depend on them). (3) the non-ASCII collating-symbol refusal removed: 1 row red (`[[.é.]]`, which then reads as the unsupported message). The restored file matches its backup, and the green run gives `RESULT PASS=820 FAIL=0`.
+
+Gaps, recorded: letters outside the two ranges (Latin Extended-C and -D, for example U+2C60 and U+A720) are not in the classes, and were not probed. A multi-character collating symbol `[.ab.]` is still refused as not supported, not probed against GNU. The 14 stroked and long letters are the only non-decomposing members found by the probe; other such letters were not checked.
