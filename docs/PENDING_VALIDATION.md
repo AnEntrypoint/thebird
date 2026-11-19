@@ -2990,3 +2990,16 @@ Red checks, each restored and confirmed by a green run: (1) the pre-check remove
 
 Gaps, recorded: the check covers the redirects of a simple command only; a redirect on an `if`, `for`, `while`, `case`, or group is not checked. dash's `&>` is not POSIX and was not used as a reference; this shell keeps its own `&>` behaviour. The message prefix is this shell's name, where dash prints `sh: 1:`.
 
+
+### Change set 30q: expr length, substr and index count characters, as GNU expr does in a UTF-8 locale
+
+Reference: GNU expr (`/bin/gnuexpr`, 9.7) under `LC_ALL=en_US.UTF-8`, the locale of this sandbox, with the rows generated from its output (`/tmp/gen-exprlen.mjs`). Probed: `expr length 'a😀é'` is 3 under UTF-8 and 7 under C (bytes); `expr substr 'a😀é' 3 5` gives `é`; `expr index 'a😀é' 'é'` is 3, so the astral character is one position. The earlier expr rows of change set 30j were generated under `LC_ALL=C`, where the two readings agree for ASCII, and they are unchanged.
+
+What was wrong: `length`, `substr` and `index` used JavaScript string indexes, which count UTF-16 units, so a character outside the Basic Multilingual Plane counted as two. What changed: each now works on `Array.from(text)`, the code points.
+
+Witness: group `expr: length, substr and index count characters in a UTF-8 locale, as GNU expr does`, 7 rows from GNU, with `RESULT PASS=683 FAIL=0` after the change.
+
+Red checks, each restored and confirmed by a green run: (1) `length` back to UTF-16 units: 1 row red (`expr length 'a😀é'`, which gave 4). (2) `substr` back to UTF-16 units: 2 rows red (both astral-character substr rows, which split the surrogate pair). `index` uses the same code-point array as `substr` and no separate sabotage was run for it.
+
+Gaps, recorded: `:` and `match` still match in UTF-16 units (`.` in the JavaScript regex is one unit), so a pattern that consumes an astral character reports a different length than GNU's. The `:` and `match` operators with astral characters are not covered by a row.
+

@@ -759,6 +759,23 @@ group('redirects: an output into a missing directory is refused before the comma
   check("redirects: an output into /dev/null still works next to a missing directory check, as dash does", rd3.stdout === "rc=0\n" && rd3.stderr === "", JSON.stringify([rd3.stdout, rd3.stderr]));
 });
 
+group('expr: length, substr and index count characters in a UTF-8 locale, as GNU expr does', async () => {
+  const ex0 = await run(await shell({}), "expr length 'a😀é'; echo rc=$?");
+  check("expr length counts characters in a UTF-8 locale, not UTF-16 units, as GNU expr does", ex0.stdout === "3\nrc=0\n" && ex0.stderr === "", JSON.stringify([ex0.stdout, ex0.stderr]));
+  const ex1 = await run(await shell({}), "expr length 'héllo'; echo rc=$?");
+  check("expr length counts a two-byte letter as one character", ex1.stdout === "5\nrc=0\n" && ex1.stderr === "", JSON.stringify([ex1.stdout, ex1.stderr]));
+  const ex2 = await run(await shell({}), "expr length 'abc'; echo rc=$?");
+  check("expr length of ASCII is unchanged", ex2.stdout === "3\nrc=0\n" && ex2.stderr === "", JSON.stringify([ex2.stdout, ex2.stderr]));
+  const ex3 = await run(await shell({}), "expr substr 'a😀é' 2 1; echo rc=$?");
+  check("expr substr takes characters, so a character outside the BMP is one", ex3.stdout === "😀\nrc=0\n" && ex3.stderr === "", JSON.stringify([ex3.stdout, ex3.stderr]));
+  const ex4 = await run(await shell({}), "expr substr 'a😀é' 3 5; echo rc=$?");
+  check("expr substr after an astral character starts at the next character", ex4.stdout === "é\nrc=0\n" && ex4.stderr === "", JSON.stringify([ex4.stdout, ex4.stderr]));
+  const ex5 = await run(await shell({}), "expr index 'a😀é' 'é'; echo rc=$?");
+  check("expr index counts characters, so an accented letter is at position 3", ex5.stdout === "3\nrc=0\n" && ex5.stderr === "", JSON.stringify([ex5.stdout, ex5.stderr]));
+  const ex6 = await run(await shell({}), "expr index 'a😀é' '😀'; echo rc=$?");
+  check("expr index of an astral character is at position 2", ex6.stdout === "2\nrc=0\n" && ex6.stderr === "", JSON.stringify([ex6.stdout, ex6.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));

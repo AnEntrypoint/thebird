@@ -1023,20 +1023,22 @@ function exprEval(argv) {
   };
   const indexOfChars = (text, chars) => {
     if (!chars.length) return '0';
-    for (let i = 0; i < text.length; i++) if (chars.includes(text[i])) return String(i + 1);
+    const points = Array.from(text);
+    for (let i = 0; i < points.length; i++) if (chars.includes(points[i])) return String(i + 1);
     return '0';
   };
   const substring = (text, start, length) => {
     const from = isInt(start) ? Number(start) : 0;
     const count = isInt(length) ? Number(length) : 0;
-    if (from < 1 || from > text.length || count <= 0) return '';
-    return text.slice(from - 1, from - 1 + count);
+    const points = Array.from(text);
+    if (from < 1 || from > points.length || count <= 0) return '';
+    return points.slice(from - 1, from - 1 + count).join('');
   };
   const primary = () => {
     if (pos >= argv.length) fail("syntax error: missing argument after '" + argv[pos - 1] + "'");
     const token = argv[pos++];
     if (token === ')') fail("syntax error: unexpected argument ')'");
-    if (token === 'length') return String(take().length);
+    if (token === 'length') return String(Array.from(take()).length);
     if (token === 'index') {
       const text = take();
       return indexOfChars(text, take());
