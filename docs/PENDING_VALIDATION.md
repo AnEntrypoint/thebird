@@ -2341,3 +2341,10 @@ Held:
 `scripts/witness-shell.mjs`: group `loops` with 4 rows: `while` repeats while the condition is 0 (`w0 w1 w2`); a false `while` never runs its body and exits 0 (`after`); `until` repeats until the condition is 0 (`u0 u1`); an endless `while` ends at its `timeoutMs` with exit 124 and `timed out`.
 
 Witness, Phase A, under the swap gate (`GATE_OPEN try=1 si=516 so=0 KB/s`): `node scripts/witness-shell.mjs` `RESULT PASS=112 FAIL=0`, wall 782 ms, exit 0 (log `/tmp/ws-gate-a.log`). The earlier 108 rows are unchanged and pass.
+
+### Phase B for change set 7 (`a6d02d9`)
+
+Swap gate: `GATE_OPEN try=1 si=324 so=0 KB/s`, read immediately before the job.
+Build check: `npm run check` exit 0, wall 345 ms (log `/tmp/pb7-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=112 FAIL=0`, exit 0, wall 797 ms (log `/tmp/pb7-shell.log`). The four `loops` rows pass: `w0 w1 w2`; a false `while` runs no body and prints `after` with exit 0; `until` prints `u0 u1`; the endless `while true; do true; done` is stopped at its 200 ms `timeoutMs` with exit 124.
+Not run in this pass: the browser witness groups that call `runShellInTxiki` (`scripts/witness.mjs`). The change reaches them through `shell-core.js`, so they are the next check before the txiki shell is used for anything else.
