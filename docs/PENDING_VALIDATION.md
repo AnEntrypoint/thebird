@@ -2919,7 +2919,7 @@ Witness: group `set -x: PS4 is expanded at each trace, and LINENO is the command
 
 Red checks, each restored and confirmed by a green run: (1) the PS4 expansion replaced by the raw text: 14 rows red. (2) `LINENO` not set per simple command: 4 rows red. (3) the substitution's line base ignored: the gap row red. (4) xtrace not suspended during PS4 expansion: the witness process aborted with a core dump (exit 134) and named no row, because a trace inside PS4 expansion expands PS4 again without end. The suspension is therefore required for the shell to terminate, not only for the output.
 
-Gaps, recorded: prompt escapes in PS4 (`\u`, `\h` and the like) are not expanded; bash prints the login name for `\u`, this shell prints `\u`. A `${x?msg}` in PS4 fails with the shell's own `? is not supported yet` message (parameter `?` is not implemented in this shell), not bash's `script: line N: x: msg`. `LINENO` inside a multi-line substitution, in an argument, follows the file line here and bash's own, different, count there.
+Gaps, recorded: prompt escapes in PS4 (`\u`, `\h` and the like) are not expanded; bash prints the login name for `\u`, this shell prints `\u`. A `${x?msg}` in PS4 fails with the shell's own `? is not supported yet` message (parameter `?` is not implemented in this shell), not bash's `script: line N: x: msg`. `LINENO` inside a multi-line substitution, in an argument, follows the file line here and bash's own, different, count there. Closed by change set 30ab.
 
 
 ### Change set 30m: chmod -v and -c report the mode changes, as GNU chmod does
@@ -3190,3 +3190,16 @@ Gate: `vmstat 1 2`, last line, at 20:51: swap-in 2464 KB/s and swap-out 0 KB/s. 
 
 Local commits not pushed: `e7f87cc`, `cc686c4`, `29ad0d8`, `0420049`, and this record.
 
+### Change set 30ab: LINENO in a multi-line substitution follows bash's count: a command's line is the line of its first word, and a newline counts only after a line with text
+
+Reference: bash (`bash -c`, LC_ALL=C), with every row's expected stdout and stderr generated from bash by a script run.
+
+Probed first, bash only: a newline inside `$(...)` moves the count only when the line it ends has text in the substitution, so the newline right after `$(` and a blank line inside it do not count, and a `;` on the same line is not a line break. A simple command's `LINENO` is the line where its first word ends: `echo $(\n...)` is the `echo` line, `x=$(\n...)` is the line of the closing `)`, and `x=1 y=$(\n...)` is the line of `x=1`, the first word. After a substitution returns, the outer `LINENO` is the outer command's own line. A `for` body reads its own line. A trace line prints the `LINENO` of the traced command under the same rule.
+
+What changed in the shell: `tokenize` takes a `substitution` flag. In a substitution it counts a newline only when the line it ends has text (`segmentHasText`), and outside one every newline counts, as before. A token records `endLine`, the line where it ends, and `parseSimple` takes its line from the first token's `endLine`. `commandText` parses the substitution with the flag set. The `LINENO` setting and the trace code are unchanged.
+
+Witness: group `LINENO: a multi-line substitution numbers each command by the first word of that command, as bash does`, 18 rows from bash. The former gap row (`PS4 LINENO in a multi-line substitution`, previously pinned to this shell's file lines 4 and 5) now expects bash's 3 and 4 and passes. Last full run after the change: `RESULT PASS=797 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the substitution flag set to `false`: 10 rows red (the newline rule is not applied). (2) the first-word rule replaced by the first token's start line: 4 rows red (the assignment rows, whose first word ends on a later line). The restored file matches its backup, and the green run gives `RESULT PASS=797 FAIL=0`.
+
+Gaps, recorded: none known for `LINENO` in a substitution. The rule is taken from the probes above; a shape not in those probes is not claimed.

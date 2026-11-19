@@ -949,6 +949,45 @@ group('read: the builtin reads a line into names, splits it on IFS, and keeps ba
   check("read: a function reads from the stream of the group that calls it, as bash does", rd26.stdout === "f got [g1]\n[g2]\n" && rd26.stderr === "", JSON.stringify([rd26.stdout, rd26.stderr]));
 });
 
+group("LINENO: a multi-line substitution numbers each command by the first word of that command, as bash does", async () => {
+  const ln0 = await run(await shell({}), "echo $(\necho $LINENO\n)");
+  check("a bare substitution that starts on a line with a newline after $( numbers its command by the line of that command", ln0.stdout === "1\n" && ln0.stderr === "", JSON.stringify([ln0.stdout, ln0.stderr]));
+  const ln1 = await run(await shell({}), "echo $(\necho $LINENO\necho $LINENO\n)");
+  check("two commands in a substitution number from the line of the first word of each command", ln1.stdout === "1 2\n" && ln1.stderr === "", JSON.stringify([ln1.stdout, ln1.stderr]));
+  const ln2 = await run(await shell({}), "echo x\necho $(\necho $LINENO\n)\necho $LINENO");
+  check("a substitution on line 2 after a line of text numbers its command from line 2 and the next command from line 5", ln2.stdout === "x\n2\n5\n" && ln2.stderr === "", JSON.stringify([ln2.stdout, ln2.stderr]));
+  const ln3 = await run(await shell({}), "x=$(\necho $LINENO\n)\necho $x");
+  check("an assignment with a substitution numbers the command inside by its own line", ln3.stdout === "3\n" && ln3.stderr === "", JSON.stringify([ln3.stdout, ln3.stderr]));
+  const ln4 = await run(await shell({}), "echo $(echo a\n\necho $LINENO\n)");
+  check("a blank line inside a substitution does not move the line of the next command", ln4.stdout === "a 2\n" && ln4.stderr === "", JSON.stringify([ln4.stdout, ln4.stderr]));
+  const ln5 = await run(await shell({}), "echo $(echo a; echo $LINENO\necho b\necho $LINENO\n)");
+  check("a semicolon on the same line does not move the line of a command in a substitution", ln5.stdout === "a 1 b 3\n" && ln5.stderr === "", JSON.stringify([ln5.stdout, ln5.stderr]));
+  const ln6 = await run(await shell({}), "echo \"$(echo a\necho $LINENO\n)\"");
+  check("a quoted substitution numbers its command as an unquoted one does", ln6.stdout === "a\n2\n" && ln6.stderr === "", JSON.stringify([ln6.stdout, ln6.stderr]));
+  const ln7 = await run(await shell({}), "echo $(echo one\necho $LINENO\n) $LINENO");
+  check("a $LINENO argument after a multi-line substitution is the line of the outer command", ln7.stdout === "one 2 1\n" && ln7.stderr === "", JSON.stringify([ln7.stdout, ln7.stderr]));
+  const ln8 = await run(await shell({}), "echo $(echo a\necho $LINENO\n)$LINENO");
+  check("a $LINENO joined to a multi-line substitution is the line of the outer command", ln8.stdout === "a 21\n" && ln8.stderr === "", JSON.stringify([ln8.stdout, ln8.stderr]));
+  const ln9 = await run(await shell({}), "x=1 y=$(\necho $LINENO\n)\necho $y");
+  check("an assignment after a line break in a substitution is numbered from the assignment line", ln9.stdout === "1\n" && ln9.stderr === "", JSON.stringify([ln9.stdout, ln9.stderr]));
+  const ln10 = await run(await shell({}), "y=$(\necho $LINENO\n) x=1\necho $y");
+  check("an assignment before a substitution with a line break numbers the inner command by its own line", ln10.stdout === "3\n" && ln10.stderr === "", JSON.stringify([ln10.stdout, ln10.stderr]));
+  const ln11 = await run(await shell({}), "echo $(echo a\necho b\n)\necho $LINENO");
+  check("a substitution after a closed one numbers the outer command after it by its line", ln11.stdout === "a b\n4\n" && ln11.stderr === "", JSON.stringify([ln11.stdout, ln11.stderr]));
+  const ln12 = await run(await shell({}), "x=$(echo $LINENO\necho $LINENO\n)\necho $x");
+  check("an assignment whose substitution starts with a command numbers that command by the assignment line", ln12.stdout === "3 4\n" && ln12.stderr === "", JSON.stringify([ln12.stdout, ln12.stderr]));
+  const ln13 = await run(await shell({}), "echo first $(\necho x\n) last $LINENO");
+  check("a $LINENO after a multi-line substitution on the same command is the outer line", ln13.stdout === "first x last 1\n" && ln13.stderr === "", JSON.stringify([ln13.stdout, ln13.stderr]));
+  const ln14 = await run(await shell({}), "for i in $(\necho a\necho b\n); do echo $i $LINENO; done");
+  check("a for word list with a multi-line substitution numbers the loop body by its own line", ln14.stdout === "a 4\nb 4\n" && ln14.stderr === "", JSON.stringify([ln14.stdout, ln14.stderr]));
+  const ln15 = await run(await shell({}), "PS4='L$LINENO '\nset -x\necho $(\necho $LINENO\n)\nset +x");
+  check("a trace of a command in a substitution after PS4 with LINENO shows the line of that command", ln15.stdout === "3\n" && ln15.stderr === "LL3 echo 3\nL3 echo 3\nL6 set +x\n", JSON.stringify([ln15.stdout, ln15.stderr]));
+  const ln16 = await run(await shell({}), "PS4='L$LINENO '\nset -x\nx=$(\necho $LINENO\n)\nset +x");
+  check("a trace of an assignment with a substitution shows the line of the assignment", ln16.stdout === "" && ln16.stderr === "LL5 echo 5\nL5 x=5\nL6 set +x\n", JSON.stringify([ln16.stdout, ln16.stderr]));
+  const ln17 = await run(await shell({}), "PS4='L$LINENO '\nset -x\necho $(echo a\necho $LINENO\n)\nset +x");
+  check("a trace of a command with a multi-line substitution argument shows the line of that command", ln17.stdout === "a 4\n" && ln17.stderr === "LL3 echo a\nLL4 echo 4\nL3 echo a 4\nL6 set +x\n", JSON.stringify([ln17.stdout, ln17.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
@@ -977,7 +1016,7 @@ group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as
   const ps12 = await run(await shell({}), "PS4='[$LINENO] '; set -x\nfor i in 1; do :; done\nset +x");
   check("$LINENO in a for header is the line of the for, as bash does", ps12.stdout === "" && ps12.stderr === "[2] for i in 1\n[2] :\n[3] set +x\n", JSON.stringify([ps12.stdout, ps12.stderr]));
   const ps13 = await run(await shell({}), "PS4='[$LINENO] '\necho $(\nset -x\necho q\nset +x\n)");
-  check("gap (PS4 LINENO in a multi-line substitution): bash numbers these trace lines inside the text, 3 and 4; this shell prints the file lines, 4 and 5", ps13.stdout === "q\n" && ps13.stderr === "[[4] echo q\n[[5] set +x\n", JSON.stringify([ps13.stdout, ps13.stderr]));
+  check("PS4 LINENO in a multi-line substitution numbers its trace lines from the first word, as bash does", ps13.stdout === "q\n" && ps13.stderr === "[[3] echo q\n[[4] set +x\n", JSON.stringify([ps13.stdout, ps13.stderr]));
   const ps14 = await run(await shell({}), "PS4='$(echo P)> '; echo $(set -x; echo q; set +x)");
   check("a command substitution inside PS4 adds to the depth, as bash does", ps14.stdout === "q\n" && ps14.stderr === "PP> echo q\nPP> set +x\n", JSON.stringify([ps14.stdout, ps14.stderr]));
   const ps15 = await run(await shell({}), "PS4='[$LINENO] '; echo a $(echo b)\nset -x; echo c; set +x");

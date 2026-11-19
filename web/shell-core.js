@@ -260,13 +260,20 @@ function readHeredocBody(src, start, doc) {
   return i;
 }
 
-export function tokenize(src, firstLine = 1) {
+export function tokenize(src, firstLine = 1, substitution = false) {
   const tokens = [];
   const heredocs = [];
   let lineNo = firstLine;
   let lineScan = 0;
+  let segmentHasText = false;
   const lineAt = (at) => {
-    for (; lineScan < at; lineScan++) if (src[lineScan] === '\n') lineNo++;
+    for (; lineScan < at; lineScan++) {
+      const ch = src[lineScan];
+      if (ch === '\n') {
+        if (!substitution || segmentHasText) lineNo++;
+        segmentHasText = false;
+      } else if (ch !== ' ' && ch !== '\t' && ch !== '\r') segmentHasText = true;
+    }
     return lineNo;
   };
   let i = 0;
@@ -294,7 +301,7 @@ export function tokenize(src, firstLine = 1) {
         }
       } else {
         const word = readParts(src, i, BREAKS);
-        tokens.push({ parts: word.parts, text: src.slice(i, word.end), line: lineAt(i) });
+        tokens.push({ parts: word.parts, text: src.slice(i, word.end), line: lineAt(i), endLine: lineAt(word.end) });
         i = word.end;
       }
     }
@@ -326,7 +333,8 @@ function parse(tokens) {
   };
 
   const parseSimple = () => {
-    const line = tokens[pos]?.line;
+    const first = tokens[pos];
+    const line = first?.endLine ?? first?.line;
     const assigns = [];
     const words = [];
     const redirects = [];
@@ -521,8 +529,8 @@ function parse(tokens) {
   return list;
 }
 
-export function parseScript(src, firstLine) {
-  return parse(tokenize(src, firstLine));
+export function parseScript(src, firstLine, substitution = false) {
+  return parse(tokenize(src, firstLine, substitution));
 }
 
 const ok = (out) => ({ code: 0, out, err: '' });
@@ -2330,7 +2338,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const outerLine = vars.get('LINENO');
     substDepth++;
     try {
-      await runSequence(parseScript(src, Number(outerLine) || 1), '', sub);
+      await runSequence(parseScript(src, Number(outerLine) || 1, true), '', sub);
     } catch (err) {
       if (!(err instanceof ShellExit)) throw err;
     } finally {
