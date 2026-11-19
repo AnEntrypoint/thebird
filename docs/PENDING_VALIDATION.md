@@ -2130,3 +2130,20 @@ Gates and suites (fixed build):
 - `npm run lint:architecture`: `396 claims: 396 pass, 0 fail, 0 unverified`, 68608 ms.
 
 Not run: the full `npm run witness` (heavy; this change set's witnesses are the rows above). Known limit, from Phase A: a rejection that gets a handler in a later turn is still reported.
+
+### Ranked open rows that need no live request, and the top item (bash through the stub)
+
+Ranking, by how close each is to a finished, verified feature:
+1. The fx approval row and the bash tool through the stub (`fx-approval` and `fx-builtin` witness groups). Re-verified in the in-page shell: the approval panel draws and `Allow once` runs the page's bash, which returns `approval`. Two of its host-tool rows were stale expectations, fixed in this change (see Change 1 below).
+2. Full witness since the rejection change (`f14656d`). The txiki tracker touches every shell, so the local rows need one full run. The live rows will still fail, and this run has to say so. Heavy, not yet run.
+3. The python `Page.navigate did not answer within 60000 ms` row. It appeared once in five full runs and has not been reproduced. It needs a full run to reproduce.
+Excluded, because they need a live request: the npm 404 row (the live registry), the three 8793 rows (the hy4 gateway, not on the swarm), and the read-only check of the hosted page. Blocked and not coded: Ctrl-C on the Pages site, which needs the owner's decision. `node:` builtins are not provided in-page by design (AGENTS.md: scripts get txiki's globals, not Node's `require`, `process` or `Buffer`), so `could not load 'node:fs'` is not a defect.
+
+Re-verification of bash through the stub (in-page, the witness's own setup: a fresh browser context with `window.THEBIRD_FX` pointing at the stub, `permissionMode: 'ask'`, `fx`, then `hello` and the bash prompt):
+- `hello` → `stub gateway answer: prompt=hello streaming=true authorized=true`.
+- `[tool:bash] [input:{"command":"echo approval"}]` → `Permission needed · Choose one`, `bash · Arguments for this request: {"command":"echo approval"}`, `❯ 1. Allow once`, `2. Allow this MCP tool for this session`, `3. Deny`.
+- `Allow once` → the page's bash `execute` recorded `{"input":{"command":"echo approval"},"result":{"content":"approval\n","isError":false}}`, and the stub's answer became `tool-result=seen`.
+- The ledger row that recorded `options: []` and `Tools are unavailable in the current JavaScript host` (fx `f60b27d6` era) does not reproduce on this tree. The fx re-vendor has the approval panel.
+
+Change 1, `scripts/witness.mjs`: three rows hard-coded the host tools as five (`bash, ask, thebird_pane, thebird_run, thebird_ports`). The page exports seven (`thebird_register` and `thebird_unregister` came with the static transport), and the TUI also advertises fx's own `shell` tool (`src/builtins/browser_workspace_tools.zig` in fx). The witness now imports `PAGE_HOST_TOOL_NAMES` from `web/fx-host-tools.js` and defines `FX_TUI_TOOLS = [...PAGE_HOST_TOOL_NAMES, 'shell'].sort()`. The `fx ask advertises` row, the `exports` count and the `TUI advertises` row use them.
+Before this change, the approval group run (`node scripts/witness.mjs --group=fx-approval`, wall 245.5 s, `totals: PASS 4 FAIL 2`) showed: `FAIL host tools: the page exports five host tools … — 7` and `FAIL host tools: the TUI advertises exactly the five page host tools … ["ask","bash","shell","thebird_pane","thebird_ports","thebird_register","thebird_run","thebird_unregister"]`. The transcript, auto-mode, approval and negative-control rows passed.
