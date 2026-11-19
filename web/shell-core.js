@@ -1850,11 +1850,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code, out, err };
     },
     chmod: ({ argv }) => {
-      const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : arg === '--dereference' ? 'D' : /^-[Rvc]+$/.test(arg) ? arg.slice(1) : '')).join('');
+      const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : arg === '--dereference' ? 'D' : arg === '--no-dereference' ? 'h' : /^-[Rvch]+$/.test(arg) ? arg.slice(1) : '')).join('');
       const recursive = flagLetters.includes('R');
       const verbose = flagLetters.includes('v');
       const changes = flagLetters.includes('c');
       const dereference = flagLetters.includes('D');
+      const noDereference = flagLetters.includes('h');
       const operands = [];
       let referenceFile = null;
       for (let i = 0; i < argv.length; i++) {
@@ -1865,7 +1866,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         } else operands.push(argv[i]);
       }
       if (referenceFile !== null && !statInfo(resolvePath(referenceFile))) return { code: 1, out: '', err: "chmod: failed to get attributes of '" + referenceFile + "': No such file or directory\n" };
-      const positional = operands.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes|--dereference)$/.test(arg));
+      const positional = operands.filter((arg) => !/^(-[Rvch]+|--recursive|--verbose|--changes|--dereference|--no-dereference)$/.test(arg));
       const mode = referenceFile === null ? positional[0] : undefined;
       const names = referenceFile === null ? positional.slice(1) : positional;
       const referenceBits = referenceFile === null ? null : parseInt(modes.get(resolvePath(referenceFile)) ?? (host.stat(resolvePath(referenceFile))?.dir === true ? '755' : '644'), 8);
@@ -1916,7 +1917,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       };
       for (const name of names) {
-        if (!statInfo(resolvePath(name))) {
+        if (noDereference && host.lstat(resolvePath(name))?.link) {
+          if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
+        } else if (!statInfo(resolvePath(name))) {
           err += "chmod: cannot access '" + name + "': No such file or directory\n";
           code = 1;
         } else {

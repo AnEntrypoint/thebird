@@ -3047,3 +3047,16 @@ Gate: `vmstat 1 2`, last line, swap-in 520 KB/s and swap-out 15416 KB/s. Swap-ou
 
 Local commits not pushed: `e817934`, `5dd020b`, `a050362`, `20679b0`, `83eac31`, and this record. The change set 30s rows last ran green at `RESULT PASS=696 FAIL=0`, in the Phase A run before the gate was read.
 
+
+### Change set 30t: chmod -h and --no-dereference leave a link operand alone, as GNU chmod does on Linux
+
+Reference: `/bin/gnuchmod` (GNU coreutils 9.7) through the `/tmp/gnubin` shim, run on a fixture with links; expectations are generated from its output, with `gnuchmod:` mapped to `chmod:` as in 30m and 30o.
+
+What was wrong: `-h` and `--no-dereference` were not known options, so `chmod -h 644 link` took `-h` as the mode and failed with `invalid mode`. What changed: both options set a no-dereference flag. A link operand under that flag is not followed, its mode is left alone, the status is 0, and under `-v` it prints `neither symbolic link 'NAME' nor referent has been changed`. A regular-file operand is changed as before. Inside a `-R` tree, links were already skipped by default, so `-h` changes nothing there; the rows confirm that.
+
+Witness: group `chmod -h and --no-dereference: a link operand is left alone, as GNU chmod does on Linux`, 5 rows, `RESULT PASS=701 FAIL=0` after the change.
+
+Red check: the operand branch disabled (`if (false && ...)`): 3 rows red (the `-h` link, the `-hv` link, and the `--no-dereference` mix). The two `-R` rows stay green, because the tree walk never used the operand branch; that is the expected split. Restored and confirmed green.
+
+Gap, recorded: none found for these options. `chmod -h` on a dangling operand is covered with the dangling-operand wording in 30v.
+
