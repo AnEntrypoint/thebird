@@ -529,6 +529,35 @@ group('expansion: brace lists, ranges and tilde expand before the command runs',
   check('expansion: a quoted tilde, a tilde with a name, and a tilde mid-word stay literal', notTilde.stdout === '~ ~x a~\n', JSON.stringify(notTilde.stdout));
 });
 
+group('files: cp, mv, touch and tee copy, move, create and write files', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /e2');
+  const copied = await run(sh, 'echo hi > /e2/a.txt; cp /e2/a.txt /e2/b.txt; cat /e2/b.txt');
+  check('files: cp copies a file to a new name', copied.stdout === 'hi\n', JSON.stringify(copied.stdout));
+  const intoDir = await run(sh, 'mkdir /e2/d; cp /e2/a.txt /e2/d; cat /e2/d/a.txt');
+  check('files: cp into a directory keeps the file name', intoDir.stdout === 'hi\n', JSON.stringify(intoDir.stdout));
+  const many = await run(sh, 'echo p > /e2/p; echo q > /e2/q; mkdir /e2/box; cp /e2/p /e2/q /e2/box; cat /e2/box/q');
+  check('files: cp of several files goes into the directory last named', many.stdout === 'q\n', JSON.stringify(many.stdout));
+  const moved = await run(sh, 'echo hi > /e2/m.txt; mv /e2/m.txt /e2/n.txt; cat /e2/n.txt; cat /e2/m.txt; echo rc=$?');
+  check('files: mv moves the file, and the old name is gone', moved.stdout === 'hi\nrc=1\n' && moved.stderr.includes("cat: /e2/m.txt: No such file or directory"), JSON.stringify(moved.stdout + moved.stderr));
+  const touched = await run(sh, 'touch /e2/new.txt; cat /e2/new.txt; echo rc=$?');
+  check('files: touch creates an empty file', touched.stdout === 'rc=0\n', JSON.stringify(touched.stdout));
+  const teed = await run(sh, 'echo one | tee /e2/t.txt; cat /e2/t.txt');
+  check('files: tee writes its input to the file and to stdout', teed.stdout === 'one\none\n', JSON.stringify(teed.stdout));
+  const appended = await run(sh, 'echo one | tee /e2/u.txt; echo two | tee -a /e2/u.txt; cat /e2/u.txt');
+  check('files: tee -a appends to the file', appended.stdout === 'one\ntwo\none\ntwo\n', JSON.stringify(appended.stdout));
+  const missing = await run(sh, 'cp /e2/nope /e2/x; echo rc=$?');
+  check('files: cp of a missing file fails with status 1 and a message', missing.stdout === 'rc=1\n' && missing.stderr.includes("cp: cannot stat '/e2/nope': No such file or directory"), JSON.stringify(missing.stderr));
+  const dirCopy = await run(sh, 'mkdir /e2/dd; cp /e2/dd /e2/x; echo rc=$?');
+  check('files: cp of a directory without -r is refused with status 1', dirCopy.stdout === 'rc=1\n' && dirCopy.stderr.includes("-r not specified; omitting directory '/e2/dd'"), JSON.stringify(dirCopy.stderr));
+  const noParent = await run(sh, 'touch /nodir/x; echo rc=$?');
+  check('files: touch under a missing directory fails with status 1', noParent.stdout === 'rc=1\n' && noParent.stderr.includes("touch: cannot touch '/nodir/x': No such file or directory"), JSON.stringify(noParent.stderr));
+  const notDir = await run(sh, 'echo a > /e2/r; echo b > /e2/s; cp /e2/r /e2/s /e2/r; echo rc=$?');
+  check('files: cp of several files needs a directory as its last name', notDir.stdout === 'rc=1\n' && notDir.stderr.includes('is not a directory'), JSON.stringify(notDir.stderr));
+  const same = await run(sh, 'echo a > /e2/v; mv /e2/v /e2/v; echo rc=$?');
+  check('files: mv of a file onto itself is refused', same.stdout === 'rc=1\n' && same.stderr.includes("mv: '/e2/v' and '/e2/v' are the same file"), JSON.stringify(same.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

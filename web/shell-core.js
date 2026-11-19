@@ -466,6 +466,8 @@ export function parseScript(src) {
 }
 
 const ok = (out) => ({ code: 0, out, err: '' });
+const basenameOf = (name) => name.split('/').filter(Boolean).pop() ?? name;
+const parentOf = (path) => path.slice(0, path.lastIndexOf('/')) || '/';
 
 function globRegExp(pattern, caseInsensitive = false) {
   const body = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
@@ -813,6 +815,38 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       host.symlink(target, dest);
       return ok('');
+    },
+    touch: ({ argv }) => {
+      if (!argv.length) return { code: 1, out: '', err: 'touch: missing file operand\n' };
+      let err = '';
+      let code = 0;
+      for (const name of argv) {
+        const path = resolvePath(name);
+        if (host.exists(path)) continue;
+        if (!host.stat(parentOf(path))?.dir) {
+          err += "touch: cannot touch '" + name + "': No such file or directory\n";
+          code = 1;
+        } else host.write(path, '');
+      }
+      return { code, out: '', err };
+    },
+    cp: ({ argv }) => copyOrMove('cp', argv),
+    mv: ({ argv }) => copyOrMove('mv', argv),
+    tee: ({ argv, stdin }) => {
+      const append = argv.includes('-a');
+      let err = '';
+      let code = 0;
+      for (const name of argv.filter((arg) => !arg.startsWith('-'))) {
+        const path = resolvePath(name);
+        if (!host.stat(parentOf(path))?.dir) {
+          err += 'tee: ' + name + ': No such file or directory\n';
+          code = 1;
+          continue;
+        }
+        const prior = append && host.exists(path) ? host.read(path) : '';
+        host.write(path, prior + (stdin ?? ''));
+      }
+      return { code, out: stdin ?? '', err };
     },
     readlink: ({ argv }) => {
       const operands = argv.filter((arg) => !arg.startsWith('-'));
@@ -1392,6 +1426,47 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const inner = { out: '', err: '', signal: sink.signal };
     const code = await runSequence(node.list, stdin, inner);
     return { code, out: inner.out, err: inner.err };
+  }
+
+  function copyOrMove(verb, argv) {
+    const names = argv.filter((arg) => !arg.startsWith('-'));
+    if (argv.some((arg) => arg.startsWith('-') && /[rR]/.test(arg))) return { code: 1, out: '', err: verb + ': directory copy is not supported\n' };
+    if (names.length < 2) return { code: 1, out: '', err: verb + ': missing file operand\n' };
+    const target = names.pop();
+    const targetPath = resolvePath(target);
+    const toDir = host.stat(targetPath)?.dir === true;
+    if (names.length > 1 && !toDir) return { code: 1, out: '', err: verb + ": target '" + target + "' is not a directory\n" };
+    let err = '';
+    let code = 0;
+    for (const name of names) {
+      const src = resolvePath(name);
+      const info = host.stat(src);
+      if (!info) {
+        err += verb + ": cannot stat '" + name + "': No such file or directory\n";
+        code = 1;
+        continue;
+      }
+      if (info.dir) {
+        err += verb + ": -r not specified; omitting directory '" + name + "'\n";
+        code = 1;
+        continue;
+      }
+      const dst = toDir ? targetPath + '/' + basenameOf(name) : targetPath;
+      if (dst === src && verb === 'mv') {
+        err += "mv: '" + name + "' and '" + name + "' are the same file\n";
+        code = 1;
+        continue;
+      }
+      if (!host.stat(parentOf(dst))?.dir) {
+        const failed = verb === 'mv' ? "mv: cannot move '" + name + "' to '" + dst + "'" : "cp: cannot create regular file '" + dst + "'";
+        err += failed + ": No such file or directory\n";
+        code = 1;
+        continue;
+      }
+      host.write(dst, host.read(src));
+      if (verb === 'mv') host.remove(src, false);
+    }
+    return { code, out: '', err };
   }
 
   async function dispatch(argv, stdin, signal) {
