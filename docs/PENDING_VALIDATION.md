@@ -2474,3 +2474,13 @@ Red check (done), each restored and confirmed by an edit that applied: links not
 `scripts/witness-shell.mjs`: group `chmod: chmod sets an octal mode that stat reports`, 5 rows: an octal mode is recorded and reported (`600`); a leading zero is dropped (`755`); one mode is set on each of two files (`700`, `700`); a missing file (status 1, the message); a symbolic mode (status 1, the message).
 
 Red check (done), each restored and confirmed by an edit that applied: the mode not recorded: `RESULT PASS=202 FAIL=3` (the three rows that read a changed mode). The missing-name status made 0: `RESULT PASS=204 FAIL=1` (the missing row). The green run after both restores is `RESULT PASS=205 FAIL=0`.
+
+### Change set 20, E4e: md5sum (Phase A)
+
+`web/shell-core.js`: `md5Hex` is an MD5 (RFC 1321) over bytes, written in the shell core because the core also runs in the browser, where no crypto module is in scope. `utf8Bytes` turns a string into UTF-8 bytes (through `encodeURIComponent`). `md5sum` hashes stdin (named `-`) when there are no names, or each named file, and prints `DIGEST  NAME` in the GNU form. A missing file gives `md5sum: NAME: No such file or directory` with status 1.
+
+Check: `md5Hex` was compared with Node crypto over nine inputs (empty, `abc`, the published fox sentence, a newline-terminated line, 55, 56, 63 and 64 bytes for the padding boundaries, and a multi-byte UTF-8 string with 100 more bytes): nine of nine match.
+
+`scripts/witness-shell.mjs`: group `md5sum: md5sum prints the MD5 of its input and of each file`, 7 rows: stdin (`900150983cd24fb0d6963f7d28e17f72  -`, the RFC value for abc); empty input (`d41d8cd98f00b204e9800998ecf8427e`); the fox sentence (`9e107d9d372bb6826bd81d3542a419d6`); a non-ASCII line hashed as UTF-8 (`6e99834b7c3e3fd53529a5489725d7e8`); a file, named as given; a missing file (status 1, the message).
+
+Red check (done), each restored and confirmed by an edit that applied: the round made to use word 0 instead of the message word: `RESULT PASS=206 FAIL=5` (every row with a digest). UTF-8 bytes replaced by zeros: `RESULT PASS=208 FAIL=3` (the rows whose input has a multi-byte character or a longer text). The missing-file status made 0: `RESULT PASS=210 FAIL=1`. The green run after all three restores is `RESULT PASS=211 FAIL=0`.

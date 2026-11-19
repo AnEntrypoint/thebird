@@ -658,6 +658,23 @@ group('chmod: chmod sets an octal mode that stat reports', async () => {
   check('chmod: a symbolic mode is refused with status 1, not ignored', symbolic.stdout === 'rc=1\n' && symbolic.stderr.includes("chmod: unsupported mode 'u+x'"), JSON.stringify(symbolic.stderr));
 });
 
+group('md5sum: md5sum prints the MD5 of its input and of each file', async () => {
+  const sh = await shell({});
+  await run(sh, 'mkdir -p /md');
+  const abc = await run(sh, 'printf "abc" | md5sum');
+  check('md5sum: the MD5 of stdin is printed with a dash', abc.stdout === '900150983cd24fb0d6963f7d28e17f72  -\n', JSON.stringify(abc.stdout));
+  const empty = await run(sh, 'printf "" | md5sum');
+  check('md5sum: the MD5 of empty input is the empty-input digest', empty.stdout === 'd41d8cd98f00b204e9800998ecf8427e  -\n', JSON.stringify(empty.stdout));
+  const fox = await run(sh, 'printf "The quick brown fox jumps over the lazy dog" | md5sum');
+  check('md5sum: a longer input gives the published digest', fox.stdout === '9e107d9d372bb6826bd81d3542a419d6  -\n', JSON.stringify(fox.stdout));
+  const unicode = await run(sh, 'echo café | md5sum');
+  check('md5sum: a non-ASCII input is hashed as UTF-8 bytes', unicode.stdout === '6e99834b7c3e3fd53529a5489725d7e8  -\n', JSON.stringify(unicode.stdout));
+  const file = await run(sh, 'echo abc > /md/f; md5sum /md/f');
+  check('md5sum: a file is hashed and named as given', file.stdout === '0bee89b07a248e27c83fc3d5951213c1  /md/f\n', JSON.stringify(file.stdout));
+  const missing = await run(sh, 'md5sum /md/none; echo rc=$?');
+  check('md5sum: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes('md5sum: /md/none: No such file or directory'), JSON.stringify(missing.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

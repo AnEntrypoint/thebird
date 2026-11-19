@@ -569,6 +569,65 @@ function braceExpand(text) {
   return alts.flatMap((alt) => braceExpand(pre + alt + post));
 }
 
+const MD5_SHIFTS = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
+const MD5_CONSTANTS = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0);
+
+function utf8Bytes(text) {
+  const encoded = encodeURIComponent(text);
+  const bytes = [];
+  for (let i = 0; i < encoded.length; i++) {
+    if (encoded[i] === '%') {
+      bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else bytes.push(encoded.charCodeAt(i));
+  }
+  return bytes;
+}
+
+function md5Hex(bytes) {
+  const data = bytes.concat([0x80]);
+  while (data.length % 64 !== 56) data.push(0);
+  const bitLength = bytes.length * 8;
+  for (let i = 0; i < 4; i++) data.push((bitLength >>> (8 * i)) & 0xff);
+  for (let i = 0; i < 4; i++) data.push((Math.floor(bitLength / 2 ** 32) >>> (8 * i)) & 0xff);
+  let [a0, b0, c0, d0] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+  for (let offset = 0; offset < data.length; offset += 64) {
+    const words = [];
+    for (let i = 0; i < 16; i++) {
+      const at = offset + 4 * i;
+      words[i] = data[at] | (data[at + 1] << 8) | (data[at + 2] << 16) | (data[at + 3] << 24);
+    }
+    let [a, b, c, d] = [a0, b0, c0, d0];
+    for (let i = 0; i < 64; i++) {
+      let f;
+      let g;
+      if (i < 16) {
+        f = (b & c) | (~b & d);
+        g = i;
+      } else if (i < 32) {
+        f = (d & b) | (~d & c);
+        g = (5 * i + 1) % 16;
+      } else if (i < 48) {
+        f = b ^ c ^ d;
+        g = (3 * i + 5) % 16;
+      } else {
+        f = c ^ (b | ~d);
+        g = (7 * i) % 16;
+      }
+      f = (f + a + MD5_CONSTANTS[i] + words[g]) | 0;
+      a = d;
+      d = c;
+      c = b;
+      b = (b + ((f << MD5_SHIFTS[i]) | (f >>> (32 - MD5_SHIFTS[i])))) | 0;
+    }
+    a0 = (a0 + a) | 0;
+    b0 = (b0 + b) | 0;
+    c0 = (c0 + c) | 0;
+    d0 = (d0 + d) | 0;
+  }
+  return [a0, b0, c0, d0].map((word) => [0, 8, 16, 24].map((shift) => ((word >>> shift) & 0xff).toString(16).padStart(2, '0')).join('')).join('');
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1112,6 +1171,26 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
+    },
+    md5sum: ({ argv, stdin = '' }) => {
+      const names = argv.filter((arg) => !arg.startsWith('-'));
+      if (!names.length) return ok(md5Hex(utf8Bytes(stdin)) + '  -\n');
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const name of names) {
+        if (name === '-') {
+          out += md5Hex(utf8Bytes(stdin)) + '  -\n';
+          continue;
+        }
+        try {
+          out += md5Hex(utf8Bytes(host.read(resolvePath(name)))) + '  ' + name + '\n';
+        } catch {
+          err += 'md5sum: ' + name + ': No such file or directory\n';
+          code = 1;
+        }
+      }
+      return { code, out, err };
     },
     realpath: ({ argv }) => {
       let out = '';
