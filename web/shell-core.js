@@ -1850,16 +1850,29 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const recursive = flagLetters.includes('R');
       const verbose = flagLetters.includes('v');
       const changes = flagLetters.includes('c');
-      const [mode, ...names] = argv.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes)$/.test(arg));
+      const operands = [];
+      let referenceFile = null;
+      for (let i = 0; i < argv.length; i++) {
+        if (argv[i].startsWith('--reference=')) referenceFile = argv[i].slice('--reference='.length);
+        else if (argv[i] === '--reference') {
+          if (i + 1 >= argv.length) return { code: 1, out: '', err: "chmod: option '--reference' requires an argument\n" + "Try 'chmod --help' for more information.\n" };
+          referenceFile = argv[++i];
+        } else operands.push(argv[i]);
+      }
+      if (referenceFile !== null && !statInfo(resolvePath(referenceFile))) return { code: 1, out: '', err: "chmod: failed to get attributes of '" + referenceFile + "': No such file or directory\n" };
+      const positional = operands.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes)$/.test(arg));
+      const mode = referenceFile === null ? positional[0] : undefined;
+      const names = referenceFile === null ? positional.slice(1) : positional;
+      const referenceBits = referenceFile === null ? null : parseInt(modes.get(resolvePath(referenceFile)) ?? (host.stat(resolvePath(referenceFile))?.dir === true ? '755' : '644'), 8);
       const usage = "Try 'chmod --help' for more information.\n";
-      if (mode === undefined) return { code: 1, out: '', err: 'chmod: missing operand\n' + usage };
+      if (referenceFile !== null ? !names.length : mode === undefined) return { code: 1, out: '', err: 'chmod: missing operand\n' + usage };
       if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
-      const octal = /^[0-7]{1,4}$/.test(mode);
-      if (!octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
+      const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
+      if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
       const changeOne = (path) => {
         const dir = host.stat(path)?.dir === true;
         const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
-        const after = octal ? parseInt(mode, 8) : applySymbolicMode(before, mode, dir).bits;
+        const after = referenceBits ?? (octal ? parseInt(mode, 8) : applySymbolicMode(before, mode, dir).bits);
         modes.set(path, formatMode(after));
         return { before, after };
       };
