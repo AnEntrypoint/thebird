@@ -2374,3 +2374,11 @@ Red check (done): the matching arm's body was replaced by `const code = 0`. `RES
 `scripts/witness-shell.mjs`: group `builtins: :, shift and set move and read the positional parameters`, 8 rows: `:` exits 0 (`rc=0`); `set --` sets three parameters (`a b 3`); `shift` drops one (`b 2`); `shift 2` drops two (`c 1`); shifting every parameter leaves none (`0`); a shift past the parameters exits 1 with its message; `set -e` exits 2 with its message; a bare `set` lists `v=1`.
 
 Red check (done), one builtin at a time, each restored: `:` made to exit 1: `RESULT PASS=134 FAIL=1` (the `:` row). `shift` made to drop nothing: `RESULT PASS=132 FAIL=3` (the three shift rows that need a shifted value). `set --` made never to run: `RESULT PASS=132 FAIL=3` (the `set --` row and the two shift rows that depend on it). The green run after restoring all three is `RESULT PASS=135 FAIL=0`.
+
+### Phase B for change sets 8 to 10 (`a8c95f8`, `2bb25b2`, `ef512af`)
+
+Swap gate: `GATE_OPEN try=1 si=792 so=0 KB/s`, read immediately before the jobs.
+Build check: `npm run check` exit 0, wall 1176 ms (`/tmp/pb10-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=135 FAIL=0`, exit 0, wall 788 ms (`/tmp/pb10-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
+
