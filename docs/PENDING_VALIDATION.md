@@ -2717,3 +2717,14 @@ Shell witness, once: `npm run witness:shell` `RESULT PASS=476 FAIL=0`, exit 0, w
 Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes (`n=3`); `loops: a short for loop still runs every item` passes.
 Commits pushed with this record: 03e22a6 (ranking and the stat correction), fe7d1b6 (29a, cp -r), 8bdb16a (29b, mv of a directory), and this record.
 
+
+### Change set 30a: diff -u and -U (unified format)
+
+`diff -u` and `diff -U N` print GNU's unified format: `--- A` and `+++ B` headers, `@@ -l,s +l,s @@` hunk headers with the count left out when it is 1, zero-count ranges written `start,0` (the line before the position), and `-`, `+` and context lines. Hunks are shared with the normal format, which uses the same change blocks (`diffBlocks`). Two changes separated by at most 2N unchanged lines share one hunk; seven unchanged lines (with N=3) give two hunks. `--label` sets the header names, once for each file, as GNU does. Options are parsed: an unknown short option gives GNU's `invalid option` message with status 2, and `-U` takes its number attached or as the next word.
+
+Expectations: twelve rows, `group diff -u and -U`, generated from GNU diff at generation time (each `check` compares the output and the `echo rc=$?` line to what GNU printed for the same two files).
+
+Gap, recorded: without `--label`, GNU puts each file's modification time after the name, and the txiki host keeps no modification time, so the header is the name alone. `--label` gives the same header as GNU. A file without a final newline is not handled (the lines are split on newlines).
+
+Red checks: (1) the merge rule halved (`<= width` for `<= 2 * width`): the six-line-gap row goes red. (2) the leading context removed: six rows red. (3) the zero-count range written without its `,0`: three rows red (the empty-file row and the two `-U0` rows). Each restored by the reverse edit; the green run is `RESULT PASS=488 FAIL=0`.
+

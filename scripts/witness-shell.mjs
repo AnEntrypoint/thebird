@@ -613,6 +613,33 @@ group('mv: a directory is moved with its tree, and not into itself, as GNU mv do
   check('mv: a directory cannot be moved into its own subdirectory', self.stdout === 'rc=1\n' && self.stderr === "mv: cannot move '/mv/p' to a subdirectory of itself, '/mv/p/q/p'\n", JSON.stringify(self));
 });
 
+group('diff -u and -U: unified output, with labels, matches GNU diff', async () => {
+  const u1 = await run(await shell({ '/workspace/a.txt': "a\nb\nc\nd\ne\nf\ng\n", '/workspace/b.txt': "a\nb\nX\nd\ne\nf\ng\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: a changed line gets a hunk with three lines of context", u1.stdout === "--- A\n+++ B\n@@ -1,6 +1,6 @@\n a\n b\n-c\n+X\n d\n e\n f\nrc=1\n", JSON.stringify(u1.stdout));
+  const u2 = await run(await shell({ '/workspace/a.txt': "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n", '/workspace/b.txt': "A\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\nB\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: changes far apart get two hunks", u2.stdout === "--- A\n+++ B\n@@ -1,4 +1,4 @@\n-1\n+A\n 2\n 3\n 4\n@@ -12,4 +12,4 @@\n 12\n 13\n 14\n-15\n+B\nrc=1\n", JSON.stringify(u2.stdout));
+  const u3 = await run(await shell({ '/workspace/a.txt': "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n", '/workspace/b.txt': "A\n2\n3\n4\n5\n6\n7\nH\n9\n10\n11\n12\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: changes six unchanged lines apart share one hunk", u3.stdout === "--- A\n+++ B\n@@ -1,11 +1,11 @@\n-1\n+A\n 2\n 3\n 4\n 5\n 6\n 7\n-8\n+H\n 9\n 10\n 11\nrc=1\n", JSON.stringify(u3.stdout));
+  const u4 = await run(await shell({ '/workspace/a.txt': "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n", '/workspace/b.txt': "A\n2\n3\n4\n5\n6\n7\n8\nI\n10\n11\n12\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: changes seven unchanged lines apart get two hunks", u4.stdout === "--- A\n+++ B\n@@ -1,4 +1,4 @@\n-1\n+A\n 2\n 3\n 4\n@@ -6,7 +6,7 @@\n 6\n 7\n 8\n-9\n+I\n 10\n 11\n 12\nrc=1\n", JSON.stringify(u4.stdout));
+  const u5 = await run(await shell({ '/workspace/a.txt': "x\ny\n", '/workspace/b.txt': "new0\nx\ny\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: an insertion at the start of a file", u5.stdout === "--- A\n+++ B\n@@ -1,2 +1,3 @@\n+new0\n x\n y\nrc=1\n", JSON.stringify(u5.stdout));
+  const u6 = await run(await shell({ '/workspace/a.txt': "p\nq\nr\n", '/workspace/b.txt': "p\nq\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: a deletion at the end of a file", u6.stdout === "--- A\n+++ B\n@@ -1,3 +1,2 @@\n p\n q\n-r\nrc=1\n", JSON.stringify(u6.stdout));
+  const u7 = await run(await shell({ '/workspace/a.txt': "", '/workspace/b.txt': "only\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: an empty file gives a hunk that starts at line 0", u7.stdout === "--- A\n+++ B\n@@ -0,0 +1 @@\n+only\nrc=1\n", JSON.stringify(u7.stdout));
+  const u8 = await run(await shell({ '/workspace/a.txt': "a\nb\nc\n", '/workspace/b.txt': "a\nNEW\nb\nc\n" }), "diff -U0 --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -U0: a zero-context insertion gives a zero-length old range", u8.stdout === "--- A\n+++ B\n@@ -1,0 +2 @@\n+NEW\nrc=1\n", JSON.stringify(u8.stdout));
+  const u9 = await run(await shell({ '/workspace/a.txt': "a\nb\nc\nd\n", '/workspace/b.txt': "a\nd\n" }), "diff -U0 --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -U0: a zero-context deletion gives a zero-length new range", u9.stdout === "--- A\n+++ B\n@@ -2,2 +1,0 @@\n-b\n-c\nrc=1\n", JSON.stringify(u9.stdout));
+  const u10 = await run(await shell({ '/workspace/a.txt': "a\nb\nc\nd\ne\nf\ng\n", '/workspace/b.txt': "a\nb\nX\nd\ne\nf\ng\n" }), "diff -U1 --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -U1: one line of context on each side", u10.stdout === "--- A\n+++ B\n@@ -2,3 +2,3 @@\n b\n-c\n+X\n d\nrc=1\n", JSON.stringify(u10.stdout));
+  const u11 = await run(await shell({ '/workspace/a.txt': "1\n2\n3\n4\n5\n6\n", '/workspace/b.txt': "1\n3\n4\nZ\n5\n6\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: a mixed change block lists its deletions and then its insertions", u11.stdout === "--- A\n+++ B\n@@ -1,6 +1,6 @@\n 1\n-2\n 3\n 4\n+Z\n 5\n 6\nrc=1\n", JSON.stringify(u11.stdout));
+  const u12 = await run(await shell({ '/workspace/a.txt': "same\n", '/workspace/b.txt': "same\n" }), "diff -u --label A --label B /workspace/a.txt /workspace/b.txt; echo rc=$?");
+  check("diff -u: identical files give no output and status 0", u12.stdout === "rc=0\n", JSON.stringify(u12.stdout));
+});
+
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
   const sh = await shell({});
   const sorted = await run(sh, 'printf "b\na\nc\n" | sort');

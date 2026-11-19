@@ -667,7 +667,7 @@ function bytesToText(bytes) {
     return String.fromCharCode(...bytes);
   }
 }
-function lineDiff(a, b) {
+function diffBlocks(a, b) {
   const n = a.length;
   const m = b.length;
   const table = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
@@ -701,7 +701,12 @@ function lineDiff(a, b) {
     }
   }
   close();
+  return hunks;
+}
+
+function lineDiff(a, b) {
   const range = (start, end) => (end - start === 1 ? String(start + 1) : (start + 1) + ',' + end);
+  const hunks = diffBlocks(a, b);
   let out = '';
   for (const h of hunks) {
     const dels = a.slice(h.a0, h.a1).map((line) => '< ' + line + '\n').join('');
@@ -709,6 +714,46 @@ function lineDiff(a, b) {
     if (dels && ins) out += range(h.a0, h.a1) + 'c' + range(h.b0, h.b1) + '\n' + dels + '---\n' + ins;
     else if (dels) out += range(h.a0, h.a1) + 'd' + h.b0 + '\n' + dels;
     else out += h.a0 + 'a' + range(h.b0, h.b1) + '\n' + ins;
+  }
+  return out;
+}
+
+function contextGroups(blocks, width) {
+  const groups = [];
+  for (const block of blocks) {
+    const last = groups.at(-1);
+    if (last && block.a0 - last.at(-1).a1 <= 2 * width) last.push(block);
+    else groups.push([block]);
+  }
+  return groups;
+}
+
+function unifiedRange(start, count) {
+  if (count === 0) return start + ',0';
+  return count === 1 ? String(start + 1) : (start + 1) + ',' + count;
+}
+
+function unifiedDiff(a, b, width, headers) {
+  const blocks = diffBlocks(a, b);
+  if (!blocks.length) return '';
+  let out = '--- ' + headers[0] + '\n+++ ' + headers[1] + '\n';
+  for (const group of contextGroups(blocks, width)) {
+    const first = group[0];
+    const last = group.at(-1);
+    const lead = Math.min(width, first.a0);
+    const trail = Math.min(width, a.length - last.a1);
+    const loA = first.a0 - lead;
+    const hiA = last.a1 + trail;
+    const loB = first.b0 - lead;
+    const hiB = last.b1 + trail;
+    out += '@@ -' + unifiedRange(loA, hiA - loA) + ' +' + unifiedRange(loB, hiB - loB) + ' @@\n';
+    let ai = loA;
+    for (const block of group) {
+      for (; ai < block.a0; ai++) out += ' ' + a[ai] + '\n';
+      for (; ai < block.a1; ai++) out += '-' + a[ai] + '\n';
+      for (let bi = block.b0; bi < block.b1; bi++) out += '+' + b[bi] + '\n';
+    }
+    for (; ai < hiA; ai++) out += ' ' + a[ai] + '\n';
   }
   return out;
 }
@@ -1332,7 +1377,24 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code: input.code, out, err: input.err };
     },
     diff: ({ argv, stdin = '' }) => {
-      const names = argv.filter((arg) => arg === '-' || !arg.startsWith('-'));
+      let mode = 'normal';
+      let width = 3;
+      const labels = [];
+      const names = [];
+      for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === '-' || !arg.startsWith('-')) names.push(arg);
+        else if (arg === '--label') labels.push(argv[++i] ?? '');
+        else if (arg.startsWith('--label=')) labels.push(arg.slice('--label='.length));
+        else if (arg === '-u') mode = 'unified';
+        else if (/^-U/.test(arg)) {
+          const value = arg.length > 2 ? arg.slice(2) : argv[++i];
+          if (!/^\d+$/.test(value ?? '')) return { code: 2, out: '', err: `diff: invalid context length '${value ?? ''}'\n` };
+          mode = 'unified';
+          width = Number(value);
+        } else if (arg.startsWith('--')) return { code: 2, out: '', err: `diff: unrecognized option '${arg}'\nTry 'diff --help' for more information.\n` };
+        else return { code: 2, out: '', err: `diff: invalid option -- '${arg[1]}'\nTry 'diff --help' for more information.\n` };
+      }
       if (names.length !== 2) return { code: 2, out: '', err: 'diff: two files are needed\n' };
       const texts = [];
       let err = '';
@@ -1348,7 +1410,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       }
       if (err) return { code: 2, out: '', err };
-      const out = lineDiff(linesOf(texts[0]), linesOf(texts[1]));
+      const headers = [labels[0] ?? names[0], labels[1] ?? names[1]];
+      const out = mode === 'unified' ? unifiedDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : lineDiff(linesOf(texts[0]), linesOf(texts[1]));
       return { code: out ? 1 : 0, out, err: '' };
     },
     expr: ({ argv }) => exprEval(argv),
