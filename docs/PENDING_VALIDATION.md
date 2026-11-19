@@ -3381,3 +3381,22 @@ Runs, each once, from the checkout at `46dfd51`, which holds 30ai, 30aj and 30ak
 The rows of 30ai (stat and chmod refuse a lookup through a directory without owner search), 30aj (stat -L) and 30ak (stat -c %N) pass in this run. Their red checks are recorded in their own sections above.
 
 Pushed: `9eb4652..46dfd51` to `origin main`, one push, which carried 7375665, d83f083, 6d3ddad, e574d63 and 46dfd51.
+
+### Change set 30al: stat -c %N quotes control characters and non-ASCII bytes in $-quoting, and a name with both quote kinds in shell form, as GNU stat does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) under LC_ALL=C as the sandbox identity `abc`, through a PATH shim named `stat`. Rows are generated from GNU with the real bytes of each name: the generator passes the JavaScript string to `sh`, so a non-ASCII character reaches GNU as its UTF-8 bytes. Each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU, real bytes; this closes the control and non-ASCII gap recorded in 30ak):
+- A name with a control character prints in $-quoting: the plain runs in single quotes, and each control character as `$'...'`. Named escapes for tab, newline, BEL, BS, FF, CR and VT: `$'\t'`, `$'\n'`, `$'\a'`, `$'\b'`, `$'\f'`, `$'\r'`, `$'\v'`. Octal for the others: 0x01 `$'\001'`, 0x1f `$'\037'`, DEL `$'\177'`, ESC `$'\033'`. Example: `'a'$'\t''b'`.
+- A non-ASCII name prints each UTF-8 byte as an octal escape in `$'...'`: `café` prints `'caf'$'\303\251'`, and a three-byte character prints `'x'$'\342\202\254'`.
+- Quote choice for a name with no control character: an apostrophe and no double quote gives double quotes (`"it's"`, as in 30ak); a double quote and no apostrophe gives single quotes (`'x"y'`); both give single quotes with each apostrophe written as `'\''`, for example `'it'\''s "x"'`.
+
+Earlier probes, superseded: the control-character and non-ASCII probes recorded before these rows passed names with literal backslash text, not the bytes, so they are not used. The UTF-8 locale comparison (en_US.UTF-8 against C.UTF-8) came from the same probes and is not claimed.
+
+What changed in the shell: `quoteName` splits the name at control characters and at code points outside printable ASCII. Each split piece outside that set is a single-quoted run; each control or non-ASCII piece is `$'...'`, with named escapes for the seven above, octal for other control characters, and the UTF-8 bytes in octal for a non-ASCII character (`octalBytes` uses `encodeURIComponent`). A name with no such character keeps the quote rule above, and the both-quotes case is in shell form.
+
+Witness: group `stat -c %N: a control character, a non-ASCII byte and a double quote are quoted as GNU stat quotes them in C locale`, 15 rows from GNU: 11 control characters (soh, tab, newline, us, bel, bs, ff, cr, vt, del, esc), a two-byte character, a three-byte character, a name with both quote kinds, and a name with a double quote only. Before the non-ASCII change, the two non-ASCII rows were red (they printed plain quotes around the bytes); after it, the full run is `RESULT PASS=896 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the named-escape map emptied: 7 rows red (tab, newline, BEL, BS, FF, CR, VT), `RESULT PASS=889 FAIL=7`. (2) the both-quotes branch removed: 1 row red, `RESULT PASS=895 FAIL=1`. (3) the split narrowed to control characters only: 2 rows red (the two non-ASCII rows), `RESULT PASS=894 FAIL=2`. A narrower check, the BEL key alone removed from the map, also gave 1 red row; (1) is the stronger check.
+
+Gaps, recorded: a name that has a control character or a non-ASCII byte together with a quote is not probed. Its output is not claimed; the plain runs are single-quoted, so an apostrophe inside them is not escaped there. The UTF-8 locales are not claimed (see the superseded probes above). The default stat output without `-c` is not witnessed.

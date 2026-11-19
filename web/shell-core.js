@@ -1420,7 +1420,18 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return null;
   };
 
-  const quoteName = (text) => (text.includes("'") ? '"' + text + '"' : "'" + text + "'");
+  const octalBytes = (ch) => encodeURIComponent(ch).split('%').slice(1).map((hex) => '\\' + parseInt(hex, 16).toString(8).padStart(3, '0')).join('');
+const ansiEscape = (ch) => {
+  if (ch.codePointAt(0) >= 0x80) return octalBytes(ch);
+  return { 7: '\\a', 8: '\\b', 9: '\\t', 10: '\\n', 11: '\\v', 12: '\\f', 13: '\\r' }[ch.charCodeAt(0)] ?? '\\' + ch.charCodeAt(0).toString(8).padStart(3, '0');
+};
+const quoteName = (text) => {
+  const pieces = text.split(/([\x00-\x1f\x7f]|[^\x20-\x7e])/u);
+  if (pieces.length > 1) return pieces.map((piece, i) => (i % 2 ? "$'" + ansiEscape(piece) + "'" : piece === '' ? '' : "'" + piece + "'")).join('');
+  if (text.includes("'") && text.includes('"')) return "'" + text.replace(/'/g, "'\\''") + "'";
+  if (text.includes("'")) return '"' + text + '"';
+  return "'" + text + "'";
+};
 const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (whole, code) => {
     if (code === 'N') return info.type === 'symbolic link' ? quoteName(name) + ' -> ' + quoteName(linkTarget) : quoteName(name);
     if (code === 'n') return name;
