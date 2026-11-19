@@ -850,6 +850,21 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return: ({ argv }) => {
       throw new ReturnSignal(Number(argv[0] ?? state.status));
     },
+    ':': () => ok(''),
+    shift: ({ argv }) => {
+      const count = argv.length ? Number(argv[0]) : 1;
+      if (!Number.isInteger(count) || count < 0 || count > positional.length) return { code: 1, out: '', err: 'shift: shift count out of range\n' };
+      positional = positional.slice(count);
+      return ok('');
+    },
+    set: ({ argv }) => {
+      if (!argv.length) return ok([...vars].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, value]) => `${name}=${value}\n`).join(''));
+      if (argv[0] === '--') {
+        positional = argv.slice(1);
+        return ok('');
+      }
+      return { code: 2, out: '', err: `set: unsupported option ${argv[0]}\n` };
+    },
     test: ({ argv }) => ({ code: evaluateTest(argv) ? 0 : 1, out: '', err: '' }),
     '[': ({ argv }) => {
       if (argv.at(-1) !== ']') return { code: 2, out: '', err: "[: missing ']'\n" };

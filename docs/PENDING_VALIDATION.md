@@ -2366,3 +2366,11 @@ Escaping note: the regex escapes every character outside `A-Za-z0-9_` with `Stri
 `scripts/witness-shell.mjs`: group `case: the first matching arm runs, with | alternatives, glob patterns and a default`, 9 rows: the arm that matches runs (`X`); a glob pattern matches the expanded word (`starts-h`); `*` is the default (`default`); `|` alternatives (`ab`); no match runs nothing, status 0, shell goes on (`after`); a quoted `*` matches only a literal star (`literal`); a quoted `*` does not match other text (`glob`); every command in the arm runs (`one uno`); the status is the arm's status (`rc=1`).
 
 Red check (done): the matching arm's body was replaced by `const code = 0`. `RESULT PASS=119 FAIL=8`, all 8 case rows that need output red. The no-match row stays green, which is correct. The line was restored; the green run is `RESULT PASS=127 FAIL=0`.
+
+### Change set 10, E1: the builtins `:`, `shift` and `set` (Phase A)
+
+`web/shell-core.js`, in the command table next to `return`: `:` does nothing and exits 0. `shift [N]` drops N positional parameters (default 1); a count that is not an integer, is negative, or is above the number of parameters exits 1 with `shift: shift count out of range`. `set -- words…` replaces the positional parameters; a bare `set` lists the shell variables as `name=value`, sorted by name. Any other `set` option (`-e`, `-x`, `-o`…) exits 2 with `set: unsupported option …`. It is refused rather than ignored, so a script that depends on `set -e` gets an error, not a silent difference.
+
+`scripts/witness-shell.mjs`: group `builtins: :, shift and set move and read the positional parameters`, 8 rows: `:` exits 0 (`rc=0`); `set --` sets three parameters (`a b 3`); `shift` drops one (`b 2`); `shift 2` drops two (`c 1`); shifting every parameter leaves none (`0`); a shift past the parameters exits 1 with its message; `set -e` exits 2 with its message; a bare `set` lists `v=1`.
+
+Red check (done), one builtin at a time, each restored: `:` made to exit 1: `RESULT PASS=134 FAIL=1` (the `:` row). `shift` made to drop nothing: `RESULT PASS=132 FAIL=3` (the three shift rows that need a shifted value). `set --` made never to run: `RESULT PASS=132 FAIL=3` (the `set --` row and the two shift rows that depend on it). The green run after restoring all three is `RESULT PASS=135 FAIL=0`.

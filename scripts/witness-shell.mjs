@@ -459,6 +459,26 @@ group('case: the first matching arm runs, with | alternatives, glob patterns and
   check('case: the status is the status of the arm that ran', status.stdout === 'rc=1\n', JSON.stringify(status.stdout));
 });
 
+group('builtins: :, shift and set move and read the positional parameters', async () => {
+  const sh = await shell({});
+  const colon = await run(sh, ': x y; echo rc=$?');
+  check('builtins: : does nothing, ignores its words and exits 0', colon.stdout === 'rc=0\n', JSON.stringify(colon.stdout));
+  const setArgs = await run(sh, 'set -- a b c; echo $1 $2 $#');
+  check('builtins: set -- replaces the positional parameters', setArgs.stdout === 'a b 3\n', JSON.stringify(setArgs.stdout));
+  const shifted = await run(sh, 'set -- a b c; shift; echo $1 $#');
+  check('builtins: shift drops one positional parameter', shifted.stdout === 'b 2\n', JSON.stringify(shifted.stdout));
+  const shiftedTwo = await run(sh, 'set -- a b c; shift 2; echo $1 $#');
+  check('builtins: shift N drops N positional parameters', shiftedTwo.stdout === 'c 1\n', JSON.stringify(shiftedTwo.stdout));
+  const emptied = await run(sh, 'set -- x y; shift; shift; echo $#');
+  check('builtins: shifting every parameter leaves none', emptied.stdout === '0\n', JSON.stringify(emptied.stdout));
+  const tooMany = await run(sh, 'set -- a; shift 2; echo rc=$?');
+  check('builtins: a shift past the parameters fails with status 1 and a message', tooMany.stdout === 'rc=1\n' && /shift count out of range/.test(tooMany.stderr), JSON.stringify(tooMany.stderr));
+  const unsupported = await run(sh, 'set -e; echo rc=$?');
+  check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -e/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
+  const listed = await run(sh, 'v=1; set | grep "^v="');
+  check('builtins: a bare set lists the shell variables', listed.stdout === 'v=1\n', JSON.stringify(listed.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
