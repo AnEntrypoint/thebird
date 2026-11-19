@@ -3540,3 +3540,25 @@ Witness: group 'case: a newline may come before the first pattern, but a semicol
 Red checks, each restored from a backup and confirmed by `cmp`, then a green run: (1) the arm loop skipping every `;` token (the 30ar behaviour): 2 rows red, `RESULT PASS=944 FAIL=2` (the two syntax-error shapes). (2) the newline mark removed from the tokenizer: 3 rows red, `RESULT PASS=943 FAIL=3` (the two accepted shapes, and the LINENO case-arm row from 30ar).
 
 Gap closed: the `;` before a case pattern that 30ar recorded as open. Still open, not probed: a backslash-newline inside double quotes and inside a heredoc body.
+
+### Change set 30at: a backslash-newline is removed inside double quotes and in an unquoted heredoc body, as bash does
+
+Reference: bash (the version in this sandbox). Probed with bash on files of the script text. Results:
+- `echo "a\` then a newline then `b"` prints `ab`: inside double quotes the backslash and the newline are both removed.
+- `echo "x\\` then a newline then `y"` prints `x\` and a newline and `y`: a doubled backslash is one backslash, and the newline stays.
+- `echo "a\q\` then a newline then `b"` prints `a\qb`: a backslash before a letter is kept, and the backslash-newline after it is removed.
+- `echo "\$x\` then a newline then `y"` prints `$xy`.
+- `cat <<E` with a body line `a\` and a newline and `b` prints `ab`: in an unquoted heredoc body the backslash-newline is removed.
+- `cat <<'E'` (quoted delimiter) and `echo 'a\` then a newline then `b'` keep the backslash and the newline. These two already matched.
+
+Before the change, four of the seven shapes differed: the three double-quoted shapes kept the newline, and the unquoted heredoc kept the backslash and the newline. The probe ran through a copy of the witness harness's in-memory host, not through the witness, before any row was written.
+
+Rule: a backslash followed by a newline is removed both inside double quotes and in an unquoted heredoc body, before the existing escape branch of each. Single quotes and quoted heredocs are unchanged.
+
+What changed in the shell: `readDouble` and `readBodyParts` each got a branch that skips a backslash-newline pair (two characters) before their existing escape branch.
+
+Witness: group `quoting: a backslash-newline is removed inside double quotes and in an unquoted heredoc body, as bash does`, 7 rows. Final in the window: `RESULT PASS=953 FAIL=0`.
+
+Red checks, run in the same window, each restored from a backup and confirmed with `cmp`: (1) the double-quote branch removed: `RESULT PASS=950 FAIL=3` (the three double-quoted shapes with a newline). (2) the heredoc branch removed: `RESULT PASS=952 FAIL=1`.
+
+Gaps still open, not probed: a backslash-newline inside a command substitution within double quotes, and a backslash-newline inside a heredoc delimiter word.

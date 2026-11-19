@@ -160,7 +160,9 @@ function readDouble(src, i) {
   while (src[j] !== '"') {
     if (j >= src.length) throw unterminated('double quote');
     const c = src[j];
-    if (c === '\\' && '$`"\\\n'.includes(src[j + 1])) {
+    if (c === '\\' && src[j + 1] === '\n') {
+      j += 2;
+    } else if (c === '\\' && '$`"\\\n'.includes(src[j + 1])) {
       lit += src[j + 1];
       j += 2;
     } else if (c === '$') {
@@ -229,7 +231,9 @@ function readBodyParts(text) {
   let i = 0;
   while (i < text.length) {
     const c = text[i];
-    if (c === '\\' && '$`\\'.includes(text[i + 1] ?? '')) {
+    if (c === '\\' && text[i + 1] === '\n') {
+      i += 2;
+    } else if (c === '\\' && '$`\\'.includes(text[i + 1] ?? '')) {
       lit += text[i + 1];
       i += 2;
     } else if (c === '$') {
