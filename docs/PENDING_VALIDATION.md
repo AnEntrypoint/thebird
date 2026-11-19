@@ -3487,3 +3487,21 @@ Witness: one group, 5 rows from GNU: the two psili rows, the dialytika row, and 
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the Greek extended range removed: 2 rows red (the two psili rows), `RESULT PASS=927 FAIL=2`. (2) the й exception removed: 1 row red (the й row of 30ao), `RESULT PASS=928 FAIL=1`. The first attempt at (1) left an extra bracket and failed to load; it was discarded and redone with a valid replacement.
 
 Gaps, recorded: Greek letters outside U+0370–U+1FFF are not probed. Cyrillic letters other than й are covered by the base rule, but only ў and Ў are probed. Other script exceptions to the base rule are not probed.
+
+### Change set 30aq: stat -c %N quotes runs of apostrophes beside a tab or a non-ASCII byte as GNU stat does; the rows pin the current rule, and no code changes
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) under LC_ALL=C as the sandbox identity `abc`, through a PATH shim named `stat`. Rows are generated from GNU with the real bytes of each name.
+
+Probed first (GNU, real bytes), with the quoted form GNU printed:
+- Each output is pinned by its row, which carries the exact text GNU printed for the name. The group titles name the shapes: two or three apostrophes before a tab, an apostrophe between two tabs, two apostrophes after a non-ASCII byte, and three apostrophes after a tab.
+- Three apostrophes before a tab, and an apostrophe between two tabs, and two apostrophes after a non-ASCII byte, and three apostrophes after a tab: all five outputs match the state machine of 30an and 30ap. No code change was needed; the rows confirm the rule for the shapes 30an did not name.
+
+What changed: the witness has one new group of 5 rows. `web/shell-core.js` is not changed in this change set.
+
+Witness: 5 rows from GNU, all passing on the current code: `RESULT PASS=934 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run. The two rules these rows depend on, broken one at a time:
+(1) an apostrophe inside an open run written as a bare `\'` instead of `'\''`: 11 rows red, including all 5 new rows, `RESULT PASS=923 FAIL=11`.
+(2) the close of a `$'...'` segment removed before an apostrophe: 8 rows red, including 3 new rows (between two tabs, two after a non-ASCII byte, three after a tab), `RESULT PASS=926 FAIL=8`.
+
+Gaps, recorded: the default `stat` output without `-c` is not witnessed. UTF-8 locale quoting is not claimed. Names that mix more than two kinds of escape character in one run are not probed beyond the shapes above.

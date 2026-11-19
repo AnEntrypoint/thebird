@@ -1460,6 +1460,19 @@ group("expr: an equivalence class of a Greek letter with a psili or a dialytika 
   check("expr: a Cyrillic letter with a breve matches its own upper case, as GNU expr does in a UTF-8 locale", gr4.stdout === "1\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
 });
 
+group("stat -c %N: runs of apostrophes next to a tab or a non-ASCII character are quoted as GNU stat quotes them in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"x''\ty\" && stat -c \"%N\" \"x''\ty\"; echo rc=$?");
+  check("stat -c %N quotes two apostrophes before a tab, as GNU stat does on Linux", gr0.stdout === "'x'\\'''\\'''$'\\t''y'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > \"x'''\ty\" && stat -c \"%N\" \"x'''\ty\"; echo rc=$?");
+  check("stat -c %N quotes three apostrophes before a tab, as GNU stat does on Linux", gr1.stdout === "'x'\\'''\\'''\\'''$'\\t''y'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "echo a > \"'\tx\t'\" && stat -c \"%N\" \"'\tx\t'\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe between two tabs, as GNU stat does on Linux", gr2.stdout === "''\\'''$'\\t''x'$'\\t'\\'''\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "echo a > \"é''x\" && stat -c \"%N\" \"é''x\"; echo rc=$?");
+  check("stat -c %N quotes two apostrophes after a non-ASCII character, as GNU stat does on Linux", gr3.stdout === "''$'\\303\\251'\\'''\\''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "echo a > \"x\t'''\" && stat -c \"%N\" \"x\t'''\"; echo rc=$?");
+  check("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", gr4.stdout === "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));
