@@ -2816,3 +2816,23 @@ Reference: bash in the sandbox. Two rows in group `set -x: tracing matches bash 
 
 Red checks, on this tree: (1) PS4 ignored (fixed prefix `+ `): two rows red. (2) PS4 dropped on the command line only: two rows red. Each restored by the reverse edit; the green run is `RESULT PASS=557 FAIL=0`.
 
+
+### Decision: env's not-found hint line (closes the open question in 30f)
+
+`env nosuchcmd` prints one line, `env: 'nosuchcmd': No such file or directory`, and exits 127. The current shell prints that line and nothing else, and that is kept.
+
+The question was whether the sandbox prints a second line, `env: use -[v]S to pass options in shebang lines`. It does, but only from the uutils binary at `/usr/bin/env` (uutils coreutils 0.10.0). The sandbox also has GNU coreutils 9.7 `env` as `/bin/gnuenv`, and that binary prints the single line in both the default and the C locale (`LC_ALL=C`, which gives straight quotes: `env: 'nosuch': No such file or directory`), with no hint line for a plain name, a name with an assignment, or a name with an argument. The hint line is therefore not part of GNU's output and is not matched. Correction to 30f: the earlier note that GNU prints the hint line was wrong, and the sandbox's uutils output was taken for GNU's.
+
+Also recorded: `/bin/gnuenv` with no arguments prints the whole environment; that is how an earlier probe in this session printed session variables. Nothing in the repo records them.
+
+### Ranked remaining work (after 575619e)
+
+Reachable, in order:
+1. `set -x` `for` headers: bash prints `+ for i in 1 2` before each pass; this shell prints nothing for the header (row `set -x (gap, compound headers)`). Cause: the for executor emits no trace line. Needs the executor to emit the header with the expanded word list on each pass.
+2. `set -x` `++` depth inside command substitution: bash prints the substitution's commands at depth two (`++ echo sub`); this shell prints depth one (row `set -x (gap, nested)`). Cause: trace depth is not tracked through substitutions. Needs a depth counter around the substitution, and the prefix repeated per level.
+3. `set -x` `$` expansion in PS4: bash expands PS4 (`$LINENO`, `$FUNCNAME` and so on); this shell uses PS4 as literal text. Found while closing 30g.
+4. `expr` `:` (regex match), `substr`, `index`, `match`, and `length` with more than one operand: refused today (`expr: syntax error` or `expr` refusal); not in the brief, found in 30d.
+5. `chmod -R`: not implemented. From reading `chmod` (`[mode, ...names]`), `chmod -R 755 f` takes `-R` as the mode and is refused with `invalid operator (expected +, -, or =, but found R)`, which is not GNU's behaviour. Not run in this shell; the probe is the first step if this is taken up.
+
+Held, with the evidence that would reopen each (unchanged from the held list above): the page shell on bashkit (owner decision H1); Ctrl-C on the Pages site (owner choice between restart and isolation); E5 per-item yield in `for` and `while` (owner picks time-sliced yielding); the three live 8793 rows (the hy4 gateway outside this repo); fx ask-mode approval; `.npmrc` `_authToken` through the browser (owner picks a registry or proxy); the fx-repo items; the Pyodide licence and vendored notices (owner licence decision).
+
