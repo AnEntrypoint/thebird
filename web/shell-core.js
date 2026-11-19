@@ -1972,13 +1972,27 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
       if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
       const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
-      const blockedAncestor = (path) => {
-        const parents = path.split('/').slice(1, -1);
-        for (let depth = 1; depth <= parents.length; depth++) {
-          if (!(ownerBits('/' + parents.slice(0, depth).join('/')) & 1)) return true;
+      const searchedDirectories = (path, depth = 0) => {
+        const parts = path.split('/').filter((part) => part !== '' && part !== '.');
+        const searched = [];
+        let current = '/';
+        for (let i = 0; i < parts.length; i++) {
+          searched.push(current);
+          if (parts[i] === '..') {
+            current = parentOf(current);
+            continue;
+          }
+          const candidate = (current === '/' ? '' : current) + '/' + parts[i];
+          if (host.lstat(candidate)?.link && depth < 40) {
+            const target = host.readlink(candidate);
+            const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, depth + 1);
+            searched.push(...inner.searched);
+            current = inner.real;
+          } else current = candidate;
         }
-        return false;
+        return { real: current, searched };
       };
+      const blockedAncestor = (path) => searchedDirectories(path).searched.some((dir) => !(ownerBits(dir) & 1));
       const changeOne = (path) => {
         const dir = host.stat(path)?.dir === true;
         const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
@@ -2021,6 +2035,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
             err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
             code = 1;
             if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+          } else if (host.lstat(child)?.link && dereference && blockedAncestor(child)) {
+            err += "chmod: cannot dereference '" + shown + '/' + entry + "': Permission denied\n";
+            code = 1;
+            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
           } else if (host.lstat(child)?.link && dereference && !statInfo(referentOf(child))) {
             err += "chmod: cannot dereference '" + shown + '/' + entry + "': No such file or directory\n";
             code = 1;
@@ -2031,12 +2049,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       };
       for (const name of names) {
-        if (noDereference && host.lstat(resolvePath(name))?.link) {
-          if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
-        } else if (blockedAncestor(resolvePath(name))) {
+        if (blockedAncestor(resolvePath(name))) {
           if (verbose) out += "'" + name + "' could not be accessed\n";
           err += "chmod: cannot access '" + name + "': Permission denied\n";
           code = 1;
+        } else if (noDereference && host.lstat(resolvePath(name))?.link) {
+          if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
         } else if (!statInfo(referentOf(resolvePath(name)))) {
           if (verbose) out += "'" + name + "' could not be accessed\n";
           err += host.lstat(resolvePath(name))?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";

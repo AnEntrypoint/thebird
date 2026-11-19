@@ -1229,6 +1229,33 @@ group("stat -c: the owner and group names are the shell identity, as GNU stat na
   check("stat -c with %U, %G and %F names the owner, group and type of each name, as GNU stat does for the identity abc", si2.stdout === "user user directory d\nuser user regular file d/a\n" && si2.stderr === "", JSON.stringify([si2.stdout, si2.stderr]));
 });
 
+group("chmod through a symbolic link: every directory the lookup passes through needs owner search, as GNU chmod does on Linux", async () => {
+  const lk0 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d lnk && chmod 000 d; chmod 700 lnk/a; echo rc=$?");
+  check("chmod through a directory symlink into a directory without owner search is refused, as GNU chmod does on Linux", lk0.stdout === "rc=1\n" && lk0.stderr === "chmod: cannot access 'lnk/a': Permission denied\n", JSON.stringify([lk0.stdout, lk0.stderr]));
+  const lk1 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a la && chmod 000 d; chmod 700 la; echo rc=$?");
+  check("chmod through a file symlink into a directory without owner search is refused when the link is followed, as GNU chmod does on Linux", lk1.stdout === "rc=1\n" && lk1.stderr === "chmod: cannot access 'la': Permission denied\n", JSON.stringify([lk1.stdout, lk1.stderr]));
+  const lk2 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a la && chmod 000 d; chmod -h 700 la; echo rc=$?");
+  check("chmod -h on a file symlink into a directory without owner search is refused, as GNU chmod does on Linux", lk2.stdout === "rc=1\n" && lk2.stderr === "chmod: cannot access 'la': Permission denied\n", JSON.stringify([lk2.stdout, lk2.stderr]));
+  const lk3 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d lnk && chmod 000 d; chmod -h 700 lnk; echo rc=$?");
+  check("chmod -h on a directory symlink to a directory without owner search is not refused, as GNU chmod does on Linux", lk3.stdout === "rc=0\n" && lk3.stderr === "", JSON.stringify([lk3.stdout, lk3.stderr]));
+  const lk4 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a la && chmod 000 d; chmod -vh 700 la; echo rc=$?");
+  check("chmod -vh on a file symlink into a directory without owner search is refused and reported, as GNU chmod does on Linux", lk4.stdout === "'la' could not be accessed\nrc=1\n" && lk4.stderr === "chmod: cannot access 'la': Permission denied\n", JSON.stringify([lk4.stdout, lk4.stderr]));
+  const lk5 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s a d/lk && chmod 000 d; chmod -h 700 d/lk; echo rc=$?");
+  check("chmod -h on a symlink in a directory without owner search is refused, as GNU chmod does on Linux", lk5.stdout === "rc=1\n" && lk5.stderr === "chmod: cannot access 'd/lk': Permission denied\n", JSON.stringify([lk5.stdout, lk5.stderr]));
+  const lk6 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s a d/lk && chmod 000 d; chmod 700 d/lk; echo rc=$?");
+  check("chmod on a symlink in a directory without owner search is refused, as GNU chmod does on Linux", lk6.stdout === "rc=1\n" && lk6.stderr === "chmod: cannot access 'd/lk': Permission denied\n", JSON.stringify([lk6.stdout, lk6.stderr]));
+  const lk7 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d l1 && ln -s l1 l2 && chmod 000 d; chmod 700 l2/a; echo rc=$?");
+  check("chmod through a directory symlink to a file in a directory reached through a second link is refused, as GNU chmod does on Linux", lk7.stdout === "rc=1\n" && lk7.stderr === "chmod: cannot access 'l2/a': Permission denied\n", JSON.stringify([lk7.stdout, lk7.stderr]));
+  const lk8 = await run(await shell({}), "mkdir d && mkdir d/e && echo a > d/e/a && ln -s d/e lnk2 && chmod 000 d/e; chmod 700 lnk2/a; echo rc=$?");
+  check("chmod through a directory symlink to a subdirectory without owner search is refused, as GNU chmod does on Linux", lk8.stdout === "rc=1\n" && lk8.stderr === "chmod: cannot access 'lnk2/a': Permission denied\n", JSON.stringify([lk8.stdout, lk8.stderr]));
+  const lk9 = await run(await shell({}), "mkdir d e && echo a > d/a && ln -s ../d/a e/lk && chmod 000 d; chmod -R --dereference 700 e; echo rc=$?");
+  check("chmod -R --dereference refuses a symlink whose target is in a directory without owner search, as GNU chmod does on Linux", lk9.stdout === "rc=1\n" && lk9.stderr === "chmod: cannot dereference 'e/lk': Permission denied\n", JSON.stringify([lk9.stdout, lk9.stderr]));
+  const lk10 = await run(await shell({}), "mkdir d e && echo a > d/a && ln -s ../d/a e/lk && chmod 000 d; chmod -vR --dereference 700 e; echo rc=$?");
+  check("chmod -vR --dereference reports the symlink whose target is in a directory without owner search, as GNU chmod does on Linux", lk10.stdout === "mode of 'e' changed from 0755 (rwxr-xr-x) to 0700 (rwx------)\n'e/lk' could not be accessed\nrc=1\n" && lk10.stderr === "chmod: cannot dereference 'e/lk': Permission denied\n", JSON.stringify([lk10.stdout, lk10.stderr]));
+  const lk11 = await run(await shell({}), "mkdir d e && echo a > d/a && ln -s ../d/a e/lk && chmod 000 d; chmod -R 700 e; echo rc=$?");
+  check("chmod -R without --dereference leaves a symlink whose target is in a directory without owner search alone, as GNU chmod does on Linux", lk11.stdout === "rc=0\n" && lk11.stderr === "", JSON.stringify([lk11.stdout, lk11.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

@@ -3271,3 +3271,24 @@ Runs, each once, from the checkout at `3a5e27a` (the last Phase A commit):
 - Runaway rows, timed by a copy of the witness in `/tmp` (not the repo) that wraps each run with a timeoutMs: `sleep 5; echo late` with 200 ms took 201 ms and exited 124; `while true; do true; done` with 200 ms took 200 ms and exited 124; `for i in {1..100000}; do :; done` with 300 ms took 300 ms and exited 124. A `while` that breaks after 3 passes, with a 2000 ms limit, took 4 ms and exited 0.
 
 Pushed in one push to `origin main`: `e7f87cc` (unset), `cc686c4` (compound output), `29ad0d8` (read), `0420049` and `373e87f` (closed gate readings for 30y to 30z), `d1d196d` (30ab, LINENO), `eee7e59` (30ac, accented equivalence), `368301b` (30ad, chmod owner bits), `2ebb5e7` (30ae, stat %U and %G), `3a5e27a` (30af, the walk-order closure), and this record. `bin/thebird-relay.js` is not committed and is not pushed.
+
+### Change set 30ag: chmod refuses a path through a symbolic link when a directory on its lookup path has no owner search, as GNU chmod does on Linux
+
+Reference: GNU chmod (`/bin/gnuchmod`, 9.7) run as the sandbox identity `abc` under LC_ALL=C, through a PATH shim named `chmod`. Rows are generated from GNU, each fixture is built in a fresh directory and removed afterwards (directories are restored by `find -exec chmod u+rwx` before `rm`).
+
+Probed first (GNU, `d` at mode 000, the link in the base directory, relative link targets only, because an absolute target depends on the directory the fixture is built in):
+- `chmod 700 lnk/a`, with `lnk` a link to `d`: refused, `cannot access 'lnk/a': Permission denied`, status 1. The lookup goes through `d`.
+- `chmod 700 la`, with `la` a link to `d/a`: refused, `cannot access 'la'`. The followed link's target is inside `d`.
+- `chmod -h 700 la` (the same link): also refused. GNU checks the target's directories even without following the link.
+- `chmod -h 700 lnk`, with `lnk` a link to the directory `d` itself: not refused, status 0. Only the directories the lookup passes through need search; `d` itself does not.
+- `chmod 700 lnk2/a`, with `lnk2` a link to `d/e` and `d/e` at 000: refused. A second link (`l2` to `l1` to `d`) is followed to the end, and the lookup through it is refused.
+- `chmod -R --dereference 700 e`, where `e/lk` is a link to `../d/a` and `d` is 000: refused for the link, `chmod: cannot dereference 'e/lk': Permission denied`, status 1; with `-v`, stdout also has `'e/lk' could not be accessed`.
+- `chmod -R 700 e` (no `--dereference`): the link is not followed, so `e/lk` is left alone, status 0.
+
+What changed in the shell: `searchedDirectories(path)` walks the path from `/`. It records each directory whose search bit a lookup needs, and when a component is a symbolic link it follows the target (up to 40 links), recording the target's directories too. `blockedAncestor` is true when any recorded directory lacks owner search (`ownerBits`, change set 30ad). The check runs first for every operand, before the `-h` branch, and in the recursive walk it runs for a child link under `--dereference` (with GNU's `cannot dereference` message, and the `-v` line). The walk without `--dereference` does not follow child links and is unchanged. The old check looked only at the literal path's parents, so a link into a blocked directory was allowed.
+
+Witness: group `chmod through a symbolic link: every directory the lookup passes through needs owner search, as GNU chmod does on Linux`, 12 rows from GNU. Last full run after the change: `RESULT PASS=848 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the walk not following links (`depth < 0`): 8 rows red (the link rows, and the operand rows that depend on a followed link). (2) the dereferencing child check removed: 2 rows red (the `--dereference` rows). (3) the operand check removed: 12 rows red (the 4 older operand rows and the link operand rows). The restored file matches its backup, and the green run gives `RESULT PASS=848 FAIL=0`.
+
+Gaps, recorded: `resolvePath` collapses `..` lexically before the link walk runs, so an operand such as `lnk/../x`, where `lnk` is a link, is resolved as `x` (POSIX resolves the link first). Absolute link targets are not witnessed. The shell's `stat` does not refuse a path through a blocked directory (GNU refuses it with `stat: cannot statx`), and the rows do not stat such a path.
