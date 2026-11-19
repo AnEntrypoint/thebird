@@ -2975,3 +2975,18 @@ Gate: `vmstat 1 2`, last line, swap-in 44 KB/s and swap-out 0 KB/s, both below 1
 
 Pushed: origin main from 16494f6 to the head after this record, one push, no force. The commits are da5fe72 (PS4 and LINENO), e6352ef (chmod -v and -c), 5a20c1d (chmod --reference), 5ae8f9e (chmod --dereference) and this record.
 
+
+### Change set 30p: an output redirect into a missing directory is refused before the command runs
+
+Reference: `sh` in this sandbox is dash (`/usr/bin/dash`). Probed: `echo a > /nonexist-q/z; echo rc=$?` prints `sh: 1: cannot create /nonexist-q/z: Directory nonexistent`, status 2, and does not run the command (the `rc=2` is printed, the `a` is not). `>>` and `2>` behave the same. The rows take their expected stdout from dash and their expected stderr from dash with its `sh: 1: ` prefix mapped to this shell's name, `thebird: `. bash is not the reference here: it prints `No such file or directory` with status 1.
+
+What was wrong: the in-memory shell's write creates a missing parent, so `echo a > /missing/z` succeeded silently. What changed: `runCommand` checks each output redirect in order (`>`, `>>`, `&>`, `&>>`, `2>`, `2>>`) before the command runs, and a missing parent directory returns status 2 with `thebird: cannot create PATH: Directory nonexistent`. `/dev/null` is exempt.
+
+Fixture change: 24 existing rows wrote to paths whose directory was never created (`echo a > /cm/f` in the chmod symbolic rows, `echo out &> /t/a.txt` in the `&>` group, and `echo t > /cp/tt` in the `cp -r` link row). Those rows relied on the implicit parent. Each now creates its directory first (`mkdir -p /cm;`, `mkdir -p /t` in the group's shell, `mkdir -p /cp;`). The stdout and stderr they expect are unchanged, since `mkdir -p` prints nothing.
+
+Witness: group `redirects: an output into a missing directory is refused before the command runs, as dash does`, 4 rows from dash, with `RESULT PASS=676 FAIL=0` after the change and the fixture fix.
+
+Red checks, each restored and confirmed by a green run: (1) the pre-check removed: 3 rows red (`>`, `>>`, `2>`). (2) `2>` removed from the output set: 1 row red (the `2>` row).
+
+Gaps, recorded: the check covers the redirects of a simple command only; a redirect on an `if`, `for`, `while`, `case`, or group is not checked. dash's `&>` is not POSIX and was not used as a reference; this shell keeps its own `&>` behaviour. The message prefix is this shell's name, where dash prints `sh: 1:`.
+

@@ -500,6 +500,7 @@ group('redirects: here-strings and heredocs feed their text to the command', asy
 
 group('redirects: &> sends stdout and stderr to a file, &>> appends to it', async () => {
   const sh = await shell({});
+  await run(sh, 'mkdir -p /t');
   const both = await run(sh, 'echo out &> /t/a.txt; cat /t/a.txt');
   check('redirects: &> writes stdout to the file and nothing to the output', both.stdout === 'out\n' && both.stderr === '', JSON.stringify(both.stdout));
   const error = await run(sh, 'cat /nope/x &> /t/e.txt; cat /t/e.txt');
@@ -598,7 +599,7 @@ group('cp -r: a directory is copied with its tree, and a link is copied as a lin
   check('cp -r: a directory copied into a directory lands inside it', into.stdout === 'x\nrc=0\n', JSON.stringify(into.stdout));
   const plain = await run(await shell({}), 'mkdir -p /cp/a; cp /cp/a /cp/z; echo rc=$?');
   check('cp: a directory without -r is omitted with status 1, as GNU cp', plain.stdout === 'rc=1\n' && plain.stderr === "cp: -r not specified; omitting directory '/cp/a'\n", JSON.stringify(plain));
-  const link = await run(await shell({}), 'echo t > /cp/tt; ln -s /cp/tt /cp/ll; mkdir -p /cp/d; cp -r /cp/ll /cp/d; test -L /cp/d/ll && echo link-kept');
+  const link = await run(await shell({}), 'mkdir -p /cp; echo t > /cp/tt; ln -s /cp/tt /cp/ll; mkdir -p /cp/d; cp -r /cp/ll /cp/d; test -L /cp/d/ll && echo link-kept');
   check('cp -r: a link is copied as a link', link.stdout === 'link-kept\n', JSON.stringify(link.stdout));
   const self = await run(await shell({}), 'mkdir -p /cp/m/n; echo k > /cp/m/n/f; cp -r /cp/m /cp/m; echo rc=$?');
   check('cp -r: a directory cannot be copied into itself', self.stdout === 'rc=1\n' && self.stderr === "cp: cannot copy a directory, '/cp/m', into itself, '/cp/m/m'\n", JSON.stringify(self));
@@ -670,43 +671,43 @@ group('diff -c and -C: context output, with labels, matches GNU diff', async () 
 });
 
 group('chmod: symbolic modes match GNU chmod, and octal modes still work', async () => {
-  const m1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m1 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: u+x adds the owner execute bit", m1.stdout === "rc=0\n744\n" && m1.stderr === "", JSON.stringify([m1.stdout, m1.stderr]));
-  const m2 = await run(await shell({}), "echo a > /cm/f; chmod 666 /cm/f; chmod \"go-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m2 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 666 /cm/f; chmod \"go-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: go-w removes write from group and other", m2.stdout === "rc=0\n644\n" && m2.stderr === "", JSON.stringify([m2.stdout, m2.stderr]));
-  const m3 = await run(await shell({}), "echo a > /cm/f; chmod 755 /cm/f; chmod \"a=r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m3 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 755 /cm/f; chmod \"a=r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a=r sets read only for all three classes", m3.stdout === "rc=0\n444\n" && m3.stderr === "", JSON.stringify([m3.stdout, m3.stderr]));
-  const m4 = await run(await shell({}), "echo a > /cm/f; chmod 444 /cm/f; chmod \"+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m4 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 444 /cm/f; chmod \"+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: +w with no class is limited by the umask for group and other", m4.stdout === "rc=0\n644\n" && m4.stderr === "", JSON.stringify([m4.stdout, m4.stderr]));
-  const m5 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m5 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: -w with no class removes write from all three classes", m5.stdout === "rc=0\n444\n" && m5.stderr === "", JSON.stringify([m5.stdout, m5.stderr]));
-  const m6 = await run(await shell({}), "echo a > /cm/f; chmod 000 /cm/f; chmod \"u+rwx,g+r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m6 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 000 /cm/f; chmod \"u+rwx,g+r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: clauses separated by a comma apply in order", m6.stdout === "rc=0\n740\n" && m6.stderr === "", JSON.stringify([m6.stdout, m6.stderr]));
-  const m7 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"g=u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m7 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"g=u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: g=u copies the owner bits to the group", m7.stdout === "rc=0\n664\n" && m7.stderr === "", JSON.stringify([m7.stdout, m7.stderr]));
-  const m8 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"a+s\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m8 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"a+s\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a+s sets the setuid and setgid bits", m8.stdout === "rc=0\n6644\n" && m8.stderr === "", JSON.stringify([m8.stdout, m8.stderr]));
-  const m9 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x,go+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m9 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x,go+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: X adds execute only when some execute bit is already set", m9.stdout === "rc=0\n755\n" && m9.stderr === "", JSON.stringify([m9.stdout, m9.stderr]));
-  const m10 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+rx,g-r,o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m10 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u+rx,g-r,o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: three clauses of different operators in one mode", m10.stdout === "rc=0\n700\n" && m10.stderr === "", JSON.stringify([m10.stdout, m10.stderr]));
-  const m11 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"+rw\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m11 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"+rw\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: +rw with no class keeps the umask on group and other write", m11.stdout === "rc=0\n644\n" && m11.stderr === "", JSON.stringify([m11.stdout, m11.stderr]));
-  const m12 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m12 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u+\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a class with no permission changes nothing", m12.stdout === "rc=0\n644\n" && m12.stderr === "", JSON.stringify([m12.stdout, m12.stderr]));
-  const m13 = await run(await shell({}), "echo a > /cm/f; chmod 700 /cm/f; chmod \"ug+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m13 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 700 /cm/f; chmod \"ug+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: ug+w adds write to owner and group only", m13.stdout === "rc=0\n720\n" && m13.stderr === "", JSON.stringify([m13.stdout, m13.stderr]));
-  const m14 = await run(await shell({}), "echo a > /cm/f; chmod 720 /cm/f; chmod \"a+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m14 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 720 /cm/f; chmod \"a+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a+X adds execute to all classes when the owner has it", m14.stdout === "rc=0\n731\n" && m14.stderr === "", JSON.stringify([m14.stdout, m14.stderr]));
-  const m15 = await run(await shell({}), "echo a > /cm/f; chmod 777 /cm/f; chmod \"o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const m15 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 777 /cm/f; chmod \"o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: o= clears all bits of other", m15.stdout === "rc=0\n770\n" && m15.stderr === "", JSON.stringify([m15.stdout, m15.stderr]));
-  const e1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+q\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const e1 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u+q\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: an unknown permission letter is refused with status 1 and the file is unchanged", e1.stdout === "rc=1\n644\n" && e1.stderr === "chmod: invalid mode: 'u+q'\nTry 'chmod --help' for more information.\n", JSON.stringify([e1.stdout, e1.stderr]));
-  const e2 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"x+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const e2 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"x+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a letter where a class or operator belongs is refused with status 1", e2.stdout === "rc=1\n644\n" && e2.stderr === "chmod: invalid mode: 'x+x'\nTry 'chmod --help' for more information.\n", JSON.stringify([e2.stdout, e2.stderr]));
-  const e3 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const e3 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \"u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: a clause with no operator is refused with status 1", e3.stdout === "rc=1\n644\n" && e3.stderr === "chmod: invalid mode: 'u'\nTry 'chmod --help' for more information.\n", JSON.stringify([e3.stdout, e3.stderr]));
-  const e4 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \",u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  const e4 = await run(await shell({}), "mkdir -p /cm; echo a > /cm/f; chmod 644 /cm/f; chmod \",u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: an empty clause is refused with status 1", e4.stdout === "rc=1\n644\n" && e4.stderr === "chmod: invalid mode: ',u+x'\nTry 'chmod --help' for more information.\n", JSON.stringify([e4.stdout, e4.stderr]));
 });
 
@@ -745,6 +746,17 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   check("set -x: an empty PS4 gives no text before each trace line, as bash does", xt15.stdout === "p\n" && xt15.stderr === "echo p\nset +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
   const xt16 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
   check("set -x: a command substitution is traced at ++, as bash does", xt16.stdout === "sub\n" && xt16.stderr === "++ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
+});
+
+group('redirects: an output into a missing directory is refused before the command runs, as dash does', async () => {
+  const rd0 = await run(await shell({}), "echo a > /nonexist-q/z; echo rc=$?");
+  check("redirects: an output into a missing directory fails with status 2 and the command does not run, as dash does", rd0.stdout === "rc=2\n" && rd0.stderr === "thebird: cannot create /nonexist-q/z: Directory nonexistent\n", JSON.stringify([rd0.stdout, rd0.stderr]));
+  const rd1 = await run(await shell({}), "echo a >> /nonexist-q/z; echo rc=$?");
+  check("redirects: an append into a missing directory fails with status 2, as dash does", rd1.stdout === "rc=2\n" && rd1.stderr === "thebird: cannot create /nonexist-q/z: Directory nonexistent\n", JSON.stringify([rd1.stdout, rd1.stderr]));
+  const rd2 = await run(await shell({}), "echo e 2> /nonexist-q/deep/z; echo rc=$?");
+  check("redirects: a 2> into a missing directory fails before the command runs, as dash does", rd2.stdout === "rc=2\n" && rd2.stderr === "thebird: cannot create /nonexist-q/deep/z: Directory nonexistent\n", JSON.stringify([rd2.stdout, rd2.stderr]));
+  const rd3 = await run(await shell({}), "echo a > /dev/null; echo rc=$?");
+  check("redirects: an output into /dev/null still works next to a missing directory check, as dash does", rd3.stdout === "rc=0\n" && rd3.stderr === "", JSON.stringify([rd3.stdout, rd3.stderr]));
 });
 
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {

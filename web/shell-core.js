@@ -8,6 +8,7 @@ export const COMMAND_TIMEOUT_MS = 900000;
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
 const OPERATORS = ['2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
 const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1']);
+const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '&>>', '2>', '2>>']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
@@ -2372,6 +2373,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function runCommand(node, argv, stdin, sink) {
+    for (const redirect of node.redirects) {
+      if (!OUTPUT_REDIRECTS.has(redirect.op)) continue;
+      const path = await wordPath(redirect.target, sink);
+      if (path !== NULL_DEVICE && host.stat(parentOf(resolvePath(path)))?.dir !== true) return { code: 2, out: '', err: 'thebird: cannot create ' + path + ': Directory nonexistent\n' };
+    }
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op === '<<') input = await bodyText(redirect.body, sink);
