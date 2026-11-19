@@ -866,15 +866,122 @@ function traceLines(assigned, argv, prefix) {
 
 class ExprFailure extends Error {}
 
+const CHARACTER_CLASSES = {
+  alpha: 'a-zA-Z',
+  digit: '0-9',
+  alnum: 'a-zA-Z0-9',
+  upper: 'A-Z',
+  lower: 'a-z',
+  space: ' \\t\\n\\r\\f\\v',
+  blank: ' \\t',
+  xdigit: '0-9A-Fa-f',
+  punct: '\\x21-\\x2f\\x3a-\\x40\\x5b-\\x60\\x7b-\\x7e',
+};
+
+function characterClass(name) {
+  if (!Object.hasOwn(CHARACTER_CLASSES, name)) throw new ExprFailure('Invalid character class name');
+  return CHARACTER_CLASSES[name];
+}
+
+function breToJs(pattern) {
+  let out = '';
+  let groups = 0;
+  let depth = 0;
+  let atStart = true;
+  const literal = (ch) => ch.replace(/[.*+?^$(){}|[\]\\\/]/g, '\\$&');
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\') {
+      i++;
+      if (i >= pattern.length) throw new ExprFailure('Trailing backslash');
+      const next = pattern[i];
+      atStart = false;
+      if (next === '(') {
+        groups++;
+        depth++;
+        out += '(';
+        atStart = true;
+      } else if (next === ')') {
+        if (depth === 0) throw new ExprFailure('Unmatched ) or \\)');
+        depth--;
+        out += ')';
+      } else if (next === '|') {
+        out += '|';
+        atStart = true;
+      } else if (next === '{') {
+        const close = pattern.indexOf('\\}', i);
+        if (close < 0) throw new ExprFailure('Unmatched \\{');
+        out += '{' + pattern.slice(i + 1, close) + '}';
+        i = close + 1;
+      } else if (next === '+' || next === '?') {
+        out += next;
+      } else if (/[1-9]/.test(next)) {
+        out += '\\' + next;
+      } else {
+        out += literal(next);
+      }
+    } else if ('(){}+?|'.includes(ch)) {
+      out += '\\' + ch;
+      atStart = false;
+    } else if (ch === '*') {
+      out += atStart ? '\\*' : '*';
+      atStart = false;
+    } else if (ch === '^') {
+      out += atStart ? '^' : '\\^';
+    } else if (ch === '$') {
+      const atEnd = i === pattern.length - 1 || pattern.startsWith('\\)', i + 1) || pattern.startsWith('\\|', i + 1);
+      out += atEnd ? '$' : '\\$';
+      atStart = false;
+    } else if (ch === '[') {
+      let j = i + 1;
+      if (pattern[j] === '^') j++;
+      if (pattern[j] === ']') j++;
+      while (j < pattern.length && pattern[j] !== ']') {
+        if (pattern.startsWith('[=', j) || pattern.startsWith('[.', j)) throw new ExprFailure('equivalence classes and collating symbols are not supported');
+        if (pattern.startsWith('[:', j) && pattern.includes(':]', j + 2)) j = pattern.indexOf(':]', j + 2) + 2;
+        else j++;
+      }
+      if (j >= pattern.length) throw new ExprFailure('Unmatched [, [^, [:, [., or [=');
+      const body = pattern.slice(i + 1, j);
+      const negate = body.startsWith('^');
+      const items = (negate ? body.slice(1) : body).replace(/\\/g, '\\\\').replace(/\[:(\w+):\]/g, (_, name) => characterClass(name)).replace(/^\]/, '\\]');
+      out += '[' + (negate ? '^' : '') + items + ']';
+      i = j;
+      atStart = false;
+    } else if (ch === '.') {
+      out += '[\\s\\S]';
+      atStart = false;
+    } else {
+      out += literal(ch);
+      atStart = false;
+    }
+  }
+  if (depth > 0) throw new ExprFailure('Unmatched ( or \\(');
+  return { source: out, groups };
+}
+
+function matchString(text, pattern) {
+  const { source, groups } = breToJs(pattern);
+  const n = text.length;
+  for (let end = n; end >= 0; end--) {
+    const found = new RegExp('^(?:' + source + ')(?=[\\s\\S]{' + (n - end) + '}$)').exec(text);
+    if (found) return groups > 0 ? (found[1] ?? '') : String(end);
+  }
+  return groups > 0 ? '' : '0';
+}
+
 function exprEval(argv) {
   const isInt = (s) => /^[+-]?\d+$/.test(s);
   const truthy = (value) => value !== '' && value !== '0';
   if (!argv.length) return { code: 2, out: '', err: 'expr: missing operand\n' };
   if (argv.length === 1) return { code: truthy(argv[0]) ? 0 : 1, out: argv[0] + '\n', err: '' };
-  if (argv[0] === 'length' && argv.length === 2) return { code: 0, out: argv[1].length + '\n', err: '' };
   let pos = 0;
   const fail = (message) => {
     throw new ExprFailure(message);
+  };
+  const take = () => {
+    if (pos >= argv.length) fail("syntax error: missing argument after '" + argv[pos - 1] + "'");
+    return argv[pos++];
   };
   const arith = (op, left, right) => {
     if (!isInt(left) || !isInt(right)) fail('non-integer argument');
@@ -891,21 +998,54 @@ function exprEval(argv) {
     const holds = op === '=' ? x === y : op === '!=' ? x !== y : op === '<' ? x < y : op === '>' ? x > y : op === '<=' ? x <= y : x >= y;
     return holds ? '1' : '0';
   };
+  const indexOfChars = (text, chars) => {
+    if (!chars.length) return '0';
+    for (let i = 0; i < text.length; i++) if (chars.includes(text[i])) return String(i + 1);
+    return '0';
+  };
+  const substring = (text, start, length) => {
+    const from = isInt(start) ? Number(start) : 0;
+    const count = isInt(length) ? Number(length) : 0;
+    if (from < 1 || from > text.length || count <= 0) return '';
+    return text.slice(from - 1, from - 1 + count);
+  };
   const primary = () => {
     if (pos >= argv.length) fail("syntax error: missing argument after '" + argv[pos - 1] + "'");
     const token = argv[pos++];
     if (token === ')') fail("syntax error: unexpected argument ')'");
+    if (token === 'length') return String(take().length);
+    if (token === 'index') {
+      const text = take();
+      return indexOfChars(text, take());
+    }
+    if (token === 'substr') {
+      const text = take();
+      const start = take();
+      return substring(text, start, take());
+    }
+    if (token === 'match') {
+      const text = take();
+      return matchString(text, take());
+    }
     if (token !== '(') return token;
     const inner = disjunction();
     if (argv[pos] !== ')') fail("syntax error: expecting ')' after '" + argv[pos - 1] + "'");
     pos++;
     return inner;
   };
-  const multiplicative = () => {
+  const matched = () => {
     let value = primary();
+    while (argv[pos] === ':') {
+      pos++;
+      value = matchString(value, primary());
+    }
+    return value;
+  };
+  const multiplicative = () => {
+    let value = matched();
     while (argv[pos] === '*' || argv[pos] === '/' || argv[pos] === '%') {
       const op = argv[pos++];
-      value = arith(op, value, primary());
+      value = arith(op, value, matched());
     }
     return value;
   };
