@@ -718,6 +718,30 @@ group('diff: diff prints the normal-format changes between two files', async () 
   check('diff: a missing file gives a message and status 2', missing.stdout === 'rc=2\n' && missing.stderr.includes('diff: /df/none: No such file or directory'), JSON.stringify(missing.stderr));
 });
 
+group('expr: expr computes arithmetic, comparisons and length, and sets the status from the result', async () => {
+  const sh = await shell({});
+  const sums = await run(sh, "expr 2 + 3; expr 7 - 10");
+  check('expr: addition and subtraction, with a negative result', sums.stdout === '5\n-3\n', JSON.stringify(sums.stdout));
+  const products = await run(sh, "expr 4 '*' 5; expr 7 / 2; expr 7 % 3; expr -7 / 2");
+  check('expr: multiplication, division and remainder truncate toward zero', products.stdout === '20\n3\n1\n-3\n', JSON.stringify(products.stdout));
+  const equal = await run(sh, 'expr 3 = 3; echo rc=$?; expr 3 = 4; echo rc=$?');
+  check('expr: a true comparison prints 1 with status 0, a false one prints 0 with status 1', equal.stdout === '1\nrc=0\n0\nrc=1\n', JSON.stringify(equal.stdout));
+  const compare = await run(sh, "expr 10 '>' 9; expr abc '<' abd; expr length hello");
+  check('expr: numbers compare as numbers, words as text, and length counts characters', compare.stdout === '1\n1\n5\n', JSON.stringify(compare.stdout));
+  const zero = await run(sh, 'expr 1 / 0; echo rc=$?');
+  check('expr: division by zero gives a message and status 2', zero.stdout === 'rc=2\n' && zero.stderr.includes('expr: division by zero'), JSON.stringify(zero.stderr));
+  const notInt = await run(sh, 'expr 2 + x; echo rc=$?');
+  check('expr: an arithmetic operand that is not an integer gives status 2', notInt.stdout === 'rc=2\n' && notInt.stderr.includes('expr: non-integer argument'), JSON.stringify(notInt.stderr));
+  const logic = await run(sh, "expr 0 '&' 5; echo rc=$?; expr 0 '|' 7; expr 3 '&' 4");
+  check('expr: & and | pick a side by truth, and the status follows the result', logic.stdout === '0\nrc=1\n7\n3\n', JSON.stringify(logic.stdout));
+  const none = await run(sh, 'expr; echo rc=$?');
+  check('expr: no operand gives a message and status 2', none.stdout === 'rc=2\n' && none.stderr.includes('expr: missing operand'), JSON.stringify(none.stderr));
+  const zeroOnly = await run(sh, 'expr 0; echo rc=$?');
+  check('expr: a lone 0 is a false result with status 1', zeroOnly.stdout === '0\nrc=1\n', JSON.stringify(zeroOnly.stdout));
+  const chained = await run(sh, "expr 1 + 2 '*' 3; echo rc=$?");
+  check('expr: a longer expression is refused with status 2, not evaluated', chained.stdout === 'rc=2\n' && chained.stderr.includes('only one operator is supported'), JSON.stringify(chained.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

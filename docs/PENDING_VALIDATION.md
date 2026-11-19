@@ -2502,3 +2502,15 @@ Known gap: when several minimal scripts exist, the choice among them can differ 
 `scripts/witness-shell.mjs`: group `diff: diff prints the normal-format changes between two files`, 8 rows: identical files print nothing (`rc=0`); a changed line (`2c2`, `< 2`, `---`, `> X`); an added line (`0a1`, `> 0`); a removed line (`2d1`, `< 2`); two separate changes as two hunks in order (`2c2` and `5c5`); stdin as the first file (`1a2`, `> X`, checked against GNU); a missing file (status 2, the message). The expected text for the last two rows was taken from GNU diff runs on the same inputs.
 
 Red check (done), each restored and confirmed by an edit that applied: the delete header with a wrong position (`d0`): `RESULT PASS=225 FAIL=1` (the removed-line row). The separator dropped from the change hunk: `RESULT PASS=224 FAIL=2` (the changed-line and two-hunk rows). The missing-file status made 0: `RESULT PASS=225 FAIL=1`. The green run after all three restores is `RESULT PASS=226 FAIL=0`.
+
+### Change set 23, E4h: expr (Phase A)
+
+`web/shell-core.js`: `exprEval` takes the arguments. One argument prints it and exits 1 when it is empty or 0. `length STRING` prints the length. Three arguments are `A OP B`: `+ - * / %` on integers (division truncates toward zero, and a zero divisor gives `expr: division by zero`, status 2); `= != < > <= >=` compare as numbers when both sides are integers and as text otherwise, and print 1 or 0; `&` gives the left side when both sides are non-empty and not 0, else 0; `|` gives the left side unless it is empty or 0, then the right side, else 0. A non-integer operand to an arithmetic operator gives `expr: non-integer argument` with status 2. No operand gives `expr: missing operand`. The exit status is 1 when the printed result is empty or 0, as in GNU expr.
+
+Known gap: an expression of more than three words is refused with `expr: only one operator is supported` and status 2. GNU expr applies operator precedence there (`expr 1 + 2 * 3` is 7), and that is not implemented.
+
+Checked against GNU expr: every value in the witness rows below was taken from a GNU run on the same arguments.
+
+`scripts/witness-shell.mjs`: group `expr: expr computes arithmetic, comparisons and length, and sets the status from the result`, 10 rows: addition and subtraction (`5`, `-3`); multiplication, division and remainder, with a negative dividend (`20`, `3`, `1`, `-3`); true and false comparisons with their status (`1 rc=0`, `0 rc=1`); numeric and text comparisons and length (`1`, `1`, `5`); division by zero (status 2, the message); a non-integer operand (status 2, the message); `&` and `|` (`0 rc=1`, `7`, `3`); no operand (status 2, the message); a lone 0 (status 1); a longer expression refused (status 2, the message).
+
+Red check (done), each restored and confirmed by an edit that applied: the arithmetic result replaced by the left operand: `RESULT PASS=234 FAIL=2` (the two arithmetic rows). The comparison result inverted: `RESULT PASS=234 FAIL=2` (the two comparison rows). The no-operand status made 0 with no message: `RESULT PASS=235 FAIL=1`. The green run after all three restores is `RESULT PASS=236 FAIL=0`.

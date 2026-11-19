@@ -712,6 +712,34 @@ function lineDiff(a, b) {
   return out;
 }
 
+function exprEval(argv) {
+  const isInt = (s) => /^[+-]?\d+$/.test(s);
+  const truthy = (value) => value !== '' && value !== '0';
+  if (!argv.length) return { code: 2, out: '', err: 'expr: missing operand\n' };
+  if (argv.length === 1) return { code: truthy(argv[0]) ? 0 : 1, out: argv[0] + '\n', err: '' };
+  if (argv[0] === 'length' && argv.length === 2) return { code: 0, out: argv[1].length + '\n', err: '' };
+  if (argv.length !== 3) return { code: 2, out: '', err: 'expr: only one operator is supported\n' };
+  const [left, op, right] = argv;
+  let value;
+  if (['+', '-', '*', '/', '%'].includes(op)) {
+    if (!isInt(left) || !isInt(right)) return { code: 2, out: '', err: 'expr: non-integer argument\n' };
+    const a = Number(left);
+    const b = Number(right);
+    if ((op === '/' || op === '%') && b === 0) return { code: 2, out: '', err: 'expr: division by zero\n' };
+    value = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : op === '/' ? Math.trunc(a / b) : a % b;
+  } else if (['=', '!=', '<', '>', '<=', '>='].includes(op)) {
+    const numeric = isInt(left) && isInt(right);
+    const x = numeric ? Number(left) : left;
+    const y = numeric ? Number(right) : right;
+    const holds = op === '=' ? x === y : op === '!=' ? x !== y : op === '<' ? x < y : op === '>' ? x > y : op === '<=' ? x <= y : x >= y;
+    value = holds ? 1 : 0;
+  } else if (op === '&') value = truthy(left) && truthy(right) ? left : 0;
+  else if (op === '|') value = truthy(left) ? left : truthy(right) ? right : 0;
+  else return { code: 2, out: '', err: 'expr: unknown operator ' + op + '\n' };
+  const text = String(value);
+  return { code: truthy(text) ? 0 : 1, out: text + '\n', err: '' };
+}
+
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1294,6 +1322,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       const out = lineDiff(linesOf(texts[0]), linesOf(texts[1]));
       return { code: out ? 1 : 0, out, err: '' };
     },
+    expr: ({ argv }) => exprEval(argv),
     md5sum: ({ argv, stdin = '' }) => {
       const names = argv.filter((arg) => !arg.startsWith('-'));
       if (!names.length) return ok(md5Hex(utf8Bytes(stdin)) + '  -\n');
