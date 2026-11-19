@@ -1397,6 +1397,30 @@ group("stat -c %N: a name that starts with a tab is quoted as GNU stat quotes it
   check("stat -c %N quotes a name that starts with a tab, as GNU stat does on Linux", gr0.stdout === "''$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
 });
 
+group("stat -c %N: a name with a non-ASCII byte and a control character or apostrophe, or a non-ASCII name alone, is quoted as GNU stat quotes it in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"é\" && stat -c \"%N\" \"é\"; echo rc=$?");
+  check("stat -c %N quotes a name that is one non-ASCII character alone, as GNU stat does on Linux", gr0.stdout === "''$'\\303\\251'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > \"éx\" && stat -c \"%N\" \"éx\"; echo rc=$?");
+  check("stat -c %N quotes a name that starts with a non-ASCII character, as GNU stat does on Linux", gr1.stdout === "''$'\\303\\251''x'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "echo a > \"é'x\" && stat -c \"%N\" \"é'x\"; echo rc=$?");
+  check("stat -c %N quotes a non-ASCII character before an apostrophe, as GNU stat does on Linux", gr2.stdout === "''$'\\303\\251'\\''x'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "echo a > \"é\tx\" && stat -c \"%N\" \"é\tx\"; echo rc=$?");
+  check("stat -c %N quotes a non-ASCII character before a tab, as GNU stat does on Linux", gr3.stdout === "''$'\\303\\251\\t''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "echo a > \"a\té\" && stat -c \"%N\" \"a\té\"; echo rc=$?");
+  check("stat -c %N quotes a tab between a letter and a non-ASCII character, as GNU stat does on Linux", gr4.stdout === "'a'$'\\t\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "echo a > \"it's\té\" && stat -c \"%N\" \"it's\té\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe, a tab and a non-ASCII character, as GNU stat does on Linux", gr5.stdout === "'it'\\''s'$'\\t\\303\\251'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "echo a > \"é'\té\" && stat -c \"%N\" \"é'\té\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe, a non-ASCII character and a tab in that order, as GNU stat does on Linux", gr6.stdout === "''$'\\303\\251'\\'''$'\\t\\303\\251'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+});
+
+group("stat -c %N: an apostrophe after a non-ASCII character, at the end of a name, is quoted as GNU stat quotes it in C locale", async () => {
+  const gr0 = await run(await shell({}), "echo a > \"xé'\" && stat -c \"%N\" \"xé'\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe after a non-ASCII character at the end of a name, as GNU stat does on Linux", gr0.stdout === "'x'$'\\303\\251'\\'''\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "echo a > \"é'\" && stat -c \"%N\" \"é'\"; echo rc=$?");
+  check("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux", gr1.stdout === "''$'\\303\\251'\\'''\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

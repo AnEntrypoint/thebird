@@ -3422,3 +3422,25 @@ Witness: three groups, 9 rows from GNU. Seven rows: an apostrophe with a tab, a 
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the flag starts closed (no opening quote at the start of the name): 2 rows red, the apostrophe-led name and the tab-led name, `RESULT PASS=903 FAIL=2`. (2) an apostrophe inside an open run written as a bare `\'`: 5 rows red, `RESULT PASS=900 FAIL=5`.
 
 Gaps, recorded: a name with a control character and a non-ASCII byte in the same name, a name that starts with a non-ASCII byte, and a name with a double quote next to a control character are not probed; no witness row claims them. The UTF-8 locales are not claimed. The default stat output without `-c` is not witnessed.
+
+### Change set 30an: stat -c %N merges adjacent control and non-ASCII characters into one $-quoted segment, and an apostrophe after one reopens the quote, as GNU stat does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) under LC_ALL=C as the sandbox identity `abc`, through a PATH shim named `stat`. Rows are generated from GNU with the real bytes of each name. Each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU, real bytes), with the quoted form GNU printed:
+- Adjacent escape characters share one $-quoted segment: a letter, a tab and a non-ASCII character give `'a'$'\t\303\251'`; a non-ASCII character, a tab and a letter give `''$'\303\251\t''x'`.
+- An apostrophe, a tab and a non-ASCII character give `'it'\''s'$'\t\303\251'`.
+- A non-ASCII character, an apostrophe, a tab and a non-ASCII character give `''$'\303\251'\'''$'\t\303\251'`: the apostrophe closes the $-segment, writes `\'` and reopens the quote, so the tab closes it again.
+- An apostrophe after a non-ASCII character at the end of a name: `'x'$'\303\251'\'''`. An apostrophe after a non-ASCII character alone: `''$'\303\251'\'''`.
+
+Rule: one pass over the name with three modes: a single-quoted run open, a $-quoted segment open, or the start. A control or non-ASCII character closes an open run, opens a $-segment if none is open, and is appended as its escape. An apostrophe closes an open $-segment; inside a run it is written as `'\''`; otherwise it is written as `\'` and the run is reopened with `'`. Any other character closes an open $-segment and opens a run if none is open. The name ends with the open quote closed.
+
+Earlier state, corrected here: 3d48021 (pushed as part of 92ee97c's successor) gave a different output for these shapes, for example `'a'$'\t'$'\303\251'` and `''$'\303\251'$'\t''x'`, with no witness row to catch it. This change set corrects the output and adds the rows.
+
+What changed in the shell: `quoteName` is one pass with the three modes above; the separate split branch and its helper are gone. The branch for a name with no control or non-ASCII character is unchanged.
+
+Witness: 9 rows from GNU. Seven rows in the group `stat -c %N: a name with a non-ASCII byte and a control character or apostrophe, or a non-ASCII name alone, is quoted as GNU stat quotes it in C locale` (four of them failed under 3d48021, the other three passed before and after), and two rows for an apostrophe after a non-ASCII character. Red during the work: 4 rows under 3d48021's rule, then all green. Final: `RESULT PASS=914 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) adjacent escape characters each get their own $-segment (the merge removed): 4 rows red, `RESULT PASS=910 FAIL=4`. (2) an apostrophe after a $-segment written as a bare `\'` with no reopen: 5 rows red, `RESULT PASS=909 FAIL=5`.
+
+Gaps, recorded: three or more adjacent apostrophes next to escape characters are not probed. A name that contains both an apostrophe and a double quote with a non-ASCII character outside that run is covered only by the rows of 30al. The UTF-8 locales are not claimed. The default stat output without `-c` is not witnessed.

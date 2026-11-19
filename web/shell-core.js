@@ -1426,34 +1426,32 @@ const ansiEscape = (ch) => {
   return { 7: '\\a', 8: '\\b', 9: '\\t', 10: '\\n', 11: '\\v', 12: '\\f', 13: '\\r' }[ch.charCodeAt(0)] ?? '\\' + ch.charCodeAt(0).toString(8).padStart(3, '0');
 };
 const quoteName = (text) => {
-  const pieces = text.split(/([\x00-\x1f\x7f]|[^\x20-\x7e])/u);
-  if (pieces.length > 1) {
-    let out = "'";
-    let inside = true;
-    pieces.forEach((piece, i) => {
-      if (i % 2) {
-        if (inside) out += "'";
-        inside = false;
-        out += "$'" + ansiEscape(piece) + "'";
-        return;
-      }
-      for (const ch of piece) {
-        if (ch === "'") {
-          out += inside ? "'\\''" : "\\'";
-        } else {
-          if (!inside) {
-            out += "'";
-            inside = true;
-          }
-          out += ch;
-        }
-      }
-    });
-    return inside ? out + "'" : out;
+  const escape = /[\x00-\x1f\x7f]|[^\x20-\x7e]/u;
+  if (!escape.test(text)) {
+    if (text.includes("'") && text.includes('"')) return "'" + text.replace(/'/g, "'\\''") + "'";
+    if (text.includes("'")) return '"' + text + '"';
+    return "'" + text + "'";
   }
-  if (text.includes("'") && text.includes('"')) return "'" + text.replace(/'/g, "'\\''") + "'";
-  if (text.includes("'")) return '"' + text + '"';
-  return "'" + text + "'";
+  let out = "'";
+  let mode = 'quote';
+  for (const ch of text) {
+    if (escape.test(ch)) {
+      if (mode === 'quote') out += "'";
+      if (mode !== 'dollar') out += "$'";
+      mode = 'dollar';
+      out += ansiEscape(ch);
+    } else if (ch === "'") {
+      if (mode === 'dollar') out += "'";
+      out += mode === 'quote' ? "'\\''" : "\\''";
+      mode = 'quote';
+    } else {
+      if (mode === 'dollar') out += "'";
+      if (mode !== 'quote') out += "'";
+      mode = 'quote';
+      out += ch;
+    }
+  }
+  return out + "'";
 };
 const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (whole, code) => {
     if (code === 'N') return info.type === 'symbolic link' ? quoteName(name) + ' -> ' + quoteName(linkTarget) : quoteName(name);
