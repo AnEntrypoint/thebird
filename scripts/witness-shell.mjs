@@ -899,7 +899,51 @@ group('expr: expr computes arithmetic, comparisons and length, and sets the stat
   const zeroOnly = await run(sh, 'expr 0; echo rc=$?');
   check('expr: a lone 0 is a false result with status 1', zeroOnly.stdout === '0\nrc=1\n', JSON.stringify(zeroOnly.stdout));
   const chained = await run(sh, "expr 1 + 2 '*' 3; echo rc=$?");
-  check('expr: a longer expression is refused with status 2, not evaluated', chained.stdout === 'rc=2\n' && chained.stderr.includes('only one operator is supported'), JSON.stringify(chained.stderr));
+  check('expr: a longer expression is evaluated with * before +', chained.stdout === '7\nrc=0\n' && chained.stderr === '', JSON.stringify([chained.stdout, chained.stderr]));
+});
+
+group('expr: * / % bind tighter than + and -, parentheses group, and the values match the sandbox expr', async () => {
+  const sh = await shell({});
+  const x0 = await run(sh, "expr 1 + 2 '*' 3; echo rc=$?");
+  check("expr: * binds tighter than + in 1 + 2 * 3, with the operator quoted", x0.stdout === "7\nrc=0\n" && x0.stderr === "", JSON.stringify([x0.stdout, x0.stderr]));
+  const x1 = await run(sh, "expr 2 \\* 3 + 1; echo rc=$?");
+  check("expr: * before + when the operator is escaped on the command line", x1.stdout === "7\nrc=0\n" && x1.stderr === "", JSON.stringify([x1.stdout, x1.stderr]));
+  const x2 = await run(sh, "expr 10 - 4 / 2; echo rc=$?");
+  check("expr: / binds tighter than - and truncates", x2.stdout === "8\nrc=0\n" && x2.stderr === "", JSON.stringify([x2.stdout, x2.stderr]));
+  const x3 = await run(sh, "expr 10 / 3 '*' 3; echo rc=$?");
+  check("expr: a left-to-right chain of * and / gives the GNU value", x3.stdout === "9\nrc=0\n" && x3.stderr === "", JSON.stringify([x3.stdout, x3.stderr]));
+  const x4 = await run(sh, "expr 2 '*' 3 '*' 4; echo rc=$?");
+  check("expr: a chain of * is multiplied out", x4.stdout === "24\nrc=0\n" && x4.stderr === "", JSON.stringify([x4.stdout, x4.stderr]));
+  const x5 = await run(sh, "expr 7 % 3 '+' 1; echo rc=$?");
+  check("expr: % binds tighter than +", x5.stdout === "2\nrc=0\n" && x5.stderr === "", JSON.stringify([x5.stdout, x5.stderr]));
+  const x6 = await run(sh, "expr '(' 1 + 2 ')' '*' 3; echo rc=$?");
+  check("expr: parentheses group a sum before *", x6.stdout === "9\nrc=0\n" && x6.stderr === "", JSON.stringify([x6.stdout, x6.stderr]));
+  const x7 = await run(sh, "expr 1 '+' 1 '*' 0 '+' 5; echo rc=$?");
+  check("expr: a chain of + and * mixes precedence correctly", x7.stdout === "6\nrc=0\n" && x7.stderr === "", JSON.stringify([x7.stdout, x7.stderr]));
+  const x8 = await run(sh, "expr -3 '*' -2; echo rc=$?");
+  check("expr: negative operands multiply by sign", x8.stdout === "6\nrc=0\n" && x8.stderr === "", JSON.stringify([x8.stdout, x8.stderr]));
+  const x9 = await run(sh, "expr 3 '<' 4 '+' 1; echo rc=$?");
+  check("expr: a comparison is looser than + in 3 < 4 + 1", x9.stdout === "1\nrc=0\n" && x9.stderr === "", JSON.stringify([x9.stdout, x9.stderr]));
+  const x10 = await run(sh, "expr 1 + 1 '=' 2; echo rc=$?");
+  check("expr: = is looser than + in 1 + 1 = 2", x10.stdout === "1\nrc=0\n" && x10.stderr === "", JSON.stringify([x10.stdout, x10.stderr]));
+  const x11 = await run(sh, "expr 1 '|' 0 '&' 0; echo rc=$?");
+  check("expr: & binds tighter than | in 1 | 0 & 0", x11.stdout === "1\nrc=0\n" && x11.stderr === "", JSON.stringify([x11.stdout, x11.stderr]));
+  const x12 = await run(sh, "expr 0 '|' 5 '&' 3; echo rc=$?");
+  check("expr: & returns its left operand when both are non-zero", x12.stdout === "5\nrc=0\n" && x12.stderr === "", JSON.stringify([x12.stdout, x12.stderr]));
+  const x13 = await run(sh, "expr 2 '+' 3 '-' 1 '-' 1; echo rc=$?");
+  check("expr: subtraction is left-associative", x13.stdout === "3\nrc=0\n" && x13.stderr === "", JSON.stringify([x13.stdout, x13.stderr]));
+  const x14 = await run(sh, "expr 1 + 2 3; echo rc=$?");
+  check("expr: an operand left after a complete expression is a syntax error", x14.stdout === "rc=2\n" && x14.stderr === "expr: syntax error: unexpected argument '3'\n", JSON.stringify([x14.stdout, x14.stderr]));
+  const x15 = await run(sh, "expr 1 +; echo rc=$?");
+  check("expr: an operator with no right operand is a syntax error", x15.stdout === "rc=2\n" && x15.stderr === "expr: syntax error: missing argument after '+'\n", JSON.stringify([x15.stdout, x15.stderr]));
+  const x16 = await run(sh, "expr '(' 1 + 2; echo rc=$?");
+  check("expr: an unclosed parenthesis is a syntax error", x16.stdout === "rc=2\n" && x16.stderr === "expr: syntax error: expecting ')' after '2'\n", JSON.stringify([x16.stdout, x16.stderr]));
+  const x17 = await run(sh, "expr 1 + 2 ')'; echo rc=$?");
+  check("expr: a stray close parenthesis is a syntax error", x17.stdout === "rc=2\n" && x17.stderr === "expr: syntax error: unexpected argument ')'\n", JSON.stringify([x17.stdout, x17.stderr]));
+  const x18 = await run(sh, "expr 1 '*' 'x'; echo rc=$?");
+  check("expr: a non-integer operand of * is refused with status 2", x18.stdout === "rc=2\n" && x18.stderr === "expr: non-integer argument\n", JSON.stringify([x18.stdout, x18.stderr]));
+  const x19 = await run(sh, "expr 1 '/' 0; echo rc=$?");
+  check("expr: division by zero inside a longer expression is refused", x19.stdout === "rc=2\n" && x19.stderr === "expr: division by zero\n", JSON.stringify([x19.stdout, x19.stderr]));
 });
 
 group('seq: seq counts from first to last by step, and refuses bad arguments', async () => {

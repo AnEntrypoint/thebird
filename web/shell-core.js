@@ -845,32 +845,93 @@ function contextDiff(a, b, width, headers) {
   return out;
 }
 
+class ExprFailure extends Error {}
+
 function exprEval(argv) {
   const isInt = (s) => /^[+-]?\d+$/.test(s);
   const truthy = (value) => value !== '' && value !== '0';
   if (!argv.length) return { code: 2, out: '', err: 'expr: missing operand\n' };
   if (argv.length === 1) return { code: truthy(argv[0]) ? 0 : 1, out: argv[0] + '\n', err: '' };
   if (argv[0] === 'length' && argv.length === 2) return { code: 0, out: argv[1].length + '\n', err: '' };
-  if (argv.length !== 3) return { code: 2, out: '', err: 'expr: only one operator is supported\n' };
-  const [left, op, right] = argv;
-  let value;
-  if (['+', '-', '*', '/', '%'].includes(op)) {
-    if (!isInt(left) || !isInt(right)) return { code: 2, out: '', err: 'expr: non-integer argument\n' };
+  let pos = 0;
+  const fail = (message) => {
+    throw new ExprFailure(message);
+  };
+  const arith = (op, left, right) => {
+    if (!isInt(left) || !isInt(right)) fail('non-integer argument');
     const a = Number(left);
     const b = Number(right);
-    if ((op === '/' || op === '%') && b === 0) return { code: 2, out: '', err: 'expr: division by zero\n' };
-    value = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : op === '/' ? Math.trunc(a / b) : a % b;
-  } else if (['=', '!=', '<', '>', '<=', '>='].includes(op)) {
+    if ((op === '/' || op === '%') && b === 0) fail('division by zero');
+    const value = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : op === '/' ? Math.trunc(a / b) : a % b;
+    return String(value);
+  };
+  const compare = (op, left, right) => {
     const numeric = isInt(left) && isInt(right);
     const x = numeric ? Number(left) : left;
     const y = numeric ? Number(right) : right;
     const holds = op === '=' ? x === y : op === '!=' ? x !== y : op === '<' ? x < y : op === '>' ? x > y : op === '<=' ? x <= y : x >= y;
-    value = holds ? 1 : 0;
-  } else if (op === '&') value = truthy(left) && truthy(right) ? left : 0;
-  else if (op === '|') value = truthy(left) ? left : truthy(right) ? right : 0;
-  else return { code: 2, out: '', err: 'expr: unknown operator ' + op + '\n' };
-  const text = String(value);
-  return { code: truthy(text) ? 0 : 1, out: text + '\n', err: '' };
+    return holds ? '1' : '0';
+  };
+  const primary = () => {
+    if (pos >= argv.length) fail("syntax error: missing argument after '" + argv[pos - 1] + "'");
+    const token = argv[pos++];
+    if (token === ')') fail("syntax error: unexpected argument ')'");
+    if (token !== '(') return token;
+    const inner = disjunction();
+    if (argv[pos] !== ')') fail("syntax error: expecting ')' after '" + argv[pos - 1] + "'");
+    pos++;
+    return inner;
+  };
+  const multiplicative = () => {
+    let value = primary();
+    while (argv[pos] === '*' || argv[pos] === '/' || argv[pos] === '%') {
+      const op = argv[pos++];
+      value = arith(op, value, primary());
+    }
+    return value;
+  };
+  const additive = () => {
+    let value = multiplicative();
+    while (argv[pos] === '+' || argv[pos] === '-') {
+      const op = argv[pos++];
+      value = arith(op, value, multiplicative());
+    }
+    return value;
+  };
+  const comparison = () => {
+    let value = additive();
+    while (['=', '!=', '<', '>', '<=', '>='].includes(argv[pos])) {
+      const op = argv[pos++];
+      value = compare(op, value, additive());
+    }
+    return value;
+  };
+  const conjunction = () => {
+    let value = comparison();
+    while (argv[pos] === '&') {
+      pos++;
+      const right = comparison();
+      value = truthy(value) && truthy(right) ? value : '0';
+    }
+    return value;
+  };
+  const disjunction = () => {
+    let value = conjunction();
+    while (argv[pos] === '|') {
+      pos++;
+      const right = conjunction();
+      value = truthy(value) ? value : truthy(right) ? right : '0';
+    }
+    return value;
+  };
+  try {
+    const value = disjunction();
+    if (pos < argv.length) fail("syntax error: unexpected argument '" + argv[pos] + "'");
+    return { code: truthy(value) ? 0 : 1, out: value + '\n', err: '' };
+  } catch (error) {
+    if (error instanceof ExprFailure) return { code: 2, out: '', err: 'expr: ' + error.message + '\n' };
+    throw error;
+  }
 }
 
 const SEQ_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;

@@ -2756,3 +2756,16 @@ Red checks, on this tree: (1) the X rule ignores existing execute bits: two rows
 
 Gap, recorded: `chmod -R` (recursive) is not implemented; it is refused as an unknown option, as before.
 
+
+### Change set 30d: expr precedence and parentheses
+
+`expr` parses its operands with precedence, lowest to highest: `|`, `&`, comparisons (`=`, `!=`, `<`, `>`, `<=`, `>=`), `+` and `-`, then `*`, `/` and `%`, with parentheses around any sub-expression. So `expr 1 + 2 '*' 3` is 7 and `expr '(' 1 + 2 ')' '*' 3` is 9. `&` returns its left operand when both sides are non-zero and `0` otherwise; `|` returns its left operand when that is non-zero and the right one otherwise. Both are left-associative. The one-operand form and `length` are unchanged. The old `only one operator is supported` refusal is gone: a longer expression is evaluated.
+
+Errors match the sandbox expr: a left-over argument is `expr: syntax error: unexpected argument 'X'`, an operator with no right operand is `expr: syntax error: missing argument after 'OP'`, an unclosed parenthesis is `expr: syntax error: expecting ')' after 'X'`, a stray close parenthesis is `expr: syntax error: unexpected argument ')'`. A non-integer operand of an arithmetic operator is `expr: non-integer argument` and division or remainder by zero is `expr: division by zero`; each is status 2.
+
+Reference: the sandbox `expr` is uutils coreutils 0.10.0 (not GNU, as recorded in 30c). The rows were generated from its output (group `expr: * / % bind tighter...`, twenty rows, stdout and stderr compared), and the changed refusal row (`expr: a longer expression is evaluated with * before +`) takes the value 7 from the same source.
+
+Red checks, on this tree: (1) precedence flattened, with `+` taking a bare operand and `*` handled at the additive level: four rows red (`1 + 2 * 3`, the escaped and quoted forms, `/` after `-`, the mixed chain). An equivalent first attempt (only the loop condition changed) left every row green, because the right operand of `+` already absorbed `*`; it was discarded, not counted. (2) `&` returns its right operand: three rows red, including the parity row against bashkit. (3) parentheses ignored: two rows red (`parentheses group a sum before *`, `an unclosed parenthesis is a syntax error`). Each restored by the reverse edit. The restore for (1) first failed because one line of the sabotage also appears in another function; it was restored with context unique to the additive level and rechecked. The green run is `RESULT PASS=540 FAIL=0`.
+
+Gap, recorded: `expr` does not implement `:` (regex match), `substr`, `index`, `match`, or the `length` form with more than one operand; those are refused as before (the unary form is unchanged).
+
