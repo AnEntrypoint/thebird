@@ -3161,3 +3161,18 @@ Red checks, each restored and confirmed green: (1) the pipeline drops the partia
 
 Gaps, recorded: when a non-last pipeline stage ends by a thrown signal, its partial output is dropped rather than fed to the next stage (bash feeds it). An `exit` inside a pipeline stage still ends the whole shell here, where bash runs every pipeline stage in a subshell, so the shell goes on after it. Neither was probed against bash.
 
+
+### Change set 30z: the read builtin reads a line into names, splits it on IFS, and keeps backslashes only with -r, as bash does
+
+Reference: `bash -c`, expectations generated from its output (`/tmp/gen-read.mjs`). Probes ran first: `REPLY` keeps its spaces; an empty IFS puts the whole line in the first name; an unknown option prints `read: -z: invalid option` and the usage line and exits 2; a read at end of input exits 1 and still assigns a last line that has no newline; the variable set by a read on the right of a pipe is not kept in the shell; a command after a read in the same group sees the rest of the input.
+
+What was wrong: `read` was not a builtin, so `while read x` failed with `read: command not found`.
+
+What changed: each stage of a pipeline, and each redirect, has an input cursor. A compound command shares its cursor with its statements, so a `while read` loop advances through its input, and a function called from the group reads the same stream. `read [-r] [--] [NAME...]` takes one line (a backslash joins a line only without -r), splits it on IFS into the names, gives the last name the rest with trailing spaces trimmed, and sets REPLY when no name is given. It exits 1 at end of input. Other commands see the rest of the stream from the cursor. A multi-stage pipeline restores the working directory and variables when it finishes, as bash's subshell stages do, so a read on the right of a pipe leaves its variable unset in the shell.
+
+Witness: group `read: the builtin reads a line into names, splits it on IFS, and keeps backslashes only with -r, as bash does`, 27 rows, `RESULT PASS=779 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) trailing field spaces kept: 1 row red. (2) the -r flag not recognised: 3 rows red (the unknown-option row, the REPLY-with-r row, the backslash-kept row). (3) the command given the whole stream: 1 row red (the cat after read). (4) the pipeline keeps its variable changes: 1 row red. (5) end of input gives status 2: 2 rows red (the empty input, and the last line with no newline).
+
+Gaps, recorded: `-p`, `-d`, `-n`, `-N`, `-a`, `-s`, `-t`, `-u` are not implemented, so they are refused as invalid options where bash accepts them. A command other than read sees the rest of the stream but does not consume it, so two such commands on one stream both see the same text (bash gives the second one nothing). A read inside a command substitution gets no input (bash inherits the stream). None was probed against bash for the unimplemented options.
+

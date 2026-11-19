@@ -80,6 +80,49 @@ function matchParen(src, start) {
 const SHELL_USER = 'user';
 const SHELL_HOST = 'thebird';
 
+function readChars(text, pos, raw) {
+  const chars = [];
+  let i = pos;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '\n') return { chars, end: i + 1, eof: false };
+    if (c === '\\' && !raw && i + 1 < text.length) {
+      if (text[i + 1] !== '\n') chars.push({ c: text[i + 1], escaped: true });
+      i += 2;
+      continue;
+    }
+    chars.push({ c, escaped: false });
+    i++;
+  }
+  return { chars, end: i, eof: true };
+}
+
+function splitRead(chars, count, ifs) {
+  if (!ifs.length) return [chars.map((x) => x.c).join(''), ...Array(count - 1).fill('')];
+  const isWs = (x) => !x.escaped && ' \t\n'.includes(x.c) && ifs.includes(x.c);
+  const isDelim = (x) => !x.escaped && !' \t\n'.includes(x.c) && ifs.includes(x.c);
+  const values = [];
+  let p = 0;
+  const skipWs = () => {
+    while (p < chars.length && isWs(chars[p])) p++;
+  };
+  skipWs();
+  for (let k = 0; k < count - 1; k++) {
+    let field = '';
+    while (p < chars.length && !isWs(chars[p]) && !isDelim(chars[p])) field += chars[p++].c;
+    values.push(field);
+    skipWs();
+    if (p < chars.length && isDelim(chars[p])) {
+      p++;
+      skipWs();
+    }
+  }
+  const rest = chars.slice(p);
+  while (rest.length && isWs(rest[rest.length - 1])) rest.pop();
+  values.push(rest.map((x) => x.c).join(''));
+  return values;
+}
+
 function parameterPart(text) {
   const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:(:?[-+=?])(.*))?$/s.exec(text);
   if (!m) throw syntaxError(`bad substitution ${text}`);
@@ -1345,6 +1388,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
+    read: ({ argv, stdin, stream }) => readBuiltin(argv, stream ?? { text: stdin, pos: 0 }),
     unset: ({ argv }) => {
       const functionsOnly = argv[0] === '-f';
       for (const name of argv[0] === '-f' || argv[0] === '-v' ? argv.slice(1) : argv) {
@@ -2213,6 +2257,33 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     exported.delete(name);
   };
 
+  const readBuiltin = (argv, cursor) => {
+    let raw = false;
+    let at = 0;
+    while (at < argv.length && argv[at].startsWith('-') && argv[at] !== '-') {
+      if (argv[at] === '--') {
+        at++;
+        break;
+      }
+      for (const letter of argv[at].slice(1)) {
+        if (letter === 'r') raw = true;
+        else return { code: 2, out: '', err: 'read: -' + letter + ': invalid option\nread: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n' };
+      }
+      at++;
+    }
+    const names = argv.slice(at);
+    const bad = names.find((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name));
+    if (bad !== undefined) return { code: 1, out: '', err: 'read: `' + bad + "': not a valid identifier\n" };
+    const { chars, end, eof } = readChars(cursor.text, cursor.pos, raw);
+    cursor.pos = end;
+    if (!names.length) setVariable('REPLY', chars.map((x) => x.c).join(''));
+    else {
+      const values = splitRead(chars, names.length, vars.get('IFS') ?? ' \t\n');
+      names.forEach((name, i) => setVariable(name, values[i]));
+    }
+    return { code: eof ? 1 : 0, out: '', err: '' };
+  };
+
   const setVariable = (name, value) => {
     const frame = frames.at(-1);
     if (frame?.has(name)) frame.set(name, value);
@@ -2384,7 +2455,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return job;
   };
 
-  async function runSimple(node, stdin, sink) {
+  async function runSimple(node, stdin, sink, stream) {
     vars.set('LINENO', String(node.line));
     const argv = await expandWords(node.words, sink);
     const assigned = [];
@@ -2398,7 +2469,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
     for (const [name, value] of assigned) setVariable(name, value);
     try {
-      return await runCommand(node, argv, stdin, sink);
+      return await runCommand(node, argv, stdin, sink, stream);
     } finally {
       for (const [name, value] of saved) {
         if (value === undefined) vars.delete(name);
@@ -2420,7 +2491,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return null;
   }
 
-  async function withRedirects(node, stdin, sink, run) {
+  async function withRedirects(node, stdin, sink, run, stream) {
     const refused = await refuseMissingOutputDir(node.redirects, sink);
     if (refused) return refused;
     let input = stdin;
@@ -2430,7 +2501,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       if (path !== NULL_DEVICE && !host.exists(path)) return { code: 2, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
       input = path === NULL_DEVICE ? '' : host.read(path);
     }
-    const scratch = { out: '', err: '', signal: sink.signal };
+    const scratch = { out: '', err: '', signal: sink.signal, stream: node.redirects.some((redirect) => redirect.op === '<') ? { text: input, pos: 0 } : stream };
     let result;
     try {
       result = await run(node, input, scratch);
@@ -2441,7 +2512,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code: result.code, ...(await applyOutputRedirects(node.redirects, result.out, result.err, sink)) };
   }
 
-  async function runCommand(node, argv, stdin, sink) {
+  async function runCommand(node, argv, stdin, sink, stream) {
     const refused = await refuseMissingOutputDir(node.redirects, sink);
     if (refused) return refused;
     let input = stdin;
@@ -2457,7 +2528,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         }
       }
     }
-    const result = await dispatch(argv, input, sink.signal);
+    const result = await dispatch(argv, input, sink.signal, input === stdin ? stream : { text: input, pos: 0 });
     const applied = await applyOutputRedirects(node.redirects, result.out, result.err, sink);
     return { code: result.code, ...applied };
   }
@@ -2591,10 +2662,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: '', err };
   }
 
-  async function dispatch(argv, stdin, signal) {
+  async function dispatch(argv, stdin, signal, stream) {
     const name = argv[0];
-    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal);
-    if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin, signal });
+    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal, stream);
+    if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin: stream && stream.text === stdin ? stream.text.slice(stream.pos) : stdin, signal, stream });
     if (inPage.has(name)) return host.external(name, argv.slice(1), state.cwd);
     return { code: 127, out: '', err: `${name}: command not found\n` };
   }
@@ -2680,11 +2751,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function callFunction(body, args, stdin, signal) {
+  async function callFunction(body, args, stdin, signal, stream) {
     const savedPositional = positional;
     positional = args;
     frames.push(new Map());
-    const bodySink = { out: '', err: '', signal };
+    const bodySink = { out: '', err: '', signal, stream: stream ?? { text: stdin, pos: 0 } };
     let result;
     try {
       result = body.type === 'subshell' ? await runSubshell(body, stdin, bodySink) : await runGroup(body, stdin, bodySink);
@@ -2698,42 +2769,52 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return result;
   }
 
-  async function runStage(cmd, stdin, sink) {
+  async function runStage(cmd, stdin, sink, stream) {
     if (cmd.type === 'funcdef') {
       functions.set(cmd.name, cmd.body);
       return ok('');
     }
-    if (cmd.type === 'subshell') return withRedirects(cmd, stdin, sink, runSubshell);
-    if (cmd.type === 'group') return withRedirects(cmd, stdin, sink, runGroup);
-    if (cmd.type === 'if') return withRedirects(cmd, stdin, sink, runIf);
-    if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor);
-    if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile);
-    if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase);
-    return runSimple(cmd, stdin, sink);
+    if (cmd.type === 'subshell') return withRedirects(cmd, stdin, sink, runSubshell, stream);
+    if (cmd.type === 'group') return withRedirects(cmd, stdin, sink, runGroup, stream);
+    if (cmd.type === 'if') return withRedirects(cmd, stdin, sink, runIf, stream);
+    if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor, stream);
+    if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile, stream);
+    if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase, stream);
+    return runSimple(cmd, stdin, sink, stream);
   }
 
   async function runPipeline(pipe, stdin, sink) {
     let input = stdin;
     let code = 0;
-    for (let i = 0; i < pipe.cmds.length; i++) {
-      const cmd = pipe.cmds[i];
-      const last = i === pipe.cmds.length - 1;
-      let result;
-      try {
-        result = await runStage(cmd, input, sink);
-      } catch (err) {
-        if (err && typeof err === 'object' && err.output) {
-          const partial = err.output;
-          delete err.output;
-          sink.err += partial.err;
-          if (last) sink.out += partial.out;
+    const saved = pipe.cmds.length > 1 ? { cwd: state.cwd, vars: new Map(vars) } : null;
+    try {
+      for (let i = 0; i < pipe.cmds.length; i++) {
+        const cmd = pipe.cmds[i];
+        const last = i === pipe.cmds.length - 1;
+        const stream = i === 0 ? (sink.stream ??= { text: input, pos: 0 }) : { text: input, pos: 0 };
+        let result;
+        try {
+          result = await runStage(cmd, input, sink, stream);
+        } catch (err) {
+          if (err && typeof err === 'object' && err.output) {
+            const partial = err.output;
+            delete err.output;
+            sink.err += partial.err;
+            if (last) sink.out += partial.out;
+          }
+          throw err;
         }
-        throw err;
+        code = result.code;
+        sink.err += result.err;
+        if (last) sink.out += result.out;
+        else input = result.out;
       }
-      code = result.code;
-      sink.err += result.err;
-      if (last) sink.out += result.out;
-      else input = result.out;
+    } finally {
+      if (saved) {
+        state.cwd = saved.cwd;
+        vars.clear();
+        for (const [name, value] of saved.vars) vars.set(name, value);
+      }
     }
     return code;
   }
