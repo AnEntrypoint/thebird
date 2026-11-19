@@ -2640,3 +2640,18 @@ With `HOME` set to the empty string, bash expands `~` to an empty field: `HOME= 
 
 Witness row: `expansion: an empty HOME still makes a field, as in bash` (stdout `2`). Red check: the quoted-part return replaced by the old literal return. The row `expansion: an empty HOME still makes a field, as in bash` went red; restored by the reverse edit; the green run is `RESULT PASS=468 FAIL=0`.
 
+
+### Change set 28i: the remaining parity differences, and the decision on each
+
+The agreement scan on the current tree: 257 usable commands, 188 agree and are in the parity group (up from 178: the reinstated rows of 28a to 28g), 69 differ. The 69 are kept out of the group, each for a stated reason:
+
+A. Environment only, kept as differences (the brief asks for these to stay): `hostname; id` (the txiki shell reports `thebird` and `user`, bashkit `bashkit-sandbox` and `sandbox`), `uname -s; whoami`, `ps`, `command -v` paths (`/bin/grep` here, `/usr/bin/grep` in bashkit, and the same for `hostname`, `id`, `ps`, `kill`), and `date +%s%N` (clock). Cause: the two shells report a different host, user and binary layout.
+
+B. Fresh-shell state, not a shell difference: the rows whose files an earlier witness row creates (`mkdir -p notes/deep/er && ls notes/deep`, `wc -w notes/a.txt`, the tar, jq and awk fixtures, `mkdir /e2/d; cp /e2/a.txt /e2/d`, and the stat, realpath, chmod, md5sum and diff fixtures under `/st`, `/rp`, `/cm`, `/md` and `/df`). Run alone, these fail in both shells for different reasons. The same commands pass in the main witness with their own setup, so they are not in the parity group.
+
+C. Message wording only, status matches, the txiki message kept: `cp: cannot stat` (GNU) against bashkit's `cannot copy`; `stat: cannot statx` (GNU stat's own wording) against `cannot stat`; `cut: you must specify the list of fields` against `a list of fields`; `seq` without the trailing `Try seq --help` line; `break` outside a loop (the txiki wording differs from bash's); `base64 -d` invalid input (GNU's `base64: invalid input`, against bashkit's `Invalid symbol 64`); `md5sum` of a missing file (GNU's `No such file or directory`, against bashkit's `io error`). Decision: the txiki shell keeps GNU's wording where GNU's is known; bashkit's wording is not the reference.
+
+D. Behaviour, kept on GNU's side: `diff` with a missing file exits 2 with a message for each file (GNU); bashkit exits 1. `realpath` of a missing path is an error with status 1 (GNU, which requires the path to exist); bashkit prints the path with status 0. `mv x x` was decided in 28a.
+
+E. Open gaps, not in the brief, left as they are and reported: `expr 1 + 2 '*' 3` (GNU prints 7, the txiki shell refuses with `only one operator is supported`, bashkit prints 1, which is also wrong); `set -x` (the txiki shell refuses with status 2, bash and bashkit trace); `stat -c %F` on a symbolic link (the txiki shell fails with `cannot statx`, GNU reports `symbolic link`); `chmod u+x` (GNU accepts a symbolic mode, the txiki shell refuses it); `env nosuchcmd` (the txiki message is `command not found`, GNU's is `No such file or directory`; the status 127 matches).
+
