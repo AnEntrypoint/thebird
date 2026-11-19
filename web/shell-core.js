@@ -1501,7 +1501,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     ':': () => ok(''),
     shift: ({ argv }) => {
       const count = argv.length ? Number(argv[0]) : 1;
-      if (!Number.isInteger(count) || count < 0 || count > positional.length) return { code: 1, out: '', err: 'shift: shift count out of range\n' };
+      if (!Number.isInteger(count)) return { code: 2, out: '', err: `shift: ${argv[0]}: numeric argument required\n` };
+      if (count < 0 || count > positional.length) return { code: 1, out: '', err: '' };
       positional = positional.slice(count);
       return ok('');
     },

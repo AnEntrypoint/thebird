@@ -473,7 +473,9 @@ group('builtins: :, shift and set move and read the positional parameters', asyn
   const emptied = await run(sh, 'set -- x y; shift; shift; echo $#');
   check('builtins: shifting every parameter leaves none', emptied.stdout === '0\n', JSON.stringify(emptied.stdout));
   const tooMany = await run(sh, 'set -- a; shift 2; echo rc=$?');
-  check('builtins: a shift past the parameters fails with status 1 and a message', tooMany.stdout === 'rc=1\n' && /shift count out of range/.test(tooMany.stderr), JSON.stringify(tooMany.stderr));
+  check('builtins: a shift past the parameters fails with status 1 and is silent, as in bash', tooMany.stdout === 'rc=1\n' && tooMany.stderr === '', JSON.stringify(tooMany.stderr));
+  const numeric = await run(sh, 'set -- a; shift x; echo rc=$?');
+  check('builtins: a non-numeric shift count is an error with status 2', numeric.stdout === 'rc=2\n' && /numeric argument required/.test(numeric.stderr), JSON.stringify(numeric.stderr));
   const unsupported = await run(sh, 'set -e; echo rc=$?');
   check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -e/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
   const listed = await run(sh, 'v=1; set | grep "^v="');
@@ -825,6 +827,7 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "set -- a; shift 2; echo rc=$?",
     "echo abc | base64 -w 0",
     "echo one; echo two && echo three || echo four",
     "false || echo or-ran",

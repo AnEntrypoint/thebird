@@ -2586,3 +2586,12 @@ Code: `base64` returns the encoding without a newline when the wrap width is 0. 
 
 Red check: the early return changed to append a newline. Rows red: `base64: -w 0 prints one line with no final newline, as GNU does`, `bash parity: printf ... base64 -w 0`, and the parity row `echo abc | base64 -w 0` (the parity group is compared against bashkit). Restored; green run below.
 
+
+### Change set 28c: shift past the parameters, and a non-numeric count
+
+Bash's `shift N` with N past the parameters is silent and returns 1 (checked with bash in the sandbox: `set -- a; shift 2` gives rc=1 and no output). The txiki shell printed `shift count out of range`. It is now silent with status 1. A non-numeric count, `shift x`, is an error: bash prints `shift: x: numeric argument required` and returns 2; the txiki shell now does the same, message and status.
+
+Witness rows: `builtins: a shift past the parameters fails with status 1 and is silent, as in bash` (stdout `rc=1`, stderr empty), `builtins: a non-numeric shift count is an error with status 2` (stdout `rc=2`, message), and the parity row `set -- a; shift 2; echo rc=$?`, reinstated: bashkit is silent with status 1 there.
+
+Red check: the past-the-end return given a message. Rows red: `builtins: a shift past the parameters fails with status 1 and is silent, as in bash` and the parity row `set -- a; shift 2; echo rc=$?`. Restored; green run below.
+
