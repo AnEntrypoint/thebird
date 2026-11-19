@@ -3259,3 +3259,15 @@ What the rows do instead: the rows that cover the walk compare sorted output (th
 Witness: none added, because no code changed. The existing sorted-output rows in 30m, 30o and 30v cover the entries, and the last full run is `RESULT PASS=836 FAIL=0`.
 
 Gap, recorded as closed: the order of reports and errors from a recursive chmod on a host other than the one probed is not claimed.
+
+### Phase B gate reading, open: change sets 30y to 30af are pushed
+
+Gate: `vmstat 1 2 | tail -n 1`, read at 21:03:58: swap-in 712 KB/s and swap-out 0 KB/s. Both are under 1000 KB/s, so the gate was open and Phase B ran.
+
+Runs, each once, from the checkout at `3a5e27a` (the last Phase A commit):
+
+- `npm run check`: exit 0, wall 0.306 s.
+- `npm run witness:shell`: exit 0, wall 1.606 s, `RESULT PASS=836 FAIL=0`.
+- Runaway rows, timed by a copy of the witness in `/tmp` (not the repo) that wraps each run with a timeoutMs: `sleep 5; echo late` with 200 ms took 201 ms and exited 124; `while true; do true; done` with 200 ms took 200 ms and exited 124; `for i in {1..100000}; do :; done` with 300 ms took 300 ms and exited 124. A `while` that breaks after 3 passes, with a 2000 ms limit, took 4 ms and exited 0.
+
+Pushed in one push to `origin main`: `e7f87cc` (unset), `cc686c4` (compound output), `29ad0d8` (read), `0420049` and `373e87f` (closed gate readings for 30y to 30z), `d1d196d` (30ab, LINENO), `eee7e59` (30ac, accented equivalence), `368301b` (30ad, chmod owner bits), `2ebb5e7` (30ae, stat %U and %G), `3a5e27a` (30af, the walk-order closure), and this record. `bin/thebird-relay.js` is not committed and is not pushed.
