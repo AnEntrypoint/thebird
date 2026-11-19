@@ -2296,3 +2296,14 @@ Not run in this pass: the full witness. The change sits under every engine timer
 ### Change set 6, item 4b: the host-check wait on the monotonic clock (Phase A)
 
 `scripts/check-web-host.mjs`: `untilServed` (its 120 s deadline, which polls the site until it serves) takes its deadline and its loop test from `performance.now()`, not `Date.now()`. The cache-buster in `hostCheck=${Date.now()}` stays: it is a unique query string, not a timer. Witness after the change: Phase B, below.
+
+### Phase B for change set 6 (items 3 and 4: `e6ab179`, `405eecf`, `7dd1fb6`)
+
+Swap gate: the first run opened at `GATE try=2 si=644 so=0 KB/s`, after `try=1 si=2472 so=6444`. The host-check rerun opened at `GATE try=3 si=324 so=0 KB/s`, after `si=2884` and `si=2788`. Both jobs re-read the gate before they started.
+
+Witnesses, each once:
+- `node scripts/witness.mjs --group=spin,ctrl-c-line,ctrl-c-curl`: `totals: PASS 4 FAIL 0 GROUPS 3 WALL 12.7s` (script wall 14 s, exit 0). Rows: Ctrl-C cancels a running command (116.6 ms); Ctrl-C ends a curl waiting on a response (147.7 ms); Ctrl-C stops a node loop that never yields, status 130 (104.8 ms); the isolated page keeps its directory (log `/tmp/pb6-ctrlc.log`).
+- `npm run witness:shell`: `RESULT PASS=108 FAIL=0`, wall 4 s, exit 0. Including `Ctrl-C: an abort ends sleep 30 within two seconds with exit 130 and cancelled — exit 130 after 201.6 ms` (log `/tmp/pb6-shell.log`).
+- `npm run host:check`, second run: `RESULT PASS=77 FAIL=0`, wall 209 s, exit 0 (log `/tmp/pb6-host2.log`).
+
+The first `host:check` run (`/tmp/pb6-host.log`, wall 214 s) exited 1 with 9 FAILs: `canonical host status reports running: stopped`, the 404s for `tjs.wasm` and `features.json`, the live registry 404, and `fetch failed` at the site page (`ECONNREFUSED 127.0.0.1:4173`). Cause: port 4173 was held by another tenant's server during that run. The host's own start printed `listening`, then its status said `stopped`, and `GET /` answered 200 while `tjs.wasm` answered 404. The tenant's process was gone before the rerun, and port 4173 answered `000` before the rerun. The untilServed change is not implicated: its failing rows are the port conflict. The rerun passed.
