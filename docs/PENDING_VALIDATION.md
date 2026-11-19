@@ -3060,3 +3060,16 @@ Red check: the operand branch disabled (`if (false && ...)`): 3 rows red (the `-
 
 Gap, recorded: none found for these options. `chmod -h` on a dangling operand is covered with the dangling-operand wording in 30v.
 
+
+### Change set 30u: expr colon and match count an astral character as one, as GNU expr does in a UTF-8 locale
+
+Reference: `/bin/gnuexpr` (GNU coreutils 9.7) under `LC_ALL=en_US.UTF-8`, through the `/tmp/gnubin` shim, the same locale as the 30q `length` rows; expectations are generated from its output (`/tmp/gen-exprutf.mjs`).
+
+What was wrong: `matchString` measured the text in UTF-16 units and built its regex without the `u` flag, so an astral character (an emoji, for example) counted as two, and `.` matched half of it. `expr 'a😀b' : '.*'` gave 4 where GNU gives 3, and a capture could return a lone surrogate. What changed: the length is taken in code points, and the regex is compiled with `u`, so `.` and the end-of-match lookahead each step over one code point. The `length`, `substr` and `index` rows from 30q were already code-point based and are unchanged.
+
+Witness: group `expr: a colon or match counts an astral character as one, as GNU expr does in a UTF-8 locale`, 8 rows, `RESULT PASS=709 FAIL=0` after the change.
+
+Red check: the `u` flag removed from `matchString`: 5 rows red (`a.` gave 1 where GNU gives 2; the capture after `a` gave a lone high surrogate; `..` gave 1; `match` captured a lone surrogate; `.` on one emoji gave 0 with status 1). The two rows that use `.*` stay green, because the greedy match happens to end at the right code-point count either way. Restored and confirmed green.
+
+Gap, recorded: the translator in `breToJs` now compiles under `u`, so an escape it does not emit a valid `u`-mode form for would throw at compile time. None was found in the current `expr` rows; a bracket expression with an escaped range is not probed.
+

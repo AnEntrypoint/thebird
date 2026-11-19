@@ -1317,6 +1317,25 @@ group('expr: POSIX character classes in a bracket expression match GNU expr', as
   check("expr: an unknown character class name is refused with status 2", xc5.stdout === "rc=2\n" && xc5.stderr === "expr: Invalid character class name\n", JSON.stringify([xc5.stdout, xc5.stderr]));
 });
 
+group('expr: a colon or match counts an astral character as one, as GNU expr does in a UTF-8 locale', async () => {
+  const ex0 = await run(await shell({}), "expr 'a😀b' : '.*'; echo rc=$?");
+  check("expr: a colon match counts an astral character as one, as GNU expr does in a UTF-8 locale", ex0.stdout === "3\nrc=0\n" && ex0.stderr === "", JSON.stringify([ex0.stdout, ex0.stderr]));
+  const ex1 = await run(await shell({}), "expr 'a😀b' : 'a.'; echo rc=$?");
+  check("expr: a colon match of a literal and one character counts the astral character, as GNU expr does", ex1.stdout === "2\nrc=0\n" && ex1.stderr === "", JSON.stringify([ex1.stdout, ex1.stderr]));
+  const ex2 = await run(await shell({}), "expr 'a😀b' : 'a\\(.\\)'; echo rc=$?");
+  check("expr: a colon match captures an astral character as one unit, as GNU expr does", ex2.stdout === "😀\nrc=0\n" && ex2.stderr === "", JSON.stringify([ex2.stdout, ex2.stderr]));
+  const ex3 = await run(await shell({}), "expr 'a😀b' : '..'; echo rc=$?");
+  check("expr: two dots match two characters when one is astral, as GNU expr does", ex3.stdout === "2\nrc=0\n" && ex3.stderr === "", JSON.stringify([ex3.stdout, ex3.stderr]));
+  const ex4 = await run(await shell({}), "expr match 'a😀b' '.\\(.\\)'; echo rc=$?");
+  check("expr: match captures the character after the first, when it is astral, as GNU expr does", ex4.stdout === "😀\nrc=0\n" && ex4.stderr === "", JSON.stringify([ex4.stdout, ex4.stderr]));
+  const ex5 = await run(await shell({}), "expr 'a😀b' : '.*b'; echo rc=$?");
+  check("expr: a colon match ending in a literal counts the whole string, as GNU expr does", ex5.stdout === "3\nrc=0\n" && ex5.stderr === "", JSON.stringify([ex5.stdout, ex5.stderr]));
+  const ex6 = await run(await shell({}), "expr '😀😀' : '.'; echo rc=$?");
+  check("expr: a dot matches one astral character, as GNU expr does", ex6.stdout === "1\nrc=0\n" && ex6.stderr === "", JSON.stringify([ex6.stdout, ex6.stderr]));
+  const ex7 = await run(await shell({}), "expr 'x😀y' : '.*\\(😀\\)'; echo rc=$?");
+  check("expr: a capture after astral characters returns the astral character, as GNU expr does", ex7.stdout === "😀\nrc=0\n" && ex7.stderr === "", JSON.stringify([ex7.stdout, ex7.stderr]));
+});
+
 group('seq: seq counts from first to last by step, and refuses bad arguments', async () => {
   const sh = await shell({});
   const last = await run(sh, 'seq 3');

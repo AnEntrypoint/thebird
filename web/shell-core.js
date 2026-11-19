@@ -986,9 +986,9 @@ function breToJs(pattern) {
 
 function matchString(text, pattern) {
   const { source, groups } = breToJs(pattern);
-  const n = text.length;
+  const n = Array.from(text).length;
   for (let end = n; end >= 0; end--) {
-    const found = new RegExp('^(?:' + source + ')(?=[\\s\\S]{' + (n - end) + '}$)').exec(text);
+    const found = new RegExp('^(?:' + source + ')(?=[\\s\\S]{' + (n - end) + '}$)', 'u').exec(text);
     if (found) return groups > 0 ? (found[1] ?? '') : String(end);
   }
   return groups > 0 ? '' : '0';
