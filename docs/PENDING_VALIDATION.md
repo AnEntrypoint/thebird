@@ -3040,3 +3040,10 @@ Red checks, each restored and confirmed by a green run: (1) the group wrapper by
 
 Gaps, recorded: a compound command that ends by a thrown signal, such as `exit` or `return` inside `{ ...; } > f`, does not apply its output redirect, so its output is lost. This was not probed against bash. The `read` builtin does not exist (`while read x` gives `read: command not found`), so a `while read` loop is not covered; this is a separate missing builtin, not part of this change. The `<` input is applied to a compound command only, not to a function call.
 
+
+### Phase B gate reading, closed: change sets 30s
+
+Gate: `vmstat 1 2`, last line, swap-in 520 KB/s and swap-out 15416 KB/s. Swap-out is above the 1000 KB/s limit, so the gate was closed. Phase B did not run: `npm run check` and `npm run witness:shell` were not run for this set, the runaway rows were not re-run, and nothing was pushed. The remote stays at `6ba21ab`.
+
+Local commits not pushed: `e817934`, `5dd020b`, `a050362`, `20679b0`, `83eac31`, and this record. The change set 30s rows last ran green at `RESULT PASS=696 FAIL=0`, in the Phase A run before the gate was read.
+
