@@ -528,6 +528,8 @@ group('expansion: brace lists, ranges and tilde expand before the command runs',
   check('expansion: a tilde stays literal while HOME is unset', bare.stdout === '~\n', JSON.stringify(bare.stdout));
   const home = await run(sh, 'HOME=/h; echo ~ ~/x');
   check('expansion: a leading tilde becomes HOME', home.stdout === '/h /h/x\n', JSON.stringify(home.stdout));
+  const emptyHome = await run(await shell({}), 'HOME=; set -- ~ x; echo $#');
+  check('expansion: an empty HOME still makes a field, as in bash', emptyHome.stdout === '2\n', JSON.stringify(emptyHome.stdout));
   const notTilde = await run(sh, "HOME=/h; echo '~' ~x a~");
   check('expansion: a quoted tilde, a tilde with a name, and a tilde mid-word stay literal', notTilde.stdout === '~ ~x a~\n', JSON.stringify(notTilde.stdout));
 });

@@ -1803,7 +1803,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (home === undefined || first?.k !== 'lit' || first.s[0] !== '~') return parts;
     const tildeOnly = first.s.length === 1 && parts.length === 1;
     if (!tildeOnly && first.s[1] !== '/') return parts;
-    return [{ k: 'lit', s: home + first.s.slice(1) }, ...parts.slice(1)];
+    return [{ k: 'sq', s: home }, { k: 'lit', s: first.s.slice(1) }, ...parts.slice(1)];
   };
 
   async function expandWords(words, sink) {

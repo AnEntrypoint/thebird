@@ -2611,7 +2611,7 @@ Red check: the errexit throw in `runSequence` replaced with `if (false)`. Seven 
 
 `~` expands to `HOME` when `HOME` is set, and the txiki shell did this already; no code change. The parity row is `HOME=/home/sandbox; export HOME; echo ~`, reinstated: the row without `HOME` set was excluded because bashkit's default home is `/home/sandbox` and the txiki shell has no default `HOME`.
 
-HOME unset, recorded: the txiki shell keeps `~` literal (witness row `expansion: a tilde stays literal while HOME is unset`). Real bash does not: with `HOME` unset it falls back to the passwd entry for the user, which is `/config` in this sandbox (`env -i bash -c 'echo ~'`). The txiki shell has no passwd database, so the literal is kept on purpose and is the one case where bash's output depends on the account database. An empty `HOME=` gives an empty expansion in bash; the txiki shell keeps the empty value as well, since `tildeWord` only checks for an undefined `HOME`.
+HOME unset, recorded: the txiki shell keeps `~` literal (witness row `expansion: a tilde stays literal while HOME is unset`). Real bash does not: with `HOME` unset it falls back to the passwd entry for the user, which is `/config` in this sandbox (`env -i bash -c 'echo ~'`). The txiki shell has no passwd database, so the literal is kept on purpose and is the one case where bash's output depends on the account database. An empty `HOME=` makes the tilde a field of its own: `set -- ~ x` gives two arguments in bash. The txiki shell first dropped that empty field; change set 28h makes it match.
 
 Red check: the `tildeWord` guard replaced with `if (true) return parts;`, which disables expansion. Rows red: `expansion: a leading tilde becomes HOME` and the parity row `HOME=/home/sandbox; export HOME; echo ~`. Restored; green run below.
 
@@ -2632,4 +2632,11 @@ Bash exports `PWD`: `env` and `printenv` list it, and `cd` updates it. The txiki
 Witness rows: the three existing `env:` listing rows updated to include `PWD=/workspace` in sorted position; `env: PWD is the working directory when the shell starts, as in bash`; `env: PWD is exported and follows cd, as in bash` (`/pw` after `cd /pw`). Parity rows reinstated: `export A=1; B=2; env`, `export C; C=3; env`, `export Y=3; env Z=4`, and `mkdir -p /pw; cd /pw; printenv PWD`.
 
 Red checks: (1) the PWD export removed (`exported.has('PWD')`): nine rows red, the three updated listing rows, the two `PWD` rows and four parity rows. (2) the sort removed: four rows red, the two listing rows and two parity rows that depend on order. Both restored by the reverse edit; the green run is `RESULT PASS=467 FAIL=0`.
+
+
+### Change set 28h: an empty HOME keeps the tilde's field
+
+With `HOME` set to the empty string, bash expands `~` to an empty field: `HOME= bash -c 'set -- ~ x; echo $#'` prints 2. The txiki shell dropped the empty expansion and printed 1. `tildeWord` now returns the home as a quoted part, so the field is kept, and the rest of the word stays a plain literal, so globbing on the rest still applies. The expansion of a tilde is never split or globbed, as in bash.
+
+Witness row: `expansion: an empty HOME still makes a field, as in bash` (stdout `2`). Red check: the quoted-part return replaced by the old literal return. The row `expansion: an empty HOME still makes a field, as in bash` went red; restored by the reverse edit; the green run is `RESULT PASS=468 FAIL=0`.
 
