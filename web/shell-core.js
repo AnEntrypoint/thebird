@@ -78,6 +78,7 @@ function matchParen(src, start) {
 }
 
 const SHELL_USER = 'user';
+const SHELL_GROUP = 'user';
 const SHELL_HOST = 'thebird';
 
 function readChars(text, pos, raw) {
@@ -1401,6 +1402,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (code === 's') return String(info.size);
     if (code === 'F') return info.type;
     if (code === 'a') return info.mode;
+    if (code === 'U') return SHELL_USER;
+    if (code === 'G') return SHELL_GROUP;
     if (code === '%') return '%';
     return whole;
   });

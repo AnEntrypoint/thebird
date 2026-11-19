@@ -1220,6 +1220,15 @@ group("chmod -R and -v: the owner bits decide whether a directory can be read an
   check("chmod -R on a nested file under a directory without owner search reports the whole path it cannot reach, as GNU chmod does on Linux", co12.stdout === "rc=1\n" && co12.stderr === "chmod: cannot access 'd/sub/b': Permission denied\n", JSON.stringify([co12.stdout, co12.stderr]));
 });
 
+group("stat -c: the owner and group names are the shell identity, as GNU stat names the identity abc", async () => {
+  const si0 = await run(await shell({}), "mkdir d && echo a > d/a && mkdir d/sub && echo b > d/sub/b && chmod 755 d d/sub; stat -c \"%U %G %a %n\" d d/a");
+  check("stat -c with %U and %G names the shell identity for a directory and a file, as GNU stat names the identity abc", si0.stdout === "user user 755 d\nuser user 644 d/a\n" && si0.stderr === "", JSON.stringify([si0.stdout, si0.stderr]));
+  const si1 = await run(await shell({}), "mkdir d && echo a > d/a && mkdir d/sub && echo b > d/sub/b && chmod 755 d d/sub; chmod 600 d/a; stat -c \"%U:%G %a %n\" d/a");
+  check("stat -c with %U and %G names the shell identity after a chmod of the file, as GNU stat names the identity abc", si1.stdout === "user:user 600 d/a\n" && si1.stderr === "", JSON.stringify([si1.stdout, si1.stderr]));
+  const si2 = await run(await shell({}), "mkdir d && echo a > d/a && mkdir d/sub && echo b > d/sub/b && chmod 755 d d/sub; stat -c \"%U %G %F %n\" d d/a");
+  check("stat -c with %U, %G and %F names the owner, group and type of each name, as GNU stat does for the identity abc", si2.stdout === "user user directory d\nuser user regular file d/a\n" && si2.stderr === "", JSON.stringify([si2.stdout, si2.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

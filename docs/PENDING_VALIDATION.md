@@ -3233,3 +3233,17 @@ Witness: group `chmod -R and -v: the owner bits decide whether a directory can b
 Red checks, each restored and confirmed by a green run: (1) the owner read check removed: 5 rows red (`-R 300`, `-R 100`, `-R 000`, `-vR 300`, `-vR 000`). (2) the ancestor search check removed: 4 rows red (the operand and nested rows). (3) the owner class replaced by the group class: 20 rows red, including the older `chmod -R` and symbolic-link rows, which depend on the owner class. The restored file matches its backup, and the green run gives `RESULT PASS=833 FAIL=0`.
 
 Gaps, recorded: the group and other classes are not selected, and cannot be witnessed against GNU as `abc`. Every file in the reference and in the shell is owned by `abc`, and a file owned by another user cannot be created here; the shell has no chown or chgrp builtin, so no path can have another owner. An intermediate symbolic link in an operand path is checked by the mode of the name as written, not of its referent. `stat` under a directory without owner search is not refused by this shell (GNU refuses it with `stat: cannot statx`).
+
+### Change set 30ae: stat -c reads %U and %G as the shell identity, the owner and group names GNU stat gives abc
+
+Reference: GNU stat (`/bin/gnustat`) run as the sandbox identity `abc` (`stat -c '%U %G'` gives `abc abc`), under LC_ALL=C, through a PATH shim named `stat`. Rows are generated from GNU, and the one identity mapping, `abc` to `user`, is applied to stdout and stderr wherever the name appears (as owner or group only; no fixture name contains it).
+
+Probed first: `%U` and `%G` give `abc` for every file and directory in the sandbox, and `%a`, `%n`, `%F` agree with this shell's existing values. This shell's stat supported `%a %n %s %F %%` only, so `%U` and `%G` printed as written.
+
+What changed in the shell: `SHELL_GROUP` (`'user'`) sits beside `SHELL_USER`, and `expandStat` returns `SHELL_USER` for `%U` and `SHELL_GROUP` for `%G`. The owner of every path is the identity, as change set 30ad records, so the owner name is the same for every name.
+
+Witness: group `stat -c: the owner and group names are the shell identity, as GNU stat names the identity abc`, 3 rows from GNU with the `abc` to `user` mapping. Last full run after the change: `RESULT PASS=836 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) `%G` returns a different name: 3 rows red. (2) `%U` returns a different name: 3 rows red. The restored file matches its backup, and the green run gives `RESULT PASS=836 FAIL=0`.
+
+Gaps, recorded: `%u`, `%g`, `%G` for a group other than the identity's, and the other stat formats of GNU, are not implemented here.
