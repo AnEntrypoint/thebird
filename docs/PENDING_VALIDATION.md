@@ -2897,3 +2897,14 @@ Red checks, on this tree: (1) recursion disabled: four rows red (the -R, the sym
 
 Gaps, recorded: (a) the descent refusal uses the owner's search bit only; the shell has no per-user permission model, so this matches a non-root owner and not root. (b) A top-level symlink argument is changed as the link path itself, as before; GNU's handling of a command-line symlink with -R is not covered. (c) The chmod options `-v`, `-c`, `--reference` and `--dereference` are not supported; `-v 644 f` is refused as `invalid mode: '-v'`, where GNU runs the option. (d) Found while building the fixture, not in chmod: the in-memory shell lets `echo a > /missing/dir/z` succeed, while GNU sh reports `cannot create ...: Directory nonexistent`; this is the host's write, not chmod, and is left as a gap.
 
+
+### Phase B record: change sets 30h to 30k
+
+Gate: the first gate run, a loop of up to thirty tries, hit the job's 300 s limit with no output, because the box was swapping when it started. No gate process was left: `ps` showed none. The gate was then run to a log file (`/tmp/gate-pb30b.log`), and its first reading was `try 1 si/so: 264 0`, so the gate opened (swap-in 264 KB/s, swap-out 0 KB/s, both below 1000 KB/s).
+
+`npm run check`: exit 0, wall 1s.
+
+`npm run witness:shell`: exit 0, wall 3s, `RESULT PASS=635 FAIL=0`. The runaway rows still stop at their timeouts: `timeout: a command past timeoutMs ends with exit 124` (PASS), `loops: a while that never ends is stopped by the command timeout with exit 124` (PASS), and `loops: a for over a large list is stopped by timeoutMs with exit 124` (PASS).
+
+Pushed: origin main from eb5446a to the head after this record, one push, no force. The commits are 7dbcaad (for header), 78bffcb (command substitution depth), abb1f30 (expr operators and classes), e1d9998 (chmod -R and GNU wording) and this record.
+
