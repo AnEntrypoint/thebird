@@ -768,7 +768,7 @@ const CHMOD_SHIFT = { u: 6, g: 3, o: 0 };
 const CHMOD_SPECIAL = { u: 0o4000, g: 0o2000, o: 0o1000 };
 
 function formatMode(bits) {
-  return bits.toString(8).padStart(bits > 0o777 ? 4 : 3, '0');
+  return bits.toString(8);
 }
 
 function applySymbolicMode(bits, spec, isDir) {
@@ -1808,28 +1808,42 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code, out, err };
     },
     chmod: ({ argv }) => {
-      const [mode, ...names] = argv;
-      if (mode === undefined || !names.length) return { code: 1, out: '', err: 'chmod: missing operand\n' };
-      const octal = /^[0-7]{3,4}$/.test(mode);
-      if (!octal && /^[0-9]+$/.test(mode)) return { code: 1, out: '', err: 'chmod: invalid digit found in string\n' };
-      if (!octal) {
-        const probe = applySymbolicMode(0, mode, false);
-        if (probe.error) return { code: 1, out: '', err: 'chmod: ' + probe.error + '\n' };
-      }
-      const digits = octal ? mode.replace(/^0+/, '').padStart(3, '0') : '';
-      let err = '';
-      let code = 0;
-      for (const name of names) {
-        const path = resolvePath(name);
-        if (!statInfo(path)) {
-          err += "chmod: cannot access '" + name + "': No such file or directory\n";
-          code = 1;
-        } else if (octal) modes.set(path, digits);
+      const recursive = argv.some((arg) => arg === '-R' || arg === '--recursive');
+      const [mode, ...names] = argv.filter((arg) => arg !== '-R' && arg !== '--recursive');
+      const usage = "Try 'chmod --help' for more information.\n";
+      if (mode === undefined) return { code: 1, out: '', err: 'chmod: missing operand\n' + usage };
+      if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
+      const octal = /^[0-7]{1,4}$/.test(mode);
+      if (!octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
+      const digits = octal ? parseInt(mode, 8).toString(8) : '';
+      const changeOne = (path) => {
+        if (octal) modes.set(path, digits);
         else {
           const dir = host.stat(path)?.dir === true;
           const current = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
           modes.set(path, formatMode(applySymbolicMode(current, mode, dir).bits));
         }
+      };
+      let err = '';
+      let code = 0;
+      const visit = (path, shown) => {
+        changeOne(path);
+        if (!recursive || host.stat(path)?.dir !== true) return;
+        const owner = parseInt(modes.get(path) ?? '755', 8) & 0o100;
+        for (const entry of host.list(path).sort()) {
+          const child = (path === '/' ? '' : path) + '/' + entry;
+          if (host.lstat(child)?.link) continue;
+          if (!owner) {
+            err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
+            code = 1;
+          } else visit(child, shown + '/' + entry);
+        }
+      };
+      for (const name of names) {
+        if (!statInfo(resolvePath(name))) {
+          err += "chmod: cannot access '" + name + "': No such file or directory\n";
+          code = 1;
+        } else visit(resolvePath(name), name);
       }
       return { code, out: '', err };
     },

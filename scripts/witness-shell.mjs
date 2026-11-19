@@ -669,7 +669,7 @@ group('diff -c and -C: context output, with labels, matches GNU diff', async () 
   check("diff -c: identical files give no output and status 0", c13.stdout === "rc=0\n", JSON.stringify(c13.stdout));
 });
 
-group('chmod: symbolic modes match the sandbox chmod, and octal modes still work', async () => {
+group('chmod: symbolic modes match GNU chmod, and octal modes still work', async () => {
   const m1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: u+x adds the owner execute bit", m1.stdout === "rc=0\n744\n" && m1.stderr === "", JSON.stringify([m1.stdout, m1.stderr]));
   const m2 = await run(await shell({}), "echo a > /cm/f; chmod 666 /cm/f; chmod \"go-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
@@ -701,13 +701,13 @@ group('chmod: symbolic modes match the sandbox chmod, and octal modes still work
   const m15 = await run(await shell({}), "echo a > /cm/f; chmod 777 /cm/f; chmod \"o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
   check("chmod: o= clears all bits of other", m15.stdout === "rc=0\n770\n" && m15.stderr === "", JSON.stringify([m15.stdout, m15.stderr]));
   const e1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+q\" /cm/f; echo rc=$?; stat -c %a /cm/f");
-  check("chmod: an unknown permission letter is refused with status 1 and the file is unchanged", e1.stdout === "rc=1\n644\n" && e1.stderr === "chmod: invalid operator (expected +, -, or =, but found q)\n", JSON.stringify([e1.stdout, e1.stderr]));
+  check("chmod: an unknown permission letter is refused with status 1 and the file is unchanged", e1.stdout === "rc=1\n644\n" && e1.stderr === "chmod: invalid mode: 'u+q'\nTry 'chmod --help' for more information.\n", JSON.stringify([e1.stdout, e1.stderr]));
   const e2 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"x+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
-  check("chmod: a letter where a class or operator belongs is refused with status 1", e2.stdout === "rc=1\n644\n" && e2.stderr === "chmod: invalid operator (expected +, -, or =, but found x)\n", JSON.stringify([e2.stdout, e2.stderr]));
+  check("chmod: a letter where a class or operator belongs is refused with status 1", e2.stdout === "rc=1\n644\n" && e2.stderr === "chmod: invalid mode: 'x+x'\nTry 'chmod --help' for more information.\n", JSON.stringify([e2.stdout, e2.stderr]));
   const e3 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
-  check("chmod: a clause with no operator is refused with status 1", e3.stdout === "rc=1\n644\n" && e3.stderr === "chmod: invalid mode (u)\n", JSON.stringify([e3.stdout, e3.stderr]));
+  check("chmod: a clause with no operator is refused with status 1", e3.stdout === "rc=1\n644\n" && e3.stderr === "chmod: invalid mode: 'u'\nTry 'chmod --help' for more information.\n", JSON.stringify([e3.stdout, e3.stderr]));
   const e4 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \",u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
-  check("chmod: an empty clause is refused with status 1", e4.stdout === "rc=1\n644\n" && e4.stderr === "chmod: invalid mode ()\n", JSON.stringify([e4.stdout, e4.stderr]));
+  check("chmod: an empty clause is refused with status 1", e4.stdout === "rc=1\n644\n" && e4.stderr === "chmod: invalid mode: ',u+x'\nTry 'chmod --help' for more information.\n", JSON.stringify([e4.stdout, e4.stderr]));
 });
 
 group('set -x: tracing matches bash for simple commands, and the gaps are rows with their cause', async () => {
@@ -781,6 +781,27 @@ group('set -x: a command substitution adds a + to the trace prefix, as bash does
   check("set -x: a substitution in a for list is traced before the for header", sd6.stdout === "a\nb\n" && sd6.stderr === "++ echo a b\n+ for i in $(echo a b)\n+ echo a\n+ for i in $(echo a b)\n+ echo b\n+ set +x\n", JSON.stringify([sd6.stdout, sd6.stderr]));
   const sd7 = await run(await shell({}), "set -x; ( echo sub ); set +x");
   check("set -x: a subshell is not a substitution, so its commands are traced at +", sd7.stdout === "sub\n" && sd7.stderr === "+ echo sub\n+ set +x\n", JSON.stringify([sd7.stdout, sd7.stderr]));
+});
+
+group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
+  const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
+  check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));
+  const cr1 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R u+x,go-w /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
+  check("chmod -R with a symbolic mode applies it to each entry on its own", cr1.stdout === "700\n700\n700\n700\n700\n700\n777\n" && cr1.stderr === "", JSON.stringify([cr1.stdout, cr1.stderr]));
+  const cr2 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod 750 -R /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
+  check("chmod takes -R after the mode, as GNU chmod does", cr2.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr2.stderr === "", JSON.stringify([cr2.stdout, cr2.stderr]));
+  const cr3 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; echo o > /cm/t/out && chmod 644 /cm/t/out && ln -s /cm/t/out /cm/t/a/outlink && chmod -R 777 /cm/t/a; stat -c %a /cm/t/out");
+  check("chmod -R does not follow a symlink to a file outside the tree", cr3.stdout === "644\n" && cr3.stderr === "", JSON.stringify([cr3.stdout, cr3.stderr]));
+  const cr4 = await run(await shell({}), "mkdir -p /cm/t/d && echo x > /cm/t/d/f1 && chmod -R a=r /cm/t/d; echo rc=$?");
+  check("chmod -R a=r removes search from a directory, and its entries are refused as GNU chmod refuses them", cr4.stdout === "rc=1\n" && cr4.stderr === "chmod: cannot access '/cm/t/d/f1': Permission denied\n", JSON.stringify([cr4.stdout, cr4.stderr]));
+  const cr5 = await run(await shell({}), "chmod -R 750 /cm/t/none; echo rc=$?");
+  check("chmod -R on a missing path reports it and exits 1", cr5.stdout === "rc=1\n" && cr5.stderr === "chmod: cannot access '/cm/t/none': No such file or directory\n", JSON.stringify([cr5.stdout, cr5.stderr]));
+  const cr6 = await run(await shell({}), "chmod 644; echo rc=$?");
+  check("chmod with a mode and no file says missing operand after the mode, as GNU chmod does", cr6.stdout === "rc=1\n" && cr6.stderr === "chmod: missing operand after '644'\nTry 'chmod --help' for more information.\n", JSON.stringify([cr6.stdout, cr6.stderr]));
+  const cr7 = await run(await shell({}), "chmod; echo rc=$?");
+  check("chmod with no operands says missing operand, as GNU chmod does", cr7.stdout === "rc=1\n" && cr7.stderr === "chmod: missing operand\nTry 'chmod --help' for more information.\n", JSON.stringify([cr7.stdout, cr7.stderr]));
+  const cr8 = await run(await shell({}), "mkdir -p /cm/t && echo a > /cm/t/z && chmod 7 /cm/t/z && stat -c %a /cm/t/z && chmod 0 /cm/t/z && stat -c %a /cm/t/z");
+  check("chmod 0 and chmod 7 are octal modes, and stat reports them without padding", cr8.stdout === "7\n0\n" && cr8.stderr === "", JSON.stringify([cr8.stdout, cr8.stderr]));
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
@@ -886,7 +907,7 @@ group('chmod: chmod sets an octal mode that stat reports', async () => {
   const missing = await run(sh, 'chmod 644 /cm/none; echo rc=$?');
   check('chmod: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes("chmod: cannot access '/cm/none': No such file or directory"), JSON.stringify(missing.stderr));
   const digitMode = await run(sh, 'chmod 999 /cm/f; echo rc=$?');
-  check('chmod: a digit that is not octal is refused with status 1, as chmod does', digitMode.stdout === 'rc=1\n' && digitMode.stderr === 'chmod: invalid digit found in string\n', JSON.stringify(digitMode.stderr));
+  check('chmod: a number that is not octal is refused as an invalid mode, as GNU chmod does', digitMode.stdout === 'rc=1\n' && digitMode.stderr === "chmod: invalid mode: '999'\nTry 'chmod --help' for more information.\n", JSON.stringify(digitMode.stderr));
 });
 
 group('md5sum: md5sum prints the MD5 of its input and of each file', async () => {
