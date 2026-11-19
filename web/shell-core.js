@@ -1968,6 +1968,14 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
       const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
       if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
+      const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
+      const blockedAncestor = (path) => {
+        const parents = path.split('/').slice(1, -1);
+        for (let depth = 1; depth <= parents.length; depth++) {
+          if (!(ownerBits('/' + parents.slice(0, depth).join('/')) & 1)) return true;
+        }
+        return false;
+      };
       const changeOne = (path) => {
         const dir = host.stat(path)?.dir === true;
         const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
@@ -1997,10 +2005,16 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         const { before, after } = changeOne(path);
         out += report(shown, before, after);
         if (seen || !recursive || host.stat(path)?.dir !== true) return;
-        const owner = parseInt(modes.get(path) ?? '755', 8) & 0o100;
+        if (!(ownerBits(path) & 4)) {
+          err += "chmod: cannot read directory '" + shown + "': Permission denied\n";
+          code = 1;
+          if (verbose) out += "'" + shown + "' could not be accessed\n";
+          return;
+        }
+        const searchable = ownerBits(path) & 1;
         for (const entry of host.list(path).sort()) {
           const child = (path === '/' ? '' : path) + '/' + entry;
-          if (!owner) {
+          if (!searchable) {
             err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
             code = 1;
             if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
@@ -2016,6 +2030,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const name of names) {
         if (noDereference && host.lstat(resolvePath(name))?.link) {
           if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
+        } else if (blockedAncestor(resolvePath(name))) {
+          if (verbose) out += "'" + name + "' could not be accessed\n";
+          err += "chmod: cannot access '" + name + "': Permission denied\n";
+          code = 1;
         } else if (!statInfo(referentOf(resolvePath(name)))) {
           if (verbose) out += "'" + name + "' could not be accessed\n";
           err += host.lstat(resolvePath(name))?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";
