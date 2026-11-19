@@ -2430,3 +2430,11 @@ Known gaps: no locale collation (sort is byte order), no multi-file headers for 
 `scripts/witness-shell.mjs`: group `text: sort, uniq, head, tail and cut read lines and pick from them`, 13 rows: sort orders lines (`a b c`); sort -n (`1 2 3`); sort -ru (`b a`); uniq -c (`      2 a`, `      1 b`); head -n 2 (`1 2`); head -2 (`1 2`); tail -n 2 (`3 4`); tail -n +4 (`4 5`); cut -d: -f2 (`b`, `e`); cut -d: -f1,3 (`a:c`); cut -f1 on a line with no tab (whole line); cut of a missing file (status 1, the message); cut without -f (status 1, the message).
 
 Red check (done), each restored: sort left unsorted: `RESULT PASS=176 FAIL=3` (the three sort rows). uniq without the count: `RESULT PASS=178 FAIL=1` (the uniq -c row). cut keeping every field: `RESULT PASS=176 FAIL=3`, with the two cut field rows red. tail returning every line: `RESULT PASS=175 FAIL=4`, with the tail row red. The first restore pass had a fault: three of the four restore edits matched text that appears elsewhere (or not at all), so the uniq, cut and tail breaks stayed in the file for the next runs. The breaks were found by reading the file, then restored by a longer unique match. The green run after that is `RESULT PASS=179 FAIL=0`. Each red run above showed its own rows going red, so the evidence for each break is valid; the leftover breaks only added failures to other rows.
+
+### Phase B for change sets 11 to 15 (`8371c21`, `6766e3f`, `473bf50`, `da06cac`, `a595ea0`)
+
+Swap gate: opened at try 25, `GATE_OPEN try=25 si=452 so=0 KB/s`, read immediately before the jobs (earlier tries were above the limit, so the jobs waited for the reading).
+Build check: `npm run check` exit 0, wall 324 ms (`/tmp/pb11-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=179 FAIL=0`, exit 0, wall 800 ms (`/tmp/pb11-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
+
