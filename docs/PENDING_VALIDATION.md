@@ -2807,3 +2807,12 @@ Gate: `vmstat 1 2 | tail -n 1 | awk '{print $7, $8}'` read swap-in 0 KB/s and sw
 
 Pushed: origin main from afb21d8 to the head after this record, one push, no force. The commits pushed are 60b573e, 56ae6e3, 6755d17, f0613b4, efc0936, 04a76f4 and this record.
 
+
+### Change set 30g: set -x uses PS4 for the trace prefix
+
+The trace prefix is the value of PS4 (default `+ `, read when the command is traced, so `PS4='>> '` gives `>> echo p`). An empty PS4 gives no prefix. Only literal PS4 text is used: the `$` expansion that bash performs on PS4 is not done (a remaining gap, see the ranked list after 575619e).
+
+Reference: bash in the sandbox. Two rows in group `set -x: tracing matches bash for simple commands` take their expectations from `bash -c`: a set PS4 and an empty PS4. They replace the row that pinned the PS4 gap.
+
+Red checks, on this tree: (1) PS4 ignored (fixed prefix `+ `): two rows red. (2) PS4 dropped on the command line only: two rows red. Each restored by the reverse edit; the green run is `RESULT PASS=557 FAIL=0`.
+

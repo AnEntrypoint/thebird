@@ -852,10 +852,10 @@ function traceWord(word) {
   return "'" + word.replaceAll("'", "'\\''") + "'";
 }
 
-function traceLines(assigned, argv) {
+function traceLines(assigned, argv, prefix) {
   let text = '';
-  for (const [name, value] of assigned) text += '+ ' + name + '=' + (value === '' ? '' : traceWord(value)) + '\n';
-  if (argv.length) text += '+ ' + argv.map(traceWord).join(' ') + '\n';
+  for (const [name, value] of assigned) text += prefix + name + '=' + (value === '' ? '' : traceWord(value)) + '\n';
+  if (argv.length) text += prefix + argv.map(traceWord).join(' ') + '\n';
   return text;
 }
 
@@ -2104,7 +2104,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const argv = await expandWords(node.words, sink);
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
-    const trace = xtrace ? traceLines(assigned, argv) : '';
+    const trace = xtrace ? traceLines(assigned, argv, vars.get('PS4') ?? '+ ') : '';
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
       return { ...ok(''), err: trace };

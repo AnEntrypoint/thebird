@@ -740,9 +740,11 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   const xt13 = await run(await shell({}), "set -x; for i in 1 2; do echo $i; done; set +x");
   check("set -x (gap, compound headers): a for-loop header is not traced, bash prints + for i in 1 2 before each pass; cause: the for executor emits no trace line", xt13.stdout === "1\n2\n" && xt13.stderr === "+ echo 1\n+ echo 2\n+ set +x\n", JSON.stringify([xt13.stdout, xt13.stderr]));
   const xt14 = await run(await shell({}), "PS4='>> '; set -x; echo p; set +x");
-  check("set -x (gap, PS4): PS4 is not read, bash prints >> and this shell prints +; cause: the trace prefix is fixed", xt14.stdout === "p\n" && xt14.stderr === "+ echo p\n+ set +x\n", JSON.stringify([xt14.stdout, xt14.stderr]));
-  const xt15 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
-  check("set -x (gap, nested): a command substitution is traced at depth one, bash prints ++; cause: trace depth is not tracked through substitutions", xt15.stdout === "sub\n" && xt15.stderr === "+ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
+  check("set -x: PS4 sets the text before each trace line, as bash does", xt14.stdout === "p\n" && xt14.stderr === ">> echo p\n>> set +x\n", JSON.stringify([xt14.stdout, xt14.stderr]));
+  const xt15 = await run(await shell({}), "PS4=''; set -x; echo p; set +x");
+  check("set -x: an empty PS4 gives no text before each trace line, as bash does", xt15.stdout === "p\n" && xt15.stderr === "echo p\nset +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
+  const xt16 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
+  check("set -x (gap, nested): a command substitution is traced at depth one, bash prints ++; cause: trace depth is not tracked through substitutions", xt16.stdout === "sub\n" && xt16.stderr === "+ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
