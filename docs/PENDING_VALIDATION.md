@@ -2655,3 +2655,12 @@ D. Behaviour, kept on GNU's side: `diff` with a missing file exits 2 with a mess
 
 E. Open gaps, not in the brief, left as they are and reported: `expr 1 + 2 '*' 3` (GNU prints 7, the txiki shell refuses with `only one operator is supported`, bashkit prints 1, which is also wrong); `set -x` (the txiki shell refuses with status 2, bash and bashkit trace); `stat -c %F` on a symbolic link (the txiki shell fails with `cannot statx`, GNU reports `symbolic link`); `chmod u+x` (GNU accepts a symbolic mode, the txiki shell refuses it); `env nosuchcmd` (the txiki message is `command not found`, GNU's is `No such file or directory`; the status 127 matches).
 
+
+### Phase B for change sets 28a to 28i
+
+Swap gate: sampled with `vmstat 1 2` before the jobs, and it opened at try 11 with `GATE_OPEN try=11 si=512 so=0 KB/s`. The earlier tries read si 78328, 22060, 16476, 11352, 70908, 10320, 26432, 11000, 9524 and 234680 KB/s with so up to 135464 KB/s, so the box was swapping heavily until the gate opened. Both were below 1000 KB/s at the open.
+Build check: `npm run check` exit 0, wall 1011 ms (`/tmp/pb14-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=468 FAIL=0`, exit 0, wall 2452 ms (`/tmp/pb14-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes (`n=3`); `loops: a short for loop still runs every item` passes.
+Commits pushed with this record: 9da82a4 (28a), 1404a50 (28b), 2fc31bb (28c), 2d0bee5 (28d), 319296c (28e), 44640bf (28f), 64f2e75 (28g), 5293cfb (28h), 539271c (28i), and this record.
+
