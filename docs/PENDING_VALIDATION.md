@@ -2708,3 +2708,12 @@ Witness rows, group `mv: a directory is moved with its tree, and not into itself
 
 Red checks, on this tree: (1) the source removal made non-recursive: the move row goes red because `test -d` still sees the source. (2) the subdirectory check disabled: the `cp -r` into-itself row and the `mv` into-subdirectory row both go red with `Maximum call stack size exceeded`. (3) the `mv` needs-no-flag rule removed, so a directory needs `-r`: three rows red. Each restored by the reverse edit; the green run is `RESULT PASS=476 FAIL=0`.
 
+
+### Phase B for change sets 29a and 29b
+
+Swap gate: sampled with `vmstat 1 2` before the jobs. It opened at try 8, `GATE_OPEN try=8 si=112 so=0 KB/s`. Earlier tries read si between 1208 and 9232 KB/s, with so 112 KB/s at try 1 and 0 after.
+Build check: `npm run check` exit 0, wall 2586 ms (`/tmp/pb15-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=476 FAIL=0`, exit 0, wall 1743 ms (`/tmp/pb15-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes (`n=3`); `loops: a short for loop still runs every item` passes.
+Commits pushed with this record: 03e22a6 (ranking and the stat correction), fe7d1b6 (29a, cp -r), 8bdb16a (29b, mv of a directory), and this record.
+
