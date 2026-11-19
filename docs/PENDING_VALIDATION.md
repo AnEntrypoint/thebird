@@ -2836,3 +2836,14 @@ Reachable, in order:
 
 Held, with the evidence that would reopen each (unchanged from the held list above): the page shell on bashkit (owner decision H1); Ctrl-C on the Pages site (owner choice between restart and isolation); E5 per-item yield in `for` and `while` (owner picks time-sliced yielding); the three live 8793 rows (the hy4 gateway outside this repo); fx ask-mode approval; `.npmrc` `_authToken` through the browser (owner picks a registry or proxy); the fx-repo items; the Pyodide licence and vendored notices (owner licence decision).
 
+
+### Phase B record: change sets 30g and the env decision
+
+Gate: `vmstat 1 2` read swap-in 340 KB/s and swap-out 0 KB/s on the first try, so the gate opened (`/tmp/gate-pb30.sh`).
+
+`npm run check`: exit 0, wall 0s.
+
+`npm run witness:shell`: exit 0, wall 2s, `RESULT PASS=557 FAIL=0`. The runaway rows still stop at timeoutMs: `timeout: a command past timeoutMs ends with exit 124` (PASS), `loops: a for over a large list is stopped by timeoutMs with exit 124` (PASS), and the `while` row, `PASS loops: a while that never ends is stopped by the command timeout with exit 124 — exit 124`.
+
+Pushed: origin main from 575619e to the head after this record, one push, no force. The commits are 0953255 (PS4), 61ef363 (env decision and ranked work) and this record.
+
