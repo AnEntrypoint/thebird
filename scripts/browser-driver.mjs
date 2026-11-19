@@ -146,9 +146,9 @@ export async function startBrowser({ chrome, profile }) {
   const poller = setInterval(() => refresh(), 500);
   try {
     const portFile = join(profile, 'DevToolsActivePort');
-    const deadline = Date.now() + 30000;
+    const deadline = performance.now() + 30000;
     while (!existsSync(portFile)) {
-      if (Date.now() > deadline) throw new Error('Chromium did not expose a DevTools port');
+      if (performance.now() > deadline) throw new Error('Chromium did not expose a DevTools port');
       await sleep(100);
     }
     const [port, path] = readFileSync(portFile, 'utf8').split('\n');
@@ -252,9 +252,9 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
       const result = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       return result.result?.value;
     };
-    const until = Date.now() + timeoutMs;
+    const until = performance.now() + timeoutMs;
     while (!(await evaluate("document.body && document.body.dataset.done === 'true'"))) {
-      if (Date.now() > until) {
+      if (performance.now() > until) {
         const screen = await evaluate("globalThis.thebird ? globalThis.thebird.text().slice(-900) : 'no terminal'").catch((error) => `screen unreadable: ${error.message}`);
         throw new Error(`terminal did not finish: ${url} — screen tail: ${JSON.stringify(screen)}`);
       }
@@ -287,9 +287,9 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
 
 function driverFor({ evaluate, press, type, note, pause, limit }) {
   const waitFor = async (expression, wait = limit) => {
-    const deadline = Date.now() + wait;
+    const deadline = performance.now() + wait;
     while (!(await evaluate(expression))) {
-      if (Date.now() > deadline) throw new Error('timed out waiting for: ' + expression);
+      if (performance.now() > deadline) throw new Error('timed out waiting for: ' + expression);
       await pause();
     }
   };
