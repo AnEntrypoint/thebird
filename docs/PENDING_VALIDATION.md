@@ -2964,3 +2964,14 @@ Red checks, each restored and confirmed by a green run: (1) the top-level symlin
 
 Gaps, recorded: a link cycle under `--dereference` is stopped by the walk guard, but GNU's own message for a cycle was not probed and no row pins it. A dangling symlink operand still reports `cannot access ...: No such file or directory`; GNU reports `cannot operate on dangling symlink`, which this change does not reach. `-h`/`--no-dereference` is still not implemented.
 
+
+### Phase B record: change sets 30l to 30o
+
+Gate: `vmstat 1 2`, last line, swap-in 44 KB/s and swap-out 0 KB/s, both below 1000 KB/s. The gate was open.
+
+`npm run check`: exit 0, wall 1s.
+
+`npm run witness:shell`: exit 0, wall 1s, `RESULT PASS=672 FAIL=0`. The runaway-loop rows still stop at their timeouts: `timeout: a command past timeoutMs ends with exit 124 and a timed-out message` (PASS), `loops: a while that never ends is stopped by the command timeout with exit 124` (PASS), and `loops: a for over a large list is stopped by timeoutMs with exit 124` (PASS).
+
+Pushed: origin main from 16494f6 to the head after this record, one push, no force. The commits are da5fe72 (PS4 and LINENO), e6352ef (chmod -v and -c), 5a20c1d (chmod --reference), 5ae8f9e (chmod --dereference) and this record.
+
