@@ -50,6 +50,7 @@ test('thebird_register posts the webserver to the registry endpoint and thebird_
   const original = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, init) => {
+    if (init === undefined) return { ok: true, json: async () => ({ name: 'thebird' }) };
     calls.push({ url, method: init.method, body: JSON.parse(init.body) });
     return { ok: true, json: async () => ({ ok: true, entry: { id: 'witness-app' } }) };
   };

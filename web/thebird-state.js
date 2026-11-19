@@ -78,6 +78,10 @@ const fxPayload = () => {
   };
 };
 
+export function localThebirdSnapshot({ term, current, body = document.body }) {
+  return { pane: paneOf(term), run: runOf(current, body), fx: fxPayload() };
+}
+
 export function startThebirdState({ term, current, body = document.body }) {
   let sent = null;
   let sentAt = 0;
@@ -85,7 +89,7 @@ export function startThebirdState({ term, current, body = document.body }) {
 
   const stop = () => clearInterval(timer);
 
-  const snapshot = () => ({ pane: paneOf(term), run: runOf(current, body), fx: fxPayload() });
+  const snapshot = () => localThebirdSnapshot({ term, current, body });
 
   const push = () => {
     const json = JSON.stringify(snapshot());

@@ -9,7 +9,7 @@ import { runFxTui } from './fx-tui.js';
 import { createPageHostTools, hostToolExecutor, pageWorkspace } from './fx-host-tools.js';
 import { createPageAsk } from './fx-ask.js';
 import { THEBIRD_FX_CAPABILITIES, THEBIRD_FX_SYSTEM_PROMPT, assertNoHostRefusal } from './fx-capabilities.js';
-import { observeRuns, startThebirdState } from './thebird-state.js';
+import { localThebirdSnapshot, observeRuns, startThebirdState } from './thebird-state.js';
 import './features.js';
 import { applyFeatureRequest, loadFeatureRequests } from './features-bridge.js';
 import { runFeatureProgram } from './features-in-txiki.js';
@@ -62,6 +62,7 @@ const fxTools = createPageHostTools({
   bash: fxBash,
   ask: createPageAsk(),
   publish: (payload) => client.publish(payload),
+  localState: () => localThebirdSnapshot({ term, current: observed.current }),
 });
 const plain = (value) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));
 client.onFeature(async ({ id, payload }) => {
