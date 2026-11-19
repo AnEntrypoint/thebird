@@ -2785,3 +2785,14 @@ Red checks, on this tree: (1) quoting removed: five rows red (the assignment-and
 
 Also changed: the row `builtins: an unsupported set option is refused` now refuses `set -u`, since `-x` is supported. The unsupported-option refusal is still tested.
 
+
+### Change set 30f: env not-found message
+
+`env NAME` where NAME is not a command (a function, a shell builtin or a page command) now writes `env: 'NAME': No such file or directory` to stderr and exits 127. The check runs before any assignment on the env line is made, so a missing command leaves no variable set. The shell's general `NAME: command not found` message is unchanged for every other caller.
+
+Reference: the sandbox `env` is uutils coreutils 0.10.0, and no GNU `env` exists in the sandbox. Its first line for a missing command is the same text as the change above. It also prints a second line, `env: use -[v]S to pass options in shebang lines`. That line is not copied here: this shell prints only the first line. Whether GNU env prints the second line in this case is not verified in this sandbox; it is an open question, recorded here rather than assumed.
+
+The env row now checks stdout (`rc=127`) and stderr exactly, under the title `env: a command env cannot find exits 127 with the No such file or directory message`.
+
+Red checks, on this tree: (1) message reverted to the generic `command not found`: one row red. (2) status changed to 1: one row red. (3) existence check bypassed: one row red. Each restored by the reverse edit; the green run is `RESULT PASS=556 FAIL=0`.
+

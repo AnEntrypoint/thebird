@@ -1710,6 +1710,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       if (argv[at]?.startsWith('-')) return { code: 125, out: '', err: `env: unsupported option ${argv[at]}\n` };
       if (at === argv.length) return ok(environmentLines(assigns));
+      const command = argv[at];
+      if (!functions.has(command) && !Object.hasOwn(commands, command) && !inPage.has(command)) return { code: 127, out: '', err: "env: '" + command + "': No such file or directory\n" };
       const restore = [...assigns.keys()].map((name) => [name, vars.get(name), exported.has(name)]);
       for (const [name, value] of assigns) {
         setVariable(name, value);

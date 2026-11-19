@@ -791,7 +791,7 @@ group('env: env and printenv show only the exported variables', async () => {
   const command = await run(await shell({}), 'env A=1 printenv A; printenv A; echo rc=$?');
   check('env: env runs a command with the assignment set, and the assignment does not stay', command.stdout === '1\nrc=1\n', JSON.stringify(command.stdout));
   const missing = await run(await shell({}), 'env nosuchcmd; echo rc=$?');
-  check('env: a command env cannot find exits 127, as in bash', missing.stdout === 'rc=127\n', JSON.stringify(missing.stdout));
+  check('env: a command env cannot find exits 127 with the No such file or directory message', missing.stdout === 'rc=127\n' && missing.stderr === "env: 'nosuchcmd': No such file or directory\n", JSON.stringify([missing.stdout, missing.stderr]));
   const start = await run(await shell({}), 'printenv PWD');
   check('env: PWD is the working directory when the shell starts, as in bash', start.stdout === '/workspace\n', JSON.stringify(start.stdout));
   const pwd = await run(await shell({}), 'mkdir -p /pw; cd /pw; printenv PWD');
