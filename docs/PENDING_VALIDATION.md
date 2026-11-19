@@ -2103,3 +2103,30 @@ Change 2, docs: `AGENTS.md` (the `tjs -e` paragraph) and `ARCHITECTURE.md` (the 
 Change 3, `scripts/txiki/pin.json`: deferred to Phase B. `scripts/vendor-txiki.mjs` checks the built wasm against the pin before it copies the file, so the pin value is the sha256 of the build this change produces, and it cannot be written before the rebuild. The same hash also goes into `AGENTS.md`, which quotes the pin.
 
 No build or test was run in Phase A.
+
+### Phase B: rebuild, witnesses, and one fix (`577f23c` and the fix commit)
+
+Toolchain: `TMPDIR=/tmp ZIG=/workspace/tools/zig-x86_64-linux-0.17.1/zig` (0.17.1, what CI installs). The zig on PATH is 0.17.0 and the script refuses it (`zig 0.17.0 is not the pinned 0.17.1`).
+
+Control: `acda218`'s `entry.c` built with the same zig gives `tjs wasm sha256 222ccf188e…ea116` (rc 0, 84152 ms), the old pin. The toolchain reproduces the pin, so later hash changes come from the source. The committed `entry.c` was then restored.
+
+Builds (`scripts/vendor-txiki.mjs`, the txiki gate: compile and link):
+- Phase A source (`577f23c`): compile 40 of 40, link 0 undefined symbols, `tjs wasm sha256 c40553091f14…ee0` (90513 ms). The pin check refused it, as designed, while the pin still read `222ccf…`.
+- Pin set to `c40553091f14…`: the rebuild passed the pin (second build, 50934 ms).
+- Defect found by the witness below: a sync throw printed `Uncaught Error: sync-boom-alone` twice. Cause: `JS_Eval` in module mode rejects the module promise before `has_module` is set, so the tracker recorded it, `drain_jobs` reported it, and `check_module` reported it again. Fix: `forget_module_rejection` clears the slot right after `JS_Eval` when it holds the module promise, and `clear_unhandled` frees the slot in one place.
+- Pin set to `1ab085a39047…0e31f` for the fixed source: rebuild 1 refused `c40553…` (as designed), then rebuild 2 passed the pin (105106 ms). `web/vendor/txiki/tjs.wasm` is `1ab085a39047…0e31f`.
+
+Witnesses on the fixed build (canonical host `npm run host`, in-page shell via gm playwriter; each line is the terminal buffer):
+- `node -e "throw new Error('sync-boom')"; echo RC_THROW $?` → `Uncaught Error: sync-boom` / `RC_THROW 1`, printed once.
+- `node -e "Promise.reject(new Error('async-boom'))"; echo RC_REJECT $?` → `Uncaught Error: async-boom` / `RC_REJECT 1`.
+- `node -e "console.log('CLEAN_OK')"; echo RC_OK $?` → `CLEAN_OK` / `RC_OK 0`.
+- `const p = Promise.reject(new Error('h')); p.catch(() => console.log('HANDLED_OK'))` → `HANDLED_OK` / `RC_HANDLED 0`.
+
+Gates and suites (fixed build):
+- `npm run host:check`: `RESULT PASS=77 FAIL=0`, 65811 ms (the earlier run before the fix: `PASS=77 FAIL=0`, 99526 ms).
+- `npm test`: `ℹ tests 64, pass 64, fail 0`, 30517 ms.
+- `npm run check`: exit 0, 221 ms.
+- `npm run lint:comments`: `139 repo-owned files checked: 0 comments`, 714 ms.
+- `npm run lint:architecture`: `396 claims: 396 pass, 0 fail, 0 unverified`, 68608 ms.
+
+Not run: the full `npm run witness` (heavy; this change set's witnesses are the rows above). Known limit, from Phase A: a rejection that gets a handler in a later turn is still reported.

@@ -63,14 +63,18 @@ static int report_exception(JSContext *ctx) {
     return report_value(ctx, JS_GetException(ctx));
 }
 
+static void clear_unhandled(JSContext *ctx) {
+    has_unhandled = 0;
+    JS_FreeValue(ctx, unhandled_promise);
+    JS_FreeValue(ctx, unhandled_reason);
+}
+
 static void track_rejection(JSContext *ctx, JSValueConst promise, JSValueConst reason, bool is_handled, void *opaque) {
     if (has_module && JS_VALUE_GET_PTR(promise) == JS_VALUE_GET_PTR(module_promise)) {
         return;
     }
     if (has_unhandled && JS_VALUE_GET_PTR(promise) == JS_VALUE_GET_PTR(unhandled_promise)) {
-        has_unhandled = 0;
-        JS_FreeValue(ctx, unhandled_promise);
-        JS_FreeValue(ctx, unhandled_reason);
+        clear_unhandled(ctx);
     }
     if (is_handled || has_unhandled) {
         return;
@@ -78,6 +82,12 @@ static void track_rejection(JSContext *ctx, JSValueConst promise, JSValueConst r
     unhandled_promise = JS_DupValue(ctx, promise);
     unhandled_reason = JS_DupValue(ctx, reason);
     has_unhandled = 1;
+}
+
+static void forget_module_rejection(JSContext *ctx) {
+    if (has_unhandled && JS_VALUE_GET_PTR(unhandled_promise) == JS_VALUE_GET_PTR(module_promise)) {
+        clear_unhandled(ctx);
+    }
 }
 
 static int report_unhandled(JSContext *ctx) {
@@ -164,9 +174,7 @@ void tjs_browser_end(void) {
         has_module = 0;
     }
     if (has_unhandled) {
-        JS_FreeValue(ctx, unhandled_promise);
-        JS_FreeValue(ctx, unhandled_reason);
-        has_unhandled = 0;
+        clear_unhandled(ctx);
     }
     tjs_fs_release_loop(TJS_GetLoop(runtime));
     TJS_FreeRuntime(runtime);
@@ -211,6 +219,7 @@ int tjs_browser_eval(const char *code, const char *name) {
     } else {
         module_promise = result;
         has_module = 1;
+        forget_module_rejection(ctx);
     }
 
     int pumped = pump(runtime);
