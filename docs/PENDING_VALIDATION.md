@@ -2438,3 +2438,11 @@ Build check: `npm run check` exit 0, wall 324 ms (`/tmp/pb11-check.log`).
 Shell witness, once: `npm run witness:shell` `RESULT PASS=179 FAIL=0`, exit 0, wall 800 ms (`/tmp/pb11-shell.log`).
 Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
 
+
+### Change set 16, E4a: env and printenv, with exported variables tracked (Phase A)
+
+`web/shell-core.js`: `export` now records each exported name in an `exported` set, which the snapshot keeps; before this, every shell variable counted as exported. `env` lists the exported variables with their current values, plus any `NAME=value` arguments, which it adds to the list. `env` with a command is refused with status 125 and the message `env: running a command is not supported`, because this shell cannot start a command under a changed environment. `printenv` with no names lists the exported variables; with names it prints each exported value and exits 1 if one is not exported.
+
+`scripts/witness-shell.mjs`: group `env: env and printenv show only the exported variables`, 7 rows: env lists an exported variable and not a plain one (`A=1`); a name exported before it is set is listed with its value (`C=3`); printenv of a plain variable prints nothing and exits 1; printenv of an exported variable prints it (`2`, then status 0); printenv takes several names (`1`, `2`); an assignment on env is added to the listing (`Y=3`, `Z=4`); env with a command exits 125 with the message.
+
+Red check (done), each restored and confirmed by an edit that applied: the listing made to include every variable: `RESULT PASS=185 FAIL=1` (the plain-variable row). printenv never printing: `RESULT PASS=184 FAIL=2`. export not recording the name: `RESULT PASS=181 FAIL=5`. The green run after all three restores is `RESULT PASS=186 FAIL=0`.

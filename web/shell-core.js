@@ -674,6 +674,7 @@ export function evaluateArithmetic(src, lookup) {
 export function createShell({ host, cwd = '/workspace', builtins = [], saved = null } = {}) {
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
   const vars = new Map(saved?.vars ?? []);
+  const exported = new Set(saved?.exported ?? []);
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
   const jobs = new Map();
@@ -683,6 +684,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const frames = [];
   let positional = [];
   let loopDepth = 0;
+
+  const environmentLines = (extra) => {
+    const entries = new Map([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)]));
+    for (const [name, value] of extra) entries.set(name, value);
+    return [...entries].map(([name, value]) => name + '=' + value + '\n').join('');
+  };
 
   const resolvePath = (name) => normalize(name.startsWith('/') ? name : state.cwd + '/' + name);
 
@@ -1067,10 +1074,31 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
     },
+    env: ({ argv }) => {
+      const assigns = new Map();
+      for (const arg of argv) {
+        const eq = arg.indexOf('=');
+        if (eq <= 0) return { code: 125, out: '', err: 'env: running a command is not supported\n' };
+        assigns.set(arg.slice(0, eq), arg.slice(eq + 1));
+      }
+      return ok(environmentLines(assigns));
+    },
+    printenv: ({ argv }) => {
+      if (!argv.length) return ok(environmentLines(new Map()));
+      let out = '';
+      let code = 0;
+      for (const name of argv) {
+        if (exported.has(name) && vars.has(name)) out += vars.get(name) + '\n';
+        else code = 1;
+      }
+      return { code, out, err: '' };
+    },
     export: ({ argv }) => {
       for (const arg of argv) {
         const eq = arg.indexOf('=');
-        if (eq > 0) setVariable(arg.slice(0, eq), arg.slice(eq + 1));
+        const name = eq > 0 ? arg.slice(0, eq) : arg;
+        if (eq > 0) setVariable(name, arg.slice(eq + 1));
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) exported.add(name);
       }
       return ok('');
     },
@@ -1762,6 +1790,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], functions: [...functions], nextPid, lastPid }),
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], functions: [...functions], nextPid, lastPid }),
   };
 }

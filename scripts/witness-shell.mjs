@@ -588,6 +588,23 @@ group('text: sort, uniq, head, tail and cut read lines and pick from them', asyn
   check('text: cut without -f is refused with status 1', noFields.stdout === 'rc=1\n' && noFields.stderr.includes('you must specify the list of fields'), JSON.stringify(noFields.stderr));
 });
 
+group('env: env and printenv show only the exported variables', async () => {
+  const exportedOnly = await run(await shell({}), 'export A=1; B=2; env');
+  check('env: env lists exported variables and not plain ones', exportedOnly.stdout === 'A=1\n', JSON.stringify(exportedOnly.stdout));
+  const markedLater = await run(await shell({}), 'export C; C=3; env');
+  check('env: a name exported before it is set is listed with its value', markedLater.stdout === 'C=3\n', JSON.stringify(markedLater.stdout));
+  const plain = await run(await shell({}), 'X=1; printenv X; echo rc=$?');
+  check('env: printenv of a plain variable prints nothing and exits 1', plain.stdout === 'rc=1\n', JSON.stringify(plain.stdout));
+  const named = await run(await shell({}), 'export X=2; printenv X; echo rc=$?');
+  check('env: printenv of an exported variable prints its value', named.stdout === '2\nrc=0\n', JSON.stringify(named.stdout));
+  const several = await run(await shell({}), 'export P=1; export Q=2; printenv P Q');
+  check('env: printenv takes several names', several.stdout === '1\n2\n', JSON.stringify(several.stdout));
+  const withAssign = await run(await shell({}), 'export Y=3; env Z=4');
+  check('env: an assignment on env is added to the listing', withAssign.stdout === 'Y=3\nZ=4\n', JSON.stringify(withAssign.stdout));
+  const command = await run(await shell({}), 'env ls; echo rc=$?');
+  check('env: running a command is refused with status 125', command.stdout === 'rc=125\n' && command.stderr.includes('running a command is not supported'), JSON.stringify(command.stderr));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {
