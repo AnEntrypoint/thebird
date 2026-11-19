@@ -2288,3 +2288,7 @@ Not run in this pass: the full witness. The change sits under every engine timer
 ### Change set 6, item 3: the witness's Ctrl-C elapsed values on the monotonic clock (Phase A)
 
 `scripts/witness.mjs`: `spinning.elapsed` (group `spin`), `cancelled.elapsed` (group `ctrl-c-line`) and `held.elapsed` (group `ctrl-c-curl`) use `performance.now()` for their start and end, instead of `Date.now()`. These are checked against 10 s and 40 s bounds, so a wall-clock step could false-fail them. The `pressed-at` note uses the same clock. The page init-script clock steps (`Date.now` in the `loops` rows) stay wall time: they are the step under test. Witness after the change: Phase B, below.
+
+### Change set 6, item 4a: the shell abort row on the monotonic clock (Phase A)
+
+`scripts/witness-shell.mjs`: the Ctrl-C abort group (`sleep 30` ends within 2 s) measures its elapsed time with `performance.now()`, not `Date.now()`. Witness after the change: Phase B, below.

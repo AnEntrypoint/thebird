@@ -172,11 +172,11 @@ group('lookups: which, command -v and type agree for every in-page builtin', asy
 group('Ctrl-C abort: a running command stops and the shell reports 130 cancelled', async () => {
   const sh = await shell({});
   const controller = new AbortController();
-  const started = Date.now();
+  const started = performance.now();
   const pending = run(sh, 'sleep 30; echo late', { signal: controller.signal });
   setTimeout(() => controller.abort(), 200);
   const cancelled = await pending;
-  const elapsed = Date.now() - started;
+  const elapsed = performance.now() - started;
   check('Ctrl-C: an abort ends sleep 30 within two seconds with exit 130 and cancelled', cancelled.exitCode === 130 && elapsed < 2000 && cancelled.stderr.includes('cancelled'), `exit ${cancelled.exitCode} after ${elapsed} ms`);
   const after = await run(sh, 'echo next');
   check('Ctrl-C: the shell accepts the next command after an abort', after.stdout === 'next\n', JSON.stringify(after.stdout));
