@@ -2951,3 +2951,16 @@ Red checks, each restored and confirmed by a green run: (1) the reference mode i
 
 Gaps, recorded: a mode operand given with `--reference` is reported as a missing file, as GNU does, but a file literally named `644` is not distinguished from one that does not exist; the wording matches. `--reference` with a reference that is a dangling symlink is not probed.
 
+
+### Change set 30o: chmod --dereference, and a symlink operand, changes its referent, as GNU chmod does
+
+Reference: `/bin/gnuchmod` (GNU coreutils 9.7), `LC_ALL=C`, rows generated through it (`/tmp/gen-chmoddref.mjs`). Probed first: a symlink operand changes its referent, and `-v` names the link while the mode is the referent's. `-R` does not follow a link child by default; with `--dereference` it does, and reports the link under its own name. `-R` on a symlink operand to a directory walks the directory it names, and the messages carry the operand's name.
+
+What changed in the shell: an operand is resolved to its referent before the change, following symlinks (`referentOf`, up to 40 hops), and the report keeps the operand name. A link child under `-R` is skipped unless `--dereference` is given, and with it the child is resolved and walked. The walk tracks the paths it has visited for each operand: an entry already walked is still changed and reported (GNU reports `retained` when a link reaches an entry that an earlier entry changed), but its children are not walked again, so a link cycle cannot recurse forever.
+
+Witness: group `chmod --dereference: a symlink operand and a -R entry follow their referent, as GNU chmod does`, 5 rows from GNU, `RESULT PASS=672 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the top-level symlink operand not resolved: 3 rows red (`chmod 644 link`, `-v` on the link, `-R` on a link to a directory). (2) a link child followed without `--dereference`: 6 rows red, including the older `chmod -R does not follow a symlink to a file outside the tree` row of change set 30k. (3) a link child not followed under `--dereference`: 1 row red.
+
+Gaps, recorded: a link cycle under `--dereference` is stopped by the walk guard, but GNU's own message for a cycle was not probed and no row pins it. A dangling symlink operand still reports `cannot access ...: No such file or directory`; GNU reports `cannot operate on dangling symlink`, which this change does not reach. `-h`/`--no-dereference` is still not implemented.
+

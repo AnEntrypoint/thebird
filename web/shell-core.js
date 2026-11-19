@@ -1846,10 +1846,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { code, out, err };
     },
     chmod: ({ argv }) => {
-      const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : /^-[Rvc]+$/.test(arg) ? arg.slice(1) : '')).join('');
+      const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : arg === '--dereference' ? 'D' : /^-[Rvc]+$/.test(arg) ? arg.slice(1) : '')).join('');
       const recursive = flagLetters.includes('R');
       const verbose = flagLetters.includes('v');
       const changes = flagLetters.includes('c');
+      const dereference = flagLetters.includes('D');
       const operands = [];
       let referenceFile = null;
       for (let i = 0; i < argv.length; i++) {
@@ -1860,7 +1861,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         } else operands.push(argv[i]);
       }
       if (referenceFile !== null && !statInfo(resolvePath(referenceFile))) return { code: 1, out: '', err: "chmod: failed to get attributes of '" + referenceFile + "': No such file or directory\n" };
-      const positional = operands.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes)$/.test(arg));
+      const positional = operands.filter((arg) => !/^(-[Rvc]+|--recursive|--verbose|--changes|--dereference)$/.test(arg));
       const mode = referenceFile === null ? positional[0] : undefined;
       const names = referenceFile === null ? positional.slice(1) : positional;
       const referenceBits = referenceFile === null ? null : parseInt(modes.get(resolvePath(referenceFile)) ?? (host.stat(resolvePath(referenceFile))?.dir === true ? '755' : '644'), 8);
@@ -1883,10 +1884,21 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       let out = '';
       let err = '';
       let code = 0;
+      const referentOf = (path) => {
+        let current = path;
+        for (let hops = 0; hops < 40 && host.lstat(current)?.link; hops++) {
+          const target = host.readlink(current);
+          current = normalize(target.startsWith('/') ? target : parentOf(current) + '/' + target);
+        }
+        return current;
+      };
+      let walked = new Set();
       const visit = (path, shown) => {
+        const seen = walked.has(path);
+        walked.add(path);
         const { before, after } = changeOne(path);
         out += report(shown, before, after);
-        if (!recursive || host.stat(path)?.dir !== true) return;
+        if (seen || !recursive || host.stat(path)?.dir !== true) return;
         const owner = parseInt(modes.get(path) ?? '755', 8) & 0o100;
         for (const entry of host.list(path).sort()) {
           const child = (path === '/' ? '' : path) + '/' + entry;
@@ -1894,16 +1906,19 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
             err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
             code = 1;
             if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
-          } else if (host.lstat(child)?.link) {
+          } else if (host.lstat(child)?.link && !dereference) {
             if (verbose) out += "neither symbolic link '" + shown + '/' + entry + "' nor referent has been changed\n";
-          } else visit(child, shown + '/' + entry);
+          } else visit(referentOf(child), shown + '/' + entry);
         }
       };
       for (const name of names) {
         if (!statInfo(resolvePath(name))) {
           err += "chmod: cannot access '" + name + "': No such file or directory\n";
           code = 1;
-        } else visit(resolvePath(name), name);
+        } else {
+          walked = new Set();
+          visit(referentOf(resolvePath(name)), name);
+        }
       }
       return { code, out, err };
     },
