@@ -2068,3 +2068,26 @@ Phase B witnesses (read-only on the hosted page; a local build served without No
 - `find` claim, not reproduced: `find /workspace -maxdepth 1 -name 'cache-probe*'` printed `/workspace/cache-probe-a.mjs` with `FIND_RC 0`, and `find /workspace -maxdepth 1 | wc -l` printed `4`.
 - Defect to fix later, with its reproduction: the in-page `node` cannot load `node:` builtins (`node:fs`, `node:fs/promises`) and reports the failure with exit 0. Command: `node -e "import('node:fs').then(() => console.log('ok'), (e) => console.log(e.message))"` on the static build, output `could not load 'node:fs'`.
 - No repo verifier changed. The new verifier stays in `runs/`, which is gitignored.
+- Correction to the `node:fs` result above: the reproduction script caught the rejected import itself, so its exit 0 was the script's own. The uncaught case is the defect, below.
+
+### Phase B: witnesses for `65eacd1`, `fce299e`, `7d1055b` (before the push)
+
+Commits not on origin before this push: `7d1055b`, `fce299e`, `65eacd1` (origin was `1dee857`).
+
+Witnesses and wall times (this tree; no code fix was needed for them to pass):
+- `node --test test/fx-host-static.test.mjs`: 181 ms; `ℹ tests 3, pass 3, fail 0`.
+- `node --test test/fx-stub-tools.test.mjs`: 176 ms; `ℹ tests 9, pass 9, fail 0`.
+- `npm test` (all node:test files): 30469 ms; `ℹ tests 64, pass 64, fail 0`.
+- `npm run check`: 300 ms; exit 0.
+- `npm run lint:comments`: 662 ms; `139 repo-owned files checked: 0 comments`.
+- `node scripts/build-pages.mjs` (the `_site` build): 92741 ms; `brotli package ok: files=112`, `site written to /workspace/thebird/_site`.
+- `npm run lint:architecture` (live probes included): 31873 ms; `394 claims: 394 pass, 0 fail, 0 unverified`.
+- `static-verify-sync.mjs` against the fresh `_site`: 135 ms; `PASS` for the 404 GET, the 405 POST, the terminal page at 200 and the static transport in `fx-host-tools.js`; `VERIFY-SYNC ALL PASS`.
+- Relay probe (`src/relay.js` started with `startRelay`): 199 ms; `PROBE GET 200 thebird`, `TOOL POST 200 {"jsonrpc":"2.0","id":1,"result":{"content":[...`.
+- Static origin (`_site` behind a server with GET 404 and POST 405 on the thebird path), fx tool calls in the page: `thebird_ports` 3 ms, `isError: true`, `unavailable on this static page…`; `thebird_run` 0 ms, `isError: false`, `"current":true,"stale":false`; `thebird_pane` 0 ms, `isError: false`, `"current":true,"ageMs":0`; `thebird_register` 0 ms, `isError: true`, static failure; `thebird_unregister` 0 ms, `isError: true`, static failure. No POST was sent.
+
+Defect found, not fixed in this push: an unhandled promise rejection in the in-page `node` is silent and exits 0.
+- Reproduce on the static build, in the in-page shell: `node -e "Promise.reject(new Error('async-boom'))"; echo RC_REJECT $?` prints nothing and gives `RC_REJECT 0`. `node -e "import('node:fs')"; echo RC_UNCAUGHT $?` also prints nothing and gives `RC_UNCAUGHT 0`. By contrast `node -e "throw new Error('sync-boom')"; echo RC_THROW $?` prints `Uncaught Error: sync-boom` and gives `RC_THROW 1`.
+- Cause: `scripts/txiki/browser/entry.c` reports only the exception that `JS_Eval` returns (`report_exception`, around line 53 and the eval at line 173). No `JS_SetHostPromiseRejectionTracker` hook is installed anywhere under `scripts/txiki/` or `web/`, so a rejected promise with no handler is never reported and the turn loop returns 0.
+- Fix needs a C change in `entry.c` (a rejection tracker that records the first unhandled rejection and returns exit status 1), then a `tjs.wasm` rebuild with `scripts/vendor-txiki.mjs`, a new pin in `scripts/txiki/pin.json`, and the txiki gate. That is a separate vendor change set, so it is open here. The local toolchain is present (`zig` at `/config/.local/bin/zig`), so it can be done next.
+- The earlier `node:fs` result (exit 0 after the script's own handler printed the error) was the script's own output, not a silent failure. The silent case is the uncaught one above.
