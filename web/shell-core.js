@@ -199,6 +199,8 @@ function readParts(src, start, breaks) {
       const r = readDouble(src, i);
       parts.push(r.part);
       i = r.end;
+    } else if (c === '\\' && src[i + 1] === '\n') {
+      i += 2;
     } else if (c === '\\') {
       flush();
       parts.push({ k: 'sq', s: src[i + 1] ?? '' });
@@ -422,7 +424,9 @@ function parse(tokens) {
     pos++;
     expectWord('in');
     const arms = [];
-    while (pos < tokens.length && !isWord(tokens[pos], 'esac')) {
+    while (pos < tokens.length) {
+      while (tokens[pos]?.op === ';') pos++;
+      if (isWord(tokens[pos], 'esac')) break;
       if (tokens[pos].op === '(') pos++;
       const patterns = [];
       for (;;) {

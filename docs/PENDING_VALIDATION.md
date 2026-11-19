@@ -3505,3 +3505,22 @@ Red checks, each restored from a backup and confirmed by `cmp` and `git status`,
 (2) the close of a `$'...'` segment removed before an apostrophe: 8 rows red, including 3 new rows (between two tabs, two after a non-ASCII byte, three after a tab), `RESULT PASS=926 FAIL=8`.
 
 Gaps, recorded: the default `stat` output without `-c` is not witnessed. UTF-8 locale quoting is not claimed. Names that mix more than two kinds of escape character in one run are not probed beyond the shapes above.
+
+### Change set 30ar: a backslash-newline joins the lines of a word, and a case word may have newlines before its first pattern and between arms, as bash does
+
+Reference: bash (`bash -c`, the version in this sandbox) for the LINENO rows, as in the rows of the LINENO group. Rows are generated from bash with the script text as bash reads it.
+
+Probed first (bash):
+- `echo a \` followed by a newline and `echo $LINENO` prints `a echo 1`: an unquoted backslash-newline removes both characters and joins the two lines into one command. Our shell printed two commands, because the word reader kept the newline as a literal character.
+- `case a in` followed by a newline, `a) echo $LINENO;;`, a newline and `esac` prints `2`: a newline may come between `in` and the first pattern. Our parser raised `expected a pattern`.
+- Six other shapes already matched bash, and are witnessed by the same group: a function body over several lines, a for body, a heredoc body, a line after a comment, an if body, and a while condition.
+
+Rule: outside quotes, a backslash followed by a newline is skipped and the word continues. In a case word, the newline tokens (which the tokenizer reads as `;`) before the first pattern and between arms are skipped, and the arm list ends at `esac`.
+
+What changed in the shell: the unquoted branch of `readParts` skips a backslash-newline pair; the `parseCase` arm loop skips `;` tokens and stops at `esac`.
+
+Witness: one group, 8 rows generated from bash. Two failed before the change (the continuation and the case arm), and six passed. Final: `RESULT PASS=942 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the continuation branch removed: 1 row red, `RESULT PASS=941 FAIL=1`. (2) the newline skip before the first arm removed: 1 row red, `RESULT PASS=941 FAIL=1`. An earlier attempt to write the edit put a literal newline into a string literal; the file was restored from its backup before the edit was redone, and the restore was confirmed with `cmp`.
+
+Gaps, recorded: the tokenizer reads a newline and an explicit `;` as the same token, so a `;` before a case pattern is accepted where bash gives a syntax error; not probed. A backslash-newline inside double quotes and inside a heredoc body is not probed by a row in this change set.

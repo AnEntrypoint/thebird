@@ -1473,6 +1473,25 @@ group("stat -c %N: runs of apostrophes next to a tab or a non-ASCII character ar
   check("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", gr4.stdout === "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
 });
 
+group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
+  const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
+  check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "f() {\necho $LINENO\n}\nf");
+  check("LINENO in a function body defined over several lines numbers the body line, as bash does", gr1.stdout === "2\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "for i in 1 2; do\necho $LINENO\ndone");
+  check("LINENO in a for body over several lines numbers the body line, as bash does", gr2.stdout === "2\n2\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "cat <<E\na\n$LINENO\nE");
+  check("LINENO in a heredoc body numbers the body line, as bash does", gr3.stdout === "a\n1\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "case a in\na) echo $LINENO;;\nesac");
+  check("LINENO in a case arm over several lines numbers the arm line, as bash does", gr4.stdout === "2\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  const gr5 = await run(await shell({}), "# c\necho $LINENO");
+  check("LINENO after a comment line numbers the command line, as bash does", gr5.stdout === "2\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  const gr6 = await run(await shell({}), "if true\nthen\necho $LINENO\nfi");
+  check("LINENO in an if body over several lines numbers the body line, as bash does", gr6.stdout === "3\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  const gr7 = await run(await shell({}), "while echo $LINENO\ndo\nbreak\ndone");
+  check("LINENO in a while condition over several lines numbers the condition line, as bash does", gr7.stdout === "1\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));
