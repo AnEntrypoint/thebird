@@ -738,13 +738,30 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   const xt12 = await run(await shell({}), "set -x; echo 'a\\b'; set +x");
   check("set -x: a word with a backslash is single-quoted", xt12.stdout === "a\\b\n" && xt12.stderr === "+ echo 'a\\b'\n+ set +x\n", JSON.stringify([xt12.stdout, xt12.stderr]));
   const xt13 = await run(await shell({}), "set -x; for i in 1 2; do echo $i; done; set +x");
-  check("set -x (gap, compound headers): a for-loop header is not traced, bash prints + for i in 1 2 before each pass; cause: the for executor emits no trace line", xt13.stdout === "1\n2\n" && xt13.stderr === "+ echo 1\n+ echo 2\n+ set +x\n", JSON.stringify([xt13.stdout, xt13.stderr]));
+  check("set -x: a for loop header is printed before each pass, as bash does", xt13.stdout === "1\n2\n" && xt13.stderr === "+ for i in 1 2\n+ echo 1\n+ for i in 1 2\n+ echo 2\n+ set +x\n", JSON.stringify([xt13.stdout, xt13.stderr]));
   const xt14 = await run(await shell({}), "PS4='>> '; set -x; echo p; set +x");
   check("set -x: PS4 sets the text before each trace line, as bash does", xt14.stdout === "p\n" && xt14.stderr === ">> echo p\n>> set +x\n", JSON.stringify([xt14.stdout, xt14.stderr]));
   const xt15 = await run(await shell({}), "PS4=''; set -x; echo p; set +x");
   check("set -x: an empty PS4 gives no text before each trace line, as bash does", xt15.stdout === "p\n" && xt15.stderr === "echo p\nset +x\n", JSON.stringify([xt15.stdout, xt15.stderr]));
   const xt16 = await run(await shell({}), "set -x; echo \"$(echo sub)\"; set +x");
   check("set -x (gap, nested): a command substitution is traced at depth one, bash prints ++; cause: trace depth is not tracked through substitutions", xt16.stdout === "sub\n" && xt16.stderr === "+ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
+});
+
+group('set -x: a for loop traces its header before each pass, as bash does', async () => {
+  const fh0 = await run(await shell({}), "set -x; for i in a b c; do :; done; set +x");
+  check("set -x: a for loop traces its header before each pass, with the words as written", fh0.stdout === "" && fh0.stderr === "+ for i in a b c\n+ :\n+ for i in a b c\n+ :\n+ for i in a b c\n+ :\n+ set +x\n", JSON.stringify([fh0.stdout, fh0.stderr]));
+  const fh1 = await run(await shell({}), "set -x; for i in 'a b' \"\"; do echo $i; done; set +x");
+  check("set -x: a for header keeps the quotes of its words as written", fh1.stdout === "a b\n\n" && fh1.stderr === "+ for i in 'a b' \"\"\n+ echo a b\n+ for i in 'a b' \"\"\n+ echo\n+ set +x\n", JSON.stringify([fh1.stdout, fh1.stderr]));
+  const fh2 = await run(await shell({}), "x=1; set -x; for i in $x \"$x\" ${x}z; do :; done; set +x");
+  check("set -x: a for header keeps variables unexpanded, as written", fh2.stdout === "" && fh2.stderr === "+ for i in $x \"$x\" ${x}z\n+ :\n+ for i in $x \"$x\" ${x}z\n+ :\n+ for i in $x \"$x\" ${x}z\n+ :\n+ set +x\n", JSON.stringify([fh2.stdout, fh2.stderr]));
+  const fh3 = await run(await shell({}), "set -- a b; set -x; for i; do :; done; set +x");
+  check("set -x: a for with no in list has the header for i in \"$@\"", fh3.stdout === "" && fh3.stderr === "+ for i in \"$@\"\n+ :\n+ for i in \"$@\"\n+ :\n+ set +x\n", JSON.stringify([fh3.stdout, fh3.stderr]));
+  const fh4 = await run(await shell({}), "set -x; for i in 1 2; do echo $i; break; done; set +x");
+  check("set -x: a for header is printed once for each pass, and a break ends it after one", fh4.stdout === "1\n" && fh4.stderr === "+ for i in 1 2\n+ echo 1\n+ break\n+ set +x\n", JSON.stringify([fh4.stdout, fh4.stderr]));
+  const fh5 = await run(await shell({}), "set -x; for i in; do echo $i; done; set +x");
+  check("set -x: a for with an empty list runs no pass and prints no header", fh5.stdout === "" && fh5.stderr === "+ set +x\n", JSON.stringify([fh5.stdout, fh5.stderr]));
+  const fh6 = await run(await shell({}), "set -x; for i in 1 2; do for j in x; do echo $i$j; done; done; set +x");
+  check("set -x: nested for loops print each header before its own passes", fh6.stdout === "1x\n2x\n" && fh6.stderr === "+ for i in 1 2\n+ for j in x\n+ echo 1x\n+ for i in 1 2\n+ for j in x\n+ echo 2x\n+ set +x\n", JSON.stringify([fh6.stdout, fh6.stderr]));
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {

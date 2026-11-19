@@ -2847,3 +2847,16 @@ Gate: `vmstat 1 2` read swap-in 340 KB/s and swap-out 0 KB/s on the first try, s
 
 Pushed: origin main from 575619e to the head after this record, one push, no force. The commits are 0953255 (PS4), 61ef363 (env decision and ranked work) and this record.
 
+
+### Change set 30h: set -x traces the header of a for loop
+
+With `set -x`, each pass of a `for` loop first prints its header, `+ for NAME in WORDS`, with the words as they are written in the source (quotes, `$x` and `$(...)` unexpanded), and then the body's trace. The implicit list (`for i; do`) prints `+ for i in "$@"`. A loop with no passes (an empty list) prints no header. The header is printed before each pass, so a `break` after the first pass shows one header. The source text comes from the tokenizer, which keeps each word's text.
+
+Reference: bash in the sandbox. Six rows in group `set -x: a for loop traces its header before each pass, as bash does` take bash's output as their expectation (`-c` runs, stdout and stderr compared exactly). The empty-list row passes before this change, because it prints nothing either way. The old gap row `set -x (gap, compound headers)` pinned the missing header; it now asserts bash's output and is renamed `set -x: a for loop header is printed before each pass, as bash does`.
+
+Red checks, on this tree: (1) header dropped: seven rows red. (2) header printed only on the first pass: six rows red (every multi-pass row, and the nested loop). (3) implicit list text dropped: one row red. Each restored by the reverse edit, and each restore confirmed by a green run at `RESULT PASS=564 FAIL=0`.
+
+Also found while closing this: `break` was not traced, because the trace was attached to the command's result, and `break` throws before that result is returned. The trace is now written to the sink before the command runs, so a thrown `break` keeps its trace line.
+
+Gap, recorded: none for the for header itself. The `set -x` `++` depth inside command substitution is the next item (30i).
+

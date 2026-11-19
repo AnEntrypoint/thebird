@@ -241,7 +241,7 @@ export function tokenize(src) {
         }
       } else {
         const word = readParts(src, i, BREAKS);
-        tokens.push({ parts: word.parts });
+        tokens.push({ parts: word.parts, text: src.slice(i, word.end) });
         i = word.end;
       }
     }
@@ -327,16 +327,21 @@ function parse(tokens) {
     if (!token?.parts || token.parts.length !== 1 || token.parts[0].k !== 'lit') throw syntaxError("expected a name after 'for'");
     const name = token.parts[0].s;
     let words = null;
+    let wordText = null;
     if (isWord(tokens[pos], 'in')) {
       pos++;
       words = [];
-      while (tokens[pos]?.parts) words.push(tokens[pos++].parts);
+      wordText = [];
+      while (tokens[pos]?.parts) {
+        words.push(tokens[pos].parts);
+        wordText.push(tokens[pos++].text);
+      }
     }
     while (tokens[pos]?.op === ';') pos++;
     expectWord('do');
     const body = parseSequence(['done']);
     expectWord('done');
-    return { type: 'for', name, words, body, redirects: parseTrailingRedirects() };
+    return { type: 'for', name, words, wordText, body, redirects: parseTrailingRedirects() };
   };
 
   const parseWhile = (negate) => {
@@ -2105,15 +2110,15 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const assigned = [];
     for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
     const trace = xtrace ? traceLines(assigned, argv, vars.get('PS4') ?? '+ ') : '';
+    sink.err += trace;
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
-      return { ...ok(''), err: trace };
+      return ok('');
     }
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
     for (const [name, value] of assigned) setVariable(name, value);
     try {
-      const result = await runCommand(node, argv, stdin, sink);
-      return { ...result, err: trace + result.err };
+      return await runCommand(node, argv, stdin, sink);
     } finally {
       for (const [name, value] of saved) {
         if (value === undefined) vars.delete(name);
@@ -2302,6 +2307,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       for (const value of values) {
         await yieldTurn();
         setVariable(node.name, value);
+        if (xtrace) inner.err += '+ for ' + node.name + ' in ' + (node.wordText ? node.wordText.join(' ') : '"$@"') + '\n';
         try {
           code = await runSequence(node.body, stdin, inner);
         } catch (err) {
