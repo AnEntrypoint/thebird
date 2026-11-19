@@ -3467,3 +3467,23 @@ Witness: two groups, 10 rows from GNU: 8 rows (Greek, Cyrillic, the multi-charac
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the Greek range removed: 1 row red, `RESULT PASS=923 FAIL=1`. (2) the Cyrillic breve condition removed, so every breve is its own letter, or none is: 2 rows red (the Latin breve rows), `RESULT PASS=922 FAIL=2`. (3) the old multi-character message restored: 2 rows red, `RESULT PASS=922 FAIL=2`. (4) the Cyrillic range removed: 1 row red (the diaeresis row), `RESULT PASS=923 FAIL=1`.
 
 Gaps, recorded: other Cyrillic letters with a breve (ў) are not probed; the rule for them is the same, but no witness row claims it. Greek letters outside U+0370–U+03FF (the Greek extended block) are not probed. Other scripts are not covered. Collating symbols that are one ASCII non-alphanumeric character are unchanged and unprobed by this change set.
+
+### Change set 30ap: expr equivalence classes cover the Greek extended block, and a Cyrillic letter with a breve matches its base letter except й, as GNU expr does in a UTF-8 locale
+
+Reference: GNU expr (`/bin/gnuexpr`, 9.7) under LC_ALL=en_US.UTF-8 as the sandbox identity `abc`, through a PATH shim named `expr`. Rows are generated from GNU with the real bytes of each argument.
+
+Probed first (GNU, en_US.UTF-8):
+- A Greek letter with a psili matches the plain letter: `expr 'ἀ' : '[[=α=]]'` and `expr 'ἄ' : '[[=α=]]'` print 1.
+- A Greek iota with a dialytika matches the plain iota: `expr 'ϊ' : '[[=ι=]]'` prints 1.
+- A Cyrillic letter with a breve matches its base letter: `expr 'ў' : '[[=у=]]'` prints 1, and its upper case matches it: `expr 'Ў' : '[[=ў=]]'` prints 1.
+- The Cyrillic й does not match и (30ao, GNU prints 0), so й is the one exception to the base rule. The Latin breve letters match their base letters (30ao, GNU prints 1).
+
+Correction of 30ao: its rule made every Cyrillic letter with a breve its own letter, which the probe above shows is wrong for ў. The rule in this change set is the base rule for every letter, with й and Й the only exception (the table in glibc's collation keeps й as a separate letter). The 30ao rows still pass under this rule.
+
+Rule: the candidate search adds the Greek extended range U+1F00–U+1FFF. `equivalenceBase` returns the letter itself for й, and the NFD base for every other letter.
+
+Witness: one group, 5 rows from GNU: the two psili rows, the dialytika row, and the two ў rows. The ў row title said the opposite of GNU's result before the probe; that title was corrected to match GNU and the expected value is unchanged. Final: `RESULT PASS=929 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the Greek extended range removed: 2 rows red (the two psili rows), `RESULT PASS=927 FAIL=2`. (2) the й exception removed: 1 row red (the й row of 30ao), `RESULT PASS=928 FAIL=1`. The first attempt at (1) left an extra bracket and failed to load; it was discarded and redone with a valid replacement.
+
+Gaps, recorded: Greek letters outside U+0370–U+1FFF are not probed. Cyrillic letters other than й are covered by the base rule, but only ў and Ў are probed. Other script exceptions to the base rule are not probed.

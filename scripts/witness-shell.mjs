@@ -1447,6 +1447,19 @@ group("expr: a breve above a Latin letter matches its base letter, as GNU expr d
   check("expr: a Latin g with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
 });
 
+group("expr: an equivalence class of a Greek letter with a psili or a dialytika matches the plain letter, and a Cyrillic letter with a breve matches its plain letter, as GNU expr does in a UTF-8 locale", async () => {
+  const gr0 = await run(await shell({}), "expr 'ἀ' : '[[=α=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek letter with a psili matches the plain letter, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  const gr1 = await run(await shell({}), "expr 'ἄ' : '[[=α=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek letter with a psili and an oxia matches the plain letter, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  const gr2 = await run(await shell({}), "expr 'ϊ' : '[[=ι=]]'; echo rc=$?");
+  check("expr: an equivalence class of a Greek iota with a dialytika matches the plain iota, as GNU expr does in a UTF-8 locale", gr2.stdout === "1\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  const gr3 = await run(await shell({}), "expr 'ў' : '[[=у=]]'; echo rc=$?");
+  check("expr: a Cyrillic letter with a breve matches its plain base letter, as GNU expr does in a UTF-8 locale", gr3.stdout === "1\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  const gr4 = await run(await shell({}), "expr 'Ў' : '[[=ў=]]'; echo rc=$?");
+  check("expr: a Cyrillic letter with a breve matches its own upper case, as GNU expr does in a UTF-8 locale", gr4.stdout === "1\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

@@ -965,7 +965,7 @@ const STROKED_BASE = { 'ø': 'o', 'ǿ': 'o', 'ſ': 's', 'ẛ': 's', 'ŀ': 'l', '
 const equivalenceBase = (letter) => {
   const folded = letter.toLowerCase();
   const decomposed = Array.from(folded.normalize('NFD'));
-  if (decomposed.includes('\u0306') && /^[\u0400-\u04ff]/u.test(folded)) return folded;
+  if (folded === 'й') return folded;
   return STROKED_BASE[folded] ?? decomposed[0];
 };
 const equivalenceClasses = new Map();
@@ -973,7 +973,7 @@ const equivalenceItems = (letter) => {
   const base = equivalenceBase(letter);
   if (!equivalenceClasses.has(base)) {
     const members = new Set([base, base.toUpperCase()].filter((member) => Array.from(member).length === 1));
-    for (const [start, end] of [[0xc0, 0x24f], [0x370, 0x3ff], [0x400, 0x4ff], [0x1e00, 0x1eff]]) {
+    for (const [start, end] of [[0xc0, 0x24f], [0x370, 0x3ff], [0x400, 0x4ff], [0x1e00, 0x1eff], [0x1f00, 0x1fff]]) {
       for (let cp = start; cp <= end; cp++) {
         const candidate = String.fromCodePoint(cp);
         if (equivalenceBase(candidate) === base) members.add(candidate);
