@@ -2653,7 +2653,7 @@ C. Message wording only, status matches, the txiki message kept: `cp: cannot sta
 
 D. Behaviour, kept on GNU's side: `diff` with a missing file exits 2 with a message for each file (GNU); bashkit exits 1. `realpath` of a missing path is an error with status 1 (GNU, which requires the path to exist); bashkit prints the path with status 0. `mv x x` was decided in 28a.
 
-E. Open gaps, not in the brief, left as they are and reported: `expr 1 + 2 '*' 3` (GNU prints 7, the txiki shell refuses with `only one operator is supported`, bashkit prints 1, which is also wrong); `set -x` (the txiki shell refuses with status 2, bash and bashkit trace); `stat -c %F` on a symbolic link (the txiki shell fails with `cannot statx`, GNU reports `symbolic link`); `chmod u+x` (GNU accepts a symbolic mode, the txiki shell refuses it); `env nosuchcmd` (the txiki message is `command not found`, GNU's is `No such file or directory`; the status 127 matches).
+E. Open gaps, not in the brief, left as they are and reported: `expr 1 + 2 '*' 3` (GNU prints 7, the txiki shell refuses with `only one operator is supported`, bashkit prints 1, which is also wrong); `set -x` (the txiki shell refuses with status 2, bash and bashkit trace); `chmod u+x` (GNU accepts a symbolic mode, the txiki shell refuses it); `env nosuchcmd` (the txiki message is `command not found`, GNU's is `No such file or directory`; the status 127 matches).
 
 
 ### Phase B for change sets 28a to 28i
@@ -2664,3 +2664,25 @@ Shell witness, once: `npm run witness:shell` `RESULT PASS=468 FAIL=0`, exit 0, w
 Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes (`n=3`); `loops: a short for loop still runs every item` passes.
 Commits pushed with this record: 9da82a4 (28a), 1404a50 (28b), 2fc31bb (28c), 2d0bee5 (28d), 319296c (28e), 44640bf (28f), 64f2e75 (28g), 5293cfb (28h), 539271c (28i), and this record.
 
+
+### Ranked remaining work (after 4160b38)
+
+Reachable, in order:
+1. `cp -r` and `mv` of a directory tree. `cp -r` is refused today with `directory copy is not supported`, and `mv` of a directory without `-r` is refused. No witness row pins either refusal. Taken in this pass as change sets 29a and 29b.
+2. `diff -u` and `diff -c` (unified and context formats). Only the normal format exists, and no witness row covers the others. GNU's format is known.
+3. `chmod` symbolic modes (`u+x`, `go-w`, `a=r`). The witness row `chmod: a symbolic mode is refused with status 1, not ignored` pins the refusal, so it changes with that row.
+4. `expr` operator precedence and longer expressions. `expr 1 + 2 '*' 3` is refused by the witness row `expr: a longer expression is refused with status 2, not evaluated` (GNU prints 7). The row changes with the feature.
+5. `set -x` tracing. Refused with status 2 today (witness row `builtins: an unsupported set option is refused with status 2, not ignored`); bash writes `+ command` lines to stderr.
+6. The `env` not-found message: status 127 matches GNU, the text is `command not found` where GNU env says `No such file or directory`.
+
+Held, with the evidence that would reopen each:
+- Page shell stays on bashkit (owner decision, H1). Reopens on an owner decision that changes the page shell.
+- Ctrl-C on the Pages site without cross-origin isolation (Blocked table). Reopens when the owner picks accepting the restart or isolating with a service worker.
+- E5 per-item yield cost in `for` and `while` (change set 26). Reopens when the owner picks time-sliced yielding in place of per-item yielding.
+- Three live 8793 rows (`fx ask on the live 8793 gateway`, the chat request, the TUI row). The hy4 gateway is outside this repo. Reopens when the gateway is reachable from this checkout.
+- fx ask-mode approval on the page `ask` tool. Reopens on the owner's approval decision.
+- `.npmrc` `_authToken` through the browser (npm defect 7). Reopens when the owner picks a registry or a same-origin proxy.
+- Items that need the fx repo (palette header `Results 50` against `Commands 49`, sign-in choices for Codex and Grok, the vendored core against libfx 0.0.16). Reopen when those changes land in fx.
+- Pyodide bundle licence, vendored licence notices, removal of `web/vendor/tte-js`. Reopen on the owner's licence decision.
+
+Correction to change set 28i, item E: `stat -c %F` on a symbolic link is not a gap. The witness row `stat: a symbolic link is reported as itself` passes. The scan saw a failure only because its host had no symlink support.
