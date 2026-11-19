@@ -2274,3 +2274,13 @@ Witness row, `loops` group: a page init script steps `Date.now` by one hour 1.5 
 Docs: ARCHITECTURE.md's clock sentence now names the WASI clock too. Residual from the ranked list, now closed: item 2 (engine timers on the wall clock). Still open: items 3 and 4 (witness and host-check `Date.now()` durations).
 
 Not changed: `bin/thebird-relay.js`.
+
+### Phase B for change set 5 (`d1fc7a5`)
+
+Swap gate, taken with `vmstat 1 2` (the second line, columns `si` and `so`, KB/s). Earlier readings in this pass, with the gate closed: `si` 2160, 2352, 2636, 2120, 11228, 2144, 1748, 4744, 1912, 1016, 2028 (swap-out was 0 or 1168 in those samples). Then eight readings all under the gate: si 208, 176, 28, 168, 44, 0, 16, 80 (so 0 each). The job started on the first reading inside the gate: `GATE try=1 si=68 so=0 KB/s`. The script re-checks the gate before it runs anything, and it would not have started on a closed reading.
+
+Build: no C change and no wasm rebuild, so no vendor step. `npm run check` (`node --check` over `bin`, `src`, `scripts`, `web`, `web/shims`): exit 0, wall under 1 s.
+
+Witness, `node scripts/witness.mjs --group=loops`, once: `totals: PASS 6 FAIL 0 GROUPS 1 WALL 18.0s`, exit 0. Rows: the new row `a pending timer keeps its 4 s due time across a forward wall-clock step … {"output":"timer-done\n","status":0,"elapsed":4650.8}`; the wall-clock step row `{"output":"after-step\n","status":0}`; the existing timeout rows: synchronous loop 124 (elapsed 1320.1 ms), pending timer 124 (1009.2 ms), abort 130 (509.4 ms), tjs and qjs timeout text. Log: `/tmp/phaseb-loops.log`. The gate script is `/tmp/phaseb-loops.sh`.
+
+Not run in this pass: the full witness. The change sits under every engine timer, so the txiki groups (fetch, curl, sqlite, npm, python and git) are the ones at risk; this pass ran the loops group only, as the request asked. A full witness is the next step before any further change to the engine clock.
