@@ -3524,3 +3524,19 @@ Witness: one group, 8 rows generated from bash. Two failed before the change (th
 Red checks, each restored from a backup and confirmed by `cmp` and `git status`, then a green run: (1) the continuation branch removed: 1 row red, `RESULT PASS=941 FAIL=1`. (2) the newline skip before the first arm removed: 1 row red, `RESULT PASS=941 FAIL=1`. An earlier attempt to write the edit put a literal newline into a string literal; the file was restored from its backup before the edit was redone, and the restore was confirmed with `cmp`.
 
 Gaps, recorded: the tokenizer reads a newline and an explicit `;` as the same token, so a `;` before a case pattern is accepted where bash gives a syntax error; not probed. A backslash-newline inside double quotes and inside a heredoc body is not probed by a row in this change set.
+
+### Change set 30as: a semicolon may not come before the first case pattern or between arms, as bash does
+
+Reference: bash (the version in this sandbox). Probed first, with bash -c on files of the script text:
+- `case a in ; a) echo x;; esac`: bash prints `syntax error near unexpected token `;'` and exits 2. Our shell (after change set 30ar) accepted it and printed `x`, because 30ar skipped every `;` token after `in`, not only the newline tokens.
+- `case a in` then a newline then `a) echo x;; esac`: prints `x`, exit 0.
+- `case b in`, a blank line, `a) echo 1;;`, `b) echo 2;;`, `esac`: prints `2`, exit 0.
+- `case a in a) echo 1;; ; b) echo 2;; esac`: bash prints the same syntax error as the first shape, exit 2.
+
+Rule: only a newline may separate the `case` word from its first pattern and the arms from each other. A semicolon in either place is a syntax error. The tokenizer now marks each newline token with `newline: true` (the token keeps `op: ';'`, so statement lists are unchanged), and the `parseCase` arm loop skips only tokens marked that way.
+
+Witness: group 'case: a newline may come before the first pattern, but a semicolon may not, as bash does', 4 rows (the two syntax-error shapes check empty stdout and a stderr that starts with `syntax error`; the two accepted shapes check stdout and empty stderr). Final: `RESULT PASS=946 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed by `cmp`, then a green run: (1) the arm loop skipping every `;` token (the 30ar behaviour): 2 rows red, `RESULT PASS=944 FAIL=2` (the two syntax-error shapes). (2) the newline mark removed from the tokenizer: 3 rows red, `RESULT PASS=943 FAIL=3` (the two accepted shapes, and the LINENO case-arm row from 30ar).
+
+Gap closed: the `;` before a case pattern that 30ar recorded as open. Still open, not probed: a backslash-newline inside double quotes and inside a heredoc body.

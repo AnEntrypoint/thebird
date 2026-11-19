@@ -1473,6 +1473,17 @@ group("stat -c %N: runs of apostrophes next to a tab or a non-ASCII character ar
   check("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", gr4.stdout === "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
 });
 
+group('case: a newline may come before the first pattern, but a semicolon may not, as bash does', async () => {
+  const cs0 = await run(await shell({}), "case a in ; a) echo x;; esac");
+  check("case: a semicolon before the first pattern is a syntax error, as bash does", cs0.stdout === "" && cs0.stderr.startsWith("syntax error"), JSON.stringify([cs0.stdout, cs0.stderr]));
+  const cs1 = await run(await shell({}), "case a in\na) echo x;; esac");
+  check("case: a newline before the first pattern is allowed, as bash does", cs1.stdout === "x\n" && cs1.stderr === "", JSON.stringify([cs1.stdout, cs1.stderr]));
+  const cs2 = await run(await shell({}), "case b in\n\na) echo 1;;\nb) echo 2;;\nesac");
+  check("case: blank lines before the first pattern and between arms are allowed, as bash does", cs2.stdout === "2\n" && cs2.stderr === "", JSON.stringify([cs2.stdout, cs2.stderr]));
+  const cs3 = await run(await shell({}), "case a in a) echo 1;; ; b) echo 2;; esac");
+  check("case: a semicolon between arms is a syntax error, as bash does", cs3.stdout === "" && cs3.stderr.startsWith("syntax error"), JSON.stringify([cs3.stdout, cs3.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

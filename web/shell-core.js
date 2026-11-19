@@ -284,7 +284,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
     const c = src[i];
     if (c === ' ' || c === '\t' || c === '\r') i++;
     else if (c === '\n') {
-      tokens.push({ op: ';', line: lineAt(i) });
+      tokens.push({ op: ';', line: lineAt(i), newline: true });
       i++;
       while (heredocs.length) i = readHeredocBody(src, i, heredocs.shift());
     } else if (c === '#') {
@@ -425,7 +425,7 @@ function parse(tokens) {
     expectWord('in');
     const arms = [];
     while (pos < tokens.length) {
-      while (tokens[pos]?.op === ';') pos++;
+      while (tokens[pos]?.newline) pos++;
       if (isWord(tokens[pos], 'esac')) break;
       if (tokens[pos].op === '(') pos++;
       const patterns = [];
