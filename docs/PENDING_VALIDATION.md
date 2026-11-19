@@ -2159,7 +2159,7 @@ Result: the top item (bash through the stub, approval panel, bash dispatch) is v
 
 ### Full witness since the rejection change (2f3285f), the failing rows, and the Python row
 
-Full run 1: `node scripts/witness.mjs` in the foreground of a job. It stopped at 194.8 s with exit 143 (SIGTERM), after the `site (heavy)` group started. The witness only exits 143 through its own SIGTERM handler, and the signal's sender was not identified. The same command was rerun detached (`setsid`, its own process group), and it completed.
+Full run 1: `node scripts/witness.mjs` in the foreground of a job. It stopped at 194.8 s with exit 143 (SIGTERM), after the `site (heavy)` group started. The exit was 143 (SIGTERM); the sender was not identified. The same command was rerun detached (`setsid`, its own process group), and it completed.
 
 Full run 2 (detached, tree `2f3285f`, before this change set): `totals: PASS 220 FAIL 7 GROUPS 64 WALL 781.6s`. Slowest groups: `fx-ask` 427.6 s, `fx-approval` 305.9 s, `fx-tui-live` 121.0 s, `site` 108.6 s, `node-txiki-npm` 102.3 s, `python-files` 73.5 s, `pip` 70.5 s, `site-manifest-retry` 67.0 s, `python` 63.5 s, `pip-fallback` 57.2 s.
 
@@ -2189,3 +2189,28 @@ Still open for the owner, not fixed here:
 - Whether fx's ask mode should prompt before the page's `ask` tool (`writes: false` is declared by the page).
 - The live 8793 rows (rows 1-3): the hy4 server outside this repo.
 - Ctrl-C on the Pages site: owner decision (`Blocked` section above). Left alone.
+
+### Change set 2: witness rerun, lint record, Python row, and the push gate
+
+Change 5, `scripts/lint-architecture.mjs` (commit 100a91f): the curl architecture record cites the fetch row by its new name, `in-page curl refuses a non-loopback host that sends no CORS headers, and the shell goes on`. Full run 3 failed the lint on that name. Rerun alone: `npm run lint:architecture` exits 0, `396 claims: 396 pass, 0 fail, 0 unverified`.
+
+Full run 3 (detached, tree 939691a, `/tmp/witness-full3.log`): `totals: PASS 228 FAIL 4 GROUPS 64 WALL 737.3s`. Failures: the three live 8793 rows (open, see above) and the architecture lint row (fixed by Change 5). The Python row passed in this run.
+
+Python row, five runs, one at a time, each `node scripts/witness.mjs --group=python` (logs `/tmp/py-run1.log` to `/tmp/py-run5.log`). No retry was added:
+- Run 1: `PASS 4 FAIL 0`, wall 44.2 s, rc 0.
+- Run 2: `PASS 4 FAIL 0`, wall 43.3 s, rc 0.
+- Run 3: `PASS 4 FAIL 0`, wall 33.7 s, rc 0.
+- Run 4: `PASS 4 FAIL 0`, wall 41.9 s, rc 0.
+- Run 5: `PASS 4 FAIL 0`, wall 47.5 s, rc 0.
+No `Runtime.evaluate did not answer within 60000 ms` (or Page.navigate) failure in any of the five. The failure recorded in run 2 of the full set did not recur in these runs or in full run 3.
+
+Full run 4 (detached, tree 100a91f, `/tmp/witness-full4.log`): `totals: PASS 227 FAIL 5 GROUPS 64 WALL 796.8s`. Load was 9 to 13 during the Python groups. Failures:
+1. The three live 8793 rows (`fx ask on the live 8793 gateway…`, `the 8793 chat request…`, `the TUI on the live 8793 gateway…`). Open: the hy4 gateway is outside this repo.
+2. `python-warm raised an error: timed out waiting for: /^1$/m.test(globalThis.thebird.text())`, at 62.4 s. The row's wait is `COLD_START_MS` (2580000 ms), so the code does not explain a 62.4 s expiry. The only path that could fire it early is a clock step, which was not checked. Not reproduced: rerun alone `PASS 1 FAIL 0`, wall 10.2 s.
+3. `in-page python3 files survive a browser restart`: `python3: Failed to fetch`. The bundle fetch failed in that page. Not reproduced: rerun alone `PASS 5 FAIL 0`, wall 16.8 s. The exact full-run order (`python-splash,python-warm,python-files`) also passed: `PASS 8 FAIL 0`, wall 43.9 s. The likely cause is a transient network failure fetching the bundle from anentrypoint.github.io while other groups ran; this is not confirmed.
+
+Rows 2 and 3 are open. Cause not established; no retry added, no code change made for them.
+
+Phase B: not pushed. The push gate is the full witness and the Python row both settled. The Python row is settled (five of five pass). The full witness is not: run 4 has two Python failures that did not reproduce, with no established cause, and three live rows that are open outside the repo. The push is held for the owner's decision.
+
+Still open for the owner: the fx ask-mode approval prompt on the page `ask` tool; the three live 8793 rows; the Python rows 2 and 3 above; Ctrl-C on the Pages site (left alone).
