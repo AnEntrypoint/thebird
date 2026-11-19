@@ -2560,3 +2560,11 @@ The 178 commands are the scripts of the existing witness rows that agree in both
 The 71 differing scripts, for the owner's decision. Environment: `hostname`, `id`, `whoami`, `ps`, and `command -v` paths (bashkit has `/usr/bin`, the txiki shell `/bin`). Behaviour: `set -e` (bashkit accepts it, the txiki shell refuses with status 2); `shift 2` past the end (bashkit is silent); `echo ~` (bashkit gives `/home/sandbox`, the txiki shell keeps `~` while HOME is unset); `env ls` (bashkit runs `ls`, the txiki shell refuses with 125); `env` lists `PWD` (bashkit has it); `mv x x` (bashkit is silent with 0, the txiki shell refuses with 1, as GNU does); `base64 -w 0` (bashkit omits the final newline, GNU and the txiki shell print it); `diff` of a missing file (exit 2 in the txiki shell, as GNU; bashkit exits 1); `expr 1 + 2 * 3` (the txiki shell refuses, bashkit computes 1). Wording only: `break`, `cp`, `cut`, `chmod`, `stat`, `sed`, `tar`, `jq`, `awk`, `kill`, `seq`, `base64`. Many others fail in a fresh shell only because an earlier witness row created their files (the `diff`, `stat`, `realpath` and `chmod` rows), so they say nothing about the shells.
 
 Red check (done): the stderr comparison broken (the txiki side forced to an empty stderr). `RESULT PASS=399 FAIL=39`: 39 parity rows red, exactly the commands that write to stderr in bashkit. The line was restored and the green run is `RESULT PASS=438 FAIL=0`.
+
+### Phase B for change set 27 (`7479fdf`)
+
+Swap gate: opened at try 2, `GATE_OPEN try=2 si=592 so=0 KB/s`, read immediately before the jobs.
+Build check: `npm run check` exit 0, wall 758 ms (`/tmp/pb13-check.log`).
+Shell witness, once: `npm run witness:shell` `RESULT PASS=438 FAIL=0`, exit 0, wall 2553 ms (`/tmp/pb13-shell.log`).
+Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends is stopped by the command timeout with exit 124` passes (exit 124); `loops: a for over a large list is stopped by timeoutMs with exit 124` passes (exit 124); `loops: break in a while loop ends it` passes under its 2000 ms limit (`n=3`).
+
