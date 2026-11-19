@@ -495,6 +495,18 @@ group('redirects: here-strings and heredocs feed their text to the command', asy
   check('redirects: two heredocs on one line read their bodies in order', twice.stdout === 'a\nb\n', JSON.stringify(twice.stdout));
 });
 
+group('redirects: &> sends stdout and stderr to a file, &>> appends to it', async () => {
+  const sh = await shell({});
+  const both = await run(sh, 'echo out &> /t/a.txt; cat /t/a.txt');
+  check('redirects: &> writes stdout to the file and nothing to the output', both.stdout === 'out\n' && both.stderr === '', JSON.stringify(both.stdout));
+  const error = await run(sh, 'cat /nope/x &> /t/e.txt; cat /t/e.txt');
+  check('redirects: &> also takes stderr into the file', error.stdout === 'cat: /nope/x: No such file or directory\n', JSON.stringify(error.stdout));
+  const appended = await run(sh, 'echo a &> /t/c.txt; echo b &>> /t/c.txt; cat /t/c.txt');
+  check('redirects: &>> appends stdout and stderr to the file', appended.stdout === 'a\nb\n', JSON.stringify(appended.stdout));
+  const quiet = await run(sh, 'echo x &> /t/d.txt');
+  check('redirects: &> leaves neither stdout nor stderr on the shell', quiet.stdout === '' && quiet.stderr === '', JSON.stringify(quiet.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

@@ -6,8 +6,8 @@ import { runAwk } from './shell-awk.js';
 export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
-const OPERATORS = ['2>>', '2>&1', '2>', '&&', '||', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '2>', '2>>', '2>&1']);
+const OPERATORS = ['2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
@@ -1266,6 +1266,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     for (const redirect of node.redirects) {
       if (redirect.op === '2>&1') {
         out += err;
+        err = '';
+      } else if (redirect.op === '&>' || redirect.op === '&>>') {
+        const path = await wordPath(redirect.target, sink);
+        const prior = redirect.op === '&>>' && host.exists(path) ? host.read(path) : '';
+        writeRedirect(path, prior + out + err);
+        out = '';
         err = '';
       } else if (redirect.op === '>' || redirect.op === '>>') {
         const path = await wordPath(redirect.target, sink);

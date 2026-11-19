@@ -2392,3 +2392,11 @@ Runaway loops still stop at their `timeoutMs`: `loops: a while that never ends i
 Red check (done), each restored: the heredoc body set to an empty list: `RESULT PASS=136 FAIL=5`, the five heredoc rows red and the here-string row green. The here-string output dropped its newline: `RESULT PASS=140 FAIL=1`, the here-string row red. The green run after both restores is `RESULT PASS=141 FAIL=0`.
 
 The witness escape rows first failed because a backslash in the witness source is consumed by the JavaScript string before the shell sees it. The rows now write `\\$x` and so on, so the shell gets one escape for each.
+
+### Change set 12, G5: &> and &>> (Phase A)
+
+`web/shell-core.js`: `&>>` and `&>` are operators (listed before `&&` and `&`), and both are redirects. `runCommand` writes the command output and its stderr to the file together (`&>`), or appends them (`&>>`), and leaves neither on the shell. The file write is the same path `>` uses.
+
+`scripts/witness-shell.mjs`: group `redirects: &> sends stdout and stderr to a file, &>> appends to it`, 4 rows: stdout goes to the file (`out`) and stderr stays empty; stderr goes to the file (`cat: /nope/x: No such file or directory`); `&>>` appends stdout and stderr (`a`, `b`); `&>` leaves neither stream on the shell.
+
+Red check (done), each restored: the file write dropping stderr: `RESULT PASS=144 FAIL=1`, the stderr row red. `&>>` made to ignore the prior contents: `RESULT PASS=144 FAIL=1`, the append row red. The green run after both restores is `RESULT PASS=145 FAIL=0`.
