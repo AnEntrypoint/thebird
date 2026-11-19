@@ -2606,3 +2606,12 @@ State: the errexit flag is part of the saved snapshot, so a restored shell keeps
 
 Red check: the errexit throw in `runSequence` replaced with `if (false)`. Seven rows went red (`set -e; false; echo SHOULD_NOT_PRINT`, `set -e; false || false; echo no3`, the function, `if`, subshell, pipeline and `||`/`&&` rows). Restored by the reverse edit; the green run is `RESULT PASS=457 FAIL=0`.
 
+
+### Change set 28e: echo ~ with HOME set, and with HOME unset
+
+`~` expands to `HOME` when `HOME` is set, and the txiki shell did this already; no code change. The parity row is `HOME=/home/sandbox; export HOME; echo ~`, reinstated: the row without `HOME` set was excluded because bashkit's default home is `/home/sandbox` and the txiki shell has no default `HOME`.
+
+HOME unset, recorded: the txiki shell keeps `~` literal (witness row `expansion: a tilde stays literal while HOME is unset`). Real bash does not: with `HOME` unset it falls back to the passwd entry for the user, which is `/config` in this sandbox (`env -i bash -c 'echo ~'`). The txiki shell has no passwd database, so the literal is kept on purpose and is the one case where bash's output depends on the account database. An empty `HOME=` gives an empty expansion in bash; the txiki shell keeps the empty value as well, since `tildeWord` only checks for an undefined `HOME`.
+
+Red check: the `tildeWord` guard replaced with `if (true) return parts;`, which disables expansion. Rows red: `expansion: a leading tilde becomes HOME` and the parity row `HOME=/home/sandbox; export HOME; echo ~`. Restored; green run below.
+

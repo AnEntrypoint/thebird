@@ -848,6 +848,7 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "HOME=/home/sandbox; export HOME; echo ~",
     "set -e; echo rc=$?",
     "set -- a; shift 2; echo rc=$?",
     "echo abc | base64 -w 0",
