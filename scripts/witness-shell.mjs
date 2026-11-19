@@ -675,6 +675,26 @@ group('md5sum: md5sum prints the MD5 of its input and of each file', async () =>
   check('md5sum: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes('md5sum: /md/none: No such file or directory'), JSON.stringify(missing.stderr));
 });
 
+group('base64: base64 encodes and decodes stdin, and wraps its output', async () => {
+  const sh = await shell({});
+  const encoded = await run(sh, 'printf "hello" | base64');
+  check('base64: stdin is encoded and the result is one line', encoded.stdout === 'aGVsbG8=\n', JSON.stringify(encoded.stdout));
+  const round = await run(sh, 'printf "hello" | base64 | base64 -d');
+  check('base64: decoding an encoding gives the input back', round.stdout === 'hello', JSON.stringify(round.stdout));
+  const wrapped = await run(sh, 'echo abc | base64 -w 4');
+  check('base64: -w sets the line width', wrapped.stdout === 'YWJj\nCg==\n', JSON.stringify(wrapped.stdout));
+  const unwrapped = await run(sh, 'echo abc | base64 -w 0');
+  check('base64: -w 0 keeps the output on one line', unwrapped.stdout === 'YWJjCg==\n', JSON.stringify(unwrapped.stdout));
+  const unicode = await run(sh, 'echo café | base64');
+  check('base64: a non-ASCII input is encoded as UTF-8 bytes', unicode.stdout === 'Y2Fmw6kK\n', JSON.stringify(unicode.stdout));
+  const decoded = await run(sh, 'printf "aGk=" | base64 -d');
+  check('base64: -d decodes a padded input', decoded.stdout === 'hi', JSON.stringify(decoded.stdout));
+  const bad = await run(sh, 'printf "@@@" | base64 -d; echo rc=$?');
+  check('base64: a character outside the alphabet is refused with status 1', bad.stdout === 'rc=1\n' && bad.stderr.includes('base64: invalid input'), JSON.stringify(bad.stderr));
+  const empty = await run(sh, 'printf "" | base64; echo rc=$?');
+  check('base64: empty input gives no output and status 0', empty.stdout === 'rc=0\n', JSON.stringify(empty.stdout));
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

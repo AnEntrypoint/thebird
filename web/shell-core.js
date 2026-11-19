@@ -628,6 +628,44 @@ function md5Hex(bytes) {
   return [a0, b0, c0, d0].map((word) => [0, 8, 16, 24].map((shift) => ((word >>> shift) & 0xff).toString(16).padStart(2, '0')).join('')).join('');
 }
 
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function base64Encode(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0);
+    out += BASE64_ALPHABET[(n >> 18) & 63] + BASE64_ALPHABET[(n >> 12) & 63];
+    out += i + 1 < bytes.length ? BASE64_ALPHABET[(n >> 6) & 63] : '=';
+    out += i + 2 < bytes.length ? BASE64_ALPHABET[n & 63] : '=';
+  }
+  return out;
+}
+
+function base64Decode(text) {
+  const body = text.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(body)) return null;
+  const bytes = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const ch of body) {
+    if (ch === '=') break;
+    buffer = ((buffer << 6) | BASE64_ALPHABET.indexOf(ch)) & 0xffffff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  return bytes;
+}
+
+function bytesToText(bytes) {
+  try {
+    return decodeURIComponent(bytes.map((byte) => '%' + byte.toString(16).padStart(2, '0')).join(''));
+  } catch {
+    return String.fromCharCode(...bytes);
+  }
+}
 function normalize(path) {
   const parts = [];
   for (const segment of path.split('/')) {
@@ -1171,6 +1209,24 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
       throw new ShellExit(Number(argv[0] ?? state.status));
+    },
+    base64: ({ argv, stdin = '' }) => {
+      const decode = argv.includes('-d');
+      const wrapFlag = argv.indexOf('-w');
+      const wrapAt = wrapFlag >= 0 ? Number(argv[wrapFlag + 1]) : 76;
+      if (!Number.isInteger(wrapAt) || wrapAt < 0) return { code: 1, out: '', err: 'base64: invalid wrap size\n' };
+      const names = argv.filter((arg, i) => !arg.startsWith('-') && i !== wrapFlag + 1);
+      const input = textInputs('base64', names, stdin);
+      if (decode) {
+        const bytes = base64Decode(input.text);
+        if (bytes === null) return { code: 1, out: '', err: 'base64: invalid input\n' };
+        return { code: input.code, out: bytesToText(bytes), err: input.err };
+      }
+      const encoded = base64Encode(utf8Bytes(input.text));
+      const width = wrapAt || encoded.length;
+      let out = '';
+      for (let i = 0; i < encoded.length; i += width) out += encoded.slice(i, i + width) + '\n';
+      return { code: input.code, out, err: input.err };
     },
     md5sum: ({ argv, stdin = '' }) => {
       const names = argv.filter((arg) => !arg.startsWith('-'));
