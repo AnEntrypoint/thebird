@@ -3146,3 +3146,18 @@ Red checks, each restored and confirmed green: (1) the local shadow removed (the
 
 Gaps, recorded: `readonly` is not a builtin, so an unset of a readonly variable (bash: `cannot unset: readonly variable`, status 1) cannot happen here. `unset` of a name with an array or a `-n` nameref is not supported (neither exists in this shell).
 
+
+### Change set 30aa: a compound command keeps the output it printed before exit, return, break or an error ends it, as bash does
+
+Reference: `bash -c`, expectations generated from its output (`/tmp/gen-compound2.mjs`). The probes ran first, in separate `bash -c` runs, because a top-level `exit` ends the script: `(for ...; exit 4) > f` writes the loop's output to `f` and exits 4; a `return` inside a function keeps the group's output, with and without a redirect; `break` inside an `if` keeps the output printed before it.
+
+What was wrong: each compound runner collected its output in a local object and returned it. A thrown `exit`, `return`, `break N` or error skipped that return, so everything the construct had printed was lost. A redirect was then never applied to it (the file was not written), and a `return` from a function lost the function's output even without a redirect. The same loss hit `break` from an `if` inside a loop.
+
+What changed: a compound runner writes into the sink it is given, so output already printed stays in that sink when a signal passes. The redirect wrapper runs its compound into a scratch sink, and on a thrown signal it applies the redirects to the scratch output, then passes the remainder up on the error. The pipeline delivers that remainder to its own sink before it rethrows, and a function call reads its body's sink when `return` ends the body.
+
+Witness: group `compound: a compound command keeps the output it printed before exit, return, break or an error ends it, as bash does`, 10 rows, `RESULT PASS=752 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) the pipeline drops the partial output of a last stage: 4 rows red (the subshell exit, break in an if, break 2, and the exit in a loop). (2) the redirect wrapper drops the partial output: 7 rows red, including the group, if and subshell redirect rows. (3) the function return drops the body output: 1 row red (the plain return).
+
+Gaps, recorded: when a non-last pipeline stage ends by a thrown signal, its partial output is dropped rather than fed to the next stage (bash feeds it). An `exit` inside a pipeline stage still ends the whole shell here, where bash runs every pipeline stage in a subshell, so the shell goes on after it. Neither was probed against bash.
+

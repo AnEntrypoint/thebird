@@ -2421,7 +2421,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function withRedirects(node, stdin, sink, run) {
-    if (!node.redirects.length) return run(node, stdin, sink);
     const refused = await refuseMissingOutputDir(node.redirects, sink);
     if (refused) return refused;
     let input = stdin;
@@ -2431,7 +2430,14 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       if (path !== NULL_DEVICE && !host.exists(path)) return { code: 2, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
       input = path === NULL_DEVICE ? '' : host.read(path);
     }
-    const result = await run(node, input, sink);
+    const scratch = { out: '', err: '', signal: sink.signal };
+    let result;
+    try {
+      result = await run(node, input, scratch);
+    } catch (err) {
+      if (err && typeof err === 'object') err.output = await applyOutputRedirects(node.redirects, scratch.out, scratch.err, sink);
+      throw err;
+    }
     return { code: result.code, ...(await applyOutputRedirects(node.redirects, result.out, result.err, sink)) };
   }
 
@@ -2485,7 +2491,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   async function runSubshell(node, stdin, sink) {
     const savedCwd = state.cwd;
     const savedVars = new Map(vars);
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     let code;
     try {
       code = await runSequence(node.list, stdin, inner);
@@ -2501,7 +2507,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function runGroup(node, stdin, sink) {
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     const code = await runSequence(node.list, stdin, inner);
     return { code, out: inner.out, err: inner.err };
   }
@@ -2594,7 +2600,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function runIf(node, stdin, sink) {
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     let code = 0;
     let taken = false;
     for (const { cond, body } of node.branches) {
@@ -2609,7 +2615,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function runFor(node, stdin, sink) {
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     const values = node.words ? await expandWords(node.words, inner) : positional;
     let code = 0;
     loopDepth++;
@@ -2637,7 +2643,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const caseRegExp = (chars) => new RegExp(`^${chars.map((ch) => (isWildcard(ch) ? (ch.c === '*' ? '.*' : '.') : ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m))).join('')}$`);
 
   async function runCase(node, stdin, sink) {
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     const value = (await expandChars(node.word, false, inner)).map((ch) => ch.c).join('');
     for (const arm of node.arms) {
       for (const pattern of arm.patterns) {
@@ -2651,7 +2657,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   }
 
   async function runWhile(node, stdin, sink) {
-    const inner = { out: '', err: '', signal: sink.signal };
+    const inner = sink;
     let code = 0;
     loopDepth++;
     try {
@@ -2678,12 +2684,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const savedPositional = positional;
     positional = args;
     frames.push(new Map());
+    const bodySink = { out: '', err: '', signal };
     let result;
     try {
-      result = body.type === 'subshell' ? await runSubshell(body, stdin, { out: '', err: '', signal }) : await runGroup(body, stdin, { out: '', err: '', signal });
+      result = body.type === 'subshell' ? await runSubshell(body, stdin, bodySink) : await runGroup(body, stdin, bodySink);
     } catch (err) {
       if (!(err instanceof ReturnSignal)) throw err;
-      result = { code: err.code, out: '', err: '' };
+      result = { code: err.code, out: bodySink.out, err: bodySink.err };
     } finally {
       frames.pop();
       positional = savedPositional;
@@ -2710,10 +2717,22 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     let code = 0;
     for (let i = 0; i < pipe.cmds.length; i++) {
       const cmd = pipe.cmds[i];
-      const result = await runStage(cmd, input, sink);
+      const last = i === pipe.cmds.length - 1;
+      let result;
+      try {
+        result = await runStage(cmd, input, sink);
+      } catch (err) {
+        if (err && typeof err === 'object' && err.output) {
+          const partial = err.output;
+          delete err.output;
+          sink.err += partial.err;
+          if (last) sink.out += partial.out;
+        }
+        throw err;
+      }
       code = result.code;
       sink.err += result.err;
-      if (i === pipe.cmds.length - 1) sink.out += result.out;
+      if (last) sink.out += result.out;
       else input = result.out;
     }
     return code;

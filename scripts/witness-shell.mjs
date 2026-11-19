@@ -869,6 +869,29 @@ group('unset: a variable, a function and a local are removed in the scope that h
   check("unset: with no names it does nothing and exits 0, as bash does", un10.stdout === "rc=0\n" && un10.stderr === "", JSON.stringify([un10.stdout, un10.stderr]));
 });
 
+group('compound: a compound command keeps the output it printed before exit, return, break or an error ends it, as bash does', async () => {
+  const cx0 = await run(await shell({}), "mkdir -p /ex; (for i in 1 2; do echo $i; exit 4; done) > /ex/f1; echo rc=$?; cat /ex/f1");
+  check("compound: a subshell that exits keeps the output of its loop in the redirect file, as bash does", cx0.stdout === "rc=4\n1\n" && cx0.stderr === "", JSON.stringify([cx0.stdout, cx0.stderr]));
+  const cx1 = await run(await shell({}), "f(){ echo a; return 1; }; f; echo rc=$?");
+  check("compound: a function that returns keeps the output it printed before return, as bash does", cx1.stdout === "a\nrc=1\n" && cx1.stderr === "", JSON.stringify([cx1.stdout, cx1.stderr]));
+  const cx2 = await run(await shell({}), "mkdir -p /ex; f(){ { echo b; return 5; } > /ex/f3; echo no; }; f; echo rc=$?; cat /ex/f3");
+  check("compound: a group that returns keeps its output in the redirect file, as bash does", cx2.stdout === "rc=5\nb\n" && cx2.stderr === "", JSON.stringify([cx2.stdout, cx2.stderr]));
+  const cx3 = await run(await shell({}), "mkdir -p /ex; f(){ if true; then echo c; return 6; fi > /ex/f4; }; f; echo rc=$?; cat /ex/f4");
+  check("compound: an if that returns keeps its output in the redirect file, as bash does", cx3.stdout === "rc=6\nc\n" && cx3.stderr === "", JSON.stringify([cx3.stdout, cx3.stderr]));
+  const cx4 = await run(await shell({}), "for i in 1; do if true; then echo x; break; fi; done; echo end");
+  check("compound: break inside an if keeps the output printed before it, as bash does", cx4.stdout === "x\nend\n" && cx4.stderr === "", JSON.stringify([cx4.stdout, cx4.stderr]));
+  const cx5 = await run(await shell({}), "for i in 1; do for j in a b; do echo $j; break 2; done; done; echo end");
+  check("compound: break 2 from an inner loop keeps the output of the inner loop, as bash does", cx5.stdout === "a\nend\n" && cx5.stderr === "", JSON.stringify([cx5.stdout, cx5.stderr]));
+  const cx6 = await run(await shell({}), "mkdir -p /ex; (while true; do echo loop; exit 7; done) > /ex/o; echo rc=$?; cat /ex/o");
+  check("compound: an exit inside a loop with a redirect keeps the output in the file, as bash does", cx6.stdout === "rc=7\nloop\n" && cx6.stderr === "", JSON.stringify([cx6.stdout, cx6.stderr]));
+  const cx7 = await run(await shell({}), "mkdir -p /ex; (echo p; exit 9) > /ex/p; echo rc=$?; cat /ex/p");
+  check("compound: a subshell that exits keeps its output on stdout when it has no redirect, as bash does", cx7.stdout === "rc=9\np\n" && cx7.stderr === "", JSON.stringify([cx7.stdout, cx7.stderr]));
+  const cx8 = await run(await shell({}), "mkdir -p /ex; (echo x; { echo y; exit 8; } > /ex/y) > /ex/z; echo rc=$?; cat /ex/z; cat /ex/y");
+  check("compound: an inner redirect and an outer redirect each keep their own output, as bash does", cx8.stdout === "rc=8\nx\ny\n" && cx8.stderr === "", JSON.stringify([cx8.stdout, cx8.stderr]));
+  const cx9 = await run(await shell({}), "for i in 1 2; do echo $i; if true; then break; fi; done; echo end");
+  check("compound: a loop that breaks at its first pass keeps the output of each pass, as bash does", cx9.stdout === "1\nend\n" && cx9.stderr === "", JSON.stringify([cx9.stdout, cx9.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));
