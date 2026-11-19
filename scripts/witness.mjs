@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { startNpmMirror } from './npm-mirror.mjs';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from '../src/relay.js';
@@ -408,7 +408,6 @@ group('fx-approval', async () => {
       const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
       const linesOf = `globalThis.thebird.text().split('\\n')`;
       const hasText = (text) => `${linesOf}.some((line) => line.includes(${JSON.stringify(text)}))`;
-      const hasRow = (text) => `${linesOf}.some((line) => line === ${JSON.stringify(text)})`;
       const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
       const submit = async (text) => { await type(text); await press('Enter'); };
       await type('fx');
@@ -479,20 +478,22 @@ group('fx-ask', async () => {
     interact: async ({ type, press, evaluate, waitFor }) => {
       const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
       const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
-      const hasRow = (text) => `globalThis.thebird.text().split('\\n').some((line) => line === ${JSON.stringify(text)})`;
       const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
       const submit = async (text) => { await type(text); await press('Enter'); };
       await type('fx');
       await press('Enter');
       surfaces.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
       await submit('[tool:ask] [input:{"question":"pick"}]');
+      surfaces.approvalPrompted = await settle(hasText('Allow once'), 90000);
+      await press('Enter');
       surfaces.askShown = await settle(hasText('pick'), 90000);
       await grab('ask');
       await submit('blue');
       surfaces.askAnswered = await settle(hasText('tool-result=seen'), 90000);
       await grab('askReply');
+      surfaces.focusAfterAsk = await evaluate("document.activeElement?.classList?.contains('xterm-helper-textarea') === true");
       await submit('[lines:60] long');
-      surfaces.linesShown = await settle(hasRow('line 60'), 90000);
+      surfaces.linesShown = await settle(hasText('line 60'), 90000);
       await press('o', { ctrl: true });
       surfaces.fullShown = await settle(hasText('esc close'), 60000);
       await grab('full');
@@ -503,8 +504,10 @@ group('fx-ask', async () => {
   });
   await stubTui.close();
   const surfaceHas = (name, text) => (surfaces[name] ?? '').split('\n').some((line) => line.includes(text));
+  check('ask: fx shows its approval panel before the page ask tool runs in ask mode', surfaces.approvalPrompted === true, String(surfaces.approvalPrompted));
   check('ask: the question is shown, and the answer reaches the stub as a tool result', surfaces.askShown === true && surfaceHas('ask', 'pick') && surfaces.askAnswered === true && surfaceHas('askReply', 'tool-result=seen'), JSON.stringify((surfaces.askReply ?? '').split('\n').slice(-6)));
-  check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('closedScreen', 'esc close'), JSON.stringify({ opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')) }));
+  check('ask: the terminal input regains focus after the answer', surfaces.focusAfterAsk === true, String(surfaces.focusAfterAsk));
+  check('Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it', surfaces.fullShown === true && surfaceHas('full', 'esc close') && surfaces.fullClosed === true && !surfaceHas('closedScreen', 'esc close'), JSON.stringify({ lines: surfaces.linesShown, opened: surfaces.fullShown, closed: surfaces.fullClosed, footer: (surfaces.full ?? '').split('\n').filter((line) => line.includes('esc close')), screenTail: (surfaces.full ?? '').split('\n').filter((line) => line.trim() !== '').slice(-10) }));
 });
 
 group('site', async () => {
@@ -953,9 +956,10 @@ group('nested', async () => {
 group('fetch', async () => {
   const corsHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); res.end('cors-host-hello\n'); });
   const plainHost = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('plain-host-hello\n'); });
-  for (const [name, server] of [['cors', corsHost], ['plain', plainHost]]) {
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  }
+  const plainAddress = Object.values(networkInterfaces()).flat().find((info) => info.family === 'IPv4' && !info.internal)?.address;
+  if (!plainAddress) throw new Error('no non-loopback IPv4 address: loopback URLs go through the page proxy, so the CORS refusal needs a host the page reaches directly');
+  await new Promise((resolve) => corsHost.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => plainHost.listen(0, plainAddress, resolve));
   const corsPort = corsHost.address().port;
   const plainPort = plainHost.address().port;
   const fetched = await terminal([
@@ -970,10 +974,10 @@ group('fetch', async () => {
   const tjsFetch = await terminal([['run', `tjs -e "const r = await fetch('http://127.0.0.1:${corsPort}/hello'); console.log('tjs-fetch', r.status, (await r.text()).trim());"`]]);
   check('tjs -e awaits txiki fetch, and the request goes out through the page', /^tjs-fetch 200 cors-host-hello$/m.test(tjsFetch.out), tjsFetch.out.split('\n').slice(-2).join(' / ').slice(0, 140));
   const refused = await terminal([
-    ['run', `curl -s http://127.0.0.1:${plainPort}/hello`],
+    ['run', `curl -s http://${plainAddress}:${plainPort}/hello`],
     ['run', 'echo after-refusal'],
   ]);
-  check('in-page curl refuses a host that sends no CORS headers, and the shell goes on', refused.out.includes(`could not fetch from 127.0.0.1:${plainPort}`) && refused.out.includes('CORS') && /^after-refusal$/m.test(refused.out) && !/^plain-host-hello$/m.test(refused.out), refused.out.split('\n').find((line) => line.includes('could not fetch'))?.slice(0, 160) ?? 'no refusal line');
+  check('in-page curl refuses a non-loopback host that sends no CORS headers, and the shell goes on', refused.out.includes(`could not fetch from ${plainAddress}:${plainPort}`) && refused.out.includes('CORS') && /^after-refusal$/m.test(refused.out) && !/^plain-host-hello$/m.test(refused.out), refused.out.split('\n').find((line) => line.includes('could not fetch'))?.slice(0, 160) ?? 'no refusal line');
   for (const server of [corsHost, plainHost]) server.close();
 
   const status = await terminal([['run', 'false'], ['run', 'echo rc=$?'], ['run', '(exit 3)'], ['run', 'echo rc=$?'], ['run', 'true'], ['run', 'echo rc=$?']]);

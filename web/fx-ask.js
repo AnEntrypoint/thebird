@@ -3,6 +3,7 @@ export function createPageAsk() {
   return (question) =>
     new Promise((resolve) => {
       active?.remove();
+      const returnFocus = document.activeElement;
       const dialog = document.createElement('div');
       dialog.id = 'thebird-ask';
       const label = document.createElement('label');
@@ -18,6 +19,7 @@ export function createPageAsk() {
       const finish = (value) => {
         dialog.remove();
         active = null;
+        returnFocus?.focus?.();
         resolve(value);
       };
       send.addEventListener('click', () => finish(input.value));

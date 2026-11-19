@@ -2156,3 +2156,36 @@ Phase B witnesses (this tree, `6cb594b` plus the change 2 commit):
 - `npm run lint:comments`: exit 0, 611 ms, `139 repo-owned files checked: 0 comments`.
 
 Result: the top item (bash through the stub, approval panel, bash dispatch) is verified on this tree. The next item is the full witness since `f14656d` (rank 2 above).
+
+### Full witness since the rejection change (2f3285f), the failing rows, and the Python row
+
+Full run 1: `node scripts/witness.mjs` in the foreground of a job. It stopped at 194.8 s with exit 143 (SIGTERM), after the `site (heavy)` group started. The witness only exits 143 through its own SIGTERM handler, and the signal's sender was not identified. The same command was rerun detached (`setsid`, its own process group), and it completed.
+
+Full run 2 (detached, tree `2f3285f`, before this change set): `totals: PASS 220 FAIL 7 GROUPS 64 WALL 781.6s`. Slowest groups: `fx-ask` 427.6 s, `fx-approval` 305.9 s, `fx-tui-live` 121.0 s, `site` 108.6 s, `node-txiki-npm` 102.3 s, `python-files` 73.5 s, `pip` 70.5 s, `site-manifest-retry` 67.0 s, `python` 63.5 s, `pip-fallback` 57.2 s.
+
+The seven failing rows, their causes and their status:
+1. `fx ask on the live 8793 gateway prints ok with rc 0` (fx-provider). Open: the hy4 gateway is outside this repo and is not on the swarm. Needs a live request; not fixed here.
+2. `the 8793 chat request returns 200 and the page logs no HTTP error` (fx-provider). Same cause as 1. Open.
+3. `the TUI on the live 8793 gateway answers hi with a reply line below the typed hi` (fx-tui-live). Same cause as 1. Open.
+4. `in-page curl refuses a host that sends no CORS headers, and the shell goes on` (fetch). Cause: loopback `http://` URLs are rewritten through the page's `/__thebird/port/<port>/` proxy (`web/txiki-in-page.js`, `proxiedUrl`, `6328e07`), so a plain loopback server answers and the page never makes a cross-origin request to it. The row used `127.0.0.1`, so it could not refuse. Reproduced by hand: `curl http://127.0.0.1:38800/hello` printed `plain-host-hello` with no refusal; `curl http://172.17.0.2:38801/hello` (a non-loopback address of the same machine) printed `could not fetch from 172.17.0.2:38801: …CORS…` and `after-refusal 1`. Fixed in the witness (Change 3 below). Rerun alone: `fetch` group `PASS 5 FAIL 0`, wall 4.2 s.
+5. `python raised an error: Runtime.evaluate did not answer within 60000 ms` (python). Open here; see the Python section below.
+6. `ask: the question is shown, and the answer reaches the stub as a tool result` (fx-ask). Two causes, both found in the run:
+   - fx's ask mode puts an approval panel (`Permission needed … MCP tool`) in front of the page's `ask` tool, although the page declares `writes: false` for it. The witness sent its answer into that panel. The witness now handles the panel (Change 4). fx owns the rule that prompts for it; whether `ask` should prompt is for the fx owner to decide.
+   - A real defect in thebird: `createPageAsk` (`web/fx-ask.js`) focused an `<input>` in a dialog and removed that dialog on finish. Removing the focused element moved focus to `body`, so keystrokes typed after an answer never reached the terminal. Fixed in `web/fx-ask.js` (Change 1): the element focused before the dialog opened gets focus back on finish.
+7. `Ctrl-O opens the full transcript (its footer reads "esc close") and Escape closes it` (fx-ask). Its `[lines:60] long` step had been typed into the unfocused page, so no transcript existed. Same cause as 6; passes after Change 1.
+
+Changes in this set (docs, code and tests only):
+- Change 1, `web/fx-ask.js`: the page ask dialog gives focus back to the element focused before it opened (`returnFocus`, `returnFocus?.focus?.()` in `finish`).
+- Change 2, `scripts/witness.mjs`, `fx-ask`: the approval panel is answered with Enter before the answer, a new row `ask: fx shows its approval panel before the page ask tool runs in ask mode` records it, and a new row `ask: the terminal input regains focus after the answer` checks Change 1 (`surfaces.focusAfterAsk`). The `[lines:60]` wait uses a text match (`hasText('line 60')`), not an exact-line match that never matched padded rows and waited 90 s every run. The Ctrl-O detail now carries the screen tail.
+- Change 3, `scripts/witness.mjs`, `fetch`: the CORS refusal uses the machine's first non-loopback IPv4 address (`networkInterfaces`), and the row's name says so. The loopback CORS-success rows are unchanged. The group throws if there is no non-loopback address.
+- Change 4: the approval handling in Change 2 is the expectation for fx `2f3285f`-era behaviour; the page's `ask` declaration is unchanged.
+- Removed the unused `hasRow` helpers from `fx-approval` and `fx-ask` (dead since the approval rows used `hasText`).
+
+Rerun results so far (each alone, same tree before the full rerun):
+- `fx-ask` group: `PASS 4 FAIL 0 GROUPS 1 WALL 212.5s` (rows: approval panel, ask answer, focus after answer, Ctrl-O).
+- `fetch` group: `PASS 5 FAIL 0 GROUPS 1 WALL 4.2s`.
+
+Still open for the owner, not fixed here:
+- Whether fx's ask mode should prompt before the page's `ask` tool (`writes: false` is declared by the page).
+- The live 8793 rows (rows 1-3): the hy4 server outside this repo.
+- Ctrl-C on the Pages site: owner decision (`Blocked` section above). Left alone.
