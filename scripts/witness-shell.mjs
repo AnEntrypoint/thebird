@@ -669,6 +669,47 @@ group('diff -c and -C: context output, with labels, matches GNU diff', async () 
   check("diff -c: identical files give no output and status 0", c13.stdout === "rc=0\n", JSON.stringify(c13.stdout));
 });
 
+group('chmod: symbolic modes match the sandbox chmod, and octal modes still work', async () => {
+  const m1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: u+x adds the owner execute bit", m1.stdout === "rc=0\n744\n" && m1.stderr === "", JSON.stringify([m1.stdout, m1.stderr]));
+  const m2 = await run(await shell({}), "echo a > /cm/f; chmod 666 /cm/f; chmod \"go-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: go-w removes write from group and other", m2.stdout === "rc=0\n644\n" && m2.stderr === "", JSON.stringify([m2.stdout, m2.stderr]));
+  const m3 = await run(await shell({}), "echo a > /cm/f; chmod 755 /cm/f; chmod \"a=r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a=r sets read only for all three classes", m3.stdout === "rc=0\n444\n" && m3.stderr === "", JSON.stringify([m3.stdout, m3.stderr]));
+  const m4 = await run(await shell({}), "echo a > /cm/f; chmod 444 /cm/f; chmod \"+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: +w with no class is limited by the umask for group and other", m4.stdout === "rc=0\n644\n" && m4.stderr === "", JSON.stringify([m4.stdout, m4.stderr]));
+  const m5 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"-w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: -w with no class removes write from all three classes", m5.stdout === "rc=0\n444\n" && m5.stderr === "", JSON.stringify([m5.stdout, m5.stderr]));
+  const m6 = await run(await shell({}), "echo a > /cm/f; chmod 000 /cm/f; chmod \"u+rwx,g+r\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: clauses separated by a comma apply in order", m6.stdout === "rc=0\n740\n" && m6.stderr === "", JSON.stringify([m6.stdout, m6.stderr]));
+  const m7 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"g=u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: g=u copies the owner bits to the group", m7.stdout === "rc=0\n664\n" && m7.stderr === "", JSON.stringify([m7.stdout, m7.stderr]));
+  const m8 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"a+s\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a+s sets the setuid and setgid bits", m8.stdout === "rc=0\n6644\n" && m8.stderr === "", JSON.stringify([m8.stdout, m8.stderr]));
+  const m9 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+x,go+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: X adds execute only when some execute bit is already set", m9.stdout === "rc=0\n755\n" && m9.stderr === "", JSON.stringify([m9.stdout, m9.stderr]));
+  const m10 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+rx,g-r,o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: three clauses of different operators in one mode", m10.stdout === "rc=0\n700\n" && m10.stderr === "", JSON.stringify([m10.stdout, m10.stderr]));
+  const m11 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"+rw\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: +rw with no class keeps the umask on group and other write", m11.stdout === "rc=0\n644\n" && m11.stderr === "", JSON.stringify([m11.stdout, m11.stderr]));
+  const m12 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a class with no permission changes nothing", m12.stdout === "rc=0\n644\n" && m12.stderr === "", JSON.stringify([m12.stdout, m12.stderr]));
+  const m13 = await run(await shell({}), "echo a > /cm/f; chmod 700 /cm/f; chmod \"ug+w\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: ug+w adds write to owner and group only", m13.stdout === "rc=0\n720\n" && m13.stderr === "", JSON.stringify([m13.stdout, m13.stderr]));
+  const m14 = await run(await shell({}), "echo a > /cm/f; chmod 720 /cm/f; chmod \"a+X\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a+X adds execute to all classes when the owner has it", m14.stdout === "rc=0\n731\n" && m14.stderr === "", JSON.stringify([m14.stdout, m14.stderr]));
+  const m15 = await run(await shell({}), "echo a > /cm/f; chmod 777 /cm/f; chmod \"o=\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: o= clears all bits of other", m15.stdout === "rc=0\n770\n" && m15.stderr === "", JSON.stringify([m15.stdout, m15.stderr]));
+  const e1 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u+q\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: an unknown permission letter is refused with status 1 and the file is unchanged", e1.stdout === "rc=1\n644\n" && e1.stderr === "chmod: invalid operator (expected +, -, or =, but found q)\n", JSON.stringify([e1.stdout, e1.stderr]));
+  const e2 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"x+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a letter where a class or operator belongs is refused with status 1", e2.stdout === "rc=1\n644\n" && e2.stderr === "chmod: invalid operator (expected +, -, or =, but found x)\n", JSON.stringify([e2.stdout, e2.stderr]));
+  const e3 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \"u\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: a clause with no operator is refused with status 1", e3.stdout === "rc=1\n644\n" && e3.stderr === "chmod: invalid mode (u)\n", JSON.stringify([e3.stdout, e3.stderr]));
+  const e4 = await run(await shell({}), "echo a > /cm/f; chmod 644 /cm/f; chmod \",u+x\" /cm/f; echo rc=$?; stat -c %a /cm/f");
+  check("chmod: an empty clause is refused with status 1", e4.stdout === "rc=1\n644\n" && e4.stderr === "chmod: invalid mode ()\n", JSON.stringify([e4.stdout, e4.stderr]));
+});
+
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
   const sh = await shell({});
   const sorted = await run(sh, 'printf "b\na\nc\n" | sort');
@@ -771,8 +812,8 @@ group('chmod: chmod sets an octal mode that stat reports', async () => {
   check('chmod: one mode is set on each named file', several.stdout === '700\n700\n', JSON.stringify(several.stdout));
   const missing = await run(sh, 'chmod 644 /cm/none; echo rc=$?');
   check('chmod: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes("chmod: cannot access '/cm/none': No such file or directory"), JSON.stringify(missing.stderr));
-  const symbolic = await run(sh, 'chmod u+x /cm/f; echo rc=$?');
-  check('chmod: a symbolic mode is refused with status 1, not ignored', symbolic.stdout === 'rc=1\n' && symbolic.stderr.includes("chmod: unsupported mode 'u+x'"), JSON.stringify(symbolic.stderr));
+  const digitMode = await run(sh, 'chmod 999 /cm/f; echo rc=$?');
+  check('chmod: a digit that is not octal is refused with status 1, as chmod does', digitMode.stdout === 'rc=1\n' && digitMode.stderr === 'chmod: invalid digit found in string\n', JSON.stringify(digitMode.stderr));
 });
 
 group('md5sum: md5sum prints the MD5 of its input and of each file', async () => {

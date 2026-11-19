@@ -758,6 +758,49 @@ function unifiedDiff(a, b, width, headers) {
   return out;
 }
 
+const UMASK = 0o022;
+const CHMOD_SHIFT = { u: 6, g: 3, o: 0 };
+const CHMOD_SPECIAL = { u: 0o4000, g: 0o2000, o: 0o1000 };
+
+function formatMode(bits) {
+  return bits.toString(8).padStart(bits > 0o777 ? 4 : 3, '0');
+}
+
+function applySymbolicMode(bits, spec, isDir) {
+  for (const clause of spec.split(',')) {
+    const who = /^[ugoa]*/.exec(clause)[0];
+    const rest = clause.slice(who.length);
+    if (!rest) return { error: 'invalid mode (' + clause + ')' };
+    const op = rest[0];
+    if (!'+-='.includes(op)) return { error: 'invalid operator (expected +, -, or =, but found ' + op + ')' };
+    const perms = rest.slice(1);
+    for (const ch of perms) if (!'rwxXstugo'.includes(ch)) return { error: 'invalid operator (expected +, -, or =, but found ' + ch + ')' };
+    const implicit = who === '';
+    const classes = implicit || who.includes('a') ? ['u', 'g', 'o'] : [...new Set(who)];
+    const anyExec = (bits & 0o111) !== 0;
+    for (const target of classes) {
+      const shift = CHMOD_SHIFT[target];
+      let value = 0;
+      for (const ch of perms) {
+        if (ch === 'r') value |= 4;
+        else if (ch === 'w') value |= 2;
+        else if (ch === 'x') value |= 1;
+        else if (ch === 'X') {
+          if (isDir || anyExec) value |= 1;
+        } else if (ch === 'u' || ch === 'g' || ch === 'o') value |= (bits >> CHMOD_SHIFT[ch]) & 7;
+      }
+      if (implicit && op !== '-') value &= ~((UMASK >> shift) & 7);
+      let special = 0;
+      if (perms.includes('s') && target !== 'o') special |= CHMOD_SPECIAL[target];
+      if (perms.includes('t') && target === 'o') special |= CHMOD_SPECIAL.o;
+      if (op === '+') bits |= (value << shift) | special;
+      else if (op === '-') bits &= ~((value << shift) | special);
+      else bits = (bits & ~((7 << shift) | CHMOD_SPECIAL[target])) | (value << shift) | special;
+    }
+  }
+  return { bits };
+}
+
 function contextRange(start, count) {
   if (count === 0) return String(start);
   return count === 1 ? String(start + 1) : (start + 1) + ',' + (start + count);
@@ -1541,8 +1584,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     chmod: ({ argv }) => {
       const [mode, ...names] = argv;
       if (mode === undefined || !names.length) return { code: 1, out: '', err: 'chmod: missing operand\n' };
-      if (!/^[0-7]{3,4}$/.test(mode)) return { code: 1, out: '', err: "chmod: unsupported mode '" + mode + "'\n" };
-      const digits = mode.replace(/^0+/, '').padStart(3, '0');
+      const octal = /^[0-7]{3,4}$/.test(mode);
+      if (!octal && /^[0-9]+$/.test(mode)) return { code: 1, out: '', err: 'chmod: invalid digit found in string\n' };
+      if (!octal) {
+        const probe = applySymbolicMode(0, mode, false);
+        if (probe.error) return { code: 1, out: '', err: 'chmod: ' + probe.error + '\n' };
+      }
+      const digits = octal ? mode.replace(/^0+/, '').padStart(3, '0') : '';
       let err = '';
       let code = 0;
       for (const name of names) {
@@ -1550,7 +1598,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         if (!statInfo(path)) {
           err += "chmod: cannot access '" + name + "': No such file or directory\n";
           code = 1;
-        } else modes.set(path, digits);
+        } else if (octal) modes.set(path, digits);
+        else {
+          const dir = host.stat(path)?.dir === true;
+          const current = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
+          modes.set(path, formatMode(applySymbolicMode(current, mode, dir).bits));
+        }
       }
       return { code, out: '', err };
     },

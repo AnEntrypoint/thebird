@@ -2741,3 +2741,18 @@ Restore note: in the first pass the side-gating restore failed (its old text occ
 
 Gap, the same as 30a: the header has no modification time, and a file without a final newline is not handled.
 
+
+### Change set 30c: chmod symbolic modes
+
+`chmod` takes symbolic modes: comma-separated clauses of who (`u`, `g`, `o`, `a`, or none), an operator (`+`, `-`, `=`) and permissions (`r`, `w`, `x`, `X`, `s`, `t`, or the bits of another class: `g=u`). With no who the change applies to all three classes and the umask (022) is taken off group and other for `+` and `=`, not for `-`. `s` sets setuid for `u` and setgid for `g`; `t` sets the sticky bit for `o`. `X` adds execute when the file is a directory or some execute bit is already set. A mode with a permission (`u+`) and no permission changes nothing, as in the sandbox chmod. Octal modes are unchanged.
+
+Errors match the sandbox chmod: an unknown permission letter or an unknown operator gives `chmod: invalid operator (expected +, -, or =, but found C)`, a clause with no operator gives `chmod: invalid mode (clause)`, and an all-digit mode that is not octal (`999`) gives `chmod: invalid digit found in string`. Each is status 1, and no file is changed.
+
+Reference: the rows were generated from the sandbox `chmod` and `stat` (`group chmod: symbolic modes match the sandbox chmod`, nineteen rows: fifteen modes, four errors). The sandbox `chmod` is uutils coreutils 0.10.0, not GNU: `chmod --version` says so, and its messages above are its own. The mode semantics agree with GNU's documented behaviour for every row here.
+
+Correction to earlier entries: the sandbox has two coreutils. `diff`, `cp` and `mv` are GNU (diffutils 3.12 and coreutils 9.7). `chmod`, `env`, `expr`, `base64` and `stat` are uutils 0.10.0. Entries that called those five commands GNU (change sets 16 to 25 and 28a to 28i) compared against uutils output. The rows still pass, but the reference name was wrong; the messages in those rows are uutils' where they differ from GNU's.
+
+Red checks, on this tree: (1) the X rule ignores existing execute bits: two rows red (`X adds execute only...`, `a+X adds execute...`). (2) the umask not applied to a class-less `+`: two rows red (`+w with no class...`, `+rw with no class...`). (3) the setuid and setgid bits dropped: one row red (`a+s sets the setuid and setgid bits`). Each restored by the reverse edit; the green run is `RESULT PASS=520 FAIL=0`.
+
+Gap, recorded: `chmod -R` (recursive) is not implemented; it is refused as an unknown option, as before.
+
