@@ -476,8 +476,8 @@ group('builtins: :, shift and set move and read the positional parameters', asyn
   check('builtins: a shift past the parameters fails with status 1 and is silent, as in bash', tooMany.stdout === 'rc=1\n' && tooMany.stderr === '', JSON.stringify(tooMany.stderr));
   const numeric = await run(sh, 'set -- a; shift x; echo rc=$?');
   check('builtins: a non-numeric shift count is an error with status 2', numeric.stdout === 'rc=2\n' && /numeric argument required/.test(numeric.stderr), JSON.stringify(numeric.stderr));
-  const unsupported = await run(sh, 'set -e; echo rc=$?');
-  check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -e/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
+  const unsupported = await run(sh, 'set -x; echo rc=$?');
+  check('builtins: an unsupported set option is refused with status 2, not ignored', unsupported.stdout === 'rc=2\n' && /unsupported option -x/.test(unsupported.stderr), JSON.stringify(unsupported.stderr));
   const listed = await run(sh, 'v=1; set | grep "^v="');
   check('builtins: a bare set lists the shell variables', listed.stdout === 'v=1\n', JSON.stringify(listed.stdout));
 });
@@ -566,6 +566,27 @@ group('mv: a file moved onto itself stays in place, as GNU mv leaves it', async 
   check('mv: a file moved onto itself is unchanged', kept.stdout === 'a\n' && kept.exitCode === 0, JSON.stringify(kept.stdout));
   const status = await run(await shell({}), 'echo a > /workspace/k; mv /workspace/k /workspace/k; echo rc=$?');
   check('mv: the same-file refusal exits 1', status.stdout === 'rc=1\n' && status.stderr === "mv: '/workspace/k' and '/workspace/k' are the same file\n", JSON.stringify(status));
+});
+
+group('errexit: set -e stops at a failing command with its status, and set +e turns it off', async () => {
+  const rows = [
+    ['set -e; false; echo SHOULD_NOT_PRINT', '', 1],
+    ['set -e; false || false; echo no3', '', 1],
+    ['set -e; f() { false; echo in-f; }; f; echo after', '', 1],
+    ['set -e; while false; do :; done; echo loop-ok', 'loop-ok\n', 0],
+    ['set -e; if true; then false; echo in-then; fi; echo after', '', 1],
+    ['set -e; echo a; set +e; false; echo b', 'a\nb\n', 0],
+    ['set -e; false | true; echo pipe-ok', 'pipe-ok\n', 0],
+    ['set -e; { false; echo grp; } || echo or-branch', 'grp\n', 0],
+    ['set -e; (false; echo sub-inner); echo outer', '', 1],
+    ['set -e; echo a | false; echo pipe-last-fails', '', 1],
+    ['set -e; false || true; if false; then :; fi; echo survived; true && false; echo no2', 'survived\n', 1],
+    ['set -e; set -- p q; shift 1; echo $1', 'q\n', 0],
+  ];
+  for (const [script, stdout, exitCode] of rows) {
+    const result = await run(await shell({}), script);
+    check('errexit (as bash): ' + JSON.stringify(script), result.stdout === stdout && result.exitCode === exitCode, JSON.stringify([result.stdout, result.exitCode]));
+  }
 });
 
 group('text: sort, uniq, head, tail and cut read lines and pick from them', async () => {
@@ -827,6 +848,7 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
   const preamble = 'mkdir -p /workspace /tmp /t /st /md /df /cm /rp /e2 /e3 /s /d /dd /box; ';
   const commands = [
+    "set -e; echo rc=$?",
     "set -- a; shift 2; echo rc=$?",
     "echo abc | base64 -w 0",
     "echo one; echo two && echo three || echo four",

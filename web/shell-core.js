@@ -868,6 +868,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
   const vars = new Map(saved?.vars ?? []);
   const exported = new Set(saved?.exported ?? []);
+  let errexit = saved?.errexit ?? false;
+  let errexitSuspended = 0;
   const modes = new Map(saved?.modes ?? []);
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
@@ -1508,11 +1510,15 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     },
     set: ({ argv }) => {
       if (!argv.length) return ok([...vars].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, value]) => `${name}=${value}\n`).join(''));
-      if (argv[0] === '--') {
-        positional = argv.slice(1);
-        return ok('');
+      for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--') {
+          positional = argv.slice(i + 1);
+          return ok('');
+        }
+        if (!/^[-+]e+$/.test(argv[i])) return { code: 2, out: '', err: `set: unsupported option ${argv[i]}\n` };
+        errexit = argv[i][0] === '-';
       }
-      return { code: 2, out: '', err: `set: unsupported option ${argv[0]}\n` };
+      return ok('');
     },
     test: ({ argv }) => ({ code: evaluateTest(argv) ? 0 : 1, out: '', err: '' }),
     '[': ({ argv }) => {
@@ -1996,7 +2002,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     let code = 0;
     let taken = false;
     for (const { cond, body } of node.branches) {
-      if ((await runSequence(cond, stdin, inner)) === 0) {
+      if ((await suspendErrexit(() => runSequence(cond, stdin, inner))) === 0) {
         code = await runSequence(body, stdin, inner);
         taken = true;
         break;
@@ -2053,7 +2059,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     try {
       for (;;) {
         await yieldTurn();
-        const status = await runSequence(node.cond, stdin, inner);
+        const status = await suspendErrexit(() => runSequence(node.cond, stdin, inner));
         if ((status === 0) === node.negate) break;
         try {
           code = await runSequence(node.body, stdin, inner);
@@ -2115,9 +2121,19 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return code;
   }
 
+  async function suspendErrexit(work) {
+    errexitSuspended++;
+    try {
+      return await work();
+    } finally {
+      errexitSuspended--;
+    }
+  }
+
   async function runSequence(list, stdin, sink) {
     let status = 0;
-    for (const { op, pipe, background } of list.items) {
+    for (let i = 0; i < list.items.length; i++) {
+      const { op, pipe, background } = list.items[i];
       if (sink.signal?.aborted) throw sink.signal.reason;
       if (op === '&&' && status !== 0) continue;
       if (op === '||' && status === 0) continue;
@@ -2127,8 +2143,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         state.status = 0;
         continue;
       }
-      status = await runPipeline(pipe, stdin, sink);
+      const guarded = list.items[i + 1]?.op === '&&' || list.items[i + 1]?.op === '||';
+      status = guarded ? await suspendErrexit(() => runPipeline(pipe, stdin, sink)) : await runPipeline(pipe, stdin, sink);
       state.status = status;
+      if (status !== 0 && errexit && !guarded && errexitSuspended === 0) throw new ShellExit(status);
     }
     return status;
   }
@@ -2176,6 +2194,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid }),
+    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid, errexit }),
   };
 }

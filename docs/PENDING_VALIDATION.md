@@ -2595,3 +2595,14 @@ Witness rows: `builtins: a shift past the parameters fails with status 1 and is 
 
 Red check: the past-the-end return given a message. Rows red: `builtins: a shift past the parameters fails with status 1 and is silent, as in bash` and the parity row `set -- a; shift 2; echo rc=$?`. Restored; green run below.
 
+
+### Change set 28d: set -e
+
+`set -e` (and `set +e`) is implemented. A failing command ends the script with its status, as bash does. Bash's exceptions are kept: a command in an `if` or `while` condition, the left side of `&&` or `||`, and anything inside a group or function that runs in such a position does not exit. A failing subshell exits its parent with its status. A pipeline exits on its last stage's status, as bash does.
+
+Expectations: each row of the `errexit (as bash)` group was run with bash in the sandbox before it was written. Parity: `set -e; echo rc=$?` is reinstated; bashkit gives rc=0 there and the txiki shell now matches it. `set -x` replaces the old `set -e` refusal row, so the refusal of an unsupported option is still tested.
+
+State: the errexit flag is part of the saved snapshot, so a restored shell keeps it.
+
+Red check: the errexit throw in `runSequence` replaced with `if (false)`. Seven rows went red (`set -e; false; echo SHOULD_NOT_PRINT`, `set -e; false || false; echo no3`, the function, `if`, subshell, pipeline and `||`/`&&` rows). Restored by the reverse edit; the green run is `RESULT PASS=457 FAIL=0`.
+
