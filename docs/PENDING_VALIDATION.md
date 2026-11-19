@@ -3131,3 +3131,18 @@ Runaway-loop rows: `timeout: a command past timeoutMs ends with exit 124`, `loop
 
 Pushed in this Phase B, once, as `6ba21ab..HEAD`: e817934, 5dd020b, a050362, 20679b0, 83eac31, ee88f21, 08523c9, 21f33c9, 8f7e001, 449b8dd, 57988ef, and this record.
 
+
+### Change set 30y: the unset builtin removes a variable, a function or a local, in the scope that holds it, as bash does
+
+Reference: `bash -c` (the sandbox bash); expectations are generated from its output (`/tmp/gen-unset.mjs`). Bash's `unset` probes were run first, with these results: an unset of a local in its own function leaves a shadow, so the global shows its default; an unset of a caller's local from a called function removes that local, so the global shows through; an unset of a name that is not a valid identifier exits 0 silently.
+
+What was wrong: `unset` was not a builtin (`unset: command not found`).
+
+What changed: `unset [-f|-v] NAME...` removes a function with `-f`, and a variable otherwise. A variable is removed from the innermost frame that holds it: a local of the current function stays as an unset marker (so the global is hidden), and a local of a caller is deleted (so the global shows). A global is deleted from the variables and from the exported names. With no names it does nothing.
+
+Witness: group `unset: a variable, a function and a local are removed in the scope that holds them, as bash does`, 11 rows, `RESULT PASS=742 FAIL=0` after the change.
+
+Red checks, each restored and confirmed green: (1) the local shadow removed (the current-function branch deletes instead of marking): 2 rows red, the local unset and the local unset-and-set rows. (2) the global removal replaced by an empty value: 4 rows red, the default, several-names, `-v`, and called-function rows.
+
+Gaps, recorded: `readonly` is not a builtin, so an unset of a readonly variable (bash: `cannot unset: readonly variable`, status 1) cannot happen here. `unset` of a name with an array or a `-n` nameref is not supported (neither exists in this shell).
+

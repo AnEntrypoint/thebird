@@ -844,6 +844,31 @@ group('set -x: PS4 prompt escapes for the user and host names expand to the shel
   check("set -x: PS4 escapes are expanded before a failing expansion in PS4 is traced as its literal, as bash does", ps6.stdout === "after\n" && ps6.stderr === "thebird: qx: no\nuser ${qx?no} :\nthebird: qx: no\nuser ${qx?no} echo after\n", JSON.stringify([ps6.stdout, ps6.stderr]));
 });
 
+group('unset: a variable, a function and a local are removed in the scope that holds them, as bash does', async () => {
+  const un0 = await run(await shell({}), "x=1; unset x; echo \"[${x-unset}]\"");
+  check("unset: a variable is removed, so its default applies, as bash does", un0.stdout === "[unset]\n" && un0.stderr === "", JSON.stringify([un0.stdout, un0.stderr]));
+  const un1 = await run(await shell({}), "unset nosuch; echo rc=$?");
+  check("unset: an unset name that was never set exits 0, as bash does", un1.stdout === "rc=0\n" && un1.stderr === "", JSON.stringify([un1.stdout, un1.stderr]));
+  const un2 = await run(await shell({}), "a=1; b=2; unset a b; echo \"[${a-A}][${b-B}]\"");
+  check("unset: several names are removed in one call, as bash does", un2.stdout === "[A][B]\n" && un2.stderr === "", JSON.stringify([un2.stdout, un2.stderr]));
+  const un3 = await run(await shell({}), "c=1; unset -v c; echo \"[${c-C}]\"");
+  check("unset -v: removes a variable, as bash does", un3.stdout === "[C]\n" && un3.stderr === "", JSON.stringify([un3.stdout, un3.stderr]));
+  const un4 = await run(await shell({}), "f(){ echo f; }; unset -f f; f 2>/dev/null; echo rc=$?");
+  check("unset -f: removes a function, so calling it is not found, as bash does", un4.stdout === "rc=127\n" && un4.stderr === "", JSON.stringify([un4.stdout, un4.stderr]));
+  const un5 = await run(await shell({}), "k=k; m(){ unset k; }; m; echo \"[${k-gone}]\"");
+  check("unset: a variable unset inside a called function is removed for the caller too, as bash does", un5.stdout === "[gone]\n" && un5.stderr === "", JSON.stringify([un5.stdout, un5.stderr]));
+  const un6 = await run(await shell({}), "z=g; p(){ local z=l; q; echo \"[${z-empty}]\"; }; q(){ unset z; }; p; echo \"[$z]\"");
+  check("unset: a local unset by a called function reveals the global of the same name, as bash does", un6.stdout === "[g]\n[g]\n" && un6.stderr === "", JSON.stringify([un6.stdout, un6.stderr]));
+  const un7 = await run(await shell({}), "g=g; h(){ local g=l; unset g; echo \"[${g-empty}]\"; }; h; echo \"[$g]\"");
+  check("unset: a local unset in its own function hides the global until the function returns, as bash does", un7.stdout === "[empty]\n[g]\n" && un7.stderr === "", JSON.stringify([un7.stdout, un7.stderr]));
+  const un8 = await run(await shell({}), "w(){ local v=1; unset v; v=2; echo \"[$v]\"; }; w; echo \"[${v-none}]\"");
+  check("unset: a local unset and set again holds the new value, and is gone after the function, as bash does", un8.stdout === "[2]\n[none]\n" && un8.stderr === "", JSON.stringify([un8.stdout, un8.stderr]));
+  const un9 = await run(await shell({}), "unset 1x; echo rc=$?");
+  check("unset: a name that is not a valid identifier is ignored with status 0, as bash does", un9.stdout === "rc=0\n" && un9.stderr === "", JSON.stringify([un9.stdout, un9.stderr]));
+  const un10 = await run(await shell({}), "unset; echo rc=$?");
+  check("unset: with no names it does nothing and exits 0, as bash does", un10.stdout === "rc=0\n" && un10.stderr === "", JSON.stringify([un10.stdout, un10.stderr]));
+});
+
 group('set -x: PS4 is expanded at each trace, and LINENO is the command line, as bash does', async () => {
   const ps0 = await run(await shell({}), "x=5; PS4='$x: '; set -x; echo a; set +x");
   check("PS4 with a parameter is expanded at each trace, as bash does", ps0.stdout === "a\n" && ps0.stderr === "5: echo a\n5: set +x\n", JSON.stringify([ps0.stdout, ps0.stderr]));

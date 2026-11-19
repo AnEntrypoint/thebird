@@ -1345,6 +1345,14 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
+    unset: ({ argv }) => {
+      const functionsOnly = argv[0] === '-f';
+      for (const name of argv[0] === '-f' || argv[0] === '-v' ? argv.slice(1) : argv) {
+        if (functionsOnly) functions.delete(name);
+        else removeVariable(name);
+      }
+      return ok('');
+    },
     sleep: ({ argv, signal }) => sleepFor(Number(argv[0] ?? 0) * 1000, signal),
     ps: () => {
       const header = { pid: 'PID', ppid: 'PPID', stat: 'STAT', command: 'COMMAND' };
@@ -2192,6 +2200,17 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       if (frames[i].has(name)) return frames[i].get(name);
     }
     return vars.get(name);
+  };
+
+  const removeVariable = (name) => {
+    for (let i = frames.length - 1; i >= 0; i--) {
+      if (!frames[i].has(name)) continue;
+      if (i === frames.length - 1) frames[i].set(name, undefined);
+      else frames[i].delete(name);
+      return;
+    }
+    vars.delete(name);
+    exported.delete(name);
   };
 
   const setVariable = (name, value) => {
