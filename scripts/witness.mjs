@@ -946,10 +946,10 @@ group('spin', async () => {
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'");
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const started = Date.now();
+      const started = performance.now();
       await press('c', { ctrl: true });
       await waitFor("document.body.dataset.busy !== 'true'", 40000);
-      spinning.elapsed = Date.now() - started;
+      spinning.elapsed = performance.now() - started;
       spinning.isolated = await evaluate('self.crossOriginIsolated');
       await type('echo status=$?; pwd');
       await press('Enter');
@@ -1112,10 +1112,10 @@ group('ctrl-c-line', async () => {
       await type('for i in $(seq 1 200); do sleep 0.1; done');
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'");
-      const started = Date.now();
+      const started = performance.now();
       await press('c', { ctrl: true });
       await waitFor("document.body.dataset.busy !== 'true'", 40000);
-      cancelled.elapsed = Date.now() - started;
+      cancelled.elapsed = performance.now() - started;
       await type('echo after-cancel');
       await press('Enter');
       await waitFor("document.body.dataset.busy !== 'true'");
@@ -1223,10 +1223,10 @@ group('ctrl-c-curl', async () => {
       await press('Enter');
       await waitFor("document.body.dataset.busy === 'true'", 20000);
       for (let poll = 0; poll < 200 && (await note('held-requests', () => heldRequests)) === 0; poll++) await pause();
-      const pressed = await note('pressed-at', () => Date.now());
+      const pressed = await note('pressed-at', () => performance.now());
       await press('c', { ctrl: true });
       await waitFor("!document.body.dataset.busy", 10000);
-      held.elapsed = await note('cancel-elapsed', () => Date.now() - pressed);
+      held.elapsed = await note('cancel-elapsed', () => performance.now() - pressed);
       held.requests = await note('held-requests-at-cancel', () => heldRequests);
       await type('echo after-held-cancel');
       await press('Enter');

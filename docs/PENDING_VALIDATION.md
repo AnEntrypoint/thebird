@@ -2284,3 +2284,7 @@ Build: no C change and no wasm rebuild, so no vendor step. `npm run check` (`nod
 Witness, `node scripts/witness.mjs --group=loops`, once: `totals: PASS 6 FAIL 0 GROUPS 1 WALL 18.0s`, exit 0. Rows: the new row `a pending timer keeps its 4 s due time across a forward wall-clock step … {"output":"timer-done\n","status":0,"elapsed":4650.8}`; the wall-clock step row `{"output":"after-step\n","status":0}`; the existing timeout rows: synchronous loop 124 (elapsed 1320.1 ms), pending timer 124 (1009.2 ms), abort 130 (509.4 ms), tjs and qjs timeout text. Log: `/tmp/phaseb-loops.log`. The gate script is `/tmp/phaseb-loops.sh`.
 
 Not run in this pass: the full witness. The change sits under every engine timer, so the txiki groups (fetch, curl, sqlite, npm, python and git) are the ones at risk; this pass ran the loops group only, as the request asked. A full witness is the next step before any further change to the engine clock.
+
+### Change set 6, item 3: the witness's Ctrl-C elapsed values on the monotonic clock (Phase A)
+
+`scripts/witness.mjs`: `spinning.elapsed` (group `spin`), `cancelled.elapsed` (group `ctrl-c-line`) and `held.elapsed` (group `ctrl-c-curl`) use `performance.now()` for their start and end, instead of `Date.now()`. These are checked against 10 s and 40 s bounds, so a wall-clock step could false-fail them. The `pressed-at` note uses the same clock. The page init-script clock steps (`Date.now` in the `loops` rows) stay wall time: they are the step under test. Witness after the change: Phase B, below.
