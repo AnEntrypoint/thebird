@@ -154,7 +154,7 @@ The gate counts as passing only when the wasm links with zero undefined symbols.
 
 sqlite is built into the same wasm. `scripts/vendor-txiki.mjs` compiles the sqlite3 amalgamation that the txiki.js source tree ships, with SQLITE_OS_OTHER=1, and txiki's mod_sqlite3 registers tjs:sqlite when the build passes -DTJS_HAVE_SQLITE (set in `flagsFor`). `scripts/txiki/browser/sqlite-vfs.c` supplies `sqlite3_os_init`, a VFS named `thebird` that calls the `tjs_fs_*` host imports, and `tjs_random` and `tjs_now_ms`. Those imports are implemented in `web/txiki-in-page.js` over `web/shims/fs.js`, and the file tree is the one the in-page shell uses for `/workspace`. The gate requires the exports `_initialize`, `malloc`, `free`, `tjs_browser_eval`, `tjs_browser_resume` and `tjs_browser_end`, and fails on any undefined symbol.
 
-`tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects reports `Uncaught ...` and exits non-zero.
+`tjs -e` evaluates its code as an ES module, so `import { Database } from 'tjs:sqlite'` works. A module that rejects, and a promise that rejects with no handler, reports `Uncaught ...` and exits non-zero.
 
 The earlier gm-backed CLI and library were removed at `0538b2c`. The later gm builtin, a stdio MCP server over a C++ WebAssembly core, was removed too; fx covers its role in the page.
 

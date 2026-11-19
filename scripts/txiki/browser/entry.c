@@ -20,6 +20,9 @@ static volatile int cancel_requested = 0;
 static double deadline_ms = 0;
 static int stop_status = 0;
 static uv_loop_t *current_loop = NULL;
+static JSValue unhandled_promise;
+static JSValue unhandled_reason;
+static int has_unhandled = 0;
 
 #define HOST_IMPORT(name) __attribute__((import_module("env"), import_name(name)))
 HOST_IMPORT("tjs_now_ms") double host_now_ms(void);
@@ -60,7 +63,34 @@ static int report_exception(JSContext *ctx) {
     return report_value(ctx, JS_GetException(ctx));
 }
 
-static int drain_jobs(JSRuntime *rt) {
+static void track_rejection(JSContext *ctx, JSValueConst promise, JSValueConst reason, bool is_handled, void *opaque) {
+    if (has_module && JS_VALUE_GET_PTR(promise) == JS_VALUE_GET_PTR(module_promise)) {
+        return;
+    }
+    if (has_unhandled && JS_VALUE_GET_PTR(promise) == JS_VALUE_GET_PTR(unhandled_promise)) {
+        has_unhandled = 0;
+        JS_FreeValue(ctx, unhandled_promise);
+        JS_FreeValue(ctx, unhandled_reason);
+    }
+    if (is_handled || has_unhandled) {
+        return;
+    }
+    unhandled_promise = JS_DupValue(ctx, promise);
+    unhandled_reason = JS_DupValue(ctx, reason);
+    has_unhandled = 1;
+}
+
+static int report_unhandled(JSContext *ctx) {
+    if (!has_unhandled) {
+        return 0;
+    }
+    has_unhandled = 0;
+    JS_FreeValue(ctx, unhandled_promise);
+    return report_value(ctx, unhandled_reason);
+}
+
+static int drain_jobs(JSContext *ctx) {
+    JSRuntime *rt = JS_GetRuntime(ctx);
     int status = 0;
     JSContext *job_ctx;
     int job;
@@ -69,12 +99,11 @@ static int drain_jobs(JSRuntime *rt) {
             status = report_exception(job_ctx);
         }
     }
-    return status;
+    return status ? status : report_unhandled(ctx);
 }
 
 static int pump(TJSRuntime *qrt) {
     JSContext *ctx = TJS_GetJSContext(qrt);
-    JSRuntime *rt = JS_GetRuntime(ctx);
     uv_loop_t *loop = TJS_GetLoop(qrt);
 
     if (!stop_status && (cancel_requested || host_cancel_requested())) {
@@ -87,12 +116,12 @@ static int pump(TJSRuntime *qrt) {
         tjs_browser_stop_timers(loop);
         return stop_status;
     }
-    int status = drain_jobs(rt);
+    int status = drain_jobs(ctx);
     if (status) {
         return status;
     }
     uv_run(loop, UV_RUN_NOWAIT);
-    status = drain_jobs(rt);
+    status = drain_jobs(ctx);
     if (status) {
         return status;
     }
@@ -134,6 +163,11 @@ void tjs_browser_end(void) {
         JS_FreeValue(ctx, module_promise);
         has_module = 0;
     }
+    if (has_unhandled) {
+        JS_FreeValue(ctx, unhandled_promise);
+        JS_FreeValue(ctx, unhandled_reason);
+        has_unhandled = 0;
+    }
     tjs_fs_release_loop(TJS_GetLoop(runtime));
     TJS_FreeRuntime(runtime);
     runtime = NULL;
@@ -166,6 +200,7 @@ int tjs_browser_eval(const char *code, const char *name) {
     current_loop = TJS_GetLoop(runtime);
     JSContext *ctx = TJS_GetJSContext(runtime);
     JS_SetInterruptHandler(JS_GetRuntime(ctx), interrupted, NULL);
+    JS_SetHostPromiseRejectionTracker(JS_GetRuntime(ctx), track_rejection, NULL);
     tjs_browser_fs_install(ctx);
     tjs_browser_bridge_install(ctx);
     int status = 0;

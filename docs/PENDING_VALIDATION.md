@@ -2091,3 +2091,15 @@ Defect found, not fixed in this push: an unhandled promise rejection in the in-p
 - Cause: `scripts/txiki/browser/entry.c` reports only the exception that `JS_Eval` returns (`report_exception`, around line 53 and the eval at line 173). No `JS_SetHostPromiseRejectionTracker` hook is installed anywhere under `scripts/txiki/` or `web/`, so a rejected promise with no handler is never reported and the turn loop returns 0.
 - Fix needs a C change in `entry.c` (a rejection tracker that records the first unhandled rejection and returns exit status 1), then a `tjs.wasm` rebuild with `scripts/vendor-txiki.mjs`, a new pin in `scripts/txiki/pin.json`, and the txiki gate. That is a separate vendor change set, so it is open here. The local toolchain is present (`zig` at `/config/.local/bin/zig`), so it can be done next.
 - The earlier `node:fs` result (exit 0 after the script's own handler printed the error) was the script's own output, not a silent failure. The silent case is the uncaught one above.
+
+### Phase A: report an unhandled promise rejection (code and docs; not built yet)
+
+Change 1, `scripts/txiki/browser/entry.c`: a host promise-rejection tracker (`track_rejection`, installed with `JS_SetHostPromiseRejectionTracker` in `tjs_browser_eval`) keeps the first promise that rejects with no handler in one slot (`unhandled_promise`, `unhandled_reason`, `has_unhandled`). A later `is_handled` for that same promise clears the slot. `drain_jobs` now takes the context and, when no job raised, `report_unhandled` sends the slot to `report_value`, so it prints `Uncaught <reason>` and returns 1, the same path as a sync throw. `tjs_browser_end` frees the slot before the runtime is freed. The module's own promise is excluded (`check_module` already reports it), so one rejection prints once.
+
+Known difference from Node: the check runs when each job drain ends, so a promise that is rejected with no handler and gets a handler in a later turn (after a timer) is still reported.
+
+Change 2, docs: `AGENTS.md` (the `tjs -e` paragraph) and `ARCHITECTURE.md` (the `tjs -e` module paragraph) now name the unhandled-rejection case.
+
+Change 3, `scripts/txiki/pin.json`: deferred to Phase B. `scripts/vendor-txiki.mjs` checks the built wasm against the pin before it copies the file, so the pin value is the sha256 of the build this change produces, and it cannot be written before the rebuild. The same hash also goes into `AGENTS.md`, which quotes the pin.
+
+No build or test was run in Phase A.
