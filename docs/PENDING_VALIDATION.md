@@ -3308,3 +3308,22 @@ Witness: group `chmod through a link with .. resolves the link first, and the di
 Red checks, each restored and confirmed by a green run: (1) the operand taken lexically (`resolvePath(name)`) instead of physically: 4 rows red (both physical-path rows, the recursive row, and the refused row). (2) the top-level access check removed from the walk: 1 row red (the `-vR lnk/..` row). The restored file matches its backup, and the green run gives `RESULT PASS=852 FAIL=0`.
 
 Gaps, recorded: `stat` with a path that has `..` after a link is not probed here, and the rows do not stat such a path. Absolute link targets are not witnessed, as in 30ag.
+
+### Change set 30ai: stat -c and chmod refuse a lookup through a directory without owner search, and stat names the physical path, as GNU does on Linux
+
+Reference: GNU stat (`/bin/gnustat`, 9.7) and GNU chmod (`/bin/gnuchmod`) run as the sandbox identity `abc` under LC_ALL=C, through PATH shims named `stat` and `chmod`. Rows are generated from GNU, each fixture is built in a fresh directory and removed afterwards.
+
+Probed first (GNU, `d` at mode 000):
+- `stat -c "%a %n" d/a`: refused, `stat: cannot statx 'd/a': Permission denied`, status 1. With `d` and `d/a` as two operands, `d` is reported (`0 d`) and `d/a` is refused, status 1.
+- `stat` does not follow the last component: `stat -c` on a file symbolic link into `d` (`la`) and on a directory symbolic link to `d` (`lnk`) prints the link itself, `777 la` and `777 lnk`, status 0. Only the directories the lookup passes through need search.
+- `stat -c "%a %n" lnk/a` (through a directory link into `d`) and `lnk/..` are refused. `d/.` is refused: looking up `.` in `d` needs search on `d`.
+- `chmod 700 d/.` is refused too (the same rule, checked against GNU chmod).
+- With `lnk` a link to `d/e` and `d` at 750, `stat -c "%a %n" lnk/..` names `d`, mode 750, not the base's mode: `..` after a link is physical.
+
+What changed in the shell: the lookup helpers (`ownerBits`, `searchedDirectories`, `blockedAncestor`) moved from inside `chmod` to shell scope, so `stat` can use them. `searchedDirectories` now treats `.` as a lookup in the current directory (it was dropped before). `stat` takes the physical path with the last component not followed (`walk.real`), and refuses a name whose lookup passes through a directory without owner search, with GNU's `cannot statx` message and status. Names are still reported once per operand.
+
+Witness: group `stat and chmod: a lookup through a directory without owner search is refused, as GNU does on Linux`, 9 rows (8 stat, 1 chmod), and group `stat -c: a dot-dot after a symbolic link names the physical directory, as GNU stat does on Linux`, 1 row. Last full run after the change: `RESULT PASS=862 FAIL=0`.
+
+Red checks, each restored and confirmed by a green run: (1) the stat lookup refusal replaced by `if (false)`: 6 rows red (the refused stat rows, including the two-operand and repeated-operand rows). (2) `.` dropped from the walk again: 2 rows red (`stat -c d/.` and `chmod 700 d/.`). (3) `stat` naming the lexical path again: 1 row red (`lnk/..` reports 755, not 750). The restored file matches its backup, and the green run gives `RESULT PASS=862 FAIL=0`.
+
+Gaps, recorded: `stat -L` (following the last link) is not implemented, and not probed. The default `stat` output (without `-c`) is not witnessed for a refused path; its rows use `-c` only. Absolute symbolic link targets are not witnessed, as in 30ag.

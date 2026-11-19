@@ -1267,6 +1267,32 @@ group("chmod through a link with .. resolves the link first, and the directory l
   check("chmod through a link with .. into a directory without owner search is refused, as GNU chmod does on Linux", lk3.stdout === "rc=1\n" && lk3.stderr === "chmod: cannot access 'lnk/../x': Permission denied\n", JSON.stringify([lk3.stdout, lk3.stderr]));
 });
 
+group("stat and chmod: a lookup through a directory without owner search is refused, as GNU does on Linux", async () => {
+  const sr0 = await run(await shell({}), "mkdir d && echo a > d/a && chmod 000 d; stat -c \"%a %n\" d/a; echo rc=$?");
+  check("stat -c refuses a file under a directory without owner search, as GNU stat does on Linux", sr0.stdout === "rc=1\n" && sr0.stderr === "stat: cannot statx 'd/a': Permission denied\n", JSON.stringify([sr0.stdout, sr0.stderr]));
+  const sr1 = await run(await shell({}), "mkdir d && echo a > d/a && chmod 000 d; stat -c \"%a %n\" d d/a; echo rc=$?");
+  check("stat -c reports a directory without owner search and refuses the file under it, as GNU stat does on Linux", sr1.stdout === "0 d\nrc=1\n" && sr1.stderr === "stat: cannot statx 'd/a': Permission denied\n", JSON.stringify([sr1.stdout, sr1.stderr]));
+  const sr2 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a la && chmod 000 d; stat -c \"%a %n\" la; echo rc=$?");
+  check("stat -c reports a symbolic link into a directory without owner search as the link, as GNU stat does on Linux", sr2.stdout === "777 la\nrc=0\n" && sr2.stderr === "", JSON.stringify([sr2.stdout, sr2.stderr]));
+  const sr3 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d lnk && chmod 000 d; stat -c \"%a %n\" lnk/a; echo rc=$?");
+  check("stat -c refuses a path through a directory symbolic link into a directory without owner search, as GNU stat does on Linux", sr3.stdout === "rc=1\n" && sr3.stderr === "stat: cannot statx 'lnk/a': Permission denied\n", JSON.stringify([sr3.stdout, sr3.stderr]));
+  const sr4 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d lnk && chmod 000 d; stat -c \"%a %n\" lnk; echo rc=$?");
+  check("stat -c reports a directory symbolic link to a directory without owner search as the link, as GNU stat does on Linux", sr4.stdout === "777 lnk\nrc=0\n" && sr4.stderr === "", JSON.stringify([sr4.stdout, sr4.stderr]));
+  const sr5 = await run(await shell({}), "mkdir d d/e && echo a > d/e/x && ln -s d/e lnk && chmod 000 d; stat -c \"%a %n\" lnk/..; echo rc=$?");
+  check("stat -c refuses a dot-dot after a directory symbolic link into a directory without owner search, as GNU stat does on Linux", sr5.stdout === "rc=1\n" && sr5.stderr === "stat: cannot statx 'lnk/..': Permission denied\n", JSON.stringify([sr5.stdout, sr5.stderr]));
+  const sr6 = await run(await shell({}), "mkdir d && chmod 000 d; stat -c \"%a %n\" d/.; echo rc=$?");
+  check("stat -c refuses a dot in a directory without owner search, as GNU stat does on Linux", sr6.stdout === "rc=1\n" && sr6.stderr === "stat: cannot statx 'd/.': Permission denied\n", JSON.stringify([sr6.stdout, sr6.stderr]));
+  const sr7 = await run(await shell({}), "mkdir d && echo a > d/a && chmod 000 d; stat -c \"%a %n\" d/a d/a; echo rc=$?");
+  check("stat -c repeats a name under a directory without owner search once for each operand, as GNU stat does on Linux", sr7.stdout === "rc=1\n" && sr7.stderr === "stat: cannot statx 'd/a': Permission denied\nstat: cannot statx 'd/a': Permission denied\n", JSON.stringify([sr7.stdout, sr7.stderr]));
+  const sr8 = await run(await shell({}), "mkdir d && chmod 000 d; chmod 700 d/.; echo rc=$?; stat -c \"%a %n\" d");
+  check("chmod refuses a dot in a directory without owner search, as GNU chmod does on Linux", sr8.stdout === "rc=1\n0 d\n" && sr8.stderr === "chmod: cannot access 'd/.': Permission denied\n", JSON.stringify([sr8.stdout, sr8.stderr]));
+});
+
+group("stat -c: a dot-dot after a symbolic link names the physical directory, as GNU stat does on Linux", async () => {
+  const sq0 = await run(await shell({}), "mkdir d d/e && chmod 750 d && ln -s d/e lnk && stat -c \"%a %n\" lnk/..; echo rc=$?");
+  check("stat -c with a dot-dot after a directory symbolic link reports the directory the physical path names, as GNU stat does on Linux", sq0.stdout === "750 lnk/..\nrc=0\n" && sq0.stderr === "", JSON.stringify([sq0.stdout, sq0.stderr]));
+});
+
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {
   const cr0 = await run(await shell({}), "mkdir -p /cm/t/a/sub/deep && echo x > /cm/t/a/f1 && echo y > /cm/t/a/sub/f2 && echo z > /cm/t/a/sub/deep/f3 && ln -s f1 /cm/t/a/link && chmod 600 /cm/t/a/f1 /cm/t/a/sub/f2 /cm/t/a/sub/deep/f3 && chmod 700 /cm/t/a /cm/t/a/sub /cm/t/a/sub/deep; chmod -R 750 /cm/t/a; for p in /cm/t/a /cm/t/a/f1 /cm/t/a/sub /cm/t/a/sub/f2 /cm/t/a/sub/deep /cm/t/a/sub/deep/f3 /cm/t/a/link; do stat -c %a $p; done");
   check("chmod -R 750 sets every entry, and a symlink keeps its own mode", cr0.stdout === "750\n750\n750\n750\n750\n750\n777\n" && cr0.stderr === "", JSON.stringify([cr0.stdout, cr0.stderr]));

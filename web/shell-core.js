@@ -1368,6 +1368,29 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   let positional = [];
   let loopDepth = 0;
 
+  const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
+  const searchedDirectories = (path, followLast = true, depth = 0) => {
+    const parts = path.split('/').filter((part) => part !== '');
+    const searched = [];
+    let current = '/';
+    for (let i = 0; i < parts.length; i++) {
+      searched.push(current);
+      if (parts[i] === '.') continue;
+      if (parts[i] === '..') {
+        current = parentOf(current);
+        continue;
+      }
+      const candidate = (current === '/' ? '' : current) + '/' + parts[i];
+      if (host.lstat(candidate)?.link && depth < 40 && (followLast || i < parts.length - 1)) {
+        const target = host.readlink(candidate);
+        const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, true, depth + 1);
+        searched.push(...inner.searched);
+        current = inner.real;
+      } else current = candidate;
+    }
+    return { real: current, searched };
+  };
+  const blockedAncestor = (path) => searchedDirectories(path).searched.some((dir) => !(ownerBits(dir) & 1));
   const statInfo = (path) => {
     const link = host.lstat(path);
     if (!link && !host.stat(path)) return null;
@@ -1971,28 +1994,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
       const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
       if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
-      const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
-      const searchedDirectories = (path, followLast = true, depth = 0) => {
-        const parts = path.split('/').filter((part) => part !== '' && part !== '.');
-        const searched = [];
-        let current = '/';
-        for (let i = 0; i < parts.length; i++) {
-          searched.push(current);
-          if (parts[i] === '..') {
-            current = parentOf(current);
-            continue;
-          }
-          const candidate = (current === '/' ? '' : current) + '/' + parts[i];
-          if (host.lstat(candidate)?.link && depth < 40 && (followLast || i < parts.length - 1)) {
-            const target = host.readlink(candidate);
-            const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, true, depth + 1);
-            searched.push(...inner.searched);
-            current = inner.real;
-          } else current = candidate;
-        }
-        return { real: current, searched };
-      };
-      const blockedAncestor = (path) => searchedDirectories(path).searched.some((dir) => !(ownerBits(dir) & 1));
       const changeOne = (path) => {
         const dir = host.stat(path)?.dir === true;
         const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
@@ -2078,7 +2079,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       let err = '';
       let code = 0;
       for (const name of names) {
-        const info = statInfo(resolvePath(name));
+        const walk = searchedDirectories(name.startsWith('/') ? name : state.cwd + '/' + name, false);
+        if (walk.searched.some((dir) => !(ownerBits(dir) & 1))) {
+          err += "stat: cannot statx '" + name + "': Permission denied\n";
+          code = 1;
+          continue;
+        }
+        const info = statInfo(walk.real);
         if (!info) {
           err += "stat: cannot statx '" + name + "': No such file or directory\n";
           code = 1;
