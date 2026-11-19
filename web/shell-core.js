@@ -758,6 +758,50 @@ function unifiedDiff(a, b, width, headers) {
   return out;
 }
 
+function contextRange(start, count) {
+  if (count === 0) return String(start);
+  return count === 1 ? String(start + 1) : (start + 1) + ',' + (start + count);
+}
+
+function contextDiff(a, b, width, headers) {
+  const blocks = diffBlocks(a, b);
+  if (!blocks.length) return '';
+  let out = '*** ' + headers[0] + '\n--- ' + headers[1] + '\n';
+  for (const group of contextGroups(blocks, width)) {
+    const first = group[0];
+    const last = group.at(-1);
+    const lead = Math.min(width, first.a0);
+    const trail = Math.min(width, a.length - last.a1);
+    const loA = first.a0 - lead;
+    const hiA = last.a1 + trail;
+    const loB = first.b0 - lead;
+    const hiB = last.b1 + trail;
+    let oldText = '';
+    let newText = '';
+    let hasOld = false;
+    let hasNew = false;
+    let ai = loA;
+    for (const block of group) {
+      for (; ai < block.a0; ai++) {
+        oldText += '  ' + a[ai] + '\n';
+        newText += '  ' + a[ai] + '\n';
+      }
+      const mark = block.a1 > block.a0 && block.b1 > block.b0 ? '! ' : null;
+      hasOld = hasOld || block.a1 > block.a0;
+      hasNew = hasNew || block.b1 > block.b0;
+      for (; ai < block.a1; ai++) oldText += (mark ?? '- ') + a[ai] + '\n';
+      for (let bi = block.b0; bi < block.b1; bi++) newText += (mark ?? '+ ') + b[bi] + '\n';
+    }
+    for (; ai < hiA; ai++) {
+      oldText += '  ' + a[ai] + '\n';
+      newText += '  ' + a[ai] + '\n';
+    }
+    out += '***************\n*** ' + contextRange(loA, hiA - loA) + ' ****\n' + (hasOld ? oldText : '');
+    out += '--- ' + contextRange(loB, hiB - loB) + ' ----\n' + (hasNew ? newText : '');
+  }
+  return out;
+}
+
 function exprEval(argv) {
   const isInt = (s) => /^[+-]?\d+$/.test(s);
   const truthy = (value) => value !== '' && value !== '0';
@@ -1387,10 +1431,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         else if (arg === '--label') labels.push(argv[++i] ?? '');
         else if (arg.startsWith('--label=')) labels.push(arg.slice('--label='.length));
         else if (arg === '-u') mode = 'unified';
-        else if (/^-U/.test(arg)) {
+        else if (arg === '-c') mode = 'context';
+        else if (/^-[UC]/.test(arg)) {
           const value = arg.length > 2 ? arg.slice(2) : argv[++i];
           if (!/^\d+$/.test(value ?? '')) return { code: 2, out: '', err: `diff: invalid context length '${value ?? ''}'\n` };
-          mode = 'unified';
+          mode = arg[1] === 'U' ? 'unified' : 'context';
           width = Number(value);
         } else if (arg.startsWith('--')) return { code: 2, out: '', err: `diff: unrecognized option '${arg}'\nTry 'diff --help' for more information.\n` };
         else return { code: 2, out: '', err: `diff: invalid option -- '${arg[1]}'\nTry 'diff --help' for more information.\n` };
@@ -1411,7 +1456,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       if (err) return { code: 2, out: '', err };
       const headers = [labels[0] ?? names[0], labels[1] ?? names[1]];
-      const out = mode === 'unified' ? unifiedDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : lineDiff(linesOf(texts[0]), linesOf(texts[1]));
+      const out = mode === 'unified' ? unifiedDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : mode === 'context' ? contextDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : lineDiff(linesOf(texts[0]), linesOf(texts[1]));
       return { code: out ? 1 : 0, out, err: '' };
     },
     expr: ({ argv }) => exprEval(argv),

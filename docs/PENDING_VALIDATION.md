@@ -2728,3 +2728,16 @@ Gap, recorded: without `--label`, GNU puts each file's modification time after t
 
 Red checks: (1) the merge rule halved (`<= width` for `<= 2 * width`): the six-line-gap row goes red. (2) the leading context removed: six rows red. (3) the zero-count range written without its `,0`: three rows red (the empty-file row and the two `-U0` rows). Each restored by the reverse edit; the green run is `RESULT PASS=488 FAIL=0`.
 
+
+### Change set 30b: diff -c and -C (context format)
+
+`diff -c` and `diff -C N` print GNU's context format: `*** A` and `--- B` headers, a `***************` line before each hunk, a `*** l,r ****` header for the old side and a `--- l,r ----` header for the new side. A changed line in a block that has both deletions and insertions is marked `!` on both sides; a block with only deletions marks its old lines `-`, and a block with only insertions marks its new lines `+`. A side with no changes in the hunk prints its header only (GNU's rule). A zero-count side is written as the line before the position (`*** 1 ****`, `*** 0 ****` for an empty file). The same hunks as the unified format are used (`contextGroups`), so the merge rule is shared.
+
+Expectations: thirteen rows, `group diff -c and -C`, generated from GNU diff at generation time.
+
+Red checks, each on the clean tree: (1) the mixed-block marks removed (`mark = null`): six rows red. (2) the side gating removed (the old side printed even when it has no changes): one row red, `diff -c: an insertion at the start shows no old lines, only the new side`. (3) the zero-count range one too high: three rows red (the empty-file row and the two `-C0` rows). Each restored by the reverse edit; the green run is `RESULT PASS=501 FAIL=0`.
+
+Restore note: in the first pass the side-gating restore failed (its old text occurs five times), so the sabotage stayed in place for the next check, and that check's result was not clean. It was repeated on a clean tree, and the result above is from the repeat. The file was checked for both the restored and the sabotaged line before the commit.
+
+Gap, the same as 30a: the header has no modification time, and a file without a final newline is not handled.
+
