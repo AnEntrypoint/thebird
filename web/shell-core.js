@@ -3296,7 +3296,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   async function parameterText(part, sink) {
     if (part.index !== undefined) {
-      if (part.index === '@' || part.index === '*') return arrayItems(part.name).join(' ');
+      if (part.index === '*') return arrayItems(part.name).join(' ');
       return arrayElement(part.name, arrayIndex(part)) ?? '';
     }
     if (arrays.has(part.name)) return arrays.get(part.name).get(0) ?? '';
