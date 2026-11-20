@@ -1140,7 +1140,28 @@ function matchString(text, pattern) {
   return groups > 0 ? '' : '0';
 }
 
-function exprEval(argv) {
+const LOCALE_NAMES = ['LC_ALL', 'LC_CTYPE', 'LANG'];
+const LOCALE_MODES = new Map([['C', 'bytes'], ['POSIX', 'bytes'], ['C.UTF-8', 'characters'], ['C.utf8', 'characters'], ['en_US.UTF-8', 'characters'], ['en_US.utf8', 'characters']]);
+const DEFAULT_LANG = 'en_US.UTF-8';
+const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
+
+function localeChoice(get) {
+  for (const name of LOCALE_NAMES) {
+    const value = get(name);
+    if (value) return { name, value };
+  }
+  return { name: null, value: 'C' };
+}
+
+function characterWidth(char, mode) {
+  return mode === 'bytes' ? new TextEncoder().encode(char).length : 1;
+}
+
+function characterCount(text, mode) {
+  return Array.from(text).reduce((total, char) => total + characterWidth(char, mode), 0);
+}
+
+function exprEval(argv, mode) {
   const isInt = (s) => /^[+-]?\d+$/.test(s);
   const truthy = (value) => value !== '' && value !== '0';
   if (!argv.length) return { code: 2, out: '', err: 'expr: missing operand\n' };
@@ -1170,8 +1191,11 @@ function exprEval(argv) {
   };
   const indexOfChars = (text, chars) => {
     if (!chars.length) return '0';
-    const points = Array.from(text);
-    for (let i = 0; i < points.length; i++) if (chars.includes(points[i])) return String(i + 1);
+    let before = 0;
+    for (const point of Array.from(text)) {
+      if (chars.includes(point)) return String(before + 1);
+      before += characterWidth(point, mode);
+    }
     return '0';
   };
   const substring = (text, start, length) => {
@@ -1185,7 +1209,7 @@ function exprEval(argv) {
     if (pos >= argv.length) fail("syntax error: missing argument after '" + argv[pos - 1] + "'");
     const token = argv[pos++];
     if (token === ')') fail("syntax error: unexpected argument ')'");
-    if (token === 'length') return String(Array.from(take()).length);
+    if (token === 'length') return String(characterCount(take(), mode));
     if (token === 'index') {
       const text = take();
       return indexOfChars(text, take());
@@ -1417,9 +1441,24 @@ export function evaluateArithmetic(src, lookup, assign) {
 
 export function createShell({ host, cwd = '/workspace', builtins = [], saved = null } = {}) {
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
-  const vars = new Map(saved?.vars ?? []);
+  const vars = new Map(saved?.vars ?? [['LANG', DEFAULT_LANG]]);
   const fdTable = new Map();
-  const exported = new Set(saved?.exported ?? []);
+  const exported = new Set(saved?.exported ?? ['LANG']);
+  const inherited = new Set(saved ? [] : ['LANG']);
+  const prefixNames = new Set();
+  const localeWarnings = [];
+  const childLocaleMode = () => {
+    const choice = localeChoice((name) => (exported.has(name) || prefixNames.has(name) ? vars.get(name) : undefined));
+    return LOCALE_MODES.get(choice.value) ?? 'bytes';
+  };
+  let shellLocale = LOCALE_MODES.get(localeChoice((name) => vars.get(name)).value) ?? 'bytes';
+  const settleLocale = (warnAbout = null) => {
+    const choice = localeChoice((name) => variableValue(name));
+    const mode = LOCALE_MODES.get(choice.value);
+    if (mode !== undefined) shellLocale = mode;
+    else if (warnAbout !== null) localeWarnings.push('thebird: warning: setlocale: ' + choice.name + ': cannot change locale (' + choice.value + '): No such file or directory\n');
+  };
+  const takeLocaleWarnings = () => localeWarnings.splice(0).join('');
   let errexit = saved?.errexit ?? false;
   let xtrace = saved?.xtrace ?? false;
   let substDepth = 0;
@@ -1616,7 +1655,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   const byName = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
   const environmentLines = (extra) => {
-    const entries = new Map([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)]));
+    const entries = new Map([...exported].filter((name) => vars.has(name) && !inherited.has(name)).map((name) => [name, vars.get(name)]));
     for (const [name, value] of extra) entries.set(name, value);
     return [...entries].sort(byName).map(([name, value]) => name + '=' + value + '\n').join('');
   };
@@ -2072,7 +2111,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       const out = mode === 'unified' ? unifiedDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : mode === 'context' ? contextDiff(linesOf(texts[0]), linesOf(texts[1]), width, headers) : lineDiff(linesOf(texts[0]), linesOf(texts[1]));
       return { code: out ? 1 : 0, out, err: '' };
     },
-    expr: ({ argv }) => exprEval(argv),
+    expr: ({ argv }) => exprEval(argv, childLocaleMode()),
     seq: ({ argv }) => {
       if (!argv.length) return { code: 1, out: '', err: 'seq: missing operand\n' };
       if (argv.length > 3) return { code: 1, out: '', err: "seq: extra operand '" + argv[3] + "'\n" };
@@ -2323,7 +2362,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const eq = arg.indexOf('=');
         const name = eq > 0 ? arg.slice(0, eq) : arg;
         if (eq > 0) setVariable(name, arg.slice(eq + 1));
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) exported.add(name);
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+          exported.add(name);
+          inherited.delete(name);
+        }
       }
       return ok('');
     },
@@ -2333,6 +2375,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const eq = arg.indexOf('=');
         const name = eq < 0 ? arg : arg.slice(0, eq);
         frame?.set(name, eq < 0 ? '' : arg.slice(eq + 1));
+        if (LOCALE_NAMES.includes(name)) settleLocale(name);
       }
       return ok('');
     },
@@ -2525,10 +2568,13 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       if (!frames[i].has(name)) continue;
       if (i === frames.length - 1) frames[i].set(name, undefined);
       else frames[i].delete(name);
+      settleLocale();
       return;
     }
     vars.delete(name);
     exported.delete(name);
+    inherited.delete(name);
+    settleLocale();
   };
 
   const readBuiltin = (argv, cursor) => {
@@ -2558,10 +2604,12 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return { code: eof ? 1 : 0, out: '', err: '' };
   };
 
-  const setVariable = (name, value) => {
+  const setVariable = (name, value, quiet = false) => {
     const frame = frames.at(-1);
     if (frame?.has(name)) frame.set(name, value);
     else vars.set(name, value);
+    if (!quiet && !prefixNames.has(name)) inherited.delete(name);
+    if (LOCALE_NAMES.includes(name)) settleLocale(quiet ? null : name);
   };
 
   async function expandChars(parts, inDouble, sink) {
@@ -2574,7 +2622,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
-      else if (part.k === 'len') add(String((variableValue(part.name) ?? '').length), inDouble);
+      else if (part.k === 'len') add(String(characterCount(variableValue(part.name) ?? '', shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
       else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
@@ -2738,17 +2786,24 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     sink.err += trace;
     if (!argv.length) {
       for (const [name, value] of assigned) setVariable(name, value);
-      return ok('');
+      return { code: 0, out: '', err: takeLocaleWarnings() };
     }
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
-    for (const [name, value] of assigned) setVariable(name, value);
+    const priorPrefix = [...prefixNames];
+    const external = !BASH_BUILTINS.has(argv[0]) && !functions.has(argv[0]);
+    for (const [name] of assigned) prefixNames.add(name);
+    for (const [name, value] of assigned) setVariable(name, value, external);
     try {
-      return await runCommand(node, argv, stdin, sink, stream);
+      const result = await runCommand(node, argv, stdin, sink, stream);
+      return { ...result, err: takeLocaleWarnings() + result.err };
     } finally {
+      prefixNames.clear();
+      for (const name of priorPrefix) prefixNames.add(name);
       for (const [name, value] of saved) {
         if (value === undefined) vars.delete(name);
-        else setVariable(name, value);
+        else setVariable(name, value, true);
       }
+      settleLocale();
     }
   }
 
@@ -3017,6 +3072,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       state.cwd = savedCwd;
       vars.clear();
       for (const [name, value] of savedVars) vars.set(name, value);
+      settleLocale();
       fdTable.clear();
       for (const [fd, value] of savedFds) fdTable.set(fd, value);
     }
@@ -3210,6 +3266,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       result = { code: err.code, out: bodySink.out, err: bodySink.err };
     } finally {
       frames.pop();
+      settleLocale();
       positional = savedPositional;
     }
     return result;
@@ -3274,6 +3331,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         state.cwd = saved.cwd;
         vars.clear();
         for (const [name, value] of saved.vars) vars.set(name, value);
+        settleLocale();
       }
     }
     return code;

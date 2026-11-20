@@ -4467,3 +4467,28 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the gate wait for the zig test, readings 2 to 6 (about three minutes). The push took about three seconds. Nothing was stopped.
 
+### Change set 30bw: the length and index of a word follow the locale that LC_ALL, LC_CTYPE or LANG names, in that order, and expr reads the exported locale, as bash does
+
+Reference: bash (this sandbox, LANG=en_US.UTF-8 in its environment), `bash -c` in a fresh directory for each case. Probed:
+- Precedence: `LC_ALL` over `LC_CTYPE` over `LANG`. `export LC_ALL=C LC_CTYPE=C.UTF-8; x=é; echo ${#x}` gives 2 and the reverse order gives 1. An empty `LC_ALL` is ignored (`export LC_ALL=; export LC_CTYPE=C` gives 2). With no locale variable set the locale is C (`unset LANG; x=é; echo ${#x}` gives 2). `C.utf8` and `POSIX` are names bash knows.
+- The shell's own locale follows assignment and unset: `export LC_ALL=C` gives 2, and `unset LC_ALL` returns to UTF-8 (1). A function-local `local LC_ALL=C` is restored on return (2, then 1). A plain assignment inside a function persists (2, then 2). A prefix assignment to a builtin does not change that command's own expansions and is restored after it (`LC_ALL=C echo ${#x}; echo ${#x}` gives 1, 1).
+- An unknown name warns and keeps the previous locale. `export LC_ALL=xx_YY; echo ${#x}` prints the word count 1 and `bash: line 1: warning: setlocale: LC_ALL: cannot change locale (xx_YY): No such file or directory`. The plain and prefix forms warn the same way.
+- A character counts as one code point, not as UTF-16 units: `x=😀; echo ${#x}` gives 1, and under C it gives 4 (bytes). The previous shell counted UTF-16 units and gave 2.
+- `expr` is an external program in bash, so it reads the exported environment and not shell-local values. `LC_ALL=C; expr length é` gives 1. `export LC_ALL=C; expr length é` and `LC_ALL=C expr length é` give 2. `LC_ALL=xx_YY expr length é` gives 2 with no warning, because the child falls back to C silently. `export LC_ALL=xx_YY; expr length é` gives 2 with the warning from bash's own setlocale. `expr index aéb b` gives 3, and 4 under C (bytes).
+
+What changed in the shell:
+- One lookup, `localeChoice(get)`, implements the precedence: LC_ALL, then LC_CTYPE, then LANG, an empty value ignored, and C when none is set. It is applied to two views. `settleLocale` applies it to the shell's own variables: an unknown name keeps the previous locale and queues the warning. `childLocaleMode` applies it to the exported environment plus prefix assignments: an unknown name gives C with no warning.
+- `LOCALE_MODES` lists the names the shell knows: C and POSIX (bytes), and C.UTF-8, C.utf8, en_US.UTF-8 and en_US.utf8 (characters). Any other name is unknown and warns. The list is a fixed model of the locales the tests use; `locale -a` lists more in this sandbox.
+- `characterCount` and `characterWidth` count a word for `${#name}` and for `expr length` and `expr index`. `${#name}` previously counted UTF-16 units.
+- A prefix assignment warns only for a bash builtin or a function (`BASH_BUILTINS`, `functions`). For any other command, which is external in bash (`expr` and the rest), the value is set quietly, as bash does for an external command. `expr` is a builtin in this shell, so this rule is what keeps `LC_ALL=xx_YY expr length é` silent.
+- Default environment: the shell starts with `LANG=en_US.UTF-8` inherited, as the sandbox bash does, so the UTF-8 rows keep their values. The inherited `LANG` is not listed by `env` until the script sets, exports or unsets it. The parity rows compare with shells whose environment is empty, so their listing is unchanged.
+
+Known gaps, not changed here:
+- `LC_CTYPE=xx; LC_ALL=C; echo ${#x}; unset LC_ALL; echo ${#x}`: bash gives 2, then 1 (it returns to UTF-8). This shell gives 2, then 2 (it keeps C). Reopen: model how bash re-evaluates the remaining name when a valid name is unset after an unknown one.
+- Under C, bash counts bytes in `expr match` and in substring slicing (`expr match é "\(.\)"` prints a partial byte, and `x=aé; echo ${x:1:1}` prints one). This shell still counts code points there. A partial byte cannot be printed by this shell's string output. Reopen: give the shell a byte-string representation for output.
+- `env` does not list the inherited `LANG`, while the sandbox bash does. This is a deliberate difference, to keep the parity rows.
+
+Witness: group `locale: the length and index of a word follow the locale` (31 rows) and group `locale precedence` (5 rows), all from bash output (stdout and stderr, with `bash: line 1:` replaced by `thebird:`). The two gap shapes above are left out of the rows. Green: `RESULT PASS=1374 FAIL=0`, wall 1.91 s.
+
+Red check: the precedence in the one lookup swapped (`const LOCALE_NAMES = ['LC_CTYPE', 'LC_ALL', 'LANG']`). Red run: `RESULT PASS=1370 FAIL=4`, the four rows that set LC_ALL and LC_CTYPE together. Restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+
