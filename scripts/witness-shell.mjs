@@ -3945,6 +3945,24 @@ group('BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME r
   }
 });
 
+group('stray ]] at the start of a command is a syntax error near ]], and an argument of ]] is an ordinary word (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["]]", "", "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `]]'\n", 2],
+  ["echo ]]; echo y", "]]\ny\n", "", 0],
+  ["[[ a ]] ]]", "", "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `[[ a ]] ]]'\n", 2],
+  ["true && ]]", "", "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `true && ]]'\n", 2],
+  ["if true; then ]]; fi", "", "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `if true; then ]]; fi'\n", 2],
+  ["echo x ]]", "x ]]\n", "", 0],
+  ["[[ a ]] && echo ok ]]", "ok ]]\n", "", 0],
+  ["echo a\n]]\necho b", "a\n", "bash: -c: line 2: syntax error near unexpected token `]]'\nbash: -c: line 2: `]]'\n", 2],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('stray ]]: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
