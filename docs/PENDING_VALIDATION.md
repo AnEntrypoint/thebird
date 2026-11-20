@@ -5126,3 +5126,50 @@ Still open, recorded (reopen rules):
 - Punctuation inside strings of more than four characters, mixed with letters that tie at levels 1 to 3: the five pairs above (for example `4-g` and `(4g`). The bash order follows a position rule for ignored punctuation that this model does not reproduce. Reopen: read the glibc `LC_COLLATE` rule for `forward,position` at level 4, then add rows for each pair before changing the model.
 - Letters outside Latin-1 with combining marks other than the seven above, ligatures (`ß`, `æ`, `œ`, `ø`) and non-Latin scripts: they sort after the table by code point and have no witness rows. Reopen: add the glibc weights for each script, then probe bash with rows.
 - `sort -n` ties, `uniq`, `join` and other collating tools were not probed in this change set.
+
+### Phase B window for e5e0295 and ce2208e (change set 30d0, sort collation under en_US.UTF-8), with its readings, red check and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-jobs.cjs (bevy 495fff6) must read clear in the same reading. Every reading from the window log is below.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 07:40:58 | 7484 | 2988 | not clear | not run | `vmstat 1 2`, second sample |
+| wait 1 | 07:41:04 | 764 | 124 | clear | not run | the waiter started the window on this reading |
+| window 1 | 07:41:08 | 1100 | 0 | not clear | busy, n=1 | |
+| window 2 | 07:41:38 | 25200 | 6672 | not clear | busy, n=1 | |
+| window 3 | 07:42:07 | 6148 | 0 | not clear | busy, n=1 | |
+| window 4 | 07:42:38 | 704 | 3040 | not clear | clear | heavy-jobs clear, gate not |
+| window 5 | 07:43:08 | 676 | 0 | clear | busy, n=3 | |
+| window 6 | 07:43:37 | 584 | 0 | clear | busy, n=1 | `playwriter` node pid 2088755, chromium gpu pid 2284641, chromium renderer pid 2284679 |
+| window 7 | 07:44:08 | 356 | 0 | clear | busy, n=2 | |
+| window 8 | 07:44:37 | 740 | 0 | clear | busy, n=1 | |
+| window 9 | 07:45:08 | 244 | 0 | clear | busy, n=1 | |
+| window 10 | 07:45:39 | 192 | 2868 | not clear | busy, n=2 | |
+| window 11 | 07:46:08 | 200 | 0 | clear | busy, n=1 | |
+| window 12 | 07:46:39 | 448 | 0 | clear | busy, n=2 | |
+| window 13 | 07:47:09 | 24 | 0 | clear | busy, n=1 | |
+| window 14 | 07:47:38 | 2064 | 0 | not clear | busy, n=1 | |
+| window 15 | 07:48:09 | 20 | 0 | clear | busy, n=4 | |
+| window 16 | 07:48:38 | 2328 | 0 | not clear | busy, n=3 | |
+| window 17 | 07:49:09 | 4 | 0 | clear | busy, n=3 | |
+| window 18 | 07:49:39 | 232 | 0 | clear | busy, n=1 | |
+| window 19 | 07:50:08 | 52 | 0 | clear | busy, n=1 | chromium renderer pid 2288436 and `claude --resume` pid 2109 in the hot list |
+| window 20 | 07:50:39 | 16 | 0 | clear | clear | both clear in the same reading: the window cleared here |
+
+The window cleared at reading 20, about 9.5 min after the waiter's start at 07:41:04, within the ten-minute budget. The waiter (pid 2283345) ran the window script only after its own clear gate reading.
+
+Green witness (pid 2290089): exit 0, wall 1.72 s, `RESULT PASS=1519 FAIL=0`.
+G2 red check (pid 2290268): the mutation empties the set of collating locales, on the HEAD copy of `web/shell-core.js`. Exit 1, wall 1.67 s, `RESULT PASS=1514 FAIL=5`: the five en_US sort rows. Restored from the copy, `cmp` matched; the witness after restore read `PASS=1519 FAIL=0`.
+`npm run check` (pid 2290304): exit 0, wall 0.35 s.
+`npm run witness:shell` (pid 2290362): exit 0, wall 1.79 s, `RESULT PASS=1519 FAIL=0`. Three rows print exit 124 by design; they are PASS rows.
+
+Push, once, after every check passed; it carried e5e0295 and ce2208e:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   08ade23..ce2208e  main -> main
+```
+
+`git ls-remote origin main` after the push: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`.
+
+Longest step: the window, about 9 min 9 s from 07:41:04 to 07:50:39, waiting for zig, chromium and playwriter jobs of other sessions to finish. Nothing was stopped.
