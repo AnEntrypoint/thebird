@@ -4192,7 +4192,7 @@ Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape, s
 
 What changed in the shell: the tokenizer matches `2>&1` only when the next character is not a word character (otherwise `2>&` with the word); a `>&` or `N>&` followed by `-` is the close operator and the rest is a separate word. The parser no longer rejects a non-numeric dup word (the word is only known after expansion), and keeps the raw text of the target. A new `dupOf` classifies the expanded word: `-` closes, a number duplicates, `>&` and `1>&` with a word are the file form (truncated once through `openFile` in the open pass, then the routing sends stdout and stderr to the file), an empty word is a bad descriptor, and anything else (N above 1, or a multi-word expansion) is ambiguous. The open pass, the output routing and the missing-directory check all use `dupOf`.
 
-Not taken in this change set (see the ranked list in the REPORT): a bad-descriptor message raised after a file-form redirect (`echo e >&2x 1>&3`) is printed on stderr, but bash writes it into the file `2x`, because the open pass returns before the routing; the message for an empty word is `thebird: : Bad file descriptor`, where bash quotes it (`"": Bad file descriptor`), so no row pins it; `>&nodir/w` gives status 2, bash gives 1, the missing-directory gap of item 6; `>>&word` is a syntax error in both, with different text.
+Not taken in this change set (see the ranked list in the REPORT): a bad-descriptor message raised after a file-form redirect (`echo e >&2x 1>&3`) is printed on stderr, but bash writes it into the file `2x`, because the open pass returns before the routing; the message for an empty word is `thebird: : Bad file descriptor`, where bash quotes it (`"": Bad file descriptor`), so no row pins it; `>&nodir/w` gives status 2, bash gives 1, the missing-directory gap of item 6; `>>&word` is a syntax error in both, with different text. Correction (30by): true at 27fc844 and stale from 46bc650 on, where the failure is routed through the redirects before it; change set 30by pins the cases.
 
 Witness: group `redirects: >&word sends stdout and stderr to a file as bash does, N>&word above 1 is an ambiguous redirect, and >&- closes stdout with the rest of the word as an argument`, 28 rows, expected stdout and status from bash, stderr from bash with its `bash: line 1:` prefix replaced by this shell's `thebird:` prefix. Final: `RESULT PASS=1230 FAIL=0` (green, wall 1.6 s).
 
@@ -4591,3 +4591,17 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `37791f0c5e17bf16b70734838db8afe5d985c9b2 refs/heads/main`.
 
 Longest step: the 30 s wait between readings; the window job ran for 74.1 s in all and ended with exit 0. The push took about 4 s. Nothing was stopped. Every process the run started was the window job's own child, and the job exited.
+
+### Change set 30by: a bad-descriptor message after a file-form redirect is written where the redirects before it point, as bash does (`echo e >&2x 1>&3` and its variants)
+
+Reference: `bash -c` in the sandbox locale (`LANG=en_US.UTF-8`, `LC_ALL` unset), each case in a fresh directory. The rows take bash's stdout and stderr, with bash's prefix `bash: line 1: ` written as `thebird: ` (the witness convention). Twelve cases: the item itself, `>f`, `2>f`, `>>f`, `&>f`, `2>>f`, `1>&3 2>f`, `>&2x 2>f`, `>&2x 1>&3 >f`, `2>&1 >f`, `>&2x 1>&3 2>&1` and `1>&3 >&2x` (the last two keep the message on the terminal, as bash does).
+
+Probed first: at HEAD, bash writes the message into the file `2x` for `echo e >&2x 1>&3` (the redirect before the failing one has already sent stderr there), status 1, and `echo` does not run. For `echo e 1>&3 >&2x` the message goes to the terminal and `2x` is not created. The shell matches bash for all twelve cases after the normalisation above.
+
+The note at line 4195 (change set 27fc844) said the shell printed this message on stderr. That was true at 27fc844 and stale from 46bc650 on. Checked against the old trees with the new rows: at 27fc844, 8 of the 12 rows fail, the item among them; at 46bc650 and at ab58c51, all 12 pass. The fix is the ordered failure routing of change set 30bu (`failAt` sends the message through the redirects before the failing one).
+
+What changed in the shell: nothing in this change set. The behaviour already matched bash at HEAD. The twelve rows pin it.
+
+Witness: twelve rows, `RESULT PASS=1386 FAIL=0` (was 1374).
+
+Red check: the mutation makes `failAt` skip the redirects before the failing one (`applyOutputRedirects([], ...)` in place of `applyOutputRedirects(redirects.slice(0, index), ...)`), on the HEAD copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1374 FAIL=12`. Eight of the failures are the new rows whose message would go into a file (the item, `2>f`, `&>f`, `2>>f`, `>&2x 2>f`, `>&2x 1>&3 >f`, `2>&1 >f`, `>&2x 1>&3 2>&1`). Four are existing rows (two missing-directory, two redirect-order), which the same routing change breaks. Restored with `cp` from the HEAD copy, `cmp` matched, and the witness is back at `PASS=1386 FAIL=0`.
