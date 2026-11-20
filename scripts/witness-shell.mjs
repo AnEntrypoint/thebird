@@ -1958,6 +1958,33 @@ group('redirects: fd 0 with the heredoc, the tab-stripping heredoc and the here-
   const f0_13 = await run(sh, "echo hi > f; cat 0<f | cat; echo st=$?");
   check("redirects fd0: echo hi > f; cat 0<f | cat; echo st=$? matches bash", f0_13.stdout === "hi\nst=0\n" && f0_13.stderr === '', JSON.stringify([f0_13.stdout, f0_13.stderr]));
 });
+group('redirects: a heredoc or here-string on fd 1 is consumed, and a command that writes to it fails with a write error and status 1, as bash does', async () => {
+  const sh = await shell({});
+  const fd1_0 = await run(sh, "cat 1<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects fd1: cat 1<<EOF / hi / EOF / echo st=$? matches bash", fd1_0.stdout === "st=0\n" && fd1_0.stderr === "", JSON.stringify([fd1_0.stdout, fd1_0.stderr]));
+  const fd1_1 = await run(sh, "cat 1<<EOF\nEOF\necho st=$?");
+  check("redirects fd1: cat 1<<EOF / EOF / echo st=$? matches bash", fd1_1.stdout === "st=0\n" && fd1_1.stderr === "", JSON.stringify([fd1_1.stdout, fd1_1.stderr]));
+  const fd1_2 = await run(sh, "cat 1<<\"EOF\"\n$HOME\nEOF\necho st=$?");
+  check("redirects fd1: cat 1<<\"EOF\" / $HOME / EOF / echo st=$? matches bash", fd1_2.stdout === "st=0\n" && fd1_2.stderr === "", JSON.stringify([fd1_2.stdout, fd1_2.stderr]));
+  const fd1_3 = await run(sh, "cat 1<<-EOF\n\thi\n\tEOF\necho st=$?");
+  check("redirects fd1: cat 1<<-EOF / \thi / \tEOF / echo st=$? matches bash", fd1_3.stdout === "st=0\n" && fd1_3.stderr === "", JSON.stringify([fd1_3.stdout, fd1_3.stderr]));
+  const fd1_4 = await run(sh, "echo x 1<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects fd1: echo x 1<<EOF / hi / EOF / echo st=$? matches bash", fd1_4.stdout === "st=1\n" && fd1_4.stderr === "thebird: write error: Bad file descriptor\n", JSON.stringify([fd1_4.stdout, fd1_4.stderr]));
+  const fd1_5 = await run(sh, "echo x 1<<EOF | cat\nhi\nEOF\necho st=$?");
+  check("redirects fd1: echo x 1<<EOF | cat / hi / EOF / echo st=$? matches bash", fd1_5.stdout === "st=0\n" && fd1_5.stderr === "thebird: write error: Bad file descriptor\n", JSON.stringify([fd1_5.stdout, fd1_5.stderr]));
+  const fd1_6 = await run(sh, "echo x 1<<EOF 1>&2\nhi\nEOF\necho st=$?");
+  check("redirects fd1: echo x 1<<EOF 1>&2 / hi / EOF / echo st=$? matches bash", fd1_6.stdout === "st=0\n" && fd1_6.stderr === "x\n", JSON.stringify([fd1_6.stdout, fd1_6.stderr]));
+  const fd1_7 = await run(sh, "cat 1<<EOF | wc -l\nhi\nEOF\necho st=$?");
+  check("redirects fd1: cat 1<<EOF | wc -l / hi / EOF / echo st=$? matches bash", fd1_7.stdout === "0\nst=0\n" && fd1_7.stderr === "", JSON.stringify([fd1_7.stdout, fd1_7.stderr]));
+  const fd1_8 = await run(sh, "echo x 1<<<hi; echo st=$?");
+  check("redirects fd1: echo x 1<<<hi; echo st=$? matches bash", fd1_8.stdout === "st=1\n" && fd1_8.stderr === "thebird: write error: Bad file descriptor\n", JSON.stringify([fd1_8.stdout, fd1_8.stderr]));
+  const fd1_9 = await run(sh, "echo x 1<<<hi | cat; echo st=$?");
+  check("redirects fd1: echo x 1<<<hi | cat; echo st=$? matches bash", fd1_9.stdout === "st=0\n" && fd1_9.stderr === "thebird: write error: Bad file descriptor\n", JSON.stringify([fd1_9.stdout, fd1_9.stderr]));
+  const fd1_10 = await run(sh, "{ echo a; cat 1<<EOF; echo b; } | cat\nhi\nEOF\n");
+  check("redirects fd1: { echo a; cat 1<<EOF; echo b; } | cat / hi / EOF /  matches bash", fd1_10.stdout === "a\nb\n" && fd1_10.stderr === "", JSON.stringify([fd1_10.stdout, fd1_10.stderr]));
+  const fd1_11 = await run(sh, "cat 1<<EOF; echo st=$?\nEOF\n");
+  check("redirects fd1: cat 1<<EOF; echo st=$? / EOF /  matches bash", fd1_11.stdout === "st=0\n" && fd1_11.stderr === "", JSON.stringify([fd1_11.stdout, fd1_11.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

@@ -10,10 +10,11 @@ const FD_OPS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>>', f
 const FD_OUTPUTS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>', fd + '>>']);
 const FD_INPUTS = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<');
 const FD_HEREDOCS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '<<<', fd + '<<']);
-const FD_HEREDOC_BODIES = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<<');
+const FD1_HEREDOCS = ['1<<<', '1<<-', '1<<'];
+const FD_HEREDOC_BODIES = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<<').concat(['1<<', '1<<-']);
 const FD0_OPS = { '0<<<': '<<<', '0<<-': '<<-', '0<<': '<<', '0<': '<' };
-const OPERATORS = ['<<-', ...Object.keys(FD0_OPS), ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<-', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
+const OPERATORS = ['<<-', ...FD1_HEREDOCS, ...Object.keys(FD0_OPS), ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<-', '<<<', ...FD1_HEREDOCS, '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
 const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
 const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWith('>&'))]);
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
@@ -330,7 +331,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
           tokens.push({ parts: word.parts, line: lineAt(i) });
-          heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted), strip: op === '<<-' });
+          heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted), strip: op.endsWith('<<-') });
           i = word.end;
         }
       } else {
@@ -2817,6 +2818,8 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const fd = op.startsWith('>') ? '1' : op[0];
         const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
         if ((fd === '1' || fd === '2') && (target === '1' || target === '2')) fds[fd] = fds[target];
+      } else if (FD1_HEREDOCS.includes(op)) {
+        fds[1] = 'readonly';
       } else if (FD_OUTPUTS.includes(op)) {
         const path = await wordPath(redirect.target, sink);
         const prior = op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
@@ -2834,13 +2837,16 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     }
     let outText = '';
     let errText = '';
+    let writeFailed = false;
     for (const [fd, text] of [[1, out], [2, err]]) {
       const target = fds[fd];
       if (target === 'out') outText += text;
       else if (target === 'err') errText += text;
+      else if (target === 'readonly') writeFailed = writeFailed || text !== '';
       else files.get(target.path).text += text;
     }
     for (const [path, entry] of files) writeRedirect(path, entry.prior + entry.text);
+    if (writeFailed) return { out: outText, err: errText + 'thebird: write error: Bad file descriptor\n', code: 1 };
     return { out: outText, err: errText };
   }
 

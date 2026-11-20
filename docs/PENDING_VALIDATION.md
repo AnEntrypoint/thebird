@@ -4069,3 +4069,23 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `4f8257a421036d70884f9744a49e9454fe89acbd refs/heads/main`. The push carried 667d8a1 (the record of the window that cleared at reading 1 for b56fb89) and 4f8257a.
 
 Longest step: the wait for the gate and heavy-jobs to clear, readings 1 to 8 (about three and a half minutes), while other runs' Chromium processes were busy. Nothing was stopped; those processes belong to other runs.
+
+### Change set 30bp: a heredoc or here-string on fd 1 is consumed, and a command that writes to fd 1 then fails with a write error and status 1, as bash does
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory. The stdout of the command is a read-only heredoc, so a stage that writes to it fails, and a stage that writes nothing succeeds. Probed shapes, bash stdout, status and stderr:
+- `cat 1<<EOF` with body `hi`: no output, status 0. With an empty body (the terminator at once): status 0. With a quoted delimiter (`cat 1<<"EOF"` with body `$HOME`): status 0, no output. With `cat 1<<-EOF` and a tab-indented body: status 0. `cat 1<<EOF | wc -l`: `0` (the pipe gets nothing, since cat's stdout is the heredoc).
+- `echo x 1<<EOF`: status 1, stderr `bash: line 1: echo: write error: Bad file descriptor`. `echo x 1<<EOF | cat`: status 0 (the last stage), the same stderr.
+- `echo x 1<<<hi; echo st=$?`: status 1, the same stderr. `echo x 1<<<hi | cat`: status 0, the same stderr.
+- `echo x 1<<EOF 1>&2`: the stdout is then the stderr, so `x` goes to stderr and the status is 0.
+- `{ echo a; cat 1<<EOF; echo b; } | cat`: `a` and `b` (only cat's stdout changed).
+- `cat 1<<EOF; echo st=$?` with the terminator at once: status 0.
+
+The rows check stdout and status against bash. The stderr of a write error is this shell's own text, `thebird: write error: Bad file descriptor`, not bash's prefix (`bash: line 1: echo: write error`), so the rows pin our text and the ledger says so. A row with `2>&1` after a heredoc on fd 1 is not in the rows: bash prints no message for that shape, and this shell prints its message to stderr. The difference is recorded here, not claimed.
+
+Not taken in this change set: `1<f` (an input file on fd 1). Bash gives the write error with `f` present and `f: No such file or directory` with it missing; this shell still reads `1` as an argument. Reopen: add `1<` with the same read-only target and the existing `<` missing-file check.
+
+What changed in the shell: `FD1_HEREDOCS` (`1<<<`, `1<<-`, `1<<`) are operators; the tokenizer takes the bodies of `1<<` and `1<<-` (`FD_HEREDOC_BODIES`), and a heredoc with a dash strips its tabs (the check is now `op.endsWith('<<-')`); `applyOutputRedirects` gives stdout the target `readonly`, and the routing marks a write failure when the stage wrote anything to it, which adds the error text to stderr and returns status 1 (the caller's status is overridden by the spread).
+
+Witness: group `redirects: a heredoc or here-string on fd 1 is consumed, and a command that writes to it fails with a write error and status 1, as bash does`, 12 rows from bash. Final: `RESULT PASS=1178 FAIL=0`.
+
+Red check: the write failure no longer set for a read-only stdout, restored from a copy of the good core and confirmed with `cmp`: `RESULT PASS=1174 FAIL=4`, the four rows that expect the write error. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
