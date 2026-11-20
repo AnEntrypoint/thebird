@@ -1376,11 +1376,11 @@ group("stat -c %N: a name with a control character or a non-ASCII byte and a quo
   const gr1 = await run(await shell({}), "echo a > 'x\"\ty' && stat -c \"%N\" 'x\"\ty'; echo rc=$?");
   check("stat -c %N quotes a double quote with a tab, as GNU stat does on Linux", gr1.stdout === "'x\"'$'\\t''y'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
   const gr2 = await run(await shell({}), "echo a > \"café's\" && stat -c \"%N\" \"café's\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe with a non-ASCII character, as GNU stat does on Linux", gr2.stdout === "'caf'$'\\303\\251'\\''s'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  check("stat -c %N quotes an apostrophe with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr2.stdout === "'caf'$'\\303\\251'\\''s'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
   const gr3 = await run(await shell({}), "echo a > \"it's \\\"é\\\"\" && stat -c \"%N\" \"it's \\\"é\\\"\"; echo rc=$?");
-  check("stat -c %N quotes a name with both quote kinds and a non-ASCII character, as GNU stat does on Linux", gr3.stdout === "'it'\\''s \"'$'\\303\\251''\"'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  check("stat -c %N quotes a name with both quote kinds and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "'it'\\''s \"'$'\\303\\251''\"'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
   const gr4 = await run(await shell({}), "echo a > 'x\"é' && stat -c \"%N\" 'x\"é'; echo rc=$?");
-  check("stat -c %N quotes a double quote with a non-ASCII character, as GNU stat does on Linux", gr4.stdout === "'x\"'$'\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  check("stat -c %N quotes a double quote with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr4.stdout === "'x\"'$'\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
   const gr5 = await run(await shell({}), "echo a > f && ln -s f \"l'\tk\" && stat -c \"%N\" \"l'\tk\"; echo rc=$?");
   check("stat -c %N quotes a symbolic link whose name has an apostrophe and a tab, as GNU stat does on Linux", gr5.stdout === "'l'\\'''$'\\t''k' -> 'f'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
   const gr6 = await run(await shell({}), "echo a > \"f'\tg\" && ln -s \"f'\tg\" lk && stat -c \"%N\" lk; echo rc=$?");
@@ -1399,26 +1399,26 @@ group("stat -c %N: a name that starts with a tab is quoted as GNU stat quotes it
 
 group("stat -c %N: a name with a non-ASCII byte and a control character or apostrophe, or a non-ASCII name alone, is quoted as GNU stat quotes it in C locale", async () => {
   const gr0 = await run(await shell({}), "echo a > \"é\" && stat -c \"%N\" \"é\"; echo rc=$?");
-  check("stat -c %N quotes a name that is one non-ASCII character alone, as GNU stat does on Linux", gr0.stdout === "''$'\\303\\251'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  check("stat -c %N quotes a name that is one non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", gr0.stdout === "''$'\\303\\251'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
   const gr1 = await run(await shell({}), "echo a > \"éx\" && stat -c \"%N\" \"éx\"; echo rc=$?");
-  check("stat -c %N quotes a name that starts with a non-ASCII character, as GNU stat does on Linux", gr1.stdout === "''$'\\303\\251''x'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  check("stat -c %N quotes a name that starts with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr1.stdout === "''$'\\303\\251''x'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
   const gr2 = await run(await shell({}), "echo a > \"é'x\" && stat -c \"%N\" \"é'x\"; echo rc=$?");
-  check("stat -c %N quotes a non-ASCII character before an apostrophe, as GNU stat does on Linux", gr2.stdout === "''$'\\303\\251'\\''x'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
+  check("stat -c %N quotes a non-ASCII character before an apostrophe, as GNU stat does on Linux under LC_ALL=C", gr2.stdout === "''$'\\303\\251'\\''x'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
   const gr3 = await run(await shell({}), "echo a > \"é\tx\" && stat -c \"%N\" \"é\tx\"; echo rc=$?");
-  check("stat -c %N quotes a non-ASCII character before a tab, as GNU stat does on Linux", gr3.stdout === "''$'\\303\\251\\t''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  check("stat -c %N quotes a non-ASCII character before a tab, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "''$'\\303\\251\\t''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
   const gr4 = await run(await shell({}), "echo a > \"a\té\" && stat -c \"%N\" \"a\té\"; echo rc=$?");
-  check("stat -c %N quotes a tab between a letter and a non-ASCII character, as GNU stat does on Linux", gr4.stdout === "'a'$'\\t\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  check("stat -c %N quotes a tab between a letter and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr4.stdout === "'a'$'\\t\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
   const gr5 = await run(await shell({}), "echo a > \"it's\té\" && stat -c \"%N\" \"it's\té\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe, a tab and a non-ASCII character, as GNU stat does on Linux", gr5.stdout === "'it'\\''s'$'\\t\\303\\251'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
+  check("stat -c %N quotes an apostrophe, a tab and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr5.stdout === "'it'\\''s'$'\\t\\303\\251'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
   const gr6 = await run(await shell({}), "echo a > \"é'\té\" && stat -c \"%N\" \"é'\té\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe, a non-ASCII character and a tab in that order, as GNU stat does on Linux", gr6.stdout === "''$'\\303\\251'\\'''$'\\t\\303\\251'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  check("stat -c %N quotes an apostrophe, a non-ASCII character and a tab in that order, as GNU stat does on Linux under LC_ALL=C", gr6.stdout === "''$'\\303\\251'\\'''$'\\t\\303\\251'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
 });
 
 group("stat -c %N: an apostrophe after a non-ASCII character, at the end of a name, is quoted as GNU stat quotes it in C locale", async () => {
   const gr0 = await run(await shell({}), "echo a > \"xé'\" && stat -c \"%N\" \"xé'\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe after a non-ASCII character at the end of a name, as GNU stat does on Linux", gr0.stdout === "'x'$'\\303\\251'\\'''\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  check("stat -c %N quotes an apostrophe after a non-ASCII character at the end of a name, as GNU stat does on Linux under LC_ALL=C", gr0.stdout === "'x'$'\\303\\251'\\'''\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
   const gr1 = await run(await shell({}), "echo a > \"é'\" && stat -c \"%N\" \"é'\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux", gr1.stdout === "''$'\\303\\251'\\'''\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  check("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", gr1.stdout === "''$'\\303\\251'\\'''\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
 });
 
 group("expr: an equivalence class of a non-Latin letter matches the letters of its class, and a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", async () => {
@@ -1468,7 +1468,7 @@ group("stat -c %N: runs of apostrophes next to a tab or a non-ASCII character ar
   const gr2 = await run(await shell({}), "echo a > \"'\tx\t'\" && stat -c \"%N\" \"'\tx\t'\"; echo rc=$?");
   check("stat -c %N quotes an apostrophe between two tabs, as GNU stat does on Linux", gr2.stdout === "''\\'''$'\\t''x'$'\\t'\\'''\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
   const gr3 = await run(await shell({}), "echo a > \"é''x\" && stat -c \"%N\" \"é''x\"; echo rc=$?");
-  check("stat -c %N quotes two apostrophes after a non-ASCII character, as GNU stat does on Linux", gr3.stdout === "''$'\\303\\251'\\'''\\''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
+  check("stat -c %N quotes two apostrophes after a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "''$'\\303\\251'\\'''\\''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
   const gr4 = await run(await shell({}), "echo a > \"x\t'''\" && stat -c \"%N\" \"x\t'''\"; echo rc=$?");
   check("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", gr4.stdout === "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
 });
@@ -2429,7 +2429,7 @@ group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors m
   const cr5 = await run(await shell({}), "chmod -R 750 /cm/t/none; echo rc=$?");
   check("chmod -R on a missing path reports it and exits 1", cr5.stdout === "rc=1\n" && cr5.stderr === "chmod: cannot access '/cm/t/none': No such file or directory\n", JSON.stringify([cr5.stdout, cr5.stderr]));
   const cr6 = await run(await shell({}), "chmod 644; echo rc=$?");
-  check("chmod with a mode and no file says missing operand after the mode, as GNU chmod does", cr6.stdout === "rc=1\n" && cr6.stderr === "chmod: missing operand after '644'\nTry 'chmod --help' for more information.\n", JSON.stringify([cr6.stdout, cr6.stderr]));
+  check("chmod with a mode and no file says missing operand after the mode, as GNU chmod does under LC_ALL=C", cr6.stdout === "rc=1\n" && cr6.stderr === "chmod: missing operand after '644'\nTry 'chmod --help' for more information.\n", JSON.stringify([cr6.stdout, cr6.stderr]));
   const cr7 = await run(await shell({}), "chmod; echo rc=$?");
   check("chmod with no operands says missing operand, as GNU chmod does", cr7.stdout === "rc=1\n" && cr7.stderr === "chmod: missing operand\nTry 'chmod --help' for more information.\n", JSON.stringify([cr7.stdout, cr7.stderr]));
   const cr8 = await run(await shell({}), "mkdir -p /cm/t && echo a > /cm/t/z && chmod 7 /cm/t/z && stat -c %a /cm/t/z && chmod 0 /cm/t/z && stat -c %a /cm/t/z");
@@ -2558,7 +2558,7 @@ group('chmod: chmod sets an octal mode that stat reports', async () => {
   const missing = await run(sh, 'chmod 644 /cm/none; echo rc=$?');
   check('chmod: a missing file gives a message and status 1', missing.stdout === 'rc=1\n' && missing.stderr.includes("chmod: cannot access '/cm/none': No such file or directory"), JSON.stringify(missing.stderr));
   const digitMode = await run(sh, 'chmod 999 /cm/f; echo rc=$?');
-  check('chmod: a number that is not octal is refused as an invalid mode, as GNU chmod does', digitMode.stdout === 'rc=1\n' && digitMode.stderr === "chmod: invalid mode: '999'\nTry 'chmod --help' for more information.\n", JSON.stringify(digitMode.stderr));
+  check('chmod: a number that is not octal is refused as an invalid mode, as GNU chmod does under LC_ALL=C', digitMode.stdout === 'rc=1\n' && digitMode.stderr === "chmod: invalid mode: '999'\nTry 'chmod --help' for more information.\n", JSON.stringify(digitMode.stderr));
 });
 
 group('md5sum: md5sum prints the MD5 of its input and of each file', async () => {

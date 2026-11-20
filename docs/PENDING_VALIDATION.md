@@ -2451,7 +2451,7 @@ Red check (done), each restored and confirmed by an edit that applied: the listi
 
 `web/shell-core.js`: `statInfo` gives a type (`regular file`, `directory`, `symbolic link`), a size and a mode for a path, without following a link. The mode comes from a `modes` map, which the snapshot keeps; the default is 644 for a file and 755 for a directory, and 777 for a link. `stat -c FORMAT` expands `%n` (the name as given), `%s` (size), `%F` (type), `%a` (mode in octal) and `%%`; any other `%x` is kept as written. With no `-c` it prints the name, the size and the type, on three lines. A missing file gives `stat: cannot statx` with the name in quotes and status 1.
 
-Known gaps: the default output is a short form, not the full GNU layout (no blocks, no access or modify times); `%` codes beyond those listed are not expanded; `stat -f` (file system) is not supported.
+Known gaps: the default output without -c is GNU's eight-line layout, with the model's device, inode and epoch times in place of the real ones (30bc); `%` codes beyond those listed are not expanded; `stat -f` (file system) is not supported.
 
 `scripts/witness-shell.mjs`: group `stat: stat reports the name, size, type and mode of a file`, 7 rows: `-c` name, size and type (`/st/f 6 regular file`); a directory is 755 by default; a file is 644 by default; a missing file gives the message and status 1; a symbolic link is reported as itself (`symbolic link`); with no `-c` the three-line form; `%%` (`2%`).
 
@@ -2748,7 +2748,7 @@ Gap, the same as 30a: the header has no modification time, and a file without a 
 
 Errors match the sandbox chmod: an unknown permission letter or an unknown operator gives `chmod: invalid operator (expected +, -, or =, but found C)`, a clause with no operator gives `chmod: invalid mode (clause)`, and an all-digit mode that is not octal (`999`) gives `chmod: invalid digit found in string`. Each is status 1, and no file is changed.
 
-Reference: the rows were generated from the sandbox `chmod` and `stat` (`group chmod: symbolic modes match the sandbox chmod`, nineteen rows: fifteen modes, four errors). The sandbox `chmod` is uutils coreutils 0.10.0, not GNU: `chmod --version` says so, and its messages above are its own. The mode semantics agree with GNU's documented behaviour for every row here.
+Reference: the rows were generated from the sandbox `chmod` and `stat` (`group chmod: symbolic modes match the sandbox chmod`, nineteen rows: fifteen modes, four errors). The sandbox `chmod` is uutils coreutils 0.10.0, not GNU: `chmod --version` says so, and its messages above are its own. The mode semantics agree with GNU chmod 9.7's output for every row here (rechecked in 30bx: all fifteen mode rows match GNU under the sandbox locale and under LC_ALL=C).
 
 Correction to earlier entries: the sandbox has two coreutils. `diff`, `cp` and `mv` are GNU (diffutils 3.12 and coreutils 9.7). `chmod`, `env`, `expr`, `base64` and `stat` are uutils 0.10.0. Entries that called those five commands GNU (change sets 16 to 25 and 28a to 28i) compared against uutils output. The rows still pass, but the reference name was wrong; the messages in those rows are uutils' where they differ from GNU's.
 
@@ -2887,7 +2887,7 @@ Red checks, on this tree: (1) shortest instead of longest match: four rows red. 
 
 Fixture runs first (both binaries on the same tree: `a/f1`, `a/sub/f2`, `a/sub/deep/f3`, a symlink `a/link` to `f1`, the dirs at 700 and the files at 600). `chmod -R 750` gave 750 for every entry in both the sandbox uutils chmod (`/bin/chmod`) and GNU chmod 9.7 (`/bin/gnuchmod`), and the symlink kept its own 777. `chmod -R u+x,go-w` gave 700 for every entry in both. `chmod 750 -R a` took the option after the operand in both. `chmod -R a=r a` removed search from the directory, and both then refused its children with `Permission denied` (the sandbox runs as a non-root user). `chmod -x 750 a` takes `-x` as the mode in both. The two differ only in wording: uutils prints `missing operand` where GNU prints `missing operand after '644'`.
 
-Correction to 30c: the chmod error messages were uutils' wording, not GNU's, and 30c's ledger line called them the sandbox chmod's. GNU chmod 9.7 prints one wording for every invalid mode: `chmod: invalid mode: 'MODE'` and `Try 'chmod --help' for more information.`, with status 1 and no change to the file. That covers `u+q`, `x+x`, `u`, `,u+x`, `+q`, `g+rw,q`, `999`, `8` and `77777`. The 30c rows were regenerated from GNU (group `chmod: symbolic modes match GNU chmod, and octal modes still work`, nineteen rows), and the digit row now expects GNU's text. The 30c symbolic and octal rows were already identical to GNU's.
+Correction to 30c: the chmod error messages were uutils' wording, not GNU's, and 30c's ledger line called them the sandbox chmod's. GNU chmod 9.7 prints one wording for every invalid mode under LC_ALL=C (under en_US.UTF-8 the MODE is in curly quotes): `chmod: invalid mode: 'MODE'` and `Try 'chmod --help' for more information.`, with status 1 and no change to the file. That covers `u+q`, `x+x`, `u`, `,u+x`, `+q`, `g+rw,q`, `999`, `8` and `77777`. The 30c rows were regenerated from GNU (group `chmod: symbolic modes match GNU chmod, and octal modes still work`, nineteen rows), and the digit row now expects GNU's text. The 30c symbolic and octal rows were already identical to GNU's.
 
 What changed in the shell: `-R` (or `--recursive`) is accepted before or after the mode. The walk applies the mode to the entry, then to each child; a symlink entry is not changed and not followed. A directory whose new mode has no owner search bit is not entered, and each of its children is reported as `chmod: cannot access 'PATH': Permission denied` with status 1, as GNU does for a non-root owner. Octal modes accept one to four digits (`0` and `7` are valid), and a mode is stored in its minimal octal form, so `stat -c %a` prints `7` and `0` without padding, as GNU's stat does. Mode errors and the missing operand use GNU's wording with the `Try` line.
 
@@ -3742,7 +3742,7 @@ Red checks, each restored from a backup and confirmed with `cmp`:
 
 Gap still open, not probed here: the classes beyond the seven new ranges (for example U+2C60 and other Latin Extended-C letters), and collating symbols `[.x.]` for the new glyphs.
 
-### Change set 30bc: stat with no -c prints GNU's nine-line layout, as GNU stat prints it for ASCII names, in the sandbox locale (no locale was varied)
+### Change set 30bc: stat with no -c prints GNU's eight-line layout, as GNU stat prints it for ASCII names, in the sandbox locale (no locale was varied)
 
 Reference: GNU stat (coreutils, this sandbox), run on files under `/tmp/stw` with `cat -A` to read the exact bytes. Probed shapes: a 2-byte regular file (mode 644); a dangling symbolic link (`'dl.txt' -> 'nosuch'`, size 6, blocks 0); a directory with one subdirectory (size 4096, blocks 8, links 3); a file after `chmod 600` (`Access: (0600/-rw-------)`); `stat -L` on a link to a regular file (plain name, regular file); two operands (two `File:` blocks, no separator); a name with a space (printed plain). GNU's line structure, with the padding: `  Size: %-10s<TAB>Blocks: %-10s IO Block: %-6s TYPE`, `Device: 0,85<TAB>Inode: %-10s  Links: N` with no trailing padding, `Access: (%04o/SYMBOLIC)  Uid: ( %5u/%8U)   Gid: ( %5g/%8G)`, three time lines, and ` Birth: ...` with a leading space.
 
@@ -4492,6 +4492,32 @@ Witness: group `locale: the length and index of a word follow the locale` (31 ro
 
 Red check: the precedence in the one lookup swapped (`const LOCALE_NAMES = ['LC_CTYPE', 'LC_ALL', 'LANG']`). Red run: `RESULT PASS=1370 FAIL=4`, the four rows that set LC_ALL and LC_CTYPE together. Restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+
+### Change set 30bx: the GNU chmod and stat citations, checked against GNU 9.7 output on this host, with the locale each one holds under
+
+Reference: `/bin/gnuchmod` and `/bin/gnustat` (GNU coreutils 9.7), run as the sandbox identity `abc` through a PATH shim (/tmp/gnu-shim) named `chmod` and `stat`. The sandbox sets `LANG=en_US.UTF-8` and leaves `LC_ALL` unset, which is the locale the shell starts in. Every witness row whose script calls chmod or stat was replayed (161 rows): each runs under `bash -c` in its own directory with the absolute fixture paths mapped to that directory, and the output is mapped back before comparing. Two runs: the sandbox locale, and `LC_ALL=C`.
+
+Result: 130 of the 161 rows match GNU stdout and stderr in the sandbox locale, and 158 match under LC_ALL=C. The 31 that differ fall into three groups.
+
+- Locale quote marks, 20 rows: witness lines 705, 707, 709 and 711 (chmod invalid mode), 2432 (chmod missing operand), and fifteen stat -c %N rows whose name holds a non-ASCII character (1364, 1366, 1379, 1381, 1383, 1402, 1404, 1406, 1408, 1410, 1412, 1414, 1419, 1421, 1471). Under en_US.UTF-8, GNU puts curly quotes around the mode in its chmod messages, and prints a non-ASCII name plainly; under LC_ALL=C it prints the straight-quote form and a dollar-quoted octal form for the bytes. The shell prints the C form in every locale, so these rows match GNU only under LC_ALL=C. Fixed: the titles of 2432 and the fifteen stat rows, and the 2561 row (the non-octal mode, probed here, which the replay did not parse), now say under LC_ALL=C; the 30k wording says it is the LC_ALL=C form. The shell's default-locale output is not changed in this set; it is gap G1 below.
+- Entry order, 8 rows: witness lines 1121, 1123, 1125, 1127, 1155, 1159, 1172 and 1187. Each pipes the output of chmod through `sort`. GNU chmod prints the same lines as the row, so the chmod citation holds. The order the rows pin is byte order, which GNU sort gives under LC_ALL=C; under en_US.UTF-8 GNU sort orders the same lines differently (for example the entry tree/a before tree). This is a sort-collation question, gap G2 below, not a chmod citation error.
+- Owner names, 3 rows: witness lines 1225, 1227 and 1229. GNU stat prints abc for the sandbox account, and the rows print user, the identity mapping recorded in change set 30ae. With that mapping applied to GNU output, all three rows match, so the citation holds as written.
+
+Corrections made in place:
+- 30bc: the heading said GNU prints a nine-line layout. GNU prints eight lines for a regular file and for a directory (`stat f | wc -l` and `stat d | wc -l` both give 8 here), and the body already says eight. The heading now says eight.
+- 17: its known-gap sentence said the default output was a short form with no blocks and no times. That was true before 30bc and is stale now: the default output has GNU's eight lines, with the model's device, inode and epoch times in place of the real ones.
+- 30c: the sentence that the mode semantics agree with GNU's documented behaviour was from memory. It is replaced with the GNU 9.7 output check: all fifteen mode rows match under both locales.
+- 30k: the invalid-mode wording now says it is the LC_ALL=C form.
+- Witness titles: 2432, 2561 and the fifteen stat rows above say under LC_ALL=C. No row was added and no row's expected output changed.
+
+Shell behaviour: unchanged in this set. Every chmod and stat behaviour the shell implements already has a witness row that matches GNU output (the replay above, and the rows for each stat -c code: N, n, s, F, a, U, G and %%). No new row, so no red check is due for this set.
+
+Witness: `RESULT PASS=1374 FAIL=0` after the title change (exit 0, wall 1.69 s).
+
+Gaps found by this audit, open (ranked in the report, not implemented here):
+- G1, reachable: GNU chmod's invalid-mode and missing-operand messages, and stat -c %N for a non-ASCII name, follow the locale (curly quotes and a plain name under en_US.UTF-8; the straight and dollar-quoted forms under LC_ALL=C). The shell always prints the C form. localeChoice (30bw) already reads the locale, so the message quoting can follow it.
+- G2, reachable, scope outside chmod: the sort in the shell orders the lines by bytes, the order the rows pin. GNU sort under en_US.UTF-8 collates them differently. Not probed beyond the three rows that show it.
+- G3, reachable in part: stat -c codes beyond N n s F a U G and %% are not expanded (17). GNU expands %u, %g, %h and %f, and the model holds what they need (uid and gid 1000, one link, the mode). %x, %y, %z, %i, %d and %w need a time, inode or device, which the model does not keep (30bc), so they stay blocked by the model.
 
 ### Phase B window for f5d3abe (change set 30bw, locale)
 
