@@ -5631,3 +5631,85 @@ Not defects, recorded as open or as observations:
 - Import of a CJS module from ESM in the page: `esm error module is not defined`. Open; the expected behaviour is not decided in the docs.
 - `craft-registry.js` and `web-host-manager.js` have no direct test. Coverage gap, open.
 - Two of the three witness-shell probe harness results were harness artifacts, not defects: the `cd-pwd` probe prints a temp path, and the terminal adds the line break before the prompt.
+
+### Full-feature test: results per feature, from the five slices, and the defects not yet in a row
+
+Method: five slices, each run in parallel. Their results are recorded here as reported by each slice, with the command and output it used. A result marked reported was not re-run by the author of this section. The OpenRouter key was read from `.env` at run time and is not in this section. Each slice's processes were stopped by PID; none remained when this section was written.
+
+Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, ledger only) and `8d52612` (the full-feature defect rows, ledger only). `b7e1299` is the Phase B window record, before af51e7b.
+
+#### Shell core and builtins (slice S1)
+
+- pass: `npm run witness:shell` gives `RESULT PASS=1562 FAIL=0`, wall 1.89 s. Families, all with zero fail: redirects 291, stat 196, expr 186, parity 188, collation and locale 146, chmod 141, tar 63, sed 77, pipes 23, sha, md5 and base64 30, grep 14, find 9, awk 9, jq 10.
+- pass: 29 of 60 probes match bash. One of these matches only because of a harness artifact: `cd-pwd` prints a temp path.
+- fail: 31 probes differ from bash. The rows S1-01 to S1-25 above cover each command family. The variants not in a row are listed below as S1-26 to S1-30.
+- pass, probe timing: each shell run took at most 6 ms.
+
+| ID | Feature and runtime | Command | Observed | Expected | Evidence |
+|---|---|---|---|---|---|
+| S1-26 | find -empty, shell core | `find d -empty` | `find: unknown predicate '-empty'` | the empty entries of `d` | reported |
+| S1-27 | find -exec, shell core | `find d -exec cat {} ';'` | `find: unknown predicate '-exec'` | the output of `cat` for each file | reported |
+| S1-28 | sed 1i, shell core | `printf 'x\n' \| sed '1i top'` | `sed: ... unknown command` | `top` then `x` | reported |
+| S1-29 | sed $=, shell core | `printf 'a\nb\n' \| sed -n '$='` | `sed: ... unknown command` | `2` | reported |
+| S1-30 | sed s///Ng, shell core | `printf 'aaa\n' \| sed 's/a/X/2g'` | `sed: ... unknown option to 's'` | `aXX` | reported |
+
+#### Node tests and lint (slice S2)
+
+- pass: each file under `test/` run alone with `node --test`, 66 of 66 test cases. app-proxy 10 of 10 (30.3 s), app-supervisor 6 of 6 (1.6 s), browser-driver 1 of 1 (0.4 s), fetch-args 5 of 5 (0.1 s), fx-host-static 3 of 3 (0.2 s), fx-stub-tools 9 of 9 (0.2 s), python-bundle-retry 2 of 2 (4.2 s), relay-api 4 of 4 (0.3 s), state-push 3 of 3 (0.1 s), thebird-mcp 13 of 13 (0.3 s), web-host-apps 10 of 10 (1.3 s).
+- pass: `npm run check` exits 0, 286 ms.
+- pass: `npm run lint:comments` exits 0, 744 ms; 140 repo-owned files, 0 comments.
+- pass: `npm run lint:architecture` exits 0, 12.0 s; 399 claims pass, 0 fail, 0 unverified; 50 prose lines are informational NO_CLAIM.
+- open: no direct test for `src/craft-registry.js` and `src/web-host-manager.js`. Both are reached by other tests only indirectly, and the slice did not check which functions those tests call.
+
+#### CLIs and servers (slice S3)
+
+- pass: relay on port 4301. `GET /` 200 text/html, 0.009 s; `HEAD /` 200; `/__thebird/registry` 200 JSON, 0.002 s; `/__thebird/events` sends `event: webservers` and `type: connected`. `/__thebird/state` returns 405 for GET and 204 for POST.
+- pass: `npm start` on port 4302, the same routes 200.
+- pass: web host start, status and stop on port 4303, with COOP `same-origin`, COEP `require-corp`, and `.wasm` served as `application/wasm`. Stop returns `stopped web host pid 18167`.
+- open: web host `check` needs headless Chromium. Not started.
+- pass: webserver `register`, `list`, `status` and scaffold check (`scaffold-check ok:true`). Folder created under `.thebird/webservers/`.
+- pass: canonical routes for the registered app: `/sites/<id>/`, `/`, `/favicon.ico` 200; `GET /settings` 200; `POST /settings` 200 and `settings.json` changed; `/mcp` 200; an unknown id 404.
+- pass: `npm install` inside the scaffold, exit 0, "up to date, audited 3 packages".
+- pass: the app run with `PORT=4305 node server.js`: `/`, `/settings` and `POST /mcp` with `{"method":"ping"}` returns `{"ok":true,"result":"pong"}`.
+- pass: `POST /__thebird/mcp/<id>` with `tools/call` returns 404 `unknown method`. The documented protocol is `{"method": ...}`, as in WEBSERVER_STANDARD.md.
+- pass: unregister removes the app and its folder (`removed:true`).
+- pass: Craft `ensure`, `sample`, `status`, `intent` (three apps), `app` (three apps), `descriptor`, `processes` and `stop` all exit 0. Each `open` takes 65 to 93 ms.
+- pass: Craft `open` and `call` on the samples return JSON with `code: 0`. `call gridcraft info` takes 50 ms.
+- fail: C-01 in the defects section, Craft `open` on a missing file exits 0.
+- side effect, not a defect: `npm start` rebuilt `_site/` from the worktree (mtime 10:32:02). `_site/` is gitignored; its contents changed.
+
+#### Browser, via playwriter only (slice S4)
+
+- pass, 27 cases: terminal `?run=` boot (9.3 s); Up and Down history, written to localStorage `thebird.history`; Ctrl-U, Ctrl-A, Ctrl-E, Ctrl-K, Ctrl-W, Home, End and Delete; Tab on a command and on a workspace path; Ctrl-L; Ctrl-C on `sleep 30`, which prints `^C cancelled` after about 3 s; 11 of 12 shell one-liners equal bash; git in `/workspace`: add, commit through the gate, log, diff, branch, checkout, with push, fetch and pull refused; sqlite3 data persists across a reload; `python3 -c "print(7*6)"` prints 42; `python3 k8p.py` prints `py-file-ok 4` (4.9 s); pip installs `humanize` 4.17.0 and imports it; `six` is refused as a Pyodide package; curl and wget with CORS succeed, and a non-CORS host fails with `could not fetch from ...` and rc 1; `fx --version`, `fx --help` and `fx check` (JSPI available); `playwriter --version` prints `birdman playwriter 0.1.0`; `feature '<json>'` and the page API for register, update, list, remove, clear; `?featureProgram=1` adds the `txiki-visible-demo` card; `THEBIRD_WEBSERVERS.registry()` returns the Craft servers; a bare `&` is refused; `node -e` runs.
+- fail: P-01 to P-04 in the defects section (touch, git init in a subdirectory, the README's node limit, and the README's paste behaviour).
+- open: `playwriter status` (the Birdman extension did not answer on this tab, so the extension is not attached); the 64 browser groups in `scripts/witness.mjs` (need headless Chromium); `npm view` (npm is a subset that reports `unsupported command: view`; not documented); CJS import from ESM in the page (`esm error module is not defined`, `require` reports `Cannot find module` as AGENTS.md documents; the expected behaviour is not decided). The slice reported five open cases and itemised four; the fifth was not named in its report.
+- observations, not rows: `git diff` and `git checkout topic` on an unborn repository report `Could not find refs/heads/master.` and `Could not find origin/topic.`; a card's `spec.text` is not rendered, and the docs use `body`; the local `/nocors` succeeds through the documented `/__thebird/port/` proxy.
+- longest step: the fx and playwriter batch, 60.1 s (cold fx core). The curl and wget batch took 45.1 s.
+
+#### LLM-backed features (slice S5)
+
+- pass: the key is present (checked with `grep -c` on `OPENROUTER_KEY=`, not printed).
+- pass: live OpenRouter chat completion from node on the free model `baidu/ernie-5.5-flash-preview:free`: HTTP 200, 5.0 s, reply `pong`, finish `stop`.
+- not a defect: paid models on this key return 403 `Key limit exceeded (total limit)`. Free models `inclusionai/ling-3.2-flash:free` returned 429 upstream, and `liquid/lfm-3-1.7b:free` returned 504 after 24.8 s upstream.
+- pass: provider helpers. `providerOf` for OpenRouter gives base `https://openrouter.ai/api/v1`; the registry entry has `protocol: openai-chat-completions` and `auth: none`; a Vercel URL gives `undefined`; `providerFetch` sets the bearer on provider URLs and leaves other URLs unchanged.
+- pass: `fx --version` gives `fx-core.wasm 232dd5dfb861 libfx SDK 2`; `fx check` gives `fx ready: JSPI available`.
+- pass: `fx ask` through the stub gateway on port 4331 streams `line 1 / line 2` in 1.1 to 1.8 s.
+- pass: `fx ask` with a wrong key returns `HTTP 401` in 0.6 s. The message `AI_GATEWAY_API_KEY authentication failed` comes from the libfx core, not thebird.
+- pass: tool-call round trip, `bash` tool with a stub execute, ends `tool-result=seen` in 0.5 s; an unadvertised tool `thebird_ports` ends `tool-not-advertised=thebird_ports` in 0.4 s.
+- pass: refusal detector: the banned phrase returns `["terminal tools are unavailable"]`; clean text returns `[]`.
+- pass: live `fx ask` through OpenRouter on the free model: `reply="pong"`, wall 2118 ms, the key not in the output.
+- pass: `node --test test/fx-stub-tools.test.mjs` 9 of 9 (183 ms); `node --test test/fx-host-static.test.mjs` 3 of 3 (138 ms).
+- open: the in-page `fx ask` needs the page, which the browser slice did not run.
+- open: the files `fx-approval` and `fx-tool-bridge` named in the directive do not exist under `web/`. Approval is covered by the `fx-approval` group in `scripts/witness.mjs`, which needs headless Chromium.
+
+#### Defects not yet in a row (added above as S1-26 to S1-30)
+
+- The five variants above are reported by the shell slice and were not re-run by the author of this section.
+
+#### Totals
+
+- Shell core: witness 1562 pass, 0 fail; probes 29 match and 31 fail (the fails are in rows S1-01 to S1-30).
+- Node tests: 66 of 66 pass; check and both lint scripts pass; two src modules have no direct test (open).
+- CLIs and servers: pass for relay, npm start, web host start, status and stop, the webserver and its routes, and Craft except the missing-file exit; open for web host check.
+- Browser: 27 pass, 4 fail (P-01 to P-04), 4 itemised open plus one not named.
+- LLM: pass for the node path and the live OpenRouter call on a free model; in-page fx ask open.
