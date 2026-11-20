@@ -7,7 +7,7 @@ import { createShell as createCoreShell, syntaxText } from './shell-core.js';
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill|tar)\b/;
 const COMMAND_TIMEOUT_MS = 900000;
-const CORE_NAMES = ['sort', 'touch'];
+const CORE_NAMES = ['sort', 'touch', 'test', '['];
 const coreWrapper = (name) => `${name}() {\n  command ${name} "$@"\n  local rc\n  rc="$(thebird_status)"\n  thebird_stderr >&2\n  return "$rc"\n}\n`;
 const EMULATION_NOTE ='note: uname, whoami, hostname, id, ps, kill and tar are in-page emulations; they report sandbox values and see only the in-page shell, not this machine';
 

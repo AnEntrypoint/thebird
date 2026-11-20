@@ -25,7 +25,7 @@ export function createHost() {
     stat(path) {
       const info = fs.lstatSync(path);
       const type = info.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'dir' : 'file';
-      return { type, size: info.size, mtimeMs: info.mtimeMs };
+      return { type, size: info.size, mtimeMs: info.mtimeMs, uid: info.uid, gid: info.gid };
     },
     readDir(path) {
       return fs.readdirSync(path, { withFileTypes: true }).map((entry) => ({ name: entry.name, type: entry.isSymbolicLink() ? 'symlink' : entry.isDirectory() ? 'dir' : 'file' }));
