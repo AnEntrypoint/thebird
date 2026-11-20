@@ -1500,6 +1500,34 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       ' Birth: -',
     ].join('\n');
   };
+  const realpathOf = (name, existing, strip) => {
+    const todo = (name.startsWith('/') ? name : state.cwd + '/' + name).split('/').filter((part) => part !== '' && part !== '.');
+    const stack = [];
+    let expansions = 0;
+    while (todo.length > 0) {
+      const part = todo.shift();
+      if (part === '..') {
+        stack.pop();
+        continue;
+      }
+      const path = '/' + stack.concat(part).join('/');
+      if (host.lstat(path)?.link && !strip) {
+        expansions += 1;
+        if (expansions > 40) return { error: 'Too many levels of symbolic links' };
+        const target = host.readlink(path);
+        if (target.startsWith('/')) stack.length = 0;
+        todo.unshift(...target.split('/').filter((piece) => piece !== '' && piece !== '.'));
+        continue;
+      }
+      const info = host.stat(path);
+      const last = todo.length === 0;
+      if (!info) {
+        if (existing || (!last && (!strip || todo[0] === '..'))) return { error: 'No such file or directory' };
+      } else if (info.dir !== true && !last) return { error: 'Not a directory' };
+      stack.push(part);
+    }
+    return { path: '/' + stack.join('/') };
+  };
   const realPath = (path) => {
     let current = normalize(path);
     for (let hops = 0; hops < 40; hops++) {
@@ -2084,21 +2112,24 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       return { code, out, err };
     },
     realpath: ({ argv }) => {
+      let existing = false;
+      let strip = false;
       let out = '';
       let err = '';
       let code = 0;
-      for (const name of argv.filter((arg) => !arg.startsWith('-'))) {
-        const path = resolvePath(name);
-        if (!host.lstat(path) && !host.stat(path)) {
-          err += 'realpath: ' + name + ': No such file or directory\n';
+      const names = [];
+      for (const arg of argv) {
+        if (arg === '-e') existing = true;
+        else if (arg === '-s') strip = true;
+        else if (arg === '-P') strip = false;
+        else if (!arg.startsWith('-')) names.push(arg);
+      }
+      for (const name of names) {
+        const result = realpathOf(name, existing, strip);
+        if (result.error) {
+          err += 'realpath: ' + name + ': ' + result.error + '\n';
           code = 1;
-          continue;
-        }
-        const resolved = realPath(path);
-        if (resolved === null) {
-          err += 'realpath: ' + name + ': Too many levels of symbolic links\n';
-          code = 1;
-        } else out += resolved + '\n';
+        } else out += result.path + '\n';
       }
       return { code, out, err };
     },

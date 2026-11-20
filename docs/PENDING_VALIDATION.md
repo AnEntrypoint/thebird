@@ -3767,3 +3767,24 @@ Witness: the group `stat: ...` keeps its rows, and the row that pinned the old t
 Red check: the stat branch restored to the old three-line text (`File:`, `Size:`, `Type:`): `RESULT PASS=1022 FAIL=8`, with the eight new rows red (the size line, the device line, the access line, the time line, the link, the directory, the mode and the `-L` rows). Restored from a backup and confirmed with `cmp`, then `git status` showed only the three files of this change set and `bin/thebird-relay.js`.
 
 Gaps still open, not probed here: a File name with a control character or a quote inside the default output (GNU quotes such names; the shell prints them plain); a symbolic link whose target is 60 bytes or more (GNU counts blocks for it, the shell says 0); a four-digit mode with setuid, setgid or sticky bits (the symbolic column ignores the high digit); real times, device and inode are not claimed.
+
+### Change set 30be: realpath -s keeps the path lexical (no link expanded), -P resolves links again, and the last of -s and -P wins, as GNU realpath does
+
+Reference: `/bin/gnurealpath` (GNU coreutils 9.7). The plain `realpath` on this PATH is uutils coreutils 0.10.0, and its output differs (for example, it accepts `tgt.txt/..` where GNU says `Not a directory`). Every row below comes from `/bin/gnurealpath` run in a fixture at `/tmp/rpw` with the same relative names as the in-memory fixture at `/workspace`. The mapping is `/tmp/rpw` to `/workspace` and the parent `/tmp` to `/`.
+
+Fixture: `tgt.txt` (a file), `lk` to `tgt.txt`, `dl` to `nosuch` (dangling), `sub/deep`, `dl2` to `sub/deep`, `dirlink` to `sub`, `al` to the absolute `/workspace/tgt.txt`.
+
+Rules the GNU probes gave (the walk in the shell follows them):
+- A name is walked one component at a time from the working directory, and a symbolic link is expanded when it is physical (the default, and `-P`), but not under `-s`. Under `-s`, `..` pops the lexical path.
+- A missing component that is not last is an error (ENOENT), except under `-s`, where it is an error only if `..` follows it (`nosuch/x` resolves; `nosuchdir/../x` does not).
+- A component that is a file and is followed by another component (including `..`) is ENOTDIR ("Not a directory").
+- A missing last component is resolved in the default mode and refused under `-e`.
+- The last of `-s` and `-P` wins: `-s -P lk` resolves, `-P -s lk` does not.
+
+What changed in the shell: the `realpath` command parses `-e`, `-s` and `-P`, and resolves each name with a new walk (`realpathOf`); the old check that refused any missing name was replaced, because GNU's default mode accepts a missing last component.
+
+Witness: group `realpath: -s keeps the path lexical, -P resolves links again (the last of -s and -P wins), and a missing component is an error only where GNU realpath gives one`, 29 rows, each stdout and stderr from GNU. One old row (`realpath: a missing name gives a message and status 1`) pinned an error that GNU does not give: the default mode gives `/rp/none` and status 0. It is replaced by a default row and an `-e` row, both from GNU. Final: `RESULT PASS=1060 FAIL=0`.
+
+Red check: `-s` made a no-op (it behaves as physical), restored from a backup and confirmed with `cmp`: `RESULT PASS=1051 FAIL=9`, the nine `-s` rows red. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Gaps still open, not probed here: `-m` (missing components are allowed without checks) and `-L` (logical `..`) are the next change set; `--relative-to`, `-z` and `-q` are not implemented.
