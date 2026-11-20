@@ -1604,6 +1604,21 @@ group('arithmetic command: += -= *= /= %= assign to a name, and ++ and -- change
   check('arithmetic command: += on an unset name starts from zero, as bash does', cp14.stdout === '0 1\n' && cp14.stderr === '', JSON.stringify([cp14.stdout, cp14.stderr]));
 });
 
+group('arithmetic command: a redirection on (( )) is applied, as bash does', async () => {
+  const rd0 = await run(await shell({}), '(( 1 )) >/dev/null; echo $?');
+  check('arithmetic command: a stdout redirection to /dev/null leaves the status of a non-zero value, as bash does', rd0.stdout === '0\n' && rd0.stderr === '', JSON.stringify([rd0.stdout, rd0.stderr]));
+  const rd1 = await run(await shell({}), '(( 0 )) >/dev/null; echo $?');
+  check('arithmetic command: a stdout redirection to /dev/null leaves the status of zero, as bash does', rd1.stdout === '1\n' && rd1.stderr === '', JSON.stringify([rd1.stdout, rd1.stderr]));
+  const rd2 = await run(await shell({}), '(( 1 / 0 )) 2>/dev/null; echo $?');
+  check('arithmetic command: a stderr redirection to /dev/null hides the division-by-zero message, as bash does', rd2.stdout === '1\n' && rd2.stderr === '', JSON.stringify([rd2.stdout, rd2.stderr]));
+  const rd4 = await run(await shell({}), '(( 1 )) 2>&1; echo $?');
+  check('arithmetic command: a stderr redirection onto stdout is accepted, as bash does', rd4.stdout === '0\n' && rd4.stderr === '', JSON.stringify([rd4.stdout, rd4.stderr]));
+  const rd3 = await run(await shell({}), '(( 1 / 0 )) >/dev/null; echo $?');
+  check('arithmetic command: a stdout redirection leaves the division-by-zero message on stderr, as bash does', rd3.stdout === '1\n' && rd3.stderr !== '', JSON.stringify([rd3.stdout, rd3.stderr]));
+  const rd5 = await run(await shell({}), '(( 1 / 0 )) 2>&1; echo $?');
+  check('arithmetic command: a stderr redirection onto stdout puts the division-by-zero message on stdout, as bash does', rd5.stdout.includes('division') && rd5.stdout.endsWith('\n1\n') && rd5.stderr === '', JSON.stringify([rd5.stdout, rd5.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

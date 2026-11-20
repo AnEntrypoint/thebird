@@ -3673,3 +3673,28 @@ Red checks, each restored from a backup with `cmp`, and `git status` showing onl
 - (2) the ++ and -- tokens removed from the tokenizer: `RESULT PASS=991 FAIL=6`, with the six increment and decrement rows red.
 
 Gap still open, not probed here: the `$(( ))` path with assignments has no witness row.
+
+### Change set 30az: a redirection on (( )) is applied, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Probed shapes (bash stdout and status):
+- `(( 1 )) >/dev/null; echo $?` prints `0`, no syntax error.
+- `(( 0 )) >/dev/null; echo $?` prints `1`.
+- `(( 1 / 0 )) 2>/dev/null; echo $?` prints `1` and nothing on stderr: the division-by-zero message goes to the redirected stream.
+- `(( 1 )) 2>&1; echo $?` prints `0`.
+- `(( 1 / 0 )) >/dev/null; echo $?` prints `1` and bash's message on stderr.
+- `(( 1 / 0 )) 2>&1; echo $?` prints bash's message on stdout (`division by 0 (error token is "0 ")`) and then `1`.
+- `(( 1 )) </dev/null; echo $?` and `(( 1 )) 3>/dev/null; echo $?` both print `0`. The shell has no `3>` descriptor support, so those two shapes are not witnessed.
+
+Before this change set, a redirection after (( ... )) was a syntax error with no output, so every shape above failed with status 2.
+
+Rule: a (( ... )) takes the same trailing redirections as the other simple commands, and they apply to it through the same wrapper the shell uses for other commands. The status still comes from the value of the expression. A message from a rejected expression goes to whichever stream the redirections give it.
+
+What changed in the shell: the parser keeps the trailing redirections on the arithmetic node, and the runner passes it through `withRedirects`.
+
+Witness: 6 rows, expected values from the bash output above. The row for `2>&1` with a division by zero checks that stdout contains `division` and ends with the status line, not bash's exact wording, because our message says `division by zero`. Final: `RESULT PASS=1003 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed with `cmp`:
+- (1) the redirect wiring in the runner removed, so the redirections are parsed but not applied: `RESULT PASS=1001 FAIL=2`, with the two stderr rows red (the stderr message reaches stdout or stderr when it should be hidden or merged).
+- (2) the parser change removed, so the redirections are a syntax error again: every arithmetic command then crashes with a TypeError (`redirects is not iterable`) inside `withRedirects`, which gives `RESULT PASS=975 FAIL=27` with the six rows of this change set in place. That run shows that the parser change is needed for the whole path, not only the redirect rows.
+
+Gaps still open, not probed here: descriptor numbers above 2 (the `3>` shape), and `<` on an arithmetic command, which bash accepts but this change set does not witness.

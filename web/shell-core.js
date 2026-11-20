@@ -489,7 +489,7 @@ function parse(tokens) {
     }
     if (token.op === '((') {
       pos++;
-      return { type: 'arith', src: token.src };
+      return { type: 'arith', src: token.src, redirects: parseTrailingRedirects() };
     }
     if (token.op === '(') {
       pos++;
@@ -2955,7 +2955,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   };
 
   async function runStage(cmd, stdin, sink, stream) {
-    if (cmd.type === 'arith') return runArithmeticCommand(cmd);
+    if (cmd.type === 'arith') return withRedirects(cmd, stdin, sink, runArithmeticCommand, stream);
     if (cmd.type === 'funcdef') {
       functions.set(cmd.name, cmd.body);
       return ok('');
