@@ -5869,3 +5869,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `date` command. `-d @SECONDS` sets the moment (an invalid value is `date: invalid date '...'` with status 1); the format is the first argument that starts with `+`, found wherever it stands; `%F` and `%T` are added to the specifiers already read.
 - Witness: `scripts/witness-shell.mjs`, group "date -d: date -d @SECONDS formats that moment in UTC, and %F and %T give the date and the time, as GNU date does", four rows with the expected output taken from GNU date. Before the change all four failed. The invalid-date text is not a row: GNU quotes it with curly quotes in a UTF-8 locale, which is recorded as open.
 - Red check: the `-d` moment ignored by mutation (the current time is used); green PASS=1656 FAIL=0; red PASS=1652 FAIL=4, restored, cmp matches.
+
+### Defect fix S1-24: wc pads its counts when several are printed
+
+- Row: S1-24 of the full-feature run (commit 8d52612, low severity, format only). Command: `printf 'hello\n' \| wc -lwc`. Before: `1 1 6`. Expected: `      1       1       6`, each count in seven columns (GNU wc 9.7, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `wc` command. On stdin with two or more counts each count is right-aligned to seven columns; a single count is not padded. A file takes its width from the total of the characters, and a single count from a file is not padded. The `total` line for several files is not part of this row and is recorded as S1-31.
+- Witness: `scripts/witness-shell.mjs`, group "wc padding: wc pads its counts to a common width when several are printed, and a single count is not padded, as GNU wc does", five rows with the expected output taken from GNU wc. Before the change two of the five failed (the stdin multi-count rows).
+- Red check: the seven-column width removed by mutation; green PASS=1661 FAIL=0; red PASS=1659 FAIL=2, restored, cmp matches.

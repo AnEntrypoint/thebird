@@ -2221,27 +2221,24 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     wc: ({ argv, stdin = '' }) => {
       const flags = argv.filter((arg) => arg.startsWith('-')).join('');
       const files = argv.filter((arg) => !arg.startsWith('-'));
-      const selected = (counts) => {
-        const pick = [];
-        if (!flags || flags.includes('l')) pick.push(counts.lines);
-        if (!flags || flags.includes('w')) pick.push(counts.words);
-        if (!flags || flags.includes('c')) pick.push(counts.chars);
-        return pick.join(' ');
-      };
+      const wanted = [!flags || flags.includes('l'), !flags || flags.includes('w'), !flags || flags.includes('c')];
+      const columns = wanted.filter(Boolean).length;
       const counts = (text) => ({ lines: (text.match(/\n/g) ?? []).length, words: text.split(/\s+/).filter(Boolean).length, chars: text.length });
-      if (!files.length) return ok(selected(counts(stdin)) + '\n');
-      let out = '';
+      const row = (count, width) => [wanted[0] ? count.lines : null, wanted[1] ? count.words : null, wanted[2] ? count.chars : null].filter((value) => value !== null).map((value) => String(value).padStart(width)).join(' ');
+      if (!files.length) return ok(row(counts(stdin), columns > 1 ? 7 : 1) + '\n');
+      const found = [];
       let err = '';
       let code = 0;
       for (const name of files) {
         try {
-          out += `${selected(counts(host.read(resolvePath(name))))} ${name}\n`;
+          found.push({ name, count: counts(host.read(resolvePath(name))) });
         } catch {
           err += `wc: ${name}: No such file or directory\n`;
           code = 1;
         }
       }
-      return { code, out, err };
+      const width = columns > 1 ? String(found.reduce((total, { count }) => total + count.chars, 0)).length : 1;
+      return { code, out: found.map(({ name, count }) => `${row(count, width)} ${name}\n`).join(''), err };
     },
     date: ({ argv }) => {
       const at = argv.indexOf('-d');

@@ -3516,6 +3516,19 @@ group("date -d: date -d @SECONDS formats that moment in UTC, and %F and %T give 
   const wdt4 = await run(sh, "date -u -d @1700000000 '+%Y-%m-%d %H:%M:%S'");
   check("date -u -d @1700000000 with a format prints the date and the time (bash output, locale en_US.UTF-8)", wdt4.stdout === "2023-11-14 22:13:20\n" && wdt4.exitCode === 0 && wdt4.stderr === "", JSON.stringify([wdt4.stdout, wdt4.stderr, wdt4.exitCode]));
 });
+group("wc padding: wc pads its counts to a common width when several are printed, and a single count is not padded, as GNU wc does", async () => {
+  const sh = await shell({});
+  const wwp1 = await run(sh, "printf 'hello\\n' | wc -lwc");
+  check("wc -lwc on stdin pads each count to seven columns (bash output, locale en_US.UTF-8)", wwp1.stdout === "      1       1       6\n" && wwp1.exitCode === 0 && wwp1.stderr === "", JSON.stringify([wwp1.stdout, wwp1.stderr, wwp1.exitCode]));
+  const wwp2 = await run(sh, "printf 'hello\\n' | wc");
+  check("wc with no option on stdin prints three padded counts (bash output, locale en_US.UTF-8)", wwp2.stdout === "      1       1       6\n" && wwp2.exitCode === 0 && wwp2.stderr === "", JSON.stringify([wwp2.stdout, wwp2.stderr, wwp2.exitCode]));
+  const wwp3 = await run(sh, "printf 'hello\\n' | wc -l");
+  check("wc -l on stdin prints one unpadded count (bash output, locale en_US.UTF-8)", wwp3.stdout === "1\n" && wwp3.exitCode === 0 && wwp3.stderr === "", JSON.stringify([wwp3.stdout, wwp3.stderr, wwp3.exitCode]));
+  const wwp4 = await run(sh, "echo hello > f.txt; wc -lwc f.txt");
+  check("wc -lwc on a file takes the width from its size (bash output, locale en_US.UTF-8)", wwp4.stdout === "1 1 6 f.txt\n" && wwp4.exitCode === 0 && wwp4.stderr === "", JSON.stringify([wwp4.stdout, wwp4.stderr, wwp4.exitCode]));
+  const wwp5 = await run(sh, "echo hello > f.txt; wc -l f.txt");
+  check("wc -l on a file prints one unpadded count and the name (bash output, locale en_US.UTF-8)", wwp5.stdout === "1 f.txt\n" && wwp5.exitCode === 0 && wwp5.stderr === "", JSON.stringify([wwp5.stdout, wwp5.stderr, wwp5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
