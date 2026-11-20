@@ -3376,6 +3376,19 @@ group("sha256sum: sha256sum prints the SHA-256 of stdin or of each file, with th
   const wsh6 = await run(sh, "sha256sum missing.txt; echo rc=$?");
   check("sha256sum of a missing file reports it and exits 1 (bash output, locale en_US.UTF-8)", wsh6.stdout === "rc=1\n" && wsh6.exitCode === 0 && wsh6.stderr === "sha256sum: missing.txt: No such file or directory\n", JSON.stringify([wsh6.stdout, wsh6.stderr, wsh6.exitCode]));
 });
+group("xargs: xargs runs the command with the words of stdin, in groups of -n, and echo when no command is given, as bash does", async () => {
+  const sh = await shell({});
+  const wxa1 = await run(sh, "printf 'a\\n' | xargs -n1 echo");
+  check("xargs -n1 runs the command once per word (bash output, locale en_US.UTF-8)", wxa1.stdout === "a\n" && wxa1.exitCode === 0 && wxa1.stderr === "", JSON.stringify([wxa1.stdout, wxa1.stderr, wxa1.exitCode]));
+  const wxa2 = await run(sh, "printf 'a b c\\n' | xargs echo");
+  check("xargs runs the command once with all the words (bash output, locale en_US.UTF-8)", wxa2.stdout === "a b c\n" && wxa2.exitCode === 0 && wxa2.stderr === "", JSON.stringify([wxa2.stdout, wxa2.stderr, wxa2.exitCode]));
+  const wxa3 = await run(sh, "printf 'a b c\\n' | xargs -n2 echo");
+  check("xargs -n2 groups the words two at a time (bash output, locale en_US.UTF-8)", wxa3.stdout === "a b\nc\n" && wxa3.exitCode === 0 && wxa3.stderr === "", JSON.stringify([wxa3.stdout, wxa3.stderr, wxa3.exitCode]));
+  const wxa4 = await run(sh, "printf 'x\\ny\\n' | xargs echo pre");
+  check("xargs passes its fixed arguments before the words (bash output, locale en_US.UTF-8)", wxa4.stdout === "pre x y\n" && wxa4.exitCode === 0 && wxa4.stderr === "", JSON.stringify([wxa4.stdout, wxa4.stderr, wxa4.exitCode]));
+  const wxa5 = await run(sh, "printf '' | xargs echo");
+  check("xargs with no words runs the command once with no arguments (bash output, locale en_US.UTF-8)", wxa5.stdout === "\n" && wxa5.exitCode === 0 && wxa5.stderr === "", JSON.stringify([wxa5.stdout, wxa5.stderr, wxa5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

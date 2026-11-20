@@ -5785,3 +5785,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`. A pure-JS SHA-256 (`sha256Hex`) sits beside `md5Hex`, so it runs in the browser and in txiki without an import. `md5sum` and `sha256sum` now share one `digestCommand` helper; the `md5sum` output is unchanged, and its existing witness rows still pass.
 - Witness: `scripts/witness-shell.mjs`, group "sha256sum: sha256sum prints the SHA-256 of stdin or of each file, with the name, and a missing file is an error, as bash does", six rows with the expected output taken from bash. Before the change all six failed against bash. The 56-byte row checks the second padding block.
 - Red check: the `sha256sum` entry pointed at the MD5 digest by mutation; the counts are in the amended line that follows.
+
+### Defect fix S1-10: xargs exists in the shell core
+
+- Row: S1-10 of the full-feature run (commit 8d52612). Command: `printf 'a\n' \| xargs -n1 echo`. Before: `xargs: command not found`, rc 127. Expected: `a` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, a new `xargs` command beside `sed`. It splits stdin on white space, runs the command (default `echo`) once per group of `-n` words, and returns 123 when an invocation fails, as GNU xargs does. It runs each invocation through the same dispatch as `env`.
+- Witness: `scripts/witness-shell.mjs`, group "xargs: xargs runs the command with the words of stdin, in groups of -n, and echo when no command is given, as bash does", five rows with the expected output taken from bash. Before the change all five failed against bash.
+- Red check: the command taken from the wrong position by mutation; the counts are in the amended line that follows.

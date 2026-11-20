@@ -2696,6 +2696,33 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
       return ok(out);
     },
+    xargs: async ({ argv, stdin = '', signal }) => {
+      let at = 0;
+      let size = Infinity;
+      while (at < argv.length && argv[at].startsWith('-') && argv[at] !== '-') {
+        const arg = argv[at++];
+        const count = arg === '-n' ? argv[at++] : arg.startsWith('-n') ? arg.slice(2) : null;
+        if (count === null) return { code: 1, out: '', err: 'xargs: unsupported option ' + arg + '\n' };
+        size = Number(count);
+        if (!Number.isInteger(size) || size < 1) return { code: 1, out: '', err: 'xargs: invalid number of arguments\n' };
+      }
+      const command = argv.slice(at);
+      if (!command.length) command.push('echo');
+      const words = stdin.split(/\s+/).filter(Boolean);
+      const batches = [];
+      for (let i = 0; i < words.length; i += size) batches.push(words.slice(i, i + size));
+      if (!batches.length) batches.push([]);
+      let out = '';
+      let err = '';
+      let code = 0;
+      for (const batch of batches) {
+        const result = await dispatch([...command, ...batch], '', signal);
+        out += result.out;
+        err += result.err;
+        if (result.code && !code) code = 123;
+      }
+      return { code, out, err };
+    },
     sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
     tar: ({ argv, stdin }) => runTar(argv, toolContext(stdin)),
     jq: ({ argv, stdin }) => runJq(argv, toolContext(stdin)),
