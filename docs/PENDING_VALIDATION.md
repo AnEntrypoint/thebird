@@ -5362,3 +5362,23 @@ Witness: green at this commit, `RESULT PASS=1536 FAIL=0` (1527 before, 9 added),
 Red check, against the pre-change code with the new rows: `RESULT PASS=1530 FAIL=6` (the six reuse rows fail; the other three rows, which the old code already matched, pass). Red check, mutation: the loop condition replaced by `while (false)` (the format runs once), `RESULT PASS=1530 FAIL=6`, the same six rows. Each restore was followed by `cmp` (matched), and `git status` showed only the three expected files and the dirty relay.
 
 Still open after this change set: a `%d` argument that is not a number. bash reports `printf: ...: invalid number` on stderr for it, and the shell prints the value as 0 without that message (the `parseInt(value, 10) || 0` branch). Not probed as a row yet; the ranked list still shows the printf item as done for reuse only.
+
+### Change set 30d5: a syntax error stops the script at its own line, and the complete lines before it run first, as bash does (G5); the top level is parsed one complete line at a time
+
+Locale: `en_US.UTF-8` (LC_ALL and LANG set for the bash probe). The output of these scripts does not depend on the locale; each row title states it.
+
+Probe (bash, `bash -c`, before the change): a syntax error on line 2 (`echo )`) runs line 1 and stops, exit 2. The same error on the same line as a complete command (`echo a; echo )`) runs nothing, exit 2. An unterminated `if` on line 2 runs line 1 only, exit 2. A stray `fi` on line 3 runs lines 1 and 2, exit 2. A redirection with no file on line 2 runs line 1 only, exit 2. A script with no error runs every line, exit 0. `exit 3` on line 2 ends the script before a syntax error on line 3, exit 3, with no error message. A one-line compound command on line 2 runs before a syntax error on line 3.
+
+Before the change the shell parsed the whole script first, so six of the eight rows printed nothing, and the stray `fi` ran as a command (`fi: command not found`).
+
+Change: `parse(tokens, partial)` collects the top level one complete command at a time. A command ends at a newline (a newline after `&&`, `||` or a pipe does not end it), at `;` followed by a newline, or at the end of the input. Anything else that stops a command is a syntax error, and that command does not run. `parseScriptPartial(src)` returns the complete commands and the error. The run path runs the complete commands, then sets the status to 2 and writes the error to stderr. A closing reserved word (`then`, `elif`, `else`, `fi`, `do`, `done`, `esac`) in command position is a syntax error. `parseScript`, used for command substitution, is unchanged in what it accepts.
+
+Witness rows: eight rows (gs1 to gs8) added after the printf rows, bash output only. Each row checks stdout and the exit status against bash. stderr is empty when bash's is empty, and starts with `syntax error` when bash's does. The shell's message is `syntax error: ...` and has no line number yet; the other syntax-error rows use the same check.
+
+Witness: before the change (HEAD code with the rows), `RESULT PASS=1538 FAIL=6` (the six rows above), wall 1.64 s. After the change, `RESULT PASS=1544 FAIL=0`, wall 1.71 s.
+
+Red check, mutation 1 (the run path parses the whole script again): `RESULT PASS=1538 FAIL=6`, wall 1.7 s. Mutation 2 (completed lines dropped after the error): `RESULT PASS=1538 FAIL=6`, wall 1.7 s. Each was restored and `cmp` matched. `git status` showed only the three expected files and the dirty relay.
+
+Other checks at this commit: `npm run check` exit 0, 318 ms. `npm run witness:shell` `RESULT PASS=1544 FAIL=0`, 1.85 s. `npm run lint:comments` exit 0, 763 ms, 0 comments in 140 repo-owned files. `npm run lint:architecture` exit 0, 8.0 s, 399 claims pass. `npm test` exit 0, 66 pass, 0 fail, 30.5 s (the longest step in this stretch).
+
+Still open after this change set: a tokenizer error (an unterminated quote, or an unterminated `$(`) anywhere in the script still stops the whole script before any line runs, because the tokenizer runs on the whole source first. bash runs the lines before it. Not probed as a row yet. The error text differs from bash's `bash: -c: line N: syntax error near unexpected token ...`; the line number is not reported.

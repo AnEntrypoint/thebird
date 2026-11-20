@@ -360,7 +360,7 @@ function parseAssignment(parts) {
   return { name, value: rest ? [{ k: 'lit', s: rest }, ...parts.slice(1)] : parts.slice(1) };
 }
 
-function parse(tokens) {
+function parse(tokens, partial = false) {
   let pos = 0;
 
   const parseRedirect = () => {
@@ -525,6 +525,8 @@ function parse(tokens) {
       return { type: 'group', list, redirects: parseTrailingRedirects() };
     }
     if (token.op !== undefined) throw syntaxError(`unexpected '${token.op}'`);
+    const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac'].find((word) => isWord(token, word));
+    if (closer) throw syntaxError("unexpected '" + closer + "'");
     if (token.parts.length === 1 && token.parts[0].k === 'lit' && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
       pos += 3;
       while (tokens[pos]?.op === ';') pos++;
@@ -548,9 +550,14 @@ function parse(tokens) {
 
   const atCloser = (stops) => tokens[pos].op === ')' || tokens[pos].op === ';;' || stops.some((word) => isWord(tokens[pos], word));
 
-  const parseSequence = (stops) => {
+  const parseSequence = (stops, topLevel = false) => {
     const items = [];
     let op = null;
+    const endsLine = () => {
+      if (!topLevel || !tokens[pos]?.newline) return false;
+      pos++;
+      return true;
+    };
     while (pos < tokens.length && !atCloser(stops)) {
       if (tokens[pos].op === ';') {
         pos++;
@@ -558,13 +565,19 @@ function parse(tokens) {
       }
       items.push({ op, pipe: parsePipeline(), background: false });
       const next = tokens[pos];
+      if (topLevel && next?.newline) {
+        pos++;
+        break;
+      }
       if (next?.op === '&') {
         pos++;
         items.at(-1).background = true;
         op = ';';
+        if (endsLine()) break;
       } else if (next?.op === ';') {
         pos++;
         op = ';';
+        if (endsLine()) break;
       } else if (next?.op === '&&' || next?.op === '||') {
         pos++;
         op = next.op;
@@ -573,13 +586,33 @@ function parse(tokens) {
     return { items };
   };
 
-  const list = parseSequence([]);
-  if (pos < tokens.length) throw syntaxError(`unexpected '${tokens[pos].op}'`);
-  return list;
+  const list = { items: [] };
+  let error = null;
+  try {
+    while (pos < tokens.length) {
+      if (tokens[pos].op === ';') {
+        pos++;
+        continue;
+      }
+      const command = parseSequence([], true);
+      if (pos < tokens.length && !tokens[pos - 1]?.newline) throw syntaxError("unexpected '" + (tokens[pos].op ?? tokens[pos].text ?? 'word') + "'");
+      if (!command.items.length) throw syntaxError("unexpected '" + tokens[pos].op + "'");
+      if (list.items.length) command.items[0].op = ';';
+      list.items.push(...command.items);
+    }
+  } catch (err) {
+    if (!partial) throw err;
+    error = err;
+  }
+  return partial ? { list, error } : list;
 }
 
 export function parseScript(src, firstLine, substitution = false) {
   return parse(tokenize(src, firstLine, substitution));
+}
+
+export function parseScriptPartial(src) {
+  return parse(tokenize(src), true);
 }
 
 const ok = (out) => ({ code: 0, out, err: '' });
@@ -3563,7 +3596,12 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       runSink = sink;
       let code;
       try {
-        code = await runSequence(parseScript(script), '', sink);
+        const parsed = parseScriptPartial(script);
+        code = await runSequence(parsed.list, '', sink);
+        if (parsed.error) {
+          code = 2;
+          sink.err += parsed.error.message + '\n';
+        }
       } catch (err) {
         if (err instanceof ShellExit) code = err.code;
         else if (control.signal.aborted && control.signal.reason instanceof TimedOut) {
