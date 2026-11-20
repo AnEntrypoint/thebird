@@ -6213,3 +6213,48 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
   - Red check 2, test integer check removed: RESULT PASS=1849 FAIL=5 (the rows test x -eq 5, test 1.5 -eq 1, [ x -eq 5 ], [ "" -eq 0 ], [ 0x10 -eq 16 ] fail). Restored from a copy; cmp matched.
   - Every witness and red check ran under timeout with its PID captured. Nine witnesses passed (witness-shell, prompt-path, tar-gzip, git-root, git-init-message, craft-cli, readme-claims, lint:comments, lint:architecture).
   - Gate readings (second sample si/so in KB/s; heavy-jobs): pre-gate vmstat second sample si 100, so 0, heavy-jobs busy on Chromium PIDs 65599 and 65638, cwd /workspace/oscraft (a peer's browser; not stopped). Attempt 1: si 44, so 508, busy 3. Attempt 2: si 264, so 0, busy 3. Attempt 3: si 464, so 660, busy 1. Attempt 4: si 1044, so 0, busy 1. Attempt 5: si 68, so 0, busy 1. Attempt 6: si 1452, so 0, busy 1. Attempt 7: si 60, so 0, heavy-jobs clear.
+
+### Phase A: select menu for ten or more items, permission tests with a logical clock, and BASH_REMATCH
+
+Phase A was code and docs only. No build, test, witness or red check was run in Phase A. Every count below is the row count in the source, and the Phase B results replace them.
+
+- Commits: `99abd50` (select menu columns), `208d245` (permission tests and the logical clock), `8e4bf4a` (BASH_REMATCH arrays), then the clock key and `${#BASH_REMATCH}` fix commit (see below). Each is lanmower, no trailers.
+- Probe: the expected output of every witness row comes from `bash -c` with `LANG=en_US.UTF-8`, not from our shell. For each `COLUMNS=N;` select row the generator also runs bash with `COLUMNS` in the environment and fails if the two differ. Permission rows run in a fresh temporary directory per row.
+
+#### a. select menu for ten or more items (`selectMenu` in `web/shell-core.js`)
+
+- Before: `runSelect` printed one line per item, whatever the item count, so ten or more items did not match bash.
+- Decision: `selectMenu(items, width)` keeps the one-per-line form below ten items. From ten items it lays the menu out in columns: digits = width of the item count, column pitch = longest item + digits + 4, columns = max(1, floor(width / pitch)), rows = ceil(N / columns), columns actually used = ceil(N / rows), filled column by column. Column 0 is unpadded. Other columns right-align their number to the digit width, and each column starts at `col * pitch`, reached with tab stops and then spaces. Width comes from `COLUMNS` when it is a positive integer, otherwise 80.
+- Witness group: `select menu: ten or more items are laid out in columns as bash lays them out` (10 rows: 10, 12, 13 and 20 items, COLUMNS 27, 40 and 60, a long-item list, a nine-item boundary, and an empty answer that reprints the menu). Stderr is compared exactly.
+- Expected witness: the 10 rows pass.
+- Red check (to run in Phase B): change the pitch `+ 4` to `+ 3` in `selectMenu`, then run the witness. Also replace the tab loop in `menuPad` with spaces only, and run the witness again. Each run should fail the column rows. Restore from a copy and `cmp`.
+
+#### b. permission tests -r -w -x -O -G -N (`permissionBit`, `clockKey`, `readFileText`, `writeFileText` in `web/shell-core.js`)
+
+- Before: `-r -w -x -O -G -N` reported `not supported`, status 2. The production host stat (`web/shell-program.js`) carries only `dir` and `size`, so mode and owner bits cannot come from the host. Exposing them through the host means a C change in `scripts/txiki/browser/fs-browser.c` and a rebuild of the pinned WASM, which needs emscripten. Not available here, so this change does not depend on it.
+- Decision: `-r -w -x` read the owner bits of the shell mode model (`modes`, the same model `chmod` and `ls -l` use, default 755 for directories and 644 for files), require every searched ancestor to be executable (`blockedAncestor`), and follow symbolic links through `searchedDirectories`. `-O` and `-G` are true for every existing file, because the model has one user (uid 1000) and no other owners. `-N` is true when the last modification tick is later than the last access tick. Both ticks come from one logical clock (`fileClock`): every `host.read` and `host.write` call site now goes through `readFileText` or `writeFileText`, which tick the clock and key the record by the real path (`clockKey`). A write sets both ticks when the file is new, and a read sets only the access tick. The clock is deterministic, so `-N` does not depend on wall time.
+- Witness group: `permission tests: -r -w -x -O -G -N give bash output` (11 rows: chmod 000, 600, 700, 400 and 500 on files and directories, missing names, owner and group tests, the -N sequence write, read, write, and a symbolic link read through `ln -s`, a blocked ancestor, and an unreadable file in a 600 directory). Stdout, stderr and status are compared exactly.
+- Expected witness: the 11 rows pass.
+- Known limit, named here: the ownership model has one owner, so `-O` and `-G` cannot report false for a file the shell did not create. This is the cell that the host owner bits would unblock (the txiki stat change above).
+- Red check (to run in Phase B): change the owner shift in `permissionBit` from `>> 6` to `>> 3`, so the group bits answer the owner question. The witness should fail the chmod 000, 600 and 400 rows. Restore from a copy and `cmp`.
+- Red check (to run in Phase B): remove the record write from `noteRead`, so the access tick is never set. The `-N` rows should fail. Restore from a copy and `cmp`.
+
+#### c. BASH_REMATCH as an indexed array (`arrays`, `arrayIndex`, `arrayLength`, `parseRegexOperand` in `web/shell-core.js`)
+
+- Before: `=~` set no array. `${BASH_REMATCH[1]}` and `$BASH_REMATCH` were empty, and `=~` with a `(`, `)` or `|` in the regex was a syntax error at the parser, because only a single word was accepted on the right.
+- Decision: indexed arrays are reachable through a narrow read-side model: a map from name to element list, written only by a successful `=~` (`BASH_REMATCH` = the whole match and each group, an unmatched group is an empty string; a failed match sets an empty array, as bash does). `parameterPart` takes an optional `[index]` after the name. `parameterText` reads elements, `${#NAME[@]}` gives the count, `${#NAME[i]}` gives the length of an element, and `$NAME` is element 0. An index is evaluated arithmetically, so `${NAME[i]}` reads a variable as bash does. `parseRegexOperand` gathers the word tokens and the `(`, `)` and `|` operators up to `]]` or the next `&&` or `||` as the regex text. No array assignment syntax (`a=(...)`) was built, so the array model is set by `=~` only.
+- Witness group: `BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME read them` (13 rows: group 0, 1 and 2 through the index, the count, an optional group that does not participate, a no-match that gives 0, `$BASH_REMATCH`, a regex in a variable, a three-group regex, `(a|x)(b)`, `^(a)(x)?bc$`, a bracket class, a failed match after a successful one, `${BASH_REMATCH[0]}` after a plain match, and `${#BASH_REMATCH}`). Stdout, stderr and status are compared exactly.
+- Expected witness: the 13 rows pass.
+- Red check (to run in Phase B): remove the `arrays.set('BASH_REMATCH', …)` line in the `=~` branch, so the array stays empty. The `BASH_REMATCH` rows should fail. Restore from a copy and `cmp`.
+
+#### Expected totals (not yet observed)
+
+- Previous total: `RESULT PASS=1854 FAIL=0` at `d747c22`. The three groups add 10 + 11 + 13 = 34 rows, so the expected total is `RESULT PASS=1888 FAIL=0`. Phase B replaces this with the observed output.
+
+#### Ranked-list cells still open after Phase A
+
+- `-O` and `-G` on a file another user owns: the shell model has one owner, so these cannot be false. Blocked by the host stat carrying no owner bits (txiki C change and WASM rebuild, emscripten not available here).
+- Stray `]]` outside `[[`: still an ordinary word here, where bash reports a syntax error near `]]`. Not in this stretch.
+- `find -exec … +`: unsupported, not re-verified. Not in this stretch.
+- `${NAME[@]}` inside double quotes: element join uses a single space; bash keeps elements separate. Not covered by the witness rows; the first `"${arr[@]}"` probe would show it.
+- Phase B results, Phase A entries: to be appended after the gate-clear window.
