@@ -3980,3 +3980,32 @@ Gaps, not taken in this change set:
 - `0<<EOF` and `0<f` (fd 0 with an explicit number) are not operators: `cat 0<<EOF` runs `cat 0` and fails with `cat: 0: No such file or directory`, where bash prints `hi`. Reopen: add `0<` and `0<<` as the stdin forms, which the existing `<` and `<<` code already handles.
 - Writes to fd N from 3 to 9 with a reader (`echo x 3<f >&3` is a write error in bash, status 1). Reopen: a descriptor table entry for N from 3 to 9 that reads and writes files.
 - `>&word` with a non-digit word (file form). Reopen: from 30bm.
+
+### Phase B record: change set 30bn, pushed as eab13de..b56fb89
+
+Window: started 03:33:12 and cleared at reading 1 (03:33:12), so it ran for about two seconds of the ten allowed.
+
+Readings, each from `vmstat 1 2` (the second sample is the gate) and `scripts/heavy-jobs.cjs` from bevy 495fff6, with the top CPU list read in the same sample:
+
+| reading | time | gate swap-in KB/s | gate swap-out KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 03:33:12 | 92 | 12 | clear | none: gate and heavy-jobs clear, window started |
+
+Runs, in the window, each with its PID captured and its wall time read from the clock:
+
+- Green witness (pid 1958753): exit 0, wall 1.57 s, `RESULT PASS=1152 FAIL=0`.
+- Red check 1, the missing N< refusal disabled (b56fb89; pid 1958836): exit 1, wall 1.54 s, `RESULT PASS=1147 FAIL=5`, restored and confirmed with `cmp`.
+- Red check 2, the heredoc body taken only for `<<` (b56fb89; pid 1958906): exit 1, wall 1.58 s, `RESULT PASS=1150 FAIL=2`, restored and confirmed with `cmp`.
+- `npm run check` (pid 1959299): exit 0, wall 0.35 s.
+- `npm run witness:shell` (pid 1960115): exit 0, wall 1.68 s, `RESULT PASS=1152 FAIL=0`, with three `exit 124` rows.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   eab13de..b56fb89  main -> main
+``
+
+`git ls-remote origin main` after the push: `b56fb89c8b4ade0bfe3b36080e9f5b1662352964 refs/heads/main`. The push carried 33cf932 (the record of the window that cleared at reading 1 for eab13de) and b56fb89.
+
+Longest step: the green witness, 1.57 s. Nothing was stopped.
