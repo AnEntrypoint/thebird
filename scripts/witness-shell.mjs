@@ -1619,6 +1619,18 @@ group('arithmetic command: a redirection on (( )) is applied, as bash does', asy
   check('arithmetic command: a stderr redirection onto stdout puts the division-by-zero message on stdout, as bash does', rd5.stdout.includes('division') && rd5.stdout.endsWith('\n1\n') && rd5.stderr === '', JSON.stringify([rd5.stdout, rd5.stderr]));
 });
 
+group('pipes and continuations: a newline after | and a continuation between assignments follow bash', async () => {
+  const pn0 = await run(await shell({}), 'echo a |\necho $LINENO');
+  check('pipes: a newline after | continues the pipeline, and LINENO is the line of the next command, as bash does', pn0.stdout === '2\n' && pn0.stderr === '', JSON.stringify([pn0.stdout, pn0.stderr]));
+  const pn1 = await run(await shell({}), 'echo a |\n\necho $LINENO');
+  check('pipes: blank lines after | still continue the pipeline, as bash does', pn1.stdout === '3\n' && pn1.stderr === '', JSON.stringify([pn1.stdout, pn1.stderr]));
+  const pn2 = await run(await shell({}), 'x=1 \\\n y=2; echo $y');
+  check('assignments: a continuation between two assignments leaves both as assignments, as bash does', pn2.stdout === '2\n' && pn2.stderr === '', JSON.stringify([pn2.stdout, pn2.stderr]));
+  const pn3 = await run(await shell({}), 'x=1 \\\n y=$LINENO; echo $y');
+  check('assignments: LINENO after a continuation between two assignments is the first line, as bash does', pn3.stdout === '1\n' && pn3.stderr === '', JSON.stringify([pn3.stdout, pn3.stderr]));
+  const pn4 = await run(await shell({}), 'echo a \\\n b');
+  check('words: a continuation between two words gives one space between them, as bash does', pn4.stdout === 'a b\n' && pn4.stderr === '', JSON.stringify([pn4.stdout, pn4.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

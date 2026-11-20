@@ -3698,3 +3698,24 @@ Red checks, each restored from a backup and confirmed with `cmp`:
 - (2) the parser change removed, so the redirections are a syntax error again: every arithmetic command then crashes with a TypeError (`redirects is not iterable`) inside `withRedirects`, which gives `RESULT PASS=975 FAIL=27` with the six rows of this change set in place. That run shows that the parser change is needed for the whole path, not only the redirect rows.
 
 Gaps still open, not probed here: descriptor numbers above 2 (the `3>` shape), and `<` on an arithmetic command, which bash accepts but this change set does not witness.
+
+### Change set 30ba: a newline after | continues a pipeline, and a continuation between assignments leaves them as assignments, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. This is ranked LINENO item 5 from the earlier list: the probe ran the LINENO shapes and the neighbouring shapes that differed. Probed (bash stdout):
+- `echo a |` newline `echo $LINENO` prints `2`. Our shell gave a syntax error, because the newline token after `|` was not skipped.
+- `echo a |` newline, blank line, `echo $LINENO` prints `3`, with the same syntax error on our side.
+- `x=1 \` newline ` y=2; echo $y` prints `2`, and `x=1 \` newline ` y=$LINENO; echo $y` prints `1`. Our shell printed an empty line and `y=2: command not found`: the continuation left an empty word, which stopped the assignment prefix before the second assignment.
+- `echo a \` newline ` b` prints `a b`, and `echo \` newline `a` prints `a`: these already matched, and the empty word was dropped when it sat in an argument list.
+- `\` newline `echo $LINENO` prints `2`, and `echo a &&` newline, blank line, `echo $LINENO` prints `a` then `3`: these already matched.
+
+Rule: after `|`, the newline tokens are skipped before the next command, as after `&&` and `||`. A word that is only a backslash-newline is not a word, so the tokenizer emits no token for it.
+
+What changed in the shell: the pipeline parser skips newline tokens after `|`, and the tokenizer does not emit a token for a word with no parts.
+
+Witness: 5 rows, four from the shapes that differed and one for the matching argument-list shape. Final: `RESULT PASS=1008 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed with `cmp`:
+- (1) the newline skip after `|` removed: `RESULT PASS=1006 FAIL=2`, with the two pipe rows red.
+- (2) the empty-word skip removed from the tokenizer: `RESULT PASS=1006 FAIL=2`, with the two assignment rows red.
+
+Gaps still open, not probed here: a newline after `|&` and after a redirection, and an empty word in a case word.

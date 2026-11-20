@@ -323,7 +323,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
         }
       } else {
         const word = readParts(src, i, BREAKS);
-        tokens.push({ parts: word.parts, text: src.slice(i, word.end), line: lineAt(i), endLine: lineAt(word.end) });
+        if (word.parts.length) tokens.push({ parts: word.parts, text: src.slice(i, word.end), line: lineAt(i), endLine: lineAt(word.end) });
         i = word.end;
       }
     }
@@ -520,6 +520,7 @@ function parse(tokens) {
     const cmds = [parseCommand()];
     while (tokens[pos]?.op === '|') {
       pos++;
+      while (tokens[pos]?.newline) pos++;
       cmds.push(parseCommand());
     }
     return { cmds };
