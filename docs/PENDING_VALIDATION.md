@@ -6454,3 +6454,29 @@ Taken this round: item 1 (stray `]]`). Items 2 to 17 are listed, not taken.
 - W2 `node --test test/prompt-path.test.mjs`, W3 tar-gzip, W4 git-root, W5 git-init-message, W6 craft-cli, W7 readme-claims: each RC 0. W8 `lint:comments`: RC 0. W9 `lint:architecture`: RC 0 (timeout 1500 s).
 - Red checks (20 mutations, each under `timeout 900`, each restored and compared by `cmp` to HEAD; 21 of 21 restores matched): every run exited 1. Failing rows under each mutation: arrayAssign 34, atParam 17, fieldStart 13, leftover 11, rematch 10, perm 7, slice 6, menuPitch 9, fnArray 5, menuTab 5, modeOf 5, keys 4, stray 4, owner 3, arrayPrefix 3, negative 2, noteRead 1, prefixKeep 1, sliceEmpty 1; `lstatGuard` (prompt-path) fails 3 tests with `host.lstat is not a function`.
 - Push of this tree: `ce70f59..9c2973d`, `git ls-remote origin main` `9c2973dec1d2a4c0ac23b2a3e21b240251c64468`.
+
+### Phase B windows 4 to 7 (HEAD 1ba7b52): the pin, touch and tjs.utime rows, the owner row, and two reds that do not fail
+
+- Pin. `91292c85…` is the digest of the `9c2973d` fs-browser.c. Build R1 (`/tmp/k13/phaseb9/build-R1-reproduce-91292c85.txt`) rebuilt that source with `ZIG=/workspace/tools/zig-x86_64-linux-0.17.1/zig` and got the same digest, so the value has now been built twice. The HEAD fs-browser.c (with `fs_utime` and the `tjs_fs_setattr` import) gave `d1c9fd49783fc5037169537138a940faf40b9bf2d8d5c04ef1a72c354f5711f6` in R2, and the pin check refused `91292c85…` for it, as designed. A second build R3 of `d1c9fd49…` gave the same digest, so the pin is `d1c9fd49…` in `1ba7b52`.
+- Why the pin moved: the `8c5766a` message said "reproduced with zig 0.17.1", but at that time only the pre-change digest had been reproduced. The `utime` change in C moves the digest.
+- Gate. Window 4 opened 20:30:55, and the first samples read `GATE_BUSY si=6144 so=0` with holders outside this work: PID 2525 in `/workspace/oscraft`, PID 2236 in `/workspace/bevy`, and processes in `/workspace/gm/build/release`. Window 6 started 20:42:57 and window 7 started 21:03:44. In window 7 every browser and red run read `GATE_CLEAR` (si 0 to 204, so 0), and W1 to W9 ran in the same window.
+- W1 `npm run -s witness:shell` (window 7): `RESULT PASS=1962 FAIL=0`, RC 0. W2 to W9 (prompt-path, tar-gzip, git-root, git-init-message, craft-cli, readme-claims, lint:comments, lint:architecture): each RC 0.
+- Browser greens, window 7 (`/tmp/k13/phaseb9/<name>.txt`): `touch-green` RC 0 (`touch -m` moves the time that tjs.stat reports to now, and `touch -a` keeps it: `touchrow-age true`, `touchrow-a-kept true`). `utime-green` RC 0 (`tjs.utime` through `tjs_fs_setattr` sets mtim to 1600000000000 ms). `owner-green` RC 0 (`PASS 1 FAIL 0`). `uvfs-green` RC 0 (`PASS 20 FAIL 0`).
+- Browser reds, window 7:
+  - `touch-red`, mutation `touch -a also sets mtime` (`web/shims/fs.js`): `PASS 1 FAIL 1`, RC 1. Restored, cmp ok.
+  - `utime-red`, mutation `setAttrSync mtime write dropped`: `PASS 0 FAIL 1`, RC 1. Restored, cmp ok.
+  - `owner-red`, mutation `shim default uid and gid to 0`: `PASS 1 FAIL 0`, RC 0. NOT caught. Restored, cmp ok.
+  - `lstat-browser-red`, mutation `lstatGuard` in `web/shell-core.js`, run through the touch row: `PASS 2 FAIL 0`, RC 0. NOT caught. Restored, cmp ok.
+- Node reds, window 7: 21 mutation keys, each under the W1 witness. Every key exits 1 except `lstatGuard`, which exits 0 and is not caught. Every restore compared equal to its good copy. `lstatGuard` had not been run in any earlier window.
+
+Why the owner row cannot fail on the shim uid (the owner row is not met):
+- In the page `[` is not a shell-core command. `CORE_NAMES` in `web/bash-shell.js` is `sort` and `touch`, so `[ -O f ]` runs bashkit's native test. The bashkit wasm gets no uid from the host: `bashkit-host.js` stat returns `type`, `size` and `mtimeMs`.
+- shell-core's `-O` (`web/shell-core.js`, the `op === '-O' || op === '-G'` branch) is not reached in the page. Its `(host.stat(real)?.[key] ?? id) === id` falls back to `SHELL_UID` when the host gives no uid, which would hide a missing uid. I tried removing the fallback and adding `uid`/`gid` to `bashkit-host` stat, and reverted both, because no page row reaches either.
+- Missing entry point: `[` and `test` in the page. To make the row discriminating, route `test` and `[` through `createShell` the way `sort` and `touch` are routed, or give bashkit's test a uid source. Neither is done here.
+
+Why `lstatGuard` escapes: `host.lstat?.(candidate)` in `web/shell-core.js` (around lines 2053 and 2070) guards a host without `lstat`. The node host always has `lstat`. `coreHost` in `web/bash-shell.js` has no `lstat`, but the touch and sort rows never reach that branch. Missing: a witness that resolves a path through a host with no `lstat`.
+
+Other findings:
+- `shell-program.js` `touch` and the native `fs_utime` (`aa17718`) are not on the page's path: `shell-program.js` is loaded only by `web/shell-in-txiki.js`. The page's `touch` goes through `bashkit-host.touch(path, access, modify)` to `fs.touchSync` in `web/shims/fs.js`, which sets `meta` and `attrs`. The `tjs_fs_setattr` entry is exposed (`fs-uv-browser.c`, `txiki-in-page.js`), and `tjs.utime` is witnessed through it by `utime-green`. The unused `__thebirdFs.utime` and `fs_utime` have no witness and should be removed in a later change, which needs its own build and pin.
+- `tjs.stat` returns `atim` and `mtim` as Date objects, not `mtimeMs` or `mtime`. The touch rows read `mtimeMs` at first and failed for that reason only.
+- Push: none. The owner row and the `lstatGuard` red do not fail as required, so the commits stay local. Local commits after `origin/main`: the touch and row commit, this ledger commit, and `1ba7b52` and the earlier ones listed by `git log origin/main..HEAD`.
