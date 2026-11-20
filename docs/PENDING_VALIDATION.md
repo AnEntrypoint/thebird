@@ -4934,3 +4934,37 @@ Not done here, recorded:
 - G1b, reachable, open: `chmod -R` over a directory tree that cannot be read (its messages carry `Permission denied` with a joined path) is not witnessed, because the sandbox's leftover permissions make the output depend on earlier runs. The messages do go through `quoted`, so they follow the same rule.
 - Other GNU tools (`ls`, `find`, `du` and so on) that quote names by locale are out of scope for this change set.
 - Names with control characters in the C locale use the escape path already present; GNU's output for them matched the rows that existed before, and was not probed further.
+
+### Phase B window for d6bfae4 (change set 30cd, stat -c %N and chmod quoting follow the locale), with its readings, red check and push
+
+Gate readings (the gate is the second `vmstat 1 2` sample, both directions under 1000 KB/s; heavy-jobs must read clear in the same reading):
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 07:00:54 | 29084 | 0 | not clear | not run | `vmstat 1 2`, second sample; the first line is the average since boot |
+| wait 1 | 07:00:59 | 17148 | 0 | not clear | not run | waiter, which takes gate readings only |
+| wait 2 | 07:01:30 | 428 | 0 | clear | not run | the waiter started the window on this reading |
+| window 1 | 07:01:33 | 16 | 0 | clear | busy, n=1 | `node scripts/check-etc2-special-modes.cjs`, pid 2248181, 100% CPU |
+| window 2 | 07:02:04 | 1140 | 6732 | not clear | busy, n=1 | the same process |
+| window 3 | 07:02:33 | 2728 | 18380 | not clear | busy, n=1 | the same process |
+| window 4 | 07:03:04 | 724 | 0 | clear | clear | the window cleared at this reading |
+
+The waiter (pid 2249094) started the window script only on a clear gate sample. The window script runs its checks only when the gate and `heavy-jobs.cjs` (bevy commit 495fff6) are both clear in the same reading. The window read busy at readings 1 to 3, and cleared at reading 4.
+
+Heavy-job rule, as applied: the hot list is every process above 20% CPU in `top`, with full command lines from `ps` and `gm-core worker --handshake` excluded, plus any Chromium renderer above 1 GB. The check script above is a check run and counts while it runs.
+
+Green witness (pid 2250617): exit 0, wall 2.15 s, `RESULT PASS=1489 FAIL=0`.
+G1 red check (pid 2250652): the mutation makes `quoteName` escape non-ASCII in every locale, on the HEAD copy of `web/shell-core.js`. Exit 1, wall 1.71 s, `RESULT PASS=1480 FAIL=9`. Restored from the HEAD copy, `cmp` matched; the witness after restore read `PASS=1489 FAIL=0`.
+`npm run check` (pid 2250804): exit 0, wall 0.37 s.
+`npm run witness:shell` (pid 2250884): exit 0, wall 1.87 s, `RESULT PASS=1489 FAIL=0`; three rows print exit 124 and are PASS rows.
+
+Push, once, after every check passed. It carried a160d2e and d6bfae4:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   19dd8fa..d6bfae4  main -> main
+```
+
+`git ls-remote origin main` after the push: `d6bfae4d6387e355b7f4112969d04b2b1789d52c refs/heads/main`.
+
+Longest step: the window wait, from the window start at 07:01:33 to the cleared reading at 07:03:04, about 91 s. Nothing was stopped; the busy process belonged to another session.
