@@ -1942,12 +1942,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const fileTicks = new Map();
   let fileClock = 0;
   const clockKey = (path) => searchedDirectories(path).real;
-  const noteRead = (path) => {
+  const readFileText = (path) => {
     const key = clockKey(path);
     fileTicks.set(key, { m: fileTicks.get(key)?.m ?? 0, a: ++fileClock });
-  };
-  const readFileText = (path) => {
-    noteRead(path);
     return host.read(path);
   };
   const writeFileText = (path, data) => {
