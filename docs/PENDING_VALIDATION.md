@@ -6303,3 +6303,26 @@ Phase A was code and docs only. No build, test, witness or red check was run in 
 - Red check (mutation, to run in Phase B): change `host.lstat?.(candidate)` back to `host.lstat(candidate)`. Expect the prompt-path tests to fail again with `host.lstat is not a function`. Restore from a copy, `cmp`, `git status`.
 - Note: the witness-shell host has `lstat` and the prompt-path host does not, so witness-shell alone cannot show a host without it. Phase B runs both.
 - Commit: 6d29cc4 (lanmower, no trailers).
+
+### Phase B, window 3: every witness, every red check, and the push
+
+- Gate: each step waited for a clear sample (second `vmstat 1 2` sample under 1000 KB/s both directions, and `scripts/heavy-jobs.cjs` clear in that sample). Holders named during the waits by PID and cwd, none stopped: PID 2525 (gm worker, cwd `/workspace/oscraft`), and short-lived PIDs in `/workspace/oscraft` and `/workspace/fx/fx`. The readings are in the Phase B log (`/tmp/k13/phaseb/readings.txt`). The first standalone reading: second sample si 200, so 0.
+- Window 2 stopped by PID after W2 failed with `host.lstat is not a function` (the `-N` clock called `lstat` on every read and write). Fixed in `6d29cc4` (`host.lstat?.`), and recorded in the L-lstat entry. Window 3 ran the full list again from the start.
+- Witnesses, each under timeout with its PID captured (rc 0 for all nine):
+  - W1 `npm run -s witness:shell`: `RESULT PASS=1888 FAIL=0`.
+  - W2 `node --test test/prompt-path.test.mjs`: tests 18, pass 18, fail 0.
+  - W3 tar-gzip: tests 4, pass 4, fail 0. W4 git-root: tests 6, pass 6, fail 0. W5 git-init-message: tests 1, pass 1. W6 craft-cli: tests 1, pass 1. W7 readme-claims: tests 2, pass 2.
+  - W8 `npm run -s lint:comments`: `146 repo-owned files checked: 0 comments`.
+  - W9 `npm run -s lint:architecture`: `399 claims: 399 pass, 0 fail, 0 unverified`.
+- Red checks, each a mutation of `web/shell-core.js` (or `prompt-path` for the last), with restore from the saved copy and `cmp` (`RESTORED cmp=ok`) after each, and `git status` showing only `bin/thebird-relay.js`:
+  - menuPitch (`+ 4` to `+ 3`): `RESULT PASS=1879 FAIL=9`. Detected.
+  - menuTab (tab stop to space): `PASS=1883 FAIL=5`. Detected.
+  - perm (owner shift `>> 6` to `>> 3`): `PASS=1884 FAIL=4`. Detected.
+  - noteRead (access tick set to 0): `PASS=1887 FAIL=1`. Detected.
+  - rematch (`BASH_REMATCH` assignment removed): `PASS=1878 FAIL=10`. Detected.
+  - creation (`createRedirect` back to `writeRedirect`): `PASS=1888 FAIL=0`. NOT detected.
+  - internal (flush prior read back to `readFileText`): `PASS=1888 FAIL=0`. NOT detected.
+  - lstatGuard (`host.lstat?.` back to `host.lstat`), against `prompt-path`: `ℹ fail 3`, each with `host.lstat is not a function`. Detected.
+- What the two NOT-detected red checks mean: no witness row decides create-then-write against bash, because bash itself varies there (see the Witness fix entry). The creation and internal-read changes are kept as the logical-clock model, and they are not witnessed. This is a known gap, not a passing witness.
+- Push: made once, because every witness run passed (W1–W9, rc 0). Carries all local commits, including the two unwitnessed model changes named above.
+- -N stat values from bash 5.3.9 on this host (the bash rule is mtime later than atime at nanosecond resolution): create `atime=2026-11-20 15:31:04.235004118 mtime=2026-11-20 15:31:04.236026644`; read leaves mtime unchanged and moves atime to `…04.243004298`; append moves mtime to `…04.247004387`. The `-N` answer for create-then-write is not stable across runs (see Witness fix). The stored rows use the read-then-append-after-sleep case, which bash answers `modified` 40 of 40.
