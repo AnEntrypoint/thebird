@@ -1,5 +1,5 @@
 export function lookupPrologue(inPageNames) {
-  const names = inPageNames.map((name) => `'${name}'`).join('|');
+  const names = inPageNames.join('|');
   return `
 which() {
   local n rc=0
@@ -13,7 +13,7 @@ which() {
   return $rc
 }
 command() {
-  case \"$1\" in -v) shift; which \"$@\" ;; *) builtin command \"$@\" ;; esac
+  if [ "$1" = -v ]; then shift; which "$@"; else builtin command "$@"; fi
 }
 type() {
   local mode= n rc=0

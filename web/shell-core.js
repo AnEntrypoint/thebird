@@ -3208,7 +3208,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       if (op === '-O' || op === '-G') {
         const real = searchedDirectories(resolvePath(value)).real;
         const [key, id] = op === '-O' ? ['uid', SHELL_UID] : ['gid', SHELL_GID];
-        return Boolean(statInfo(real)) && host.stat(real)?.[key] === id;
+        return Boolean(statInfo(real)) && (host.stat(real)?.[key] ?? id) === id;
       }
       if (op === '-N') {
         const real = searchedDirectories(resolvePath(value)).real;

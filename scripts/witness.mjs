@@ -182,12 +182,12 @@ group('tjs.utime sets the modification time that tjs.stat reports, through tjs_f
   check('tjs.utime sets the mtime to 1600000000000 ms, and tjs.stat reports it back, through tjs_fs_setattr', setLines.includes('utrow-mtime 1600000000000'), JSON.stringify(setLines.slice(-6)));
 });
 
-group('permission owner in the page: a file the page creates is owned by the shell user, so -O and -G are true', async () => {
+group('permission owner in the page: [ -O ] and [ -G ] are true for a file the page creates', async () => {
   const owner = await terminal([
     ['run', "printf x > /workspace/ownrow-f && [ -O /workspace/ownrow-f ] && echo owner-yes; [ -G /workspace/ownrow-f ] && echo group-yes"]
   ]);
   const ownerLines = owner.out.split('\n');
-  check('-O and -G are true for a file the page creates, because the shim gives it uid and gid 1000', ownerLines.includes('owner-yes') && ownerLines.includes('group-yes'), JSON.stringify(ownerLines.filter((line) => line.endsWith('-yes')).slice(0, 4)));
+  check('[ -O ] and [ -G ] are true for a file the page creates, answered by the bashkit test of the page, which does not read the shim uid', ownerLines.includes('owner-yes') && ownerLines.includes('group-yes'), JSON.stringify(ownerLines.filter((line) => line.endsWith('-yes')).slice(0, 4)));
 });
 
 group('uv-fs', async () => {
