@@ -1965,7 +1965,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   let positional = [];
   let loopDepth = 0;
 
-  const ownerBits = (path) => (parseInt(modes.get(path) ?? '755', 8) >> 6) & 7;
+  const hostModeText = (path) => {
+    const mode = host.stat(path)?.mode;
+    return Number.isInteger(mode) ? (mode & 0o7777).toString(8) : undefined;
+  };
+  const modeOf = (path, fallback) => modes.get(path) ?? hostModeText(path) ?? fallback;
+  const ownerBits = (path) => (parseInt(modeOf(path, '755'), 8) >> 6) & 7;
   const searchedDirectories = (path, followLast = true, depth = 0) => {
     const parts = path.split('/').filter((part) => part !== '');
     const searched = [];
@@ -2000,7 +2005,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (link?.link) return { type: 'symbolic link', size: link.size ?? 0, mode: modes.get(path) ?? '777' };
     const info = host.stat(path);
     const dir = info?.dir === true;
-    return { type: dir ? 'directory' : 'regular file', size: info?.size ?? 0, mode: modes.get(path) ?? (dir ? '755' : '644') };
+    return { type: dir ? 'directory' : 'regular file', size: info?.size ?? 0, mode: modeOf(path, dir ? '755' : '644') };
   };
 
   const inodeNumbers = new Map();

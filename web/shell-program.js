@@ -37,12 +37,12 @@ const host = {
   exists: (path) => __thebirdFs.stat(path) != null,
   stat(path) {
     const info = __thebirdFs.stat(path);
-    return info == null ? null : { dir: info.kind === 2, size: info.size };
+    return info == null ? null : { dir: info.kind === 2, size: info.size, mode: info.mode & 0o7777 };
   },
   list: (path) => __thebirdFs.readdir(path) ?? [],
   lstat(path) {
     const info = __thebirdFs.lstat(path);
-    return info == null ? null : { dir: info.kind === 2, link: info.kind === 3, size: info.size };
+    return info == null ? null : { dir: info.kind === 2, link: info.kind === 3, size: info.size, mode: info.mode & 0o7777 };
   },
   readlink(path) {
     const target = __thebirdFs.readlink(path);

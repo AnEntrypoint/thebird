@@ -19,7 +19,7 @@ const MISSING = 'web/shell-core.js is not present: the txiki shell has not been 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function memoryHost(files = {}) {
+function memoryHost(files = {}, modes = {}) {
   const store = new Map(Object.entries(files));
   const dirs = new Set(['/', '/workspace']);
   const links = new Map();
@@ -38,8 +38,8 @@ function memoryHost(files = {}) {
   };
   const statOf = (real) => {
     if (real === null) return null;
-    if (dirs.has(real) || children(real).length > 0) return { dir: true, size: 0 };
-    if (store.has(real)) return { dir: false, size: store.get(real).length };
+    if (dirs.has(real) || children(real).length > 0) return { dir: true, size: 0, mode: modes[real] };
+    if (store.has(real)) return { dir: false, size: store.get(real).length, mode: modes[real] };
     return null;
   };
   return {
@@ -97,8 +97,8 @@ function memoryHost(files = {}) {
 
 const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'curl', 'wget'];
 
-async function shell(files) {
-  const host = memoryHost(files);
+async function shell(files, modes = {}) {
+  const host = memoryHost(files, modes);
   return core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
 }
 
@@ -3974,6 +3974,22 @@ group('a word after a compound command is a syntax error near that word, as bash
     const sh = await shell({});
     const r = await run(sh, script);
     check('leftover word: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
+group('permission tests read the host mode bits when the shell has no chmod for the file (bash output with chmod, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["[ -r f ]; echo r=$?; [ -w f ]; echo w=$?", "r=1\nw=1\n", "", 0, {"/workspace/f":"x"}, {"/workspace/f":0}],
+  ["[[ -r f && ! -w f ]] && echo readonly", "readonly\n", "", 0, {"/workspace/f":"x"}, {"/workspace/f":256}],
+  ["[[ -w f ]] && echo w; [[ -x f ]] || echo nx", "w\nnx\n", "", 0, {"/workspace/f":"x"}, {"/workspace/f":421}],
+  ["[[ -r d/f ]] || echo blocked; [[ -x d ]] || echo dir_nx", "blocked\ndir_nx\n", "", 0, {"/workspace/d/f":"x"}, {"/workspace/d":384}],
+  ["[[ -x f ]] && echo exec; [[ -r f ]] || echo unreadable", "exec\nunreadable\n", "", 0, {"/workspace/f":"x"}, {"/workspace/f":64}],
+  ["[ -r d/f ]; echo rc=$?; [[ -x d ]] && echo dx", "rc=1\ndx\n", "", 0, {"/workspace/d/f":"x"}, {"/workspace/d":493,"/workspace/d/f":0}],
+  ];
+  for (const [script, stdout, stderr, status, files, modes] of cases) {
+    const sh = await shell(files, modes);
+    const r = await run(sh, script);
+    check('host mode: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
   }
 });
 
