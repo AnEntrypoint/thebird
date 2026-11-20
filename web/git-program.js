@@ -192,7 +192,7 @@ async function gitAdd(dir, paths) {
 
 async function gitInit(dir) {
     await isomorphic.init(io(dir));
-    return `initialized empty repository in ${dir}/.git/`;
+    return `Initialized empty Git repository in ${dir}/.git/`;
 }
 
 async function gitBranches(dir) {

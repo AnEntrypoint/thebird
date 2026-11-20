@@ -1031,7 +1031,7 @@ group('git-repo', async () => {
     ['run', 'git log'],
   ]);
   check('in-page git commit without DESIGN.md is refused and names it', repo.out.includes('commit refused by the in-page gate') && repo.out.includes('DESIGN.md is not in the commit'), repo.out.split('\n').find((line) => line.includes('DESIGN.md is not in the commit'))?.slice(0, 160) ?? 'no refusal line');
-  check('in-page git inits and stages over OPFS', repo.engine === 'ready' && repo.out.includes('initialized empty repository') && repo.out.includes('staged 1 path'), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
+  check('in-page git inits and stages over OPFS', repo.engine === 'ready' && repo.out.includes('Initialized empty Git repository') && repo.out.includes('staged 1 path'), repo.out.split('\n').slice(0, 3).join(' / ').slice(0, 140));
   const committedSha = repo.out.match(/committed ([0-9a-f]{7})/)?.[1];
   const headSha = repo.out.match(/^([0-9a-f]{7}) first$/m)?.[1];
   check('in-page git commit runs the gate and sets HEAD', repo.out.includes('gate smoke:') && repo.out.includes('gate syntax:') && committedSha !== undefined && committedSha === headSha, `committed ${committedSha} / log HEAD ${headSha}`);
