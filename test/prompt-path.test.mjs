@@ -45,6 +45,15 @@ test('touch -c at the typed prompt creates nothing, as GNU touch does', async ()
   assert.equal(r.output, 'rc=0\nnew.txt\n');
 });
 
+test('touch at the typed prompt updates the modification time of an existing file, as GNU touch does', async () => {
+  await run("mkdir -p /mtchk && echo x > /mtchk/a");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await run("echo y > /mtchk/b");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const r = await run("touch /mtchk/a; [ /mtchk/a -nt /mtchk/b ] && echo newer; echo rc=$?");
+  assert.equal(r.output, 'newer\nrc=0\n');
+});
+
 test('touch at the typed prompt reports a missing directory as GNU touch does, with status 1', async () => {
   const r = await run('touch /tchk/nodir/x; echo rc=$?');
   assert.equal(r.output, "rc=1\ntouch: cannot touch '/tchk/nodir/x': No such file or directory\n");

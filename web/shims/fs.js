@@ -119,6 +119,10 @@ function touch(path) {
   }
 }
 
+export function touchSync(path) {
+  touch(path);
+}
+
 function forgetAttrs(path) {
   const prefix = path + '/';
   let removed = false;

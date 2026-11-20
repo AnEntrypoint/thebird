@@ -2092,7 +2092,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       let code = 0;
       for (const name of names) {
         const path = resolvePath(name);
-        if (host.exists(path) || noCreate) continue;
+        if (host.exists(path)) {
+          host.touch?.(path);
+          continue;
+        }
+        if (noCreate) continue;
         if (!host.stat(parentOf(path))?.dir) {
           err += "touch: cannot touch '" + name + "': No such file or directory\n";
           code = 1;

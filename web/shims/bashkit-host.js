@@ -33,6 +33,9 @@ export function createHost() {
     exists(path) {
       return fs.existsSync(path);
     },
+    touch(path) {
+      fs.touchSync(path);
+    },
     symlink(target, path) {
       fs.symlinkSync(target, path);
     },
