@@ -3402,6 +3402,15 @@ group("grep -r and -l: grep -r searches a directory and prefixes each line with 
   const wgr5 = await run(sh, "echo hit > x.txt; grep -l hit x.txt nothing.txt; echo rc=$?");
   check("grep -l with a missing file keeps the error status (bash output, locale en_US.UTF-8)", wgr5.stdout === "x.txt\nrc=2\n" && wgr5.exitCode === 0 && wgr5.stderr === "grep: nothing.txt: No such file or directory\n", JSON.stringify([wgr5.stdout, wgr5.stderr, wgr5.exitCode]));
 });
+group("find -maxdepth: find -maxdepth stops the walk at the given depth below each start point, as bash does", async () => {
+  const sh = await shell({});
+  const wfd1 = await run(sh, "mkdir -p d; echo hit > d/x.txt; find d -maxdepth 1; echo rc=$?");
+  check("find -maxdepth 1 lists the start point and its direct entries (bash output, locale en_US.UTF-8)", wfd1.stdout === "d\nd/x.txt\nrc=0\n" && wfd1.exitCode === 0 && wfd1.stderr === "", JSON.stringify([wfd1.stdout, wfd1.stderr, wfd1.exitCode]));
+  const wfd2 = await run(sh, "mkdir -p d/e; find d -maxdepth 0; echo rc=$?");
+  check("find -maxdepth 0 lists only the start point (bash output, locale en_US.UTF-8)", wfd2.stdout === "d\nrc=0\n" && wfd2.exitCode === 0 && wfd2.stderr === "", JSON.stringify([wfd2.stdout, wfd2.stderr, wfd2.exitCode]));
+  const wfd3 = await run(sh, "mkdir -p d/e/f; find d -maxdepth 2 -type d; echo rc=$?");
+  check("find -maxdepth 2 with -type d lists the directories two levels down (bash output, locale en_US.UTF-8)", wfd3.stdout === "d\nd/e\nd/e/f\nrc=0\n" && wfd3.exitCode === 0 && wfd3.stderr === "", JSON.stringify([wfd3.stdout, wfd3.stderr, wfd3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

@@ -2186,22 +2186,24 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       while (i < argv.length && !argv[i].startsWith('-')) roots.push(argv[i++]);
       if (!roots.length) roots.push('.');
       const predicates = [];
+      let maxDepth = Infinity;
       for (; i < argv.length; i += 2) {
         const [flag, value] = [argv[i], argv[i + 1] ?? ''];
         if (flag === '-name') predicates.push((name) => globRegExp(value).test(name));
         else if (flag === '-iname') predicates.push((name) => globRegExp(value, true).test(name));
         else if (flag === '-type') predicates.push((_name, info) => (value === 'd' ? info.dir : !info.dir));
+        else if (flag === '-maxdepth') maxDepth = Number(value);
         else throw new Error(`find: unknown predicate '${flag}'`);
       }
       let out = '';
       let err = '';
       let code = 0;
-      const visit = (display, path) => {
+      const visit = (display, path, depth = 0) => {
         const info = host.stat(path);
         if (!info) return;
         const base = display.slice(display.lastIndexOf('/') + 1) || display;
         if (predicates.every((test) => test(base, info))) out += display + '\n';
-        if (info.dir) {
+        if (info.dir && depth < maxDepth) {
           for (const entry of host.list(path).sort()) visit(`${display.replace(/\/$/, '')}/${entry}`, `${path === '/' ? '' : path}/${entry}`);
         }
       };

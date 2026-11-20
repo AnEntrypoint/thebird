@@ -5799,3 +5799,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `grep` command. `-r` walks a directory (with the names joined as the shell path, and no ./ prefix when no file is named); `-l` prints each matching name once, or `(standard input)`. A directory without `-r` is `grep: d: Is a directory` with status 2, as bash prints it.
 - Witness: `scripts/witness-shell.mjs`, group "grep -r and -l: grep -r searches a directory and prefixes each line with the file, grep -l prints each file that matches once, and a directory without -r is an error, as bash does", five rows with the expected output taken from bash. Before the change four of the five failed against bash.
 - Red checks, two: `-r` treated as absent (the directory error for every directory), and `-l` disabled. Counts: -r, green RESULT PASS=1614 FAIL=0 (1.66 s), red RESULT PASS=1613 FAIL=1 (pid 40225, the -r row failing); -l, green RESULT PASS=1614 FAIL=0 (1.63 s), red RESULT PASS=1611 FAIL=3 (pid 40296, the three -l rows failing). Both restored, cmp matches.
+
+### Defect fix S1-14: find -maxdepth stops the walk
+
+- Row: S1-14 of the full-feature run (commit 8d52612). Command: `find d -maxdepth 1`. Before: `find: unknown predicate '-maxdepth'`, rc 2. Expected: the start point and its direct entries, `d` then `d/x.txt` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `find` command. `-maxdepth N` is read as a predicate that sets the depth limit, and the walk does not descend below it.
+- Witness: `scripts/witness-shell.mjs`, group "find -maxdepth: find -maxdepth stops the walk at the given depth below each start point, as bash does", three rows with the expected output taken from bash. Before the change all three failed against bash.
+- Red check: the depth limit removed by mutation (the walk descends at any depth); the counts are in the amended line that follows.
