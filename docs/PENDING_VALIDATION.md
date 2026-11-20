@@ -5770,7 +5770,7 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - Row: S1-07 of the full-feature run (commit 8d52612). Commands: `jq -S .` on an object, and `jq --arg x hi .`. Before: `jq: Unknown option` for both. Expected: the object with its keys in order, and the bound value (bash with jq 1.8.2, locale en_US.UTF-8).
 - File: `web/shell-jq.js`. `-S` (and `--sort-keys`) sorts the keys of each output value. `--arg name value` binds a string to `$name`. The tokenizer reads `$name` as a variable, the parser makes a variable node, and the evaluator looks it up; a name that is not bound is a runtime error, not the compile error jq gives, which is recorded as an open note.
 - Witness: `scripts/witness-shell.mjs`, group "jq -S and --arg: jq -S sorts the keys of each object, and --arg binds a named variable that the filter reads, as jq does", four rows with the expected output taken from bash. Before the change all four failed against bash.
-- Red checks, two: the `-S` sort disabled by mutation, and the variable binding disabled by mutation (each run's counts are in the amended line that follows).
+- Red checks, two: the `-S` sort disabled by mutation, and the variable binding disabled by mutation (-S: green RESULT PASS=1594 FAIL=0, 1.75 s; red, pid 37545, RESULT PASS=1592 FAIL=2, the two -S rows failing. --arg: red, pid 37595, RESULT PASS=1592 FAIL=2, the two --arg rows failing. Both restored, cmp matches.) Open note: an unbound variable is a runtime error (exit 5) here, where jq 1.8.2 reports a compile error (exit 3) before any input is read; no witness row covers it yet.
 
 ### Defect fix S1-08: a prefix assignment reaches env
 
@@ -5805,14 +5805,14 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - Row: S1-14 of the full-feature run (commit 8d52612). Command: `find d -maxdepth 1`. Before: `find: unknown predicate '-maxdepth'`, rc 2. Expected: the start point and its direct entries, `d` then `d/x.txt` (bash, locale en_US.UTF-8).
 - File: `web/shell-core.js`, the `find` command. `-maxdepth N` is read as a predicate that sets the depth limit, and the walk does not descend below it.
 - Witness: `scripts/witness-shell.mjs`, group "find -maxdepth: find -maxdepth stops the walk at the given depth below each start point, as bash does", three rows with the expected output taken from bash. Before the change all three failed against bash.
-- Red check: the depth limit removed by mutation (the walk descends at any depth); the counts are in the amended line that follows.
+- Red check: the depth limit removed by mutation (the walk descends at any depth): green RESULT PASS=1617 FAIL=0 (1.66 s); red RESULT PASS=1616 FAIL=1, the depth-0 row failing. The depth-2 row cannot show the mutation, because the tree is two levels deep and bash lists the same entries; restored, cmp matches.
 
 ### Defect fix S1-15: cut -c picks characters
 
 - Row: S1-15 of the full-feature run (commit 8d52612). Command: `printf 'hello\n' \| cut -c2-4`. Before: `cut: you must specify the list of fields`, rc 1. Expected: `ell` (bash, locale en_US.UTF-8).
 - File: `web/shell-core.js`, the `cut` command. `-c LIST` picks characters by position, with the same list syntax as `-f` (single, ranges, open ends); the field path is unchanged.
 - Witness: `scripts/witness-shell.mjs`, group "cut -c: cut -c picks characters by position, with open and closed ranges, as bash does", five rows with the expected output taken from bash (the last is the existing `-f` path, kept as a regression). Before the change the four `-c` rows failed against bash.
-- Red check: the character branch disabled by mutation; the counts are in the amended line that follows.
+- Red check: the character branch disabled by mutation: green RESULT PASS=1622 FAIL=0 (1.66 s); red RESULT PASS=1618 FAIL=4, the four -c rows failing; restored, cmp matches.
 
 ### Defect fix S1-16: awk arrays, for (k in arr), and delete
 
