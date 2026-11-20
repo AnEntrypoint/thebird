@@ -16,6 +16,9 @@ const core = await import(pathToFileURL(join(root, 'web', 'shell-core.js')).href
 const coreReady = typeof core.createShell === 'function';
 const MISSING = 'web/shell-core.js is not present: the txiki shell has not been built';
 
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
 function memoryHost(files = {}) {
   const store = new Map(Object.entries(files));
   const dirs = new Set(['/', '/workspace']);
@@ -43,7 +46,14 @@ function memoryHost(files = {}) {
     read(path) {
       const real = follow(path);
       if (real === null || !store.has(real)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' });
-      return store.get(real);
+      const value = store.get(real);
+      return typeof value === 'string' ? value : decoder.decode(value);
+    },
+    readBytes(path) {
+      const real = follow(path);
+      if (real === null || !store.has(real)) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' });
+      const value = store.get(real);
+      return typeof value === 'string' ? encoder.encode(value) : value;
     },
     write(path, text) {
       store.set(follow(path) ?? path, text);
@@ -3538,6 +3548,22 @@ group("wc total: wc prints a total line when it reads several files, and the tot
   const wwt3 = await run(sh, "echo hello > f.txt; wc -l f.txt");
   check("wc -l on one file prints no total line (bash output, locale en_US.UTF-8)", wwt3.stdout === "1 f.txt\n" && wwt3.exitCode === 0 && wwt3.stderr === "", JSON.stringify([wwt3.stdout, wwt3.stderr, wwt3.exitCode]));
 });
+group('tar -z: tar writes and reads a gzip archive, as GNU tar does', async () => {
+  const sh = await shell({ '/workspace/x.txt': 'hit\n' });
+  const made = await run(sh, 'cd /workspace && tar -czf a.tgz x.txt; echo rc=$?');
+  check('tar -z: tar -czf writes the archive and exits 0', made.stdout === 'rc=0\n' && made.stderr === '', JSON.stringify([made.stdout, made.stderr]));
+  const listed = await run(sh, 'cd /workspace && tar -tzf a.tgz; echo rc=$?');
+  check('tar -z: tar -tzf lists the member of the gzip archive', listed.stdout === 'x.txt\nrc=0\n' && listed.stderr === '', JSON.stringify([listed.stdout, listed.stderr]));
+  const detected = await run(sh, 'cd /workspace && tar -tf a.tgz');
+  check('tar -z: tar -tf reads a gzip archive without -z, as GNU tar detects it', detected.stdout === 'x.txt\n' && detected.stderr === '', JSON.stringify([detected.stdout, detected.stderr]));
+  const extracted = await run(sh, 'cd /workspace && mkdir -p d && tar -xzf a.tgz -C d; echo rc=$?; cat d/x.txt');
+  check('tar -z: tar -xzf extracts the member into the directory', extracted.stdout === 'rc=0\nhit\n' && extracted.stderr === '', JSON.stringify([extracted.stdout, extracted.stderr]));
+  const plain = await run(sh, 'cd /workspace && tar -cf plain.tar x.txt && tar -tzf plain.tar; echo rc=$?');
+  check('tar -z: tar -tzf on a plain archive fails as GNU tar does', plain.stdout === 'rc=2\n' && plain.stderr === 'gzip: stdin: not in gzip format\ntar: Child returned status 1\ntar: Error is not recoverable: exiting now\n', JSON.stringify([plain.stdout, plain.stderr]));
+  const missing = await run(sh, 'cd /workspace && tar -tzf missing.tgz; echo rc=$?');
+  check('tar -z: tar -tzf on a missing archive reports the child failure as GNU tar does', missing.stdout === 'rc=2\n' && missing.stderr === 'tar (child): missing.tgz: Cannot open: No such file or directory\ntar (child): Error is not recoverable: exiting now\ntar: Child returned status 2\ntar: Error is not recoverable: exiting now\n', JSON.stringify([missing.stdout, missing.stderr]));
+});
+
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

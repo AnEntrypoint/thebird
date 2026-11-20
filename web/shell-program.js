@@ -23,8 +23,13 @@ const host = {
     if (bytes === undefined) throw enoent(path);
     return decoder.decode(bytes);
   },
-  write(path, text) {
-    const bytes = encoder.encode(text);
+  readBytes(path) {
+    const bytes = __thebirdFs.readFile(path);
+    if (bytes === undefined) throw enoent(path);
+    return new Uint8Array(bytes);
+  },
+  write(path, data) {
+    const bytes = typeof data === 'string' ? encoder.encode(data) : data;
     if (!__thebirdFs.writeFile(path, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))) {
       throw Object.assign(new Error(`EIO: i/o error, '${path}'`), { code: 'EIO' });
     }
