@@ -5962,3 +5962,65 @@ Not rows, but found while fixing them:
 - date: the invalid-date message uses straight quotes; GNU date uses curly quotes in a UTF-8 locale. No witness row covers it.
 - wc: the width of a file's count uses characters, where GNU uses bytes. The two differ only for multi-byte text.
 - Reference tools: the coreutils on PATH are uutils 0.10.0. The expectations for sort, uniq, tr, cut, sha256sum and env were checked again against GNU coreutils 9.7 (through `/tmp/gnubin3`, symlinks to `/bin/gnu<tool>`), and every case matched. The date and wc rows were generated from GNU.
+
+## Defect fixes for the five rows left open by the Phase B push (7190122)
+
+Each fix is its own commit. Each has a witness, and a red check: a mutation, the witness red, the file restored from a copy, `cmp` matched, `git status`. The shell-core rows share `web/shell-core.js` and `web/bash-shell.js`, so the three commits were built by applying each row's edits to the previous state, and the final state was checked to be byte-identical to the working tree.
+
+### Defect fix D1: sort at the typed prompt uses the en_US collation
+
+- Row: D1 of aa2c507 (the typed prompt's sort used bashkit's byte order). Command: `printf 'b\na\nB\n' | sort`. Before: `B a b`. Expected, as GNU sort in en_US.UTF-8 does: `a b B`. Missing file: expected `sort: cannot read: /p/none: No such file or directory` with rc 2.
+- Files: `web/bash-shell.js` (`CORE_NAMES` routes `sort` to shell-core through a host adapter, `coreHost`; a prologue wrapper prints the stored stderr with `>&2` and returns the stored status), `web/shell-core.js` (a `command(argv, stdin)` method on the shell; the `textInputs` missing-file text and status are parameters, and sort passes GNU's text and status 2), `test/prompt-path.test.mjs` (sort tests).
+- Witness: `node --test test/prompt-path.test.mjs`, the sort tests: `ℹ pass 3 ℹ fail 0` at this commit.
+- Red check: `CORE_NAMES = []`, the prompt test red `ℹ pass 1 ℹ fail 2`; restored, cmp matched; green again `ℹ pass 3 ℹ fail 0`.
+- Witness-shell after the commit: `RESULT PASS=1670 FAIL=0`.
+- Commit: f8b517a (lanmower, no trailers).
+- Limit: the prompt's `sort` is shell-core's, so bashkit's other sort options are not used at the prompt; a command with a failing file operand prints stdout first and then stderr, as separate streams in a non-streamed run.
+
+### Defect fix P-01: touch on the page path returns 0
+
+- Row: P-01 of 8d52612 (touch on the page path). Command: `echo x > k8r.txt; touch k8r.txt; echo rc=$?` and `touch k8t.txt; echo rc=$?`. Before: `rc=1` with `touch: cannot touch 'k8r.txt': set_modified_time not supported` (the new file was created and still returned 1). Expected, as GNU touch does: `rc=0` and no message, and `touch -c` creates nothing.
+- Files: `web/bash-shell.js` (`touch` added to `CORE_NAMES`, so the prologue wrapper calls shell-core's touch), `web/shell-core.js` (`-c` and `--no-create` are options, not file names; a bare `touch -c` gives GNU's two-line missing-operand text), `test/prompt-path.test.mjs` (four touch tests).
+- Witness: `node --test test/prompt-path.test.mjs`: `ℹ pass 7 ℹ fail 0` at this commit.
+- Red check: the `-c` skip removed from shell-core's touch, `ℹ pass 6 ℹ fail 1`; restored, cmp matched; green again `ℹ pass 7 ℹ fail 0`.
+- Commit: 7bf3784 (lanmower, no trailers).
+- Limit: touch does not update the modification time of an existing file; shell-core writes no times, and the bashkit touch that failed here was the only place that set them.
+
+### Defect fix D2: a syntax error at the typed prompt prints the bash text
+
+- Row: D2 of aa2c507 (the parse error at the prompt printed bashkit's `parse error at line N, column C` text). Command: `echo (`. Before: `parse error at line 1, column 6: syntax error near unexpected token `newline'`. Expected, as bash -c prints it: `bash: -c: line 1: syntax error near unexpected token `newline'` and then the echoed source line, which is ``bash: -c: line 1: `echo ('``, with rc 2.
+- Files: `web/bash-shell.js` (`run` catches bashkit's parse error and returns shell-core's `syntaxText(command)` with status 2; any other error is still thrown), `web/shell-core.js` (`syntaxText` exported; a lone command word followed by `(` reports the token after the `(`, as bash does for a function definition; end-of-input errors carry `eof`, and their line is the number of source lines plus one, as bash reports it; `echo ()` gives `syntax error: unexpected end of file`), `test/prompt-path.test.mjs` (nine parse-error rows with bash's exact text and rc 2, and an array-assignment guard).
+- Witness: `node --test test/prompt-path.test.mjs`: `ℹ pass 17 ℹ fail 0` at this commit; the nine rows were taken from `bash -c` on this machine.
+- Red checks: the EOF line rule changed from `+ 1` to `+ 0`, `ℹ pass 14 ℹ fail 3` (the EOF rows); the `(` rule changed to report `tokens[pos + 1]`, `ℹ fail 3` (the three `(` rows). Each restored, cmp matched, green again `ℹ pass 17`.
+- Witness-shell after the commit: `RESULT PASS=1670 FAIL=0`.
+- Commit: 372c316 (lanmower, no trailers).
+- Limit: the parse texts are checked against bash for the nine inputs in the test. Other inputs are not compared with bash, and shell-core's parser is the source of the text on the prompt now.
+
+### Outcome of the five open rows after Phase A
+
+| Row | Result | Commit | Witness |
+|---|---|---|---|
+| S1-25 tar -z | fixed | 4361c51 | witness-shell PASS=1670 FAIL=0; test/tar-gzip.test.mjs ℹ pass 4 ℹ fail 0 |
+| P-01 touch on the page path | fixed (the bash-shell path; the page run is not repeated) | 7bf3784 | test/prompt-path.test.mjs ℹ pass 7 ℹ fail 0 |
+| P-02 git init in a subdirectory | fixed in the code; the page run is not verified | 1236a78 | test/git-root.test.mjs ℹ pass 6 ℹ fail 0 |
+| D1 sort at the typed prompt | fixed | f8b517a | test/prompt-path.test.mjs ℹ pass 3 ℹ fail 0 |
+| D2 parse error at the typed prompt | fixed for the nine inputs in the test | 372c316 | test/prompt-path.test.mjs ℹ pass 17 ℹ fail 0 |
+
+The node witnesses for the prompt path run bashkit from its vendored WASM in Node, with the browser globals stubbed; they do not run in the page. The page runs for P-01 and P-02 need playwriter, which was not started in this stretch.
+
+### Defect fix S1-25: tar -z writes and reads gzip
+
+- Row: S1-25 (tar -z, the shell core). Before: `tar -czf a.tgz x.txt` printed `tar: compression is not supported` with `rc=2`. Expected, as GNU tar 1.35 does: `rc=0`, a gzip archive that `tar -tzf` and `tar -xzf -C` read back, and a plain archive read with `-z` fails with the GNU `gzip: stdin: not in gzip format` lines.
+- Files: `web/shell-tar.js` (gzip writer with stored deflate blocks and CRC32 and ISIZE trailer; RFC 1951 inflate with stored, fixed and dynamic Huffman; RFC 1952 header with FEXTRA, FNAME, FCOMMENT and FHCRC; magic check on read, as GNU tar detects it; `-j` and `-J` still refused), `web/shell-program.js` (txiki host gains `readBytes`, and `write` takes bytes), `scripts/witness-shell.mjs` (memory host gains `readBytes` and byte storage; group "tar -z: tar writes and reads a gzip archive, as GNU tar does", six rows whose expected values are GNU 1.35 output).
+- Node witness: `test/tar-gzip.test.mjs`, four tests on a real temporary directory: the writer output decompresses with `zlib.gunzipSync` to the plain tar bytes, a multi-block archive (over 65535 bytes) round-trips, archives made by zlib at levels 0, 1 and 9 extract and list, and a bad CRC is rejected with `gzip: stdin: invalid compressed data--crc error`.
+- Red check, mutation 1: the CRC trailer set to zero in the writer. Witness `FAIL=3` (the tar -z rows that read the archive), node test `ℹ fail 2`. Mutation 2: the stored-block NLEN written as LEN. Witness `FAIL=3`, node test `ℹ fail 2`. Both restored from a copy with `cp`, `cmp` matched, and `git status` showed only the lead's files and the relay file.
+- Counts after the fix: witness `RESULT PASS=1670 FAIL=0` (1664 before, plus six rows); node `ℹ pass 4 ℹ fail 0`; `lint:comments` 0 comments; `lint:architecture` 399 of 399 claims pass.
+- Commit: 4361c51 (lanmower, no trailers).
+- Limits, not covered by a row: `tar -cz -f -` (gzip to standard output) is refused with `tar: compressed archive to standard output is not supported`, because the shell's output is text; a concatenated multi-member gzip reads only its first member; member contents are still decoded as UTF-8, as before.
+P-02, git init in a subdirectory (page path)
+- Row: P-02 of 8d52612. Command: mkdir -p k && cd k && git init. Before: the git builtin ran on DIR = /workspace, so the repository was /workspace/.git. Expected (real git): Initialized empty Git repository in <cwd>/.git/, with the repository in the working directory.
+- Files: web/git-in-page.js (repositoryDirFor(verb, cwd, exists): init uses cwd; other verbs use the nearest ancestor of cwd with a .git directory, else cwd; gitBuiltin takes cwd and passes the repository dir to the program), web/builtins.js (git receives cwd), test/git-root.test.mjs (six node tests, six checks against the in-page fs shim store and fake predicates).
+- Witness: node --test test/git-root.test.mjs, green: ℹ pass 6, ℹ fail 0.
+- Red check: the nearest-ancestor branch mutated to return cwd (sed on the line `) return dir;`), node --test red: ℹ pass 3, ℹ fail 3; restored and cmp matched; green again ℹ pass 6, ℹ fail 0.
+- Not verified: the page run (git init in a subdirectory creating k/.git, and the init message text from the txiki program) needs playwriter and was not run. The message text is unchanged in the program; it now prints the repository directory it receives.
+- Limit: a cwd with a trailing slash is not normalized by repositoryDirFor; the shell passes normalized paths.
