@@ -4778,3 +4778,40 @@ Found, not in this change set:
 - `cmd <&0` inside a group shares the group's cursor (one row covers it, the head case); other shared-fd forms were not probed.
 - Positions count characters, not bytes (as recorded in 30ca).
 - G5 (a syntax error stops every line here, where bash runs the earlier lines) is unchanged.
+
+### Phase B window that did not clear for 38f4151 (change set 30cb, the group, function, loop and subshell offsets, and head on a seekable input), with its readings; nothing pushed
+
+Window: one job of up to twenty readings, one every 30 s, from 06:28:13 to 06:38:09 (wall 600.5 s, exit 0). The job logged `WINDOW_NEVER_CLEARED` and did not run the green witness, the red check or the push. `git ls-remote origin main` before and after: `9aca69d20b27fd72493af7210f48ef22f6389b51 refs/heads/main`. Nothing was stopped; every process listed below belongs to another session or run.
+
+Before the window, one manual `vmstat 1 2` at 06:27:59: the first line is the average since boot and is not the gate; the second sample was `si 768, so 0` (clear for the gate). Heavy-jobs was not run by hand; the job runs it on each reading.
+
+Readings (the gate is the second `vmstat 1 2` sample, both directions under 1000 KB/s; heavy-jobs must read clear in the same reading):
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Hot processes named in the log |
+|---|---|---|---|---|---|---|
+| 1 | 06:28:13 | 748 | 0 | clear | busy, n=2 | Chromium gpu-process pid 2222086 (1083% CPU); `node .spawn/local/standalone-dump.mjs` pid 2222169 (84%) |
+| 2 | 06:28:42 | 664 | 0 | clear | busy, n=2 | the same two (710%, 86%) |
+| 3 | 06:29:13 | 4452 | 0 | not clear (si) | busy, n=2 | the same two (1062%, 88%) |
+| 4 | 06:29:43 | 3024 | 0 | not clear (si) | busy, n=3 | playwriter `bin.js` pid 2088755 (24%); Chromium pid 2212284 (32%); Chromium renderer pid 2212379 (116%) |
+| 5 | 06:30:13 | 2992 | 0 | not clear (si) | busy, n=4 | claude pid 1629 (23%); Chromium pid 2212284 (31%); `scripts/dev/serve.mjs` pid 2222715; Chromium network service pid 2212344 |
+| 6 | 06:30:42 | 112 | 0 | clear | busy, n=1 | one process (not recorded by pid) |
+| 7 | 06:31:13 | 10700 | 0 | not clear (si) | busy, n=1 | one process |
+| 8 | 06:31:43 | 860 | 0 | clear | busy, n=1 | one process |
+| 9 | 06:32:12 | 1148 | 188 | not clear (si) | busy, n=1 | Chromium renderer pid 2212379 (116%) |
+| 10 | 06:32:43 | 868 | 0 | clear | busy, n=2 | two processes |
+| 11 | 06:33:12 | 2408 | 9460 | not clear (si, so) | busy, n=1 | one process |
+| 12 | 06:33:43 | 4664 | 0 | not clear (si) | busy, n=1 | one process |
+| 13 | 06:34:13 | 2104 | 4324 | not clear (si, so) | busy, n=1 | one process |
+| 14 | 06:34:42 | 1816 | 10708 | not clear (si, so) | busy, n=1 | one process |
+| 15 | 06:35:13 | 9120 | 23944 | not clear (si, so) | busy, n=1 | one process |
+| 16 | 06:35:43 | 2780 | 0 | not clear (si) | busy, n=1 | one process |
+| 17 | 06:36:12 | 632 | 0 | clear | busy, n=1 | one process |
+| 18 | 06:36:43 | 2728 | 8880 | not clear (si, so) | busy, n=1 | one process |
+| 19 | 06:37:13 | 1864 | 0 | not clear (si) | busy, n=1 | one process |
+| 20 | 06:37:42 | 8320 | 49936 | not clear (si, so) | busy, n=1 | one process |
+
+The gate was clear in readings 2, 6, 8, 10 and 17, and each of those reading also had heavy-jobs busy. No reading had both clear, so the window never started its checks.
+
+Heavy-job rule, as applied: the hot list is every process above 20% CPU in `top`, with `gm-core worker --handshake` processes excluded, plus any Chromium renderer above 1 GB. The named pids above are from the job log `runs/2026-11-19-14-00-59-e21bf1/jobs/p11l-window.out`; for readings 6 to 20 the log names the count only where marked, and the process identity was not captured per reading.
+
+Carried forward: 38f4151 (change set 30cb) is committed locally and unpushed. The next Phase B window pushes it with the window record above, once a window clears with the green witness, the red check and the check runs all passing.
