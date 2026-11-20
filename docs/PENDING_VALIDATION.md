@@ -5729,3 +5729,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - Witness: `scripts/witness-shell.mjs`, group "uniq -d and -u: uniq -d prints only the repeated lines and uniq -u prints only the lines that are not repeated, as bash does", three rows with the expected output taken from bash. Before the change all three failed against bash.
 - Green: `RESULT PASS=1570 FAIL=0`, wall 1.65 s.
 - Red check: mutation `count > 1` to `count > 0` in the `-d` branch (pid 34918); witness `RESULT PASS=1568 FAIL=2`, exit 1, with both `-d` rows failing. Restored from the saved copy; `cmp` matches; `git status` shows only the intended files and the relay.
+
+### Defect fix S1-11: grep -w matches whole words only
+
+- Row: S1-11 of the full-feature run (commit 8d52612). Command: `printf 'two\n' \| grep -w tw; echo rc=$?`. Before: `two` then `rc=0` (the flag was ignored). Expected: `rc=1` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `grep` command. With `-w` the pattern is wrapped so a letter, digit or underscore on either side means no match.
+- Witness: `scripts/witness-shell.mjs`, group "grep -w: grep -w matches only whole words, so a letter or digit next to the match means no match, as bash does", four rows with the expected output taken from bash. Before the change three failed against bash.
+- Red check: mutation disables the `-w` branch green RESULT PASS=1574 FAIL=0 (1.74 s); red, with the branch disabled (pid 35597), RESULT PASS=1571 FAIL=3, the three -w rows failing; restored, cmp matches.

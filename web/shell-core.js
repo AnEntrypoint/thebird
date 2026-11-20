@@ -2211,6 +2211,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       } catch {
         return { code: 2, out: '', err: `grep: invalid regular expression '${pattern}'\n` };
       }
+      if (flags.includes('w')) re = new RegExp('(?<![A-Za-z0-9_])(?:' + re.source + ')(?![A-Za-z0-9_])', re.flags);
       const invert = flags.includes('v');
       const numbered = flags.includes('n');
       const counting = flags.includes('c');

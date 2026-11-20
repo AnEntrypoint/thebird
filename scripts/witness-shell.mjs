@@ -3284,6 +3284,17 @@ group("uniq -d and -u: uniq -d prints only the repeated lines and uniq -u prints
   const wuq3 = await run(sh, "printf 'a\\na\\nb\\n' | uniq -u");
   check("uniq -u prints only the lines that are not repeated (bash output, locale en_US.UTF-8)", wuq3.stdout === "b\n" && wuq3.exitCode === 0 && wuq3.stderr === "", JSON.stringify([wuq3.stdout, wuq3.stderr, wuq3.exitCode]));
 });
+group("grep -w: grep -w matches only whole words, so a letter or digit next to the match means no match, as bash does", async () => {
+  const sh = await shell({});
+  const wgw1 = await run(sh, "printf 'two\\n' | grep -w tw; echo rc=$?");
+  check("grep -w does not match a word inside a longer word (bash output, locale en_US.UTF-8)", wgw1.stdout === "rc=1\n" && wgw1.exitCode === 0 && wgw1.stderr === "", JSON.stringify([wgw1.stdout, wgw1.stderr, wgw1.exitCode]));
+  const wgw2 = await run(sh, "printf 'a two b\\n' | grep -w two");
+  check("grep -w matches a whole word between spaces (bash output, locale en_US.UTF-8)", wgw2.stdout === "a two b\n" && wgw2.exitCode === 0 && wgw2.stderr === "", JSON.stringify([wgw2.stdout, wgw2.stderr, wgw2.exitCode]));
+  const wgw3 = await run(sh, "printf 'twofold\\n' | grep -w two; echo rc=$?");
+  check("grep -w does not match a prefix of a longer word (bash output, locale en_US.UTF-8)", wgw3.stdout === "rc=1\n" && wgw3.exitCode === 0 && wgw3.stderr === "", JSON.stringify([wgw3.stdout, wgw3.stderr, wgw3.exitCode]));
+  const wgw4 = await run(sh, "printf 'x_two y\\n' | grep -w two; echo rc=$?");
+  check("grep -w treats an underscore as part of the word (bash output, locale en_US.UTF-8)", wgw4.stdout === "rc=1\n" && wgw4.exitCode === 0 && wgw4.stderr === "", JSON.stringify([wgw4.stdout, wgw4.stderr, wgw4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
