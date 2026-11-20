@@ -450,6 +450,10 @@ group('awk: fields, patterns, actions and errors', async () => {
   check("a single quote closed on line 3 runs as one command before an unterminated double quote on line 4, as bash does (bash output, locale en_US.UTF-8)", gt6.stdout === "a\nx\ny\n" && gt6.exitCode === 2 && gt6.stderr.startsWith("syntax error"), JSON.stringify([gt6.stdout, gt6.stderr, gt6.exitCode]));
   const gt7 = await run(sh, "echo a\necho b\necho $(\necho c\n");
   check("an unterminated command substitution on line 3 runs lines 1 and 2 only, as bash does (bash output, locale en_US.UTF-8)", gt7.stdout === "a\nb\n" && gt7.exitCode === 2 && gt7.stderr.startsWith("syntax error"), JSON.stringify([gt7.stdout, gt7.stderr, gt7.exitCode]));
+  const hy1 = await run(sh, "printf 'ѷ\\nѵ\\nѣ\\nә\\nа\\nғ\\nг\\nӏ\\nѧ\\nѡ\\nх\\nү\\nу\\nқ\\nк\\nѹ\\nө\\nо\\nѿ\\nѽ\\nҳ\\n' | sort");
+  check("en_US.UTF-8 sort places the Cyrillic extended letters ѣ, ә, ғ, ӏ, ѧ, ѡ, ү, ѹ, ө, ҳ, ѿ, ѽ and ѷ among the base letters (bash output)", hy1.stdout === "а\nә\nг\nғ\nк\nқ\nо\nө\nу\nү\nѹ\nх\nҳ\nѡ\nѿ\nѽ\nѣ\nѧ\nѵ\nѷ\nӏ\n" && hy1.exitCode === 0 && hy1.stderr === "", JSON.stringify([hy1.stdout, hy1.stderr, hy1.exitCode]));
+  const hy2 = await run(sh, "printf 'ѷя\\nѷң\\nѽ\\nѽѹк\\nңѷѽ\\nѵок\\nяѡѽ\\nаа\\nѹң\\nѣѹѹ\\nѣкя\\nяѷ\\nяѽ\\nѷ\\nѣ\\nүѣ\\nҁ\\nх\\nѡү\\nа\\nѣѽх\\nяѣѡ\\nүѷ\\nѹоң\\nѷ\\nү\\nүѹ\\nѡа\\nѷѹя\\nа\\n' | sort");
+  check("en_US.UTF-8 sort on random short Cyrillic lines with the extended letters ѷ, ѡ, ѿ, ѽ, ҳ, ә, ө, ӏ, ѧ, ѣ, ү, ѹ, қ, ҡ, ң, ҁ (bash output)", hy2.stdout === "а\nа\nаа\nңѷѽ\nҁ\nү\nүѹ\nүѣ\nүѷ\nѹң\nѹоң\nх\nѡа\nѡү\nѽ\nѽѹк\nѣ\nѣкя\nѣѹѹ\nѣѽх\nяѡѽ\nяѽ\nяѣѡ\nяѷ\nѷ\nѷ\nѷң\nѵок\nѷѹя\nѷя\n" && hy2.exitCode === 0 && hy2.stderr === "", JSON.stringify([hy2.stdout, hy2.stderr, hy2.exitCode]));
   const builtins = await run(sh, "awk '{print toupper($1), length($2), substr($2, 2, 3)}' a.txt");
   check('awk: toupper, length and substr', builtins.stdout === 'ONE 3 wo\nTHREE 4 our\n', JSON.stringify(builtins.stdout));
   const divided = await run(sh, "awk 'BEGIN { print 1/0 }'");

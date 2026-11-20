@@ -5471,3 +5471,27 @@ To https://github.com/AnEntrypoint/thebird
 ```
 
 `git ls-remote origin main` after the push: `a44df46b18461c64b4cb65973adaf131cea9189c refs/heads/main`. This carried 320b4d3 (G5), 0f94558 (the window record for the earlier window) and a44df46 (the G5 tail).
+
+### Change set 30d7: sort places the Cyrillic letters ѣ, ә, ғ, ҙ, қ, ҡ, ң, ө, ҁ, ҫ, ү, ѹ, ҳ, ѡ, ѿ, ѽ, ҷ, ѧ, ѫ, ѯ, ѱ, ѳ, ѵ, ӏ and ѷ among the base letters as glibc does for en_US.UTF-8; decided by bash output (item 2 remainder, Cyrillic)
+
+Locale: `en_US.UTF-8` (LC_ALL and LANG set for the bash probe; PATH with the GNU shim for sort). The output of `sort` on these lines is the same in every locale in the probe; the locale is stated in each row title.
+
+Probe (bash, before the change): the letters above are each their own symbol in the glibc table (`iso14651_t1_common`, `<S0461>` and the rest), except `ѷ` (U+0477), which the table gives as `<S0475>` with `<2GRAV>`, so it is `ѵ` with a double grave. Bash's order for the full Cyrillic alphabet with these letters is: а ә б в г ғ д ђ ҙ е є ж з и і й ј к қ ҡ л љ м н ң њ о ө п ҁ р с ҫ т ћ у ү ѹ ф х ҳ ѡ ѿ ѽ ц ч ҷ џ ш щ ъ ы ь ѣ э ю я ѧ ѫ ѯ ѱ ѳ ѵ ѷ ӏ.
+
+Before the change the shell placed these letters after every known letter (the unknown-letter fallback), so the two rows failed.
+
+Change: each new letter is inserted in the primary order string directly after its bash predecessor, and `ҙ` (U+0499) comes after `ђ` (U+0452), not after `д`: a first version put it before `ђ`, and the model test found the swap. U+030F (double grave) is added to the accent list, so `ѷ` decomposes to `ѵ` plus an accent as glibc orders it. The primary literal is written with `\u` escapes for the new letters, as the rest of the Cyrillic literal is.
+
+Witness rows: two rows (hy1, hy2) added after the G5 tail rows, bash output only: a fixed list of the new letters, and a seeded random list of 30 short lines built from the new letters and base letters. Each row checks stdout, the exit status and an empty stderr against bash.
+
+Model test against bash (sort in the GNU shim, the block extracted from `web/shell-core.js`): three seeded sets of 6000 lines (new letters up to length 4 and 6; new letters with `й и і ї ј ё є ђ ћ` and Latin letters up to length 4) give zero adjacent violations and zero index differences. The Latin and Cyrillic model sets from change sets 30d3 and 30d2 still give zero differences. The full Cyrillic alphabet with the new letters, sorted by bash and by the model, is identical.
+
+Witness: before the change (HEAD code with the rows), `RESULT PASS=1551 FAIL=2`, wall 1.63 s (hy1 and hy2). After the change, green: `RESULT PASS=1553 FAIL=0`, wall 1.87 s.
+
+Red check, mutation 1 (the letter ѡ removed from the primary order): `RESULT PASS=1551 FAIL=2`, the two new rows fail, wall 1.6 s. Mutation 2 (the letter ѣ removed from the primary order): `RESULT PASS=1551 FAIL=2`, the same two rows fail. Each was restored and `cmp` matched. `git status` showed only the three expected files and the dirty relay.
+
+Mutation 3, not counted as a red check: dropping U+030F from the accent list gives `RESULT PASS=1553 FAIL=0`. No row compares two accents on the same base, and `ѷ` still sorts after `ѵ` at the last level, so the current rows cannot observe that accent. It stays because glibc gives `ѷ` the level-2 accent.
+
+Other checks at this commit: `npm run check` exit 0, 494 ms. `npm run witness:shell` `RESULT PASS=1553 FAIL=0`, 1.93 s. `npm run lint:comments` exit 0, 0 comments in 140 repo-owned files. `npm test` exit 0, 66 pass, 0 fail, 30.4 s (the longest step).
+
+Still open after this change set: the remaining Cyrillic letters beyond those listed (the table has more forms with accents, which the accent rule covers, but a probe per set is still needed), and the G5 error text and line number.

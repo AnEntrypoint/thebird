@@ -1205,8 +1205,8 @@ function headEnd(text, count) {
 }
 const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
 
-const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_' + '\x60' + '{|}~$0123456789' + 'abcdefghiıjklmnŋopqĸrstŧuvwxyzþ' + 'αβγδεζηθικλμνξοπρστυφχψω' + 'абвгдђеєжзи\u0456\u0439јклљмнњопрстћуфхцчџшщъыьэюя';
-const COLLATION_ACCENTS = '̧́̀̂̊̈̃̆';
+const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_' + '\x60' + '{|}~$0123456789' + 'abcdefghiıjklmnŋopqĸrstŧuvwxyzþ' + 'αβγδεζηθικλμνξοπρστυφχψω' + '\u0430\u04d9\u0431\u0432\u0433\u0493\u0434\u0452\u0499\u0435\u0454\u0436\u0437\u0438\u0456\u0439\u0458\u043a\u049b\u04a1\u043b\u0459\u043c\u043d\u04a3\u045a\u043e\u04e9\u043f\u0481\u0440\u0441\u04ab\u0442\u045b\u0443\u04af\u0479\u0444\u0445\u04b3\u0461\u047f\u047d\u0446\u0447\u04b7\u045f\u0448\u0449\u044a\u044b\u044c\u0463\u044d\u044e\u044f\u0467\u046b\u046f\u0471\u0473\u0475\u04cf';
+const COLLATION_ACCENTS = '̧́̀̂̊̈̃̆̏';
 const COLLATING_LOCALES = new Set(['en_US.UTF-8', 'en_US.utf8']);
 const COLLATION_VARIANT = 10;
 const COLLATION_OBLIQUE = 9;
