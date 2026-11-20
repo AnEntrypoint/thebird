@@ -6,7 +6,7 @@ import { runAwk } from './shell-awk.js';
 export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
-const OPERATORS = ['2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const OPERATORS = ['2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
 const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1']);
 const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '&>>', '2>', '2>>']);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
@@ -520,7 +520,8 @@ function parse(tokens) {
 
   const parsePipeline = () => {
     const cmds = [parseCommand()];
-    while (tokens[pos]?.op === '|') {
+    while (tokens[pos]?.op === '|' || tokens[pos]?.op === '|&') {
+      if (tokens[pos].op === '|&') cmds[cmds.length - 1].mergeStderr = true;
       pos++;
       while (tokens[pos]?.newline) pos++;
       cmds.push(parseCommand());
@@ -3070,6 +3071,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           throw err;
         }
         code = result.code;
+        if (cmd.mergeStderr) {
+          result.out += result.err;
+          result.err = '';
+        }
         sink.err += result.err;
         if (last) sink.out += result.out;
         else input = result.out;

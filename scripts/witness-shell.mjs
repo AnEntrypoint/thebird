@@ -1765,6 +1765,29 @@ group('realpath: -m allows missing components with no check, and the last of -e 
   const rm19 = await run(sh, "realpath -m nosuch/../../..; echo rc=$?");
   check("realpath: realpath -m nosuch/../../.. matches GNU realpath", rm19.stdout === "/\nrc=0\n" && rm19.stderr === "", JSON.stringify([rm19.stdout, rm19.stderr]));
 });
+group('pipes: |& runs the pipe with the left stage stderr on the pipe, and a newline after it continues the pipeline, as bash does', async () => {
+  const sh = await shell({});
+  const pa0 = await run(sh, "echo a |& cat");
+  check("pipes: echo a |& cat matches bash", pa0.stdout === "a\n" && pa0.stderr === "", JSON.stringify([pa0.stdout, pa0.stderr]));
+  const pa1 = await run(sh, "echo a |&cat");
+  check("pipes: echo a |&cat matches bash", pa1.stdout === "a\n" && pa1.stderr === "", JSON.stringify([pa1.stdout, pa1.stderr]));
+  const pa2 = await run(sh, "echo a |&\necho $LINENO");
+  check("pipes: echo a |& / echo $LINENO matches bash", pa2.stdout === "2\n" && pa2.stderr === "", JSON.stringify([pa2.stdout, pa2.stderr]));
+  const pa3 = await run(sh, "echo a |&\n\necho $LINENO");
+  check("pipes: echo a |& /  / echo $LINENO matches bash", pa3.stdout === "3\n" && pa3.stderr === "", JSON.stringify([pa3.stdout, pa3.stderr]));
+  const pa4 = await run(sh, "echo a |& cat |& cat");
+  check("pipes: echo a |& cat |& cat matches bash", pa4.stdout === "a\n" && pa4.stderr === "", JSON.stringify([pa4.stdout, pa4.stderr]));
+  const pa5 = await run(sh, "echo a |& cat; echo rc=$?");
+  check("pipes: echo a |& cat; echo rc=$? matches bash", pa5.stdout === "a\nrc=0\n" && pa5.stderr === "", JSON.stringify([pa5.stdout, pa5.stderr]));
+  const pa6 = await run(sh, "false |& cat; echo st=$?");
+  check("pipes: false |& cat; echo st=$? matches bash", pa6.stdout === "st=0\n" && pa6.stderr === "", JSON.stringify([pa6.stdout, pa6.stderr]));
+  const pa7 = await run(sh, "cat /nope/zz |& cat");
+  check("pipes: cat /nope/zz |& cat matches bash", pa7.stdout === "cat: /nope/zz: No such file or directory\n" && pa7.stderr === "", JSON.stringify([pa7.stdout, pa7.stderr]));
+  const pa8 = await run(sh, "cat /nope/zz |& cat; echo st=$?");
+  check("pipes: cat /nope/zz |& cat; echo st=$? matches bash", pa8.stdout === "cat: /nope/zz: No such file or directory\nst=0\n" && pa8.stderr === "", JSON.stringify([pa8.stdout, pa8.stderr]));
+  const pa9 = await run(sh, "echo x |& cat /nope/zz; echo rc=$?");
+  check("pipes: echo x |& cat /nope/zz; echo rc=$? matches bash", pa9.stdout === "rc=1\n" && pa9.stderr === "cat: /nope/zz: No such file or directory\n", JSON.stringify([pa9.stdout, pa9.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

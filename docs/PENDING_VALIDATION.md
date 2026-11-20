@@ -3815,3 +3815,25 @@ What changed in the shell: the `File:` line of a symbolic link is the name, then
 Witness: the link row of 30bc now expects `  File: /st/l -> /st/t` (the quoted form was the wrong one). Final: `RESULT PASS=1080 FAIL=0`.
 
 Red check: the link line put back to the quoted `%N` form, restored from a backup and confirmed with `cmp`: `RESULT PASS=1079 FAIL=1`, the link row red. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+### Change set 30bh: |& runs the pipe with the left stage's stderr on the pipe, and a newline after it continues the pipeline, as bash does
+
+Reference: bash (the version in this sandbox), run on the script text with `bash -c`, and for the stderr rows the same message bytes that `cat` prints for a missing file in both shells (`cat: /nope/zz: No such file or directory`). The probes showed the shapes below (bash stdout, stderr):
+- `echo a |& cat` and `echo a |&cat` print `a`.
+- `echo a |&` newline `echo $LINENO` prints `2`; with a blank line after the newline it prints `3`. The newline after `|&` continues the pipeline, as after `|`.
+- `echo a |& cat |& cat` prints `a`.
+- `cat /nope/zz |& cat` prints the message on stdout, and `cat /nope/zz |& cat; echo st=$?` prints the message then `st=0` (the status is the last stage's).
+- `echo x |& cat /nope/zz; echo rc=$?` prints `rc=1` on stdout and the message on stderr: the stderr of the last stage is not joined, only the stderr of a stage before a `|&`.
+- `false |& cat; echo st=$?` prints `st=0`.
+
+Before this change set, `|&` was a syntax error (`unexpected '&'`).
+
+Rule: `|&` is a pipe operator. The stage on its left has its stderr joined to its stdout before the pipe, as `2>&1 |` does. The tokenizer reads `|&` as one operator, and the parser sets `mergeStderr` on the stage before it, so the runner joins that stage's stderr to its stdout.
+
+What changed in the shell: `'|&'` is in the operator list after `'||'`; the pipeline parser sets `mergeStderr` and skips the newlines after `|&` (as after `|`); the pipeline runner joins a stage's stderr to its stdout when `mergeStderr` is set.
+
+Witness: group `pipes: |& runs the pipe with the left stage stderr on the pipe, and a newline after it continues the pipeline, as bash does`, 10 rows from bash. Final: `RESULT PASS=1090 FAIL=0`.
+
+Red check: the join removed (the runner's `if (cmd.mergeStderr)` made false), restored from a backup and confirmed with `cmp`: `RESULT PASS=1088 FAIL=2`, the two rows whose left stage writes to stderr red. The other eight rows do not depend on the join. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Gap found while probing, not taken in this change set: the redirect `>&N` with no leading digit (`echo e >&2`, `echo e 1>&2`, and `{ echo e >&2; } 2>&1 | cat` in a group) is refused as `syntax error: expected a file after '>'`. Bash writes to stderr. The tokenizer has `2>&1` but no `>&` operator. Reopen: a change set that adds `>&` and `1>&2` with bash rows, which is ranked first in the next list.
