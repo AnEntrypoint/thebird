@@ -4560,3 +4560,34 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `f5d3abee14fa281a66a647974bd8066e8033d617 refs/heads/main`.
 
 Longest step: the gate wait, readings 1 to 14 (about seven minutes), held by other runs' check and zig test jobs and a claude session. The push took about three seconds. Nothing was stopped.
+
+### Phase B window for 37791f0 (change set 30bx, the GNU chmod and stat citations)
+
+Readings: the second sample of `vmstat 1 2` (the gate, both directions under 1000 KB/s), and the heavy-jobs check (`scripts/heavy-jobs.cjs` from bevy commit 495fff6) with the hot-process count, one reading every 30 s.
+
+| Reading | Clock | si KB/s | so KB/s | heavy-jobs | hot count | Note |
+|---|---|---|---|---|---|---|
+| before | not read | 6568 | 0 | not run | not run | a manual `vmstat 1 2` before the window; si over 1000 |
+| 1 | 05:38:54 | 1036 | 0 | clear | 0 | si over 1000 |
+| 2 | 05:39:25 | 2048 | 0 | busy, n=1 | 1 | pid 2159134, a gm-core worker for /workspace/freddie at 101% CPU |
+| 3 | 05:39:55 | 232 | 0 | clear | 0 | gate and heavy-jobs clear in the same reading |
+
+The hot check reads each process's arguments cut to 200 characters before it looks for `--handshake`, so a flag beyond that point is not seen. That can only count an extra process, never hide one.
+
+Runs, each under `timeout` with the PID of the timeout process captured:
+
+- Green witness (pid 2161215): exit 0, wall 1.72 s, `RESULT PASS=1374 FAIL=0`.
+- Red check (pid 2161253): the mutation sets LC_CTYPE ahead of LC_ALL in the HEAD copy of web/shell-core.js. Exit 1, wall 1.61 s, `RESULT PASS=1370 FAIL=4`, the four rows that set LC_ALL and LC_CTYPE together. Restored with cp from the HEAD copy, and cmp matched.
+- `npm run check` (pid 2161291): exit 0, wall 0.27 s.
+- `npm run witness:shell` (pid 2161346): exit 0, wall 1.69 s, `RESULT PASS=1374 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout and loop tests.
+
+Push, once, after every check passed. It carried 24c791e and 37791f0:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   f5d3abe..37791f0  main -> main
+```
+
+`git ls-remote origin main` after the push: `37791f0c5e17bf16b70734838db8afe5d985c9b2 refs/heads/main`.
+
+Longest step: the 30 s wait between readings; the window job ran for 74.1 s in all and ended with exit 0. The push took about 4 s. Nothing was stopped. Every process the run started was the window job's own child, and the job exited.
