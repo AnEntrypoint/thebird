@@ -267,6 +267,15 @@ function readHeredocBody(src, start, doc) {
   return i;
 }
 
+function arithmeticCommand(src, i) {
+  let depth = 2;
+  for (let j = i + 2; j < src.length; j++) {
+    if (src[j] === '(') depth++;
+    else if (src[j] === ')' && --depth === 0) return src[j - 1] === ')' ? { src: src.slice(i + 2, j - 1), end: j + 1 } : null;
+  }
+  return null;
+}
+
 export function tokenize(src, firstLine = 1, substitution = false) {
   const tokens = [];
   const heredocs = [];
@@ -294,6 +303,12 @@ export function tokenize(src, firstLine = 1, substitution = false) {
     } else if (c === '#') {
       while (i < src.length && src[i] !== '\n') i++;
     } else {
+      const arith = src.startsWith('((', i) ? arithmeticCommand(src, i) : null;
+      if (arith) {
+        tokens.push({ op: '((', src: arith.src, line: lineAt(i) });
+        i = arith.end;
+        continue;
+      }
       const op = OPERATORS.find((candidate) => src.startsWith(candidate, i));
       if (op) {
         const opToken = { op, line: lineAt(i) };
@@ -471,6 +486,10 @@ function parse(tokens) {
     if (isWord(token, 'case')) {
       pos++;
       return parseCase();
+    }
+    if (token.op === '((') {
+      pos++;
+      return { type: 'arith', src: token.src };
     }
     if (token.op === '(') {
       pos++;
@@ -2899,7 +2918,23 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return result;
   }
 
+  const runArithmeticCommand = (node) => {
+    const evaluate = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '');
+    try {
+      const assignment = /^\s*([A-Za-z_]\w*)\s*=(?!=)([\s\S]*)$/.exec(node.src);
+      if (assignment) {
+        const value = evaluate(assignment[2]);
+        setVariable(assignment[1], String(value));
+        return { code: value === 0 ? 1 : 0, out: '', err: '' };
+      }
+      return { code: evaluate(node.src) === 0 ? 1 : 0, out: '', err: '' };
+    } catch (error) {
+      return { code: 1, out: '', err: error.message + '\n' };
+    }
+  };
+
   async function runStage(cmd, stdin, sink, stream) {
+    if (cmd.type === 'arith') return runArithmeticCommand(cmd);
     if (cmd.type === 'funcdef') {
       functions.set(cmd.name, cmd.body);
       return ok('');

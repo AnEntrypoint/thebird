@@ -3622,3 +3622,27 @@ Red check, run locally and restored with `cmp`, with `git status` showing only t
 Final green witness: `RESULT PASS=974 FAIL=0`.
 
 Gaps still open, not probed here: the `(( ))` arithmetic command, which the shell does not implement yet (taken in the next change set).
+
+### Change set 30ax: (( ... )) is an arithmetic command, with status 0 for a non-zero value and 1 for zero, and a name followed by = assigns the value, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Probed shapes (bash stdout, status shown by echo):
+- `(( 1 + 2 )); echo $?` prints `0`.
+- `(( 1 + \` newline ` 2 )); echo $?` prints `0`.
+- `(( 0 )); echo $?` prints `1`.
+- `(( 0 \` newline `)); echo $?` prints `1`.
+- `((\` newline `3*2)); echo $?` prints `0`.
+- `x=0; (( x = \` newline `5 )); echo $x` prints `5`.
+- `(( 1\\` newline `+2 )); echo $?` prints `1` and a syntax error on stderr.
+- `((echo a); echo b)` prints `a` and `b`: a (( whose outer parentheses do not close with `))` is a nested subshell.
+
+Before this change set, our shell had no (( command: the first seven shapes ran as command not found with status 127, and the eighth already matched bash.
+
+Rule: a (( is an arithmetic command only when the parenthesis that matches its first ( is followed by another ), so the eighth shape stays a subshell. The tokenizer reads the text between the two parentheses and emits one token, the parser keeps it as an arithmetic node, and the runner evaluates it with `evaluateArithmetic`. A plain name followed by = (not ==) assigns the value of the expression on its right. The status is 0 for a non-zero value, 1 for zero, and 1 with the error on stderr when the expression is rejected.
+
+Limitations, not probed: compound assignments (+=, -=, ++, --) are not supported and give an arithmetic error, and redirections on an arithmetic command are not applied.
+
+Witness: group `arithmetic command: (( ... )) sets status 0 for a non-zero value and 1 for zero, as bash does`, 8 rows, expected values from the bash output above. Final: `RESULT PASS=982 FAIL=0`.
+
+Red check, restored with `cmp`: the tokenizer branch that reads `((` removed from `web/shell-core.js` gives `RESULT PASS=975 FAIL=7`. All seven arithmetic-command rows go red, and the nested-subshell row stays green.
+
+Gap still open, not probed: compound assignment operators and redirections on an arithmetic command. Reopen: a bash probe where our output differs.

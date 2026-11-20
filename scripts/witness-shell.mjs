@@ -1552,6 +1552,25 @@ group('heredoc: a backslash-newline inside $(( )) in an unquoted heredoc body is
   check('heredoc: a heredoc body inside a command substitution in double quotes removes a backslash-newline in $(( )), as bash does', hb4.stdout === '20\n' && hb4.stderr === '', JSON.stringify([hb4.stdout, hb4.stderr]));
 });
 
+group('arithmetic command: (( ... )) sets status 0 for a non-zero value and 1 for zero, as bash does', async () => {
+  const ac0 = await run(await shell({}), '(( 1 + 2 )); echo $?');
+  check('arithmetic command: a non-zero value gives status 0, as bash does', ac0.stdout === '0\n' && ac0.stderr === '', JSON.stringify([ac0.stdout, ac0.stderr]));
+  const ac1 = await run(await shell({}), '(( 1 + \\\n 2 )); echo $?');
+  check('arithmetic command: a backslash-newline between operands is removed, as bash does', ac1.stdout === '0\n' && ac1.stderr === '', JSON.stringify([ac1.stdout, ac1.stderr]));
+  const ac2 = await run(await shell({}), '(( 0 )); echo $?');
+  check('arithmetic command: a zero value gives status 1, as bash does', ac2.stdout === '1\n' && ac2.stderr === '', JSON.stringify([ac2.stdout, ac2.stderr]));
+  const ac3 = await run(await shell({}), '(( 0 \\\n)); echo $?');
+  check('arithmetic command: a zero value followed by a backslash-newline gives status 1, as bash does', ac3.stdout === '1\n' && ac3.stderr === '', JSON.stringify([ac3.stdout, ac3.stderr]));
+  const ac4 = await run(await shell({}), '((\\\n3*2)); echo $?');
+  check('arithmetic command: a backslash-newline right after the opening parentheses is removed, as bash does', ac4.stdout === '0\n' && ac4.stderr === '', JSON.stringify([ac4.stdout, ac4.stderr]));
+  const ac5 = await run(await shell({}), 'x=0; (( x = \\\n5 )); echo $x');
+  check('arithmetic command: an assignment inside (( )) sets the variable, as bash does', ac5.stdout === '5\n' && ac5.stderr === '', JSON.stringify([ac5.stdout, ac5.stderr]));
+  const ac6 = await run(await shell({}), '(( 1\\\\\n+2 )); echo $?');
+  check('arithmetic command: a doubled backslash before a newline is a syntax error with status 1, as bash does', ac6.stdout === '1\n' && ac6.stderr !== '', JSON.stringify([ac6.stdout, ac6.stderr]));
+  const ac7 = await run(await shell({}), '((echo a); echo b)');
+  check('arithmetic command: a (( that does not close with )) is a nested subshell, as bash does', ac7.stdout === 'a\nb\n' && ac7.stderr === '', JSON.stringify([ac7.stdout, ac7.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
