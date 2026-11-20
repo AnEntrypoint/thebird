@@ -5198,3 +5198,31 @@ Source checked: the glibc locale data is installed, `/usr/share/i18n/locales/iso
 Reopen (blocked on the glibc algorithm source): fetch the glibc source for the installed version (for example `apt-get source libc6`, which needs network access and a decision from the user), read how `position` counts ignored characters in `do_compare`, implement that rule over the table, then add rows from bash output. Until then the rows stay as they are: ASCII up to four characters, and accented letters without punctuation, are exact; longer strings mixing punctuation with letters tie at levels 1 to 3 and are not.
 
 Also reachable, not started: the non-Latin and ligature weights (`ß`, `æ`, `œ`, `ø`, Greek, Cyrillic) can be read from the same table, because the accent-only class is already exact; those need rows from bash before any change.
+
+### Change set 30d2: sort places the ligatures æ, œ and ß, the stroked ø and the final sigma ς as glibc does for en_US.UTF-8; extended Latin and Cyrillic letters stay open
+
+Reference: GNU 9.7 `sort` through the PATH shim `/tmp/gnubin` (the PATH `sort` is uutils, not GNU); bash with that PATH. Locale: `LANG=en_US.UTF-8` with `LC_ALL` unset, the default of the shell; each witness row states it in its title.
+
+Probed first, against HEAD ce2208e:
+- Single letters, bash: `a æ Æ e o ø Ø œ Œ s ß t z` and `α Α β Β γ Γ` (Greek), `а А б Б в ђ е ё Ё ж я Я` (Cyrillic). `ß` sorts between `ss` and `st`; `ø` sorts after plain `o` and before `oe`; `æ` sorts between `ae` and `af`; uppercase `AE` sorts before `æ`, and `Æ` after it.
+- The shell before this change put every letter outside ASCII at its code point after `z`, so `æ`, `œ`, `ß` and `ø` went to the end, and `ς` sorted before `σ`.
+- Greek upper and lower alphabets, and the Cyrillic alphabet `а` to `я`, already match bash in code-point order, with case handled by the case level. Final sigma does not (bash: `σ Σ ς`).
+- Cyrillic extended letters (`ђ ѓ ћ џ ј љ њ ќ ѝ ў ѐ ї є і ґ`) and extended Latin (`ð þ ł đ ħ ŧ ŋ ı ĸ ſ ŉ ĳ`) are not in code-point order in bash. Not implemented here (see open).
+
+Source: the weights are in `/usr/share/i18n/locales/iso14651_t1_common`. For these letters the table gives: `æ` as `a e` with a variant element between them at level 2 (`BASE VRNT1 BASE`) and compat weights at level 3; `ß` and `œ` likewise; `ø` as `o` with an oblique element at level 2 (`BASE OBLIK`); `ς` as `σ` with the final-form weight at level 3. Each letter contributes a base element at level 2 before any accent element, which the `ó` and `ø` rows require.
+
+Decision: implement, because the table gives an exact structure for these letters, and the model reproduces bash without a free parameter. The change adds a table of expansions (`ß æ œ`) and the special cases for `ø` and `ς` to `collationUnits`, and changes the level-2 and level-3 lists in `collationLevels` to one base element per letter plus the optional accent, oblique and variant elements.
+
+Checks of the model against bash, by extracting the helper block from `web/shell-core.js` and sorting random lines with GNU `sort`:
+- 6000 lines, length up to 4, letters, digits and the special letters: 0 adjacent violations, 0 index differences.
+- 6000 lines, length up to 6, the same alphabet: 0 and 0.
+- 6000 lines, ASCII punctuation and letters, length up to 4 (the earlier exact class): 0 and 0.
+- 6000 lines, accented, Greek and Cyrillic base letters, length up to 5: 0 and 0.
+
+Witness: five new rows from bash output (the two ligature pairs with uppercase, the ß row, the ø family row, the final sigma row, and a random row of 25 lines with `æ ß ø œ ς`). Before the change, on the pre-change copy: `RESULT PASS=1519 FAIL=5` (the five new rows). After: a first run of the change failed one row, the `ø` row, because `ø` had no base element at level 2 (bash: `ó ö ø`); the base element fixed it. After the fix: `RESULT PASS=1524 FAIL=0`.
+
+Red check: the mutation disables the expansions, the `ø` case and the final-sigma case, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1519 FAIL=5`, the five new rows. Restored from the copy, `cmp` matched, `git status` shows `web/shell-core.js` and `scripts/witness-shell.mjs` modified (plus the relay, which stays dirty), and the witness after restore reads `PASS=1524 FAIL=0`.
+
+Still open (item 2 of the ranked list, the rest of it):
+- Extended Latin letters (`ð þ ł đ ħ ŧ ŋ ı ĸ ſ ŉ ĳ`) and extended Cyrillic letters (`ђ ѓ ћ џ ј љ њ ќ ѝ ў ѐ ї є і ґ`) still sort by code point after the ASCII table. Reopen: read each character's line in `iso14651_t1_common`, add it to the expansion table in `collationUnits` with its level-2 and level-3 elements, then probe bash with rows for each character in a neighbourhood of its neighbours.
+- Final-sigma and uppercase variants beyond the listed letters (for example `ẞ`) were not probed.

@@ -2734,6 +2734,16 @@ group('text: sort, uniq, head, tail and cut read lines and pick from them', asyn
   check("text: en_US.UTF-8 sort on random short ASCII lines with punctuation, bash output", ec6.stdout === "1\n5\n8\na\na\na\nA\nC\nd\nG\nH\nH\nI\nJ\nl\nm\nO\noah\nQ\nS\nU\nV\nW\nX\ny\n" && ec6.stderr === "" && ec6.exitCode === 0, JSON.stringify([ec6.stdout, ec6.stderr, ec6.exitCode]));
   const ec7 = await run(sh, "printf 'E\\né\\n2\\n1\\n6\\nÜ\\n$\\n3\\n4\\nÜ\\n0\\nè\\n8\\n5\\n5\\nè\\nB\\né\\nä\\nä\\nE\\nB\\na\\n4\\nÜ\\n' | sort");
   check("text: en_US.UTF-8 sort on random short accented lines, bash output", ec7.stdout === "$\n0\n1\n2\n3\n4\n4\n5\n5\n6\n8\na\nä\nä\nB\nB\nE\nE\né\né\nè\nè\nÜ\nÜ\nÜ\n" && ec7.stderr === "" && ec7.exitCode === 0, JSON.stringify([ec7.stdout, ec7.stderr, ec7.exitCode]));
+  const gx1 = await run(sh, "printf 'AE\\nÆ\\næ\\nae\\nAF\\n' | sort");
+  check("text: en_US.UTF-8 sort puts ae, AE and the ligature æ in glibc order (bash output)", gx1.stdout === "ae\nAE\næ\nÆ\nAF\n" && gx1.stderr === "" && gx1.exitCode === 0, JSON.stringify([gx1.stdout, gx1.stderr, gx1.exitCode]));
+  const gx2 = await run(sh, "printf 'ß\\nst\\nss\\nssa\\nsz\\nt\\n' | sort");
+  check("text: en_US.UTF-8 sort places ß between ss and st (bash output)", gx2.stdout === "ss\nß\nssa\nst\nsz\nt\n" && gx2.stderr === "" && gx2.exitCode === 0, JSON.stringify([gx2.stdout, gx2.stderr, gx2.exitCode]));
+  const gx3 = await run(sh, "printf 'oe\\nø\\nØ\\no\\nœ\\nof\\nö\\nó\\n' | sort");
+  check("text: en_US.UTF-8 sort puts ø after o and before oe, bash output", gx3.stdout === "o\nó\nö\nø\nØ\noe\nœ\nof\n" && gx3.stderr === "" && gx3.exitCode === 0, JSON.stringify([gx3.stdout, gx3.stderr, gx3.exitCode]));
+  const gx4 = await run(sh, "printf 'ς\\nσa\\nςa\\nΣ\\nσ\\nςb\\nσb\\n' | sort");
+  check("text: en_US.UTF-8 sort puts the final sigma ς after σ and Σ (bash output)", gx4.stdout === "σ\nΣ\nς\nσa\nςa\nσb\nςb\n" && gx4.stderr === "" && gx4.exitCode === 0, JSON.stringify([gx4.stdout, gx4.stderr, gx4.exitCode]));
+  const gx5 = await run(sh, "printf 'Œeoé\\nØ\\nt\\nt\\nς\\nœ\\nœ\\no\\nα\\na\\no\\nσ\\nς\\no\\nΣ\\nß\\næ\\ns\\nA\\ns\\ns\\nς\\na\\nB\\ns\\n' | sort");
+  check("text: en_US.UTF-8 sort on random short lines with æ, ß, ø, œ, final sigma, bash output", gx5.stdout === "a\na\nA\næ\nB\no\no\no\nØ\nœ\nœ\nŒeoé\ns\ns\ns\ns\nß\nt\nt\nα\nσ\nΣ\nς\nς\nς\n" && gx5.stderr === "" && gx5.exitCode === 0, JSON.stringify([gx5.stdout, gx5.stderr, gx5.exitCode]));
   const counted = await run(sh, 'printf "a\na\nb\n" | uniq -c');
   check('text: uniq -c counts each run of equal lines', counted.stdout === '      2 a\n      1 b\n', JSON.stringify(counted.stdout));
   const head = await run(sh, 'printf "1\n2\n3\n4\n" | head -n 2');

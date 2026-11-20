@@ -1160,24 +1160,51 @@ const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_`{|}~$0123456789abcdefgh
 const COLLATION_ACCENTS = '̧́̀̂̊̈̃';
 const COLLATING_LOCALES = new Set(['en_US.UTF-8', 'en_US.utf8']);
 
-const collationLevels = (text) => {
+const COLLATION_VARIANT = 10;
+const COLLATION_OBLIQUE = 9;
+const COLLATION_EXPANSIONS = new Map([['ß', ['s', 's']], ['æ', ['a', 'e']], ['œ', ['o', 'e']]]);
+
+const collationUnits = (text) => {
   const units = [];
   for (const char of text.normalize('NFD')) {
     if (COLLATION_ACCENTS.includes(char)) {
       if (units.length) units.at(-1).accents.push(char);
       continue;
     }
-    units.push({ base: char.toLowerCase(), upper: char !== char.toLowerCase(), accents: [] });
+    const lower = char.toLowerCase();
+    const upper = char !== lower;
+    const expansion = COLLATION_EXPANSIONS.get(lower);
+    if (expansion) {
+      units.push({ base: expansion[0], upper, accents: [], expansion: true, variant: true });
+      units.push({ base: expansion[1], upper, accents: [], expansion: true });
+    } else if (lower === 'ø') {
+      units.push({ base: 'o', upper, accents: [], oblique: true });
+    } else if (lower === 'ς') {
+      units.push({ base: 'σ', upper: false, accents: [], final: true });
+    } else {
+      units.push({ base: lower, upper, accents: [] });
+    }
   }
+  return units;
+};
+
+const collationLevels = (text) => {
+  const units = collationUnits(text);
   const weight = (base) => {
     const at = COLLATION_PRIMARY.indexOf(base);
     return at === -1 ? COLLATION_PRIMARY.length + base.codePointAt(0) : at;
   };
   const letters = units.filter((unit) => /[\p{L}\p{N}]/u.test(unit.base));
+  const accentRank = (unit) => (unit.accents.length ? COLLATION_ACCENTS.indexOf(unit.accents[0]) + 1 : 0);
+  const caseLevel = (unit) => {
+    if (unit.final) return 2;
+    if (unit.expansion) return unit.upper ? 3 : 2;
+    return unit.upper ? 1 : 0;
+  };
   return [
     units.filter((unit) => /[\p{L}\p{N}]/u.test(unit.base) || unit.base === '$').map((unit) => weight(unit.base)),
-    letters.map((unit) => (unit.accents.length ? COLLATION_ACCENTS.indexOf(unit.accents[0]) + 1 : 0)),
-    letters.map((unit) => (unit.upper ? 1 : 0)),
+    letters.flatMap((unit) => [0, ...(unit.accents.length ? [accentRank(unit)] : []), ...(unit.oblique ? [COLLATION_OBLIQUE] : []), ...(unit.variant ? [COLLATION_VARIANT] : [])]),
+    letters.flatMap((unit) => [caseLevel(unit), ...(unit.oblique ? [0] : []), ...(unit.variant ? [2] : [])]),
     units.map((unit) => weight(unit.base)),
   ];
 };
