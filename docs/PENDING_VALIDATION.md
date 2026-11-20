@@ -4815,3 +4815,40 @@ The gate was clear in readings 2, 6, 8, 10 and 17, and each of those reading als
 Heavy-job rule, as applied: the hot list is every process above 20% CPU in `top`, with `gm-core worker --handshake` processes excluded, plus any Chromium renderer above 1 GB. The named pids above are from the job log `runs/2026-11-19-14-00-59-e21bf1/jobs/p11l-window.out`; for readings 6 to 20 the log names the count only where marked, and the process identity was not captured per reading.
 
 Carried forward: 38f4151 (change set 30cb) is committed locally and unpushed. The next Phase B window pushes it with the window record above, once a window clears with the green witness, the red check and the check runs all passing.
+
+### Phase B window for 5528810 (change set 30cb, the group, function, loop and subshell offsets, and head on a seekable input), with its readings, red check and push
+
+Window: one job of up to twenty readings, one every 30 s. It started at 06:40:59 (the manual gate sample before the job) and cleared at reading 8 (06:44:36), so the window ran about 3.5 minutes of readings.
+
+Manual `vmstat 1 2` at 06:40:59, before the job: first line is the average since boot, second sample `si 3164, so 4628` (not clear). The job was started anyway, because it takes the gate and heavy-jobs readings itself and runs its checks only when both are clear in the same reading.
+
+Readings (the gate is the second `vmstat 1 2` sample, both directions under 1000 KB/s; heavy-jobs must read clear in the same reading):
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Hot processes |
+|---|---|---|---|---|---|---|
+| 1 | 06:41:07 | 14428 | 1440 | not clear | busy, n=1 | Chromium renderer pid 2212379 (105% CPU) |
+| 2 | 06:41:37 | 2056 | 6940 | not clear | busy, n=1 | the same renderer (103%) |
+| 3 | 06:42:06 | 115584 | 11412 | not clear | clear | none |
+| 4 | 06:42:37 | 57192 | 0 | not clear | clear | none |
+| 5 | 06:43:06 | 6732 | 6520 | not clear | clear | none |
+| 6 | 06:43:37 | 6272 | 3900 | not clear | clear | none |
+| 7 | 06:44:07 | 1044 | 40056 | not clear | clear | none |
+| 8 | 06:44:36 | 784 | 0 | clear | clear | none |
+
+Heavy-job rule, as applied: every process above 20% CPU in `top` with its full command line from `ps`, excluding `gm-core worker --handshake`, plus any Chromium renderer above 1 GB. The checker is `/workspace/bevy/scripts/heavy-jobs.cjs` from bevy commit 495fff6.
+
+Green witness (pid 2236963): exit 0, wall 1.62 s, `RESULT PASS=1445 FAIL=0`.
+Red check for item 14 (pid 2237005): the mutation removes the line that moves a withRedirects cursor's position back into its fd entry, on the HEAD copy of `web/shell-core.js`. Exit 1, wall 1.62 s, `RESULT PASS=1440 FAIL=5`. Restored from the HEAD copy, `cmp` matched; the witness after restore read `PASS=1445 FAIL=0`.
+`npm run check` (pid 2237114): exit 0, wall 0.31 s.
+`npm run witness:shell` (pid 2237169): exit 0, wall 1.70 s, `RESULT PASS=1445 FAIL=0`; three rows print exit 124 and are PASS rows.
+
+Push, once, after every check passed. It carried 38f4151 and 5528810:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   9aca69d..5528810  main -> main
+```
+
+`git ls-remote origin main` after the push: `55288102042a827421f0cdeb89061335858a5c29 refs/heads/main`.
+
+Longest step: the gate wait, from the job start at 06:41:07 to reading 8 at 06:44:36. Nothing was stopped; the busy reading 1 and 2 process belonged to another session. The push took 3 s.
