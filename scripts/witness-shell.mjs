@@ -1631,6 +1631,34 @@ group('pipes and continuations: a newline after | and a continuation between ass
   const pn4 = await run(await shell({}), 'echo a \\\n b');
   check('words: a continuation between two words gives one space between them, as bash does', pn4.stdout === 'a b\n' && pn4.stderr === '', JSON.stringify([pn4.stdout, pn4.stderr]));
 });
+group('expr: an equivalence class matches the compatibility forms of its letter, as GNU expr does in a UTF-8 locale', async () => {
+  const cp0 = await run(await shell({}), "expr '\u{249c}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches a parenthesised a (U+249C)', cp0.stdout === "1\nrc=0\n" && cp0.stderr === "", JSON.stringify([cp0.stdout, cp0.stderr]));
+  const cp1 = await run(await shell({}), "expr '\u{1f110}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches a parenthesised capital A (U+1F110)', cp1.stdout === "1\nrc=0\n" && cp1.stderr === "", JSON.stringify([cp1.stdout, cp1.stderr]));
+  const cp2 = await run(await shell({}), "expr '\u{aa}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches feminine ordinal a (U+00AA)', cp2.stdout === "1\nrc=0\n" && cp2.stderr === "", JSON.stringify([cp2.stdout, cp2.stderr]));
+  const cp3 = await run(await shell({}), "expr '\u{ff41}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches fullwidth a (U+FF41)', cp3.stdout === "1\nrc=0\n" && cp3.stderr === "", JSON.stringify([cp3.stdout, cp3.stderr]));
+  const cp4 = await run(await shell({}), "expr '\u{1d41a}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches bold a (U+1D41A)', cp4.stdout === "1\nrc=0\n" && cp4.stderr === "", JSON.stringify([cp4.stdout, cp4.stderr]));
+  const cp5 = await run(await shell({}), "expr '\u{1f150}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches negative circled a (U+1F150), which has no decomposition', cp5.stdout === "1\nrc=0\n" && cp5.stderr === "", JSON.stringify([cp5.stdout, cp5.stderr]));
+  const cp6 = await run(await shell({}), "expr '\u{1f170}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches negative squared a (U+1F170), which has no decomposition', cp6.stdout === "1\nrc=0\n" && cp6.stderr === "", JSON.stringify([cp6.stdout, cp6.stderr]));
+  const cp7 = await run(await shell({}), "expr '\u{1d79}' : '[[=g=]]'; echo rc=$?");
+  check('expr: an equivalence class [=g=] matches insular g (U+1D79), which has no decomposition', cp7.stdout === "1\nrc=0\n" && cp7.stderr === "", JSON.stringify([cp7.stdout, cp7.stderr]));
+  const cp8 = await run(await shell({}), "expr '\u{1f18a}' : '[[=p=]]'; echo rc=$?");
+  check('expr: an equivalence class [=p=] matches crossed negative squared p (U+1F18A), which has no decomposition', cp8.stdout === "1\nrc=0\n" && cp8.stderr === "", JSON.stringify([cp8.stdout, cp8.stderr]));
+  const cp9 = await run(await shell({}), "expr '\u{2071}' : '[[=i=]]'; echo rc=$?");
+  check('expr: an equivalence class [=i=] matches superscript i (U+2071)', cp9.stdout === "1\nrc=0\n" && cp9.stderr === "", JSON.stringify([cp9.stdout, cp9.stderr]));
+  const cp10 = await run(await shell({}), "expr '\u{1f12d}' : '[[=c=]]'; echo rc=$?");
+  check('expr: an equivalence class [=c=] matches a two-letter compatibility glyph (U+1F12D) does not match one letter', cp10.stdout === "0\nrc=1\n" && cp10.stderr === "", JSON.stringify([cp10.stdout, cp10.stderr]));
+  const cp11 = await run(await shell({}), "expr '\u{251}' : '[[=a=]]'; echo rc=$?");
+  check('expr: an equivalence class [=a=] matches latin small alpha (U+0251) does not match a', cp11.stdout === "0\nrc=1\n" && cp11.stderr === "", JSON.stringify([cp11.stdout, cp11.stderr]));
+  const cp12 = await run(await shell({}), "expr '\u{1f12a}' : '[[=s=]]'; echo rc=$?");
+  check('expr: an equivalence class [=s=] matches a tortoise-shell bracketed S (U+1F12A), as GNU expr does in a UTF-8 locale', cp12.stdout === "1\nrc=0\n" && cp12.stderr === "", JSON.stringify([cp12.stdout, cp12.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

@@ -3719,3 +3719,25 @@ Red checks, each restored from a backup and confirmed with `cmp`:
 - (2) the empty-word skip removed from the tokenizer: `RESULT PASS=1006 FAIL=2`, with the two assignment rows red.
 
 Gaps still open, not probed here: a newline after `|&` and after a redirection, and an empty word in a case word.
+
+### Change set 30bb: an equivalence class matches the compatibility forms of its letter, as GNU expr does in a UTF-8 locale
+
+Reference: GNU expr (`/bin/gnuexpr` with `LC_ALL=en_US.UTF-8`). Probed every code point in the new ranges (U+00AA; U+2070–U+209F; U+2460–U+24FF; U+1D00–U+1DBF; U+1D400–U+1D7FF; U+1F100–U+1F1FF; U+FF00–U+FFEF; 1921 code points) against each of the 26 letters with `expr CH : '[[=L=]]'`. The table of matches is the reference; each witness row's expected output comes from it.
+
+Before this change set, the classes only covered the NFD ranges (U+00C0–U+024F, Greek, Cyrillic, Latin Extended Additional, Greek Extended), so every compatibility form of a letter failed to match, and the table had 945 matches the shell did not produce. A first rule that took the first NFKD character gave 68 disagreements with GNU, in three groups:
+- two-letter compatibility glyphs such as U+1F12D (`CD`) and U+1F190 (`DJ`), which GNU does not match;
+- letters with no decomposition: the negative circled and negative squared letters (U+1F150–U+1F169, U+1F170–U+1F189), U+1D79, U+1D9E, U+1F18A and U+1F1A5, which GNU maps to their letter;
+- U+1F12A (tortoise-shell bracketed S), whose NFKD form carries brackets that a parenthesis-only rule does not remove.
+
+Rule now in use: a code point in one of the new ranges takes its letter from a small table (the no-decomposition group), and otherwise from its NFKD form: every non-letter is dropped, and the form is accepted only if exactly one letter is left, lowercased. Code points outside those ranges keep the NFD rule, unchanged.
+
+Result: the shell's classes equal GNU's table for all 26 letters over all 1921 code points, with zero disagreements (checked with the shell and the full table, not only the witness rows).
+
+Witness: group `expr: an equivalence class matches the compatibility forms of its letter, as GNU expr does in a UTF-8 locale`, 13 rows (eleven matches, two non-matches: U+1F12D for c and U+0251 for a). Final: `RESULT PASS=1021 FAIL=0`.
+
+Red checks, each restored from a backup and confirmed with `cmp`:
+- (1) the compatibility-range branch removed: `RESULT PASS=1010 FAIL=11`, the eleven match rows red.
+- (2) the no-decomposition table removed: `RESULT PASS=1017 FAIL=4`, the four table rows red (U+1F150, U+1F170, U+1D79, U+1F18A).
+- (3) the single-letter rule loosened to accept one or more letters: `RESULT PASS=1020 FAIL=1`, the U+1F12D row red.
+
+Gap still open, not probed here: the classes beyond the seven new ranges (for example U+2C60 and other Latin Extended-C letters), and collating symbols `[.x.]` for the new glyphs.

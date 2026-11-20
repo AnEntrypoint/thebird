@@ -990,8 +990,21 @@ function characterClass(name) {
 }
 
 const STROKED_BASE = { 'ø': 'o', 'ǿ': 'o', 'ſ': 's', 'ẛ': 's', 'ŀ': 'l', 'ł': 'l', 'ð': 'd', 'đ': 'd' };
+const LETTER_GLYPHS = new Map([
+  [0x1d79, 'g'], [0x1d9e, 'd'], [0x1f18a, 'p'], [0x1f1a5, 'd'],
+  ...Array.from({ length: 26 }, (_, i) => [0x1f150 + i, String.fromCharCode(97 + i)]),
+  ...Array.from({ length: 26 }, (_, i) => [0x1f170 + i, String.fromCharCode(97 + i)]),
+]);
+const COMPATIBILITY_RANGES = [[0xaa, 0xaa], [0x2070, 0x209f], [0x2460, 0x24ff], [0x1d00, 0x1dbf], [0x1d400, 0x1d7ff], [0x1f100, 0x1f1ff], [0xff00, 0xffef]];
+const inCompatibilityRange = (cp) => COMPATIBILITY_RANGES.some(([start, end]) => cp >= start && cp <= end);
+const compatibilityBase = (folded) => {
+  if (LETTER_GLYPHS.has(folded.codePointAt(0))) return LETTER_GLYPHS.get(folded.codePointAt(0));
+  const letters = Array.from(folded.normalize('NFKD')).filter((char) => /\p{L}/u.test(char));
+  return letters.length === 1 ? letters[0].toLowerCase() : folded;
+};
 const equivalenceBase = (letter) => {
   const folded = letter.toLowerCase();
+  if (inCompatibilityRange(folded.codePointAt(0))) return compatibilityBase(folded);
   const decomposed = Array.from(folded.normalize('NFD'));
   if (folded === 'й') return folded;
   return STROKED_BASE[folded] ?? decomposed[0];
@@ -1001,7 +1014,7 @@ const equivalenceItems = (letter) => {
   const base = equivalenceBase(letter);
   if (!equivalenceClasses.has(base)) {
     const members = new Set([base, base.toUpperCase()].filter((member) => Array.from(member).length === 1));
-    for (const [start, end] of [[0xc0, 0x24f], [0x370, 0x3ff], [0x400, 0x4ff], [0x1e00, 0x1eff], [0x1f00, 0x1fff]]) {
+    for (const [start, end] of [[0xc0, 0x24f], [0x370, 0x3ff], [0x400, 0x4ff], [0x1e00, 0x1eff], [0x1f00, 0x1fff], ...COMPATIBILITY_RANGES]) {
       for (let cp = start; cp <= end; cp++) {
         const candidate = String.fromCodePoint(cp);
         if (equivalenceBase(candidate) === base) members.add(candidate);
