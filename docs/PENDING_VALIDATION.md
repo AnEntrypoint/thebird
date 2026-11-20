@@ -6357,3 +6357,21 @@ Phase A was code and docs only. No build, test, witness or red check was run in 
 17. `Date.now()` durations in the witness and host-check (ledger items 3 and 4): OPEN, reachable; not taken this round.
 
 Taken this round: item 1 (stray `]]`). Items 2 to 17 are listed, not taken.
+
+### Phase B, window 4: the round above, every witness and red check
+
+- Gate: the standalone `vmstat 1 2` reading before the window had second sample si 5016, so 172 (not clear); the script waited on its own per-step gate. The window ran from `GATE_CLEAR` on every step (si between 4 and 240 KB/s, so 0, heavy-jobs clear in each sample). The readings are in the Phase B log. No process holding the gate was stopped.
+- Earlier in this round, a window (PID 225308) was stopped by PID after W1 failed on `[[ a ]] ]]`, and that failure led to C7. Its readings are in the stopped log.
+- Witnesses, under timeout with the PID captured, all rc 0: W1 `RESULT PASS=1900 FAIL=0` (1888 before this round, plus 8 stray rows and 4 leftover rows); W2 prompt-path 18 of 18; W3 tar-gzip 4 of 4; W4 git-root 6 of 6; W5 git-init-message 1 of 1; W6 craft-cli 1 of 1; W7 readme-claims 2 of 2; W8 lint:comments rc 0; W9 lint:architecture rc 0.
+- Red checks, each a one-anchor mutation, witness run under timeout, restore from the saved copy, `cmp` (`RESTORED cmp=ok`), `git status` (only `bin/thebird-relay.js`):
+  - menuPitch: `PASS=1891 FAIL=9`. Detected.
+  - menuTab: `PASS=1895 FAIL=5`. Detected.
+  - perm (owner shift): `PASS=1896 FAIL=4`. Detected.
+  - noteRead (C3, access tick 0): `PASS=1899 FAIL=1`. Detected.
+  - rematch: `PASS=1890 FAIL=10`. Detected.
+  - creation (C1, the first creation site with `host.write`): `PASS=1900 FAIL=0`. Not detected, as expected: the claim was removed in C1, and no row depends on it.
+  - internal (C2, flush with `host.read`): `PASS=1900 FAIL=0`. Not detected, as expected: the claim was removed in C2.
+  - stray (C6, the `]]` test replaced): `PASS=1896 FAIL=4`. Detected.
+  - leftover (C7, the generic message put back): `PASS=1889 FAIL=11`. Detected.
+  - lstatGuard (against prompt-path): `ℹ fail 3`, two lines with `host.lstat is not a function`. Detected.
+- Result: no witness failed, so the push is allowed by the rule. Two changes (creation, internal read) are recorded as claims removed, and their red checks show no row depends on them.
