@@ -364,7 +364,7 @@ function parse(tokens) {
     const target = tokens[pos];
     if (!target?.parts) throw syntaxError(`expected a file after '${op}'`);
     pos++;
-    if (DUP_OPS.has(op) && !/^[0-9]+$/.test(target.parts.map(textOf).join(''))) throw syntaxError("expected a file descriptor after '" + op + "'");
+    if (DUP_OPS.has(op) && !/^([0-9]+|-)$/.test(target.parts.map(textOf).join(''))) throw syntaxError("expected a file descriptor after '" + op + "'");
     return { op, target: target.parts, body: opToken.body };
   };
 
@@ -1413,6 +1413,7 @@ export function evaluateArithmetic(src, lookup, assign) {
 export function createShell({ host, cwd = '/workspace', builtins = [], saved = null } = {}) {
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
   const vars = new Map(saved?.vars ?? []);
+  const fdTable = new Map();
   const exported = new Set(saved?.exported ?? []);
   let errexit = saved?.errexit ?? false;
   let xtrace = saved?.xtrace ?? false;
@@ -2768,9 +2769,65 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return null;
   }
 
+  async function openFile(redirect, sink) {
+    const path = await wordPath(redirect.target, sink);
+    const append = redirect.op.endsWith('>>');
+    if (path !== NULL_DEVICE && (!append || !host.exists(path))) writeRedirect(path, '');
+    return path;
+  }
+
+  const badFdResult = (target) => ({ code: 1, out: '', err: 'thebird: ' + target + ': Bad file descriptor\n' });
+
+  async function openRedirects(redirects, sink) {
+    const open = new Set([1, 2, ...fdTable.keys()]);
+    for (const redirect of redirects) {
+      const { op } = redirect;
+      if (DUP_OPS.has(op) || op === '2>&1') {
+        const fd = Number(op.startsWith('>') ? '1' : op[0]);
+        const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
+        if (target === '-') {
+          open.delete(fd);
+          continue;
+        }
+        if (!open.has(Number(target))) return badFdResult(target);
+        open.add(fd);
+      } else if (FD1_HEREDOCS.includes(op) || FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
+        open.add(Number(op[0]));
+      } else if (FD_OUTPUTS.includes(op) || FILE_FDS[op]) {
+        await openFile(redirect, sink);
+        for (const fd of FILE_FDS[op] ?? [Number(op[0])]) open.add(fd);
+      }
+    }
+    return null;
+  }
+
+  async function applyTableRedirects(redirects, sink) {
+    for (const redirect of redirects) {
+      const { op } = redirect;
+      const fd = Number(op[0]);
+      if (DUP_OPS.has(op)) {
+        const target = (await expandWord(redirect.target, sink)).join('');
+        if (target === '-') fdTable.delete(fd);
+        else fdTable.set(fd, target === '1' ? 'out' : target === '2' ? 'err' : fdTable.get(Number(target)));
+      } else if (FD_OUTPUTS.includes(op)) {
+        fdTable.set(fd, { path: await wordPath(redirect.target, sink) });
+      } else if (FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
+        fdTable.set(fd, 'readonly');
+      }
+    }
+  }
+
+  async function applyExecRedirects(redirects, sink) {
+    if (redirects.some((redirect) => !/^[3-9]/.test(redirect.op))) return { code: 2, out: '', err: 'thebird: exec: only descriptors 3 to 9 can be redirected\n' };
+    await applyTableRedirects(redirects, sink);
+    return { code: 0, out: '', err: '' };
+  }
+
   async function withRedirects(node, stdin, sink, run, stream) {
     const refused = (await refuseMissingOutputDir(node.redirects, sink)) ?? (await refuseMissingInputs(node.redirects, sink));
     if (refused) return refused;
+    const opened = await openRedirects(node.redirects, sink);
+    if (opened) return opened;
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op !== '<') continue;
@@ -2779,12 +2836,20 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       input = path === NULL_DEVICE ? '' : host.read(path);
     }
     const scratch = { out: '', err: '', signal: sink.signal, stream: node.redirects.some((redirect) => redirect.op === '<') ? { text: input, pos: 0 } : stream };
+    const descriptors = node.redirects.filter((redirect) => /^[3-9]/.test(redirect.op));
+    const saved = descriptors.map((redirect) => [Number(redirect.op[0]), fdTable.get(Number(redirect.op[0]))]);
+    await applyTableRedirects(descriptors, sink);
     let result;
     try {
       result = await run(node, input, scratch);
     } catch (err) {
       if (err && typeof err === 'object') err.output = await applyOutputRedirects(node.redirects, scratch.out, scratch.err, sink);
       throw err;
+    } finally {
+      for (const [fd, value] of saved) {
+        if (value === undefined) fdTable.delete(fd);
+        else fdTable.set(fd, value);
+      }
     }
     return { code: result.code, ...(await applyOutputRedirects(node.redirects, result.out, result.err, sink)) };
   }
@@ -2792,6 +2857,9 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   async function runCommand(node, argv, stdin, sink, stream) {
     const refused = (await refuseMissingOutputDir(node.redirects, sink)) ?? (await refuseMissingInputs(node.redirects, sink));
     if (refused) return refused;
+    const opened = await openRedirects(node.redirects, sink);
+    if (opened) return opened;
+    if (argv.length === 1 && argv[0] === 'exec') return applyExecRedirects(node.redirects, sink);
     let input = stdin;
     for (const redirect of node.redirects) {
       if (redirect.op === '<<' || redirect.op === '<<-') input = await bodyText(redirect.body, sink);
@@ -2812,29 +2880,27 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   async function applyOutputRedirects(redirects, out, err, sink) {
     const fds = { 1: 'out', 2: 'err' };
+    for (const [fd, target] of fdTable) fds[fd] = target;
     for (const redirect of redirects) {
       const { op } = redirect;
       if (DUP_OPS.has(op) || op === '2>&1') {
         const fd = op.startsWith('>') ? '1' : op[0];
         const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
-        if ((fd === '1' || fd === '2') && (target === '1' || target === '2')) fds[fd] = fds[target];
+        if (target === '-') delete fds[fd];
+        else if (!(target in fds)) return badFdResult(target);
+        else fds[fd] = fds[target];
       } else if (FD1_HEREDOCS.includes(op)) {
         fds[1] = 'readonly';
+      } else if (FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
+        fds[op[0]] = 'readonly';
       } else if (FD_OUTPUTS.includes(op)) {
-        const path = await wordPath(redirect.target, sink);
-        const prior = op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
-        writeRedirect(path, prior);
+        fds[op[0]] = { path: await wordPath(redirect.target, sink) };
       } else if (FILE_FDS[op]) {
-        const path = await wordPath(redirect.target, sink);
-        const prior = op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
-        for (const fd of FILE_FDS[op]) fds[fd] = { path, prior };
+        const target = { path: await wordPath(redirect.target, sink) };
+        for (const fd of FILE_FDS[op]) fds[fd] = target;
       }
     }
     const files = new Map();
-    for (const fd of [1, 2]) {
-      const target = fds[fd];
-      if (typeof target === 'object' && !files.has(target.path)) files.set(target.path, { prior: target.prior, text: '' });
-    }
     let outText = '';
     let errText = '';
     let writeFailed = false;
@@ -2842,10 +2908,12 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       const target = fds[fd];
       if (target === 'out') outText += text;
       else if (target === 'err') errText += text;
-      else if (target === 'readonly') writeFailed = writeFailed || text !== '';
-      else files.get(target.path).text += text;
+      else if (target === undefined || target === 'readonly') writeFailed = writeFailed || text !== '';
+      else files.set(target.path, (files.get(target.path) ?? '') + text);
     }
-    for (const [path, entry] of files) writeRedirect(path, entry.prior + entry.text);
+    for (const [path, text] of files) {
+      if (text !== '') writeRedirect(path, (host.exists(path) ? host.read(path) : '') + text);
+    }
     if (writeFailed) return { out: outText, err: errText + 'thebird: write error: Bad file descriptor\n', code: 1 };
     return { out: outText, err: errText };
   }
@@ -2853,6 +2921,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   async function runSubshell(node, stdin, sink) {
     const savedCwd = state.cwd;
     const savedVars = new Map(vars);
+    const savedFds = new Map(fdTable);
     const inner = sink;
     let code;
     try {
@@ -2864,6 +2933,8 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       state.cwd = savedCwd;
       vars.clear();
       for (const [name, value] of savedVars) vars.set(name, value);
+      fdTable.clear();
+      for (const [fd, value] of savedFds) fdTable.set(fd, value);
     }
     return { code, out: inner.out, err: inner.err };
   }

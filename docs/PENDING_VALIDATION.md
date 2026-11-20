@@ -4121,3 +4121,24 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `bcd369077da99919b3ae1dab37870dbdcc8b8192 refs/heads/main`. The push carried 9c8d41f (the record of the window that cleared at reading 8 for 4f8257a) and bcd3690.
 
 Longest step: the wait for the gate and heavy-jobs to clear, readings 1 to 5 (about two minutes). Nothing was stopped.
+### Change set 30bq: a file-backed descriptor table for fd 3 to 9, so `exec N>f`, `exec N>>f`, `exec N>&-` and a per-command or per-group `N>f` persist as bash does, and a write to a closed or read-only descriptor fails with status 1
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory. Probed with a probe script that runs each shape under bash and under this shell with the same fixture, comparing stdout, status and stderr. Probed shapes, bash output:
+- `exec 3>f; echo x >&3; cat f`: `x`. `exec 3>f; echo x >&3; echo y >&3; cat f`: `x` then `y`. `exec 3>f; echo x 1>&3; cat f`: `x`.
+- `echo hi > f; echo x 3<f >&3; echo st=$?`: status 1, stderr `bash: line 1: echo: write error: Bad file descriptor`. `echo hi > f; exec 3<f; echo x >&3; echo st=$?`: the same status and write error.
+- `echo keep > f; exec 4>>f; echo x >&4; cat f`: `keep` then `x` (the append keeps the old text).
+- `exec 3>f; echo x >&3; exec 3>&-; echo y >&3; echo st=$?; cat f`: status 1, stderr `bash: line 1: 3: Bad file descriptor`, stdout `st=1` then `x`. `echo x >&3; echo st=$?`: status 1, the same stderr, stdout `st=1`.
+- `echo x 3>f >&3; cat f`: `x`. `{ echo a >&3; echo b; } 3>f; cat f`: `b` then `a`. `echo x >&3 3>f; echo st=$?`: status 1, `3: Bad file descriptor`, and the file is not written.
+- `exec 3>f; echo x >&3 | cat; echo st=$?; cat f`: `st=0`, `x`. `exec 5>f; echo a >&5; echo b >&5; cat f`: `a` then `b`. `f2() { echo z >&3; }; exec 3>f; f2; cat f`: `z`.
+- `echo x 3>f 3>&-; echo st=$?; cat f`: `x`, `st=0`. `exec 3>f; (echo s >&3); echo t >&3; cat f`: `s` then `t`. `(exec 3>f; echo s >&3); echo t >&3; echo st=$?`: status 1, the inner exec does not reach the parent.
+- `exec 3>f; exec 3>&1; echo x >&3; echo st=$?`: `x`, `st=0`. `echo x 9>f >&9; cat f`: `x`. `echo x 3>&-; echo st=$?`: `x`, `st=0`. `echo a >&-; echo st=$?`: status 1, stderr `bash: line 1: echo: write error: Bad file descriptor`.
+- `exec 3>f; echo 1 >&3; echo 2 >&3; exec 3>&-; echo 3 >&3; echo st=$?; cat f`: `st=1`, `1`, `2`. `exec 3>f 4>&3; echo x >&4; cat f`: `x`.
+
+What changed in the shell: a shell-level `fdTable` (a map from fd number to `out`, `err`, `readonly`, or `{ path }`) holds the descriptors opened by `exec` and by the redirects of a command or group, and a subshell saves and restores it. `openRedirects` runs first, in order, so a dup of a closed descriptor fails with `thebird: N: Bad file descriptor` and status 1 before anything runs, and a file truncates or creates once. `applyTableRedirects` applies the descriptors 3 to 9 of a command or group, and the table is restored after the group. `applyOutputRedirects` starts from the table, so `N>f` and `N>>f` write their text to the file at the end of the command, `N>&-` and `N>&M` follow the table, and a write to a closed or read-only descriptor sets the write error. The parser accepts `-` as the dup target (`N>&-`, `>&-`).
+
+Not taken in this change set: `<&N` (input dup, `cat <&3` is still a syntax error); `>&0` (dup of stdin); `1<f` (input file on fd 1); `>&word` for a file name. `exec` with a command argument is not implemented; `exec` takes only redirects.
+
+Witness: group `redirects: fd 3 to 9 written with exec or a redirect on a command or group reach a file, a closed or read-only fd fails with status 1, as bash does`, 24 rows from bash output. Final: `RESULT PASS=1202 FAIL=0`.
+
+Red check: the file append in the routing replaced by an empty text, so a file write loses its text, restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). The red run: `RESULT PASS=1113 FAIL=89`. The mutation also breaks ordinary file redirects, so the check shows the routing appends, not a check of fd 3 alone. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+
