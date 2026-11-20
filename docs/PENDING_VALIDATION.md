@@ -5261,3 +5261,39 @@ Eight readings had the gate clear (4, 5, 6, 8, 12, 15, 19, 20), and heavy-jobs r
 Because the window did not clear, no green witness, red check, `npm run check` or `npm run witness:shell` ran, and no push happened. `git ls-remote origin main` at the end of the window: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`, which is the commit origin had before this stretch.
 
 Still unpushed when the window ended: `67c54f1` (window record), `c73b1d9` (G2 probe findings) and `92d9214` (change set 30d2). They are carried into the next window.
+
+### Phase B window that did not clear for 67c54f1, c73b1d9, 92d9214 and ed91c30; nothing was pushed
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-jobs.cjs (bevy 495fff6) must read clear in the same reading. Every reading from the window log is below.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 08:21:09 | 59104 | 0 | not clear | not run | `vmstat 1 2`, second sample |
+| wait 1 | 08:21:13 | 2308 | 0 | not clear | not run | waiter (pid 2310786), gate readings only |
+| wait 2 | 08:21:44 | 3752 | 0 | not clear | not run | |
+| wait 3 | 08:22:15 | 4808 | 0 | not clear | not run | |
+| wait 4 | 08:22:47 | 88 | 4 | clear | not run | the waiter started the window on this reading |
+| window 1 | 08:22:50 | 84 | 116 | clear | busy, n=2 | |
+| window 2 | 08:23:21 | 104 | 0 | clear | busy, n=1 | |
+| window 3 | 08:23:50 | 136 | 0 | clear | busy, n=1 | |
+| window 4 | 08:24:21 | 116 | 0 | clear | busy, n=1 | |
+| window 5 | 08:24:51 | 26096 | 0 | not clear | clear | heavy-jobs clear, gate not |
+| window 6 | 08:25:20 | 56 | 0 | clear | busy, n=4 | |
+| window 7 | 08:25:51 | 12 | 0 | clear | busy, n=3 | |
+| window 8 | 08:26:20 | 4 | 0 | clear | busy, n=2 | |
+| window 9 | 08:26:51 | 28 | 0 | clear | busy, n=1 | |
+| window 10 | 08:27:21 | 4 | 0 | clear | busy, n=1 | |
+| window 11 | 08:27:50 | 5504 | 0 | not clear | busy, n=3 | |
+| window 12 | 08:28:21 | 904 | 0 | clear | busy, n=1 | |
+| window 13 | 08:28:51 | 256 | 0 | clear | busy, n=1 | |
+| window 14 | 08:29:20 | 260 | 0 | clear | busy, n=1 | |
+| window 15 | 08:29:51 | 8 | 0 | clear | busy, n=1 | |
+| window 16 | 08:30:21 | 28 | 98416 | not clear | busy, n=7 | |
+| window 17 | 08:30:50 | 128 | 0 | clear | busy, n=2 | |
+| window 18 | 08:31:21 | 20 | 36 | clear | busy, n=1 | |
+| window 19 | 08:31:50 | 40 | 0 | clear | busy, n=1 | |
+| window 20 | 08:32:21 | 20 | 0 | clear | busy, n=1 | the last reading; the window ended here |
+
+Fifteen readings had the gate clear, and heavy-jobs read busy in every reading except window 5, where the gate was not clear. The busy process at readings 16 to 20 was a Chromium renderer, pid 2317387, at about 107% CPU, which is over the 20% rule; it is not one of this stretch's processes. The window ran from 08:22:47 to 08:32:21, about 9 min 34 s, and ended with `WINDOW_NEVER_CLEARED` at 08:32:47.
+
+No green witness, red check, check or witness:shell ran, and no push happened. `git ls-remote origin main` at the end of the window: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`.
