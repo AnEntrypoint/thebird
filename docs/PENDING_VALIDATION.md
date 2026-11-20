@@ -5876,3 +5876,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `wc` command. On stdin with two or more counts each count is right-aligned to seven columns; a single count is not padded. A file takes its width from the total of the characters, and a single count from a file is not padded. The `total` line for several files is not part of this row and is recorded as S1-31.
 - Witness: `scripts/witness-shell.mjs`, group "wc padding: wc pads its counts to a common width when several are printed, and a single count is not padded, as GNU wc does", five rows with the expected output taken from GNU wc. Before the change two of the five failed (the stdin multi-count rows).
 - Red check: the seven-column width removed by mutation; green PASS=1661 FAIL=0; red PASS=1659 FAIL=2, restored, cmp matches.
+
+### Defect fix S1-31: wc prints a total line for several files
+
+- Row: S1-31, found while fixing S1-24 (not in the 8d52612 table). Command: `echo hello > f.txt; echo hi > g.txt; wc -lwc f.txt g.txt`. Before: two lines, no total. Expected: a third line `2 2 9 total`, after the per-file lines (GNU wc 9.7, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `wc` command. With two or more files a total line is added, with each count summed.
+- Witness: `scripts/witness-shell.mjs`, group "wc total: wc prints a total line when it reads several files, and the total is summed per count, as GNU wc does", three rows with the expected output taken from GNU wc. Before the change two of the three failed.
+- Red check: the total line removed by mutation; green PASS=1664 FAIL=0; red PASS=1662 FAIL=2, restored, cmp matches.

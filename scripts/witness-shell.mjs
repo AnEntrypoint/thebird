@@ -3529,6 +3529,15 @@ group("wc padding: wc pads its counts to a common width when several are printed
   const wwp5 = await run(sh, "echo hello > f.txt; wc -l f.txt");
   check("wc -l on a file prints one unpadded count and the name (bash output, locale en_US.UTF-8)", wwp5.stdout === "1 f.txt\n" && wwp5.exitCode === 0 && wwp5.stderr === "", JSON.stringify([wwp5.stdout, wwp5.stderr, wwp5.exitCode]));
 });
+group("wc total: wc prints a total line when it reads several files, and the total is summed per count, as GNU wc does", async () => {
+  const sh = await shell({});
+  const wwt1 = await run(sh, "echo hello > f.txt; echo hi > g.txt; wc -lwc f.txt g.txt");
+  check("wc -lwc on two files prints a total line (bash output, locale en_US.UTF-8)", wwt1.stdout === "1 1 6 f.txt\n1 1 3 g.txt\n2 2 9 total\n" && wwt1.exitCode === 0 && wwt1.stderr === "", JSON.stringify([wwt1.stdout, wwt1.stderr, wwt1.exitCode]));
+  const wwt2 = await run(sh, "echo hello > f.txt; echo hi > g.txt; wc -l f.txt g.txt");
+  check("wc -l on two files prints a total of the lines (bash output, locale en_US.UTF-8)", wwt2.stdout === "1 f.txt\n1 g.txt\n2 total\n" && wwt2.exitCode === 0 && wwt2.stderr === "", JSON.stringify([wwt2.stdout, wwt2.stderr, wwt2.exitCode]));
+  const wwt3 = await run(sh, "echo hello > f.txt; wc -l f.txt");
+  check("wc -l on one file prints no total line (bash output, locale en_US.UTF-8)", wwt3.stdout === "1 f.txt\n" && wwt3.exitCode === 0 && wwt3.stderr === "", JSON.stringify([wwt3.stdout, wwt3.stderr, wwt3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

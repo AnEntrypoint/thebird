@@ -2238,7 +2238,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         }
       }
       const width = columns > 1 ? String(found.reduce((total, { count }) => total + count.chars, 0)).length : 1;
-      return { code, out: found.map(({ name, count }) => `${row(count, width)} ${name}\n`).join(''), err };
+      const total = found.reduce((sum, { count }) => ({ lines: sum.lines + count.lines, words: sum.words + count.words, chars: sum.chars + count.chars }), { lines: 0, words: 0, chars: 0 });
+      const lines = found.map(({ name, count }) => `${row(count, width)} ${name}\n`);
+      if (found.length > 1) lines.push(`${row(total, width)} total\n`);
+      return { code, out: lines.join(''), err };
     },
     date: ({ argv }) => {
       const at = argv.indexOf('-d');
