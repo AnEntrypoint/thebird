@@ -3913,6 +3913,7 @@ group('permission tests: -r -w -x -O -G -N give bash output for each of these in
   ["printf a > f; cat f > /dev/null; [[ -N f ]] || echo readnotmod", "readnotmod\n", "", 0],
   ["printf x > f; chmod 000 f; [[ -r f ]] || echo unread; chmod 400 f; [[ -r f ]] && echo readable", "unread\nreadable\n", "", 0],
   ["mkdir -p a/b; printf x > a/b/f; chmod 644 a/b/f; chmod 600 a; [[ -r a/b/f ]] || echo blocked; chmod 700 a", "blocked\n", "", 0],
+  ["printf a > f; ln -s f l; cat l > /dev/null; printf b >> f; [[ -N l ]] && echo modified; [[ -N f ]] && echo fmod", "modified\nfmod\n", "", 0],
   ];
   for (const [script, stdout, stderr, status] of cases) {
     const sh = await shell({});
@@ -3935,6 +3936,7 @@ group('BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME r
   ["[[ 5 =~ [0-9] ]] && echo digit", "digit\n", "", 0],
   ["[[ abc123 =~ ([a-z]+)([0-9]+) ]]; [[ x =~ y ]]; echo \"${#BASH_REMATCH[@]}\"", "0\n", "", 0],
   ["[[ abc =~ b ]]; echo \"${BASH_REMATCH[0]}\"", "b\n", "", 0],
+  ["[[ abc =~ (b)(c) ]]; echo \"${#BASH_REMATCH}\"", "2\n", "", 0],
   ];
   for (const [script, stdout, stderr, status] of cases) {
     const sh = await shell({});

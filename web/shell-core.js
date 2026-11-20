@@ -1941,8 +1941,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   };
   const fileTicks = new Map();
   let fileClock = 0;
+  const clockKey = (path) => searchedDirectories(path).real;
   const noteRead = (path) => {
-    fileTicks.set(path, { m: fileTicks.get(path)?.m ?? 0, a: ++fileClock });
+    const key = clockKey(path);
+    fileTicks.set(key, { m: fileTicks.get(key)?.m ?? 0, a: ++fileClock });
   };
   const readFileText = (path) => {
     noteRead(path);
@@ -1950,8 +1952,9 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   };
   const writeFileText = (path, data) => {
     const t = ++fileClock;
-    const record = fileTicks.get(path);
-    fileTicks.set(path, record ? { m: t, a: record.a } : { m: t, a: t });
+    const key = clockKey(path);
+    const record = fileTicks.get(key);
+    fileTicks.set(key, record ? { m: t, a: record.a } : { m: t, a: t });
     host.write(path, data);
   };
   const functions = new Map(saved?.functions ?? []);
@@ -3221,7 +3224,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
-      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(variableValue(part.name) ?? '', shellLocale)), inDouble);
+      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name)[0] ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
       else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
