@@ -8,8 +8,11 @@ export const COMMAND_TIMEOUT_MS = 900000;
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
 const FD_OPS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>>', fd + '>&', fd + '>']);
 const FD_OUTPUTS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>', fd + '>>']);
-const OPERATORS = [...FD_OPS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS]);
+const FD_INPUTS = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<');
+const FD_HEREDOCS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '<<<', fd + '<<']);
+const FD_HEREDOC_BODIES = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<<');
+const OPERATORS = [...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
 const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
 const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWith('>&'))]);
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
@@ -320,7 +323,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
         const opToken = { op, line: lineAt(i) };
         tokens.push(opToken);
         i += op.length;
-        if (op === '<<') {
+        if (op === '<<' || FD_HEREDOC_BODIES.includes(op)) {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
           tokens.push({ parts: word.parts, line: lineAt(i) });
@@ -2752,8 +2755,17 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return null;
   }
 
+  async function refuseMissingInputs(redirects, sink) {
+    for (const redirect of redirects) {
+      if (!FD_INPUTS.includes(redirect.op)) continue;
+      const path = await wordPath(redirect.target, sink);
+      if (path !== NULL_DEVICE && !host.exists(path)) return { code: 1, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
+    }
+    return null;
+  }
+
   async function withRedirects(node, stdin, sink, run, stream) {
-    const refused = await refuseMissingOutputDir(node.redirects, sink);
+    const refused = (await refuseMissingOutputDir(node.redirects, sink)) ?? (await refuseMissingInputs(node.redirects, sink));
     if (refused) return refused;
     let input = stdin;
     for (const redirect of node.redirects) {
@@ -2774,7 +2786,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   }
 
   async function runCommand(node, argv, stdin, sink, stream) {
-    const refused = await refuseMissingOutputDir(node.redirects, sink);
+    const refused = (await refuseMissingOutputDir(node.redirects, sink)) ?? (await refuseMissingInputs(node.redirects, sink));
     if (refused) return refused;
     let input = stdin;
     for (const redirect of node.redirects) {

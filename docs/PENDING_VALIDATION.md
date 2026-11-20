@@ -3958,3 +3958,25 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `eab13de7ada6486279b500047108f5b3a289e382 refs/heads/main`. The push carried 20a1ba8 (the record of the earlier window) and eab13de.
 
 Longest step: the green witness, 1.53 s. Nothing was stopped; the gate and heavy-jobs were clear.
+
+### Change set 30bn: N< and the heredoc forms N<< and N<<< for N from 3 to 9 are accepted on a command and on an arithmetic command, and a missing N< file refuses the command with status 1, as bash does
+
+Reference: bash (this sandbox), with `bash -c` and a fresh directory holding `f` (for the present-file rows). Probed shapes, bash stdout and status: `(( 1 )) 3<f` (status 0), `(( 0 )) 3<f` (status 1), `(( 1 )) 3< f` (0), `echo x 3<f` (`x`, 0), `echo x 4<f 5<f` and `echo x 9<f` (`x`, 0), `echo x 3<f | cat` (`x`, 0). For a missing file, bash prints `bash: line 1: nofile: No such file or directory` on stderr, status 1, and does not run the command: `echo x 3<nofile` (no `x`, status 1), `(( 1 )) 3<nofile` (status 1), `{ echo x; } 3<nofile` (status 1, the group does not run), `echo x 3<f 3<nofile` (status 1), and `echo x 3<nofile | cat` (status 0, the last stage's; the refused stage prints nothing). Heredocs and here-strings on fd 3: `cat 3<<EOF` (status 0, no output), `echo x 3<<EOF` (`x`), `cat 3<<<hi` (status 0), `echo x 3<<<hi` (`x`).
+
+The rows check stdout and status against bash. The stderr of a missing file is this shell's own text, `thebird: cannot open /workspace/nofile: No such file`, the same form the existing `<` rows use (those pin dash's status 2). The bash prefix and wording are not copied, so the stderr is not claimed to match bash. Bash's status (1) is used, not dash's (2), for the new operator.
+
+Why the heredoc forms are in this change set: adding `3<` made `cat 3<<EOF` a syntax error (the operator `3<` matched the front of `3<<`), which bash runs with status 0. Caught by the probe before this commit. `N<<` and `N<<<` are now operators of their own; the heredoc body of `N<<` is still consumed, and the here-string or heredoc does not reach stdin.
+
+What changed in the shell: `FD_INPUTS` (`N<`), `FD_HEREDOCS` (`N<<<`, `N<<`) and `FD_HEREDOC_BODIES` (`N<<`) for N from 3 to 9 are operators, in the list and in the redirect set; the heredoc body branch of the tokenizer also takes `N<<`; `refuseMissingInputs` is checked before the output refusal in `withRedirects` and `runCommand` (the input redirect is refused with status 1 and the text above, and the command is not run).
+
+Witness: group `redirects: N< with N from 3 to 9 is accepted on a command and an arithmetic command, and a missing file refuses the command with status 1, as bash does`, 12 rows; and group `redirects: a heredoc or here-string on fd 3 to 9 is consumed and does not reach stdin, as bash does`, 4 rows. Final: `RESULT PASS=1152 FAIL=0`.
+
+Red checks, each restored from a copy of the good core and confirmed with `cmp`:
+- The missing-input refusal disabled: `RESULT PASS=1147 FAIL=5`, the five rows with a missing file.
+- The heredoc body taken only for `<<` (the `N<<` forms no longer consume their body): `RESULT PASS=1150 FAIL=2`, the two heredoc rows with `3<<EOF`.
+Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Gaps, not taken in this change set:
+- `0<<EOF` and `0<f` (fd 0 with an explicit number) are not operators: `cat 0<<EOF` runs `cat 0` and fails with `cat: 0: No such file or directory`, where bash prints `hi`. Reopen: add `0<` and `0<<` as the stdin forms, which the existing `<` and `<<` code already handles.
+- Writes to fd N from 3 to 9 with a reader (`echo x 3<f >&3` is a write error in bash, status 1). Reopen: a descriptor table entry for N from 3 to 9 that reads and writes files.
+- `>&word` with a non-digit word (file form). Reopen: from 30bm.

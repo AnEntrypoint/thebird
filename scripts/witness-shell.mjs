@@ -1889,6 +1889,44 @@ group('redirects: >&1, >&2 and 1>&2 send a command output to the other stream, a
   const dup25 = await run(sh, "echo x 1>f 2>&1 >&2; echo rc=$?; cat f");
   check("redirects dup: echo x 1>f 2>&1 >&2; echo rc=$?; cat f matches bash", dup25.stdout === "rc=0\nx\n" && dup25.stderr === "", JSON.stringify([dup25.stdout, dup25.stderr]));
 });
+group('redirects: N< with N from 3 to 9 is accepted on a command and an arithmetic command, and a missing file refuses the command with status 1, as bash does', async () => {
+  const sh = await shell({});
+  const fin0 = await run(sh, "echo hi > f; (( 1 )) 3<f; echo $?");
+  check("redirects in: echo hi > f; (( 1 )) 3<f; echo $? matches bash", fin0.stdout === "0\n" && fin0.stderr === "", JSON.stringify([fin0.stdout, fin0.stderr]));
+  const fin1 = await run(sh, "echo hi > f; (( 0 )) 3<f; echo $?");
+  check("redirects in: echo hi > f; (( 0 )) 3<f; echo $? matches bash", fin1.stdout === "1\n" && fin1.stderr === "", JSON.stringify([fin1.stdout, fin1.stderr]));
+  const fin2 = await run(sh, "echo hi > f; (( 1 )) 3< f; echo $?");
+  check("redirects in: echo hi > f; (( 1 )) 3< f; echo $? matches bash", fin2.stdout === "0\n" && fin2.stderr === "", JSON.stringify([fin2.stdout, fin2.stderr]));
+  const fin3 = await run(sh, "echo hi > f; echo x 3<f; echo st=$?");
+  check("redirects in: echo hi > f; echo x 3<f; echo st=$? matches bash", fin3.stdout === "x\nst=0\n" && fin3.stderr === "", JSON.stringify([fin3.stdout, fin3.stderr]));
+  const fin4 = await run(sh, "echo hi > f; echo x 4<f 5<f; echo st=$?");
+  check("redirects in: echo hi > f; echo x 4<f 5<f; echo st=$? matches bash", fin4.stdout === "x\nst=0\n" && fin4.stderr === "", JSON.stringify([fin4.stdout, fin4.stderr]));
+  const fin5 = await run(sh, "echo hi > f; echo x 9<f; echo st=$?");
+  check("redirects in: echo hi > f; echo x 9<f; echo st=$? matches bash", fin5.stdout === "x\nst=0\n" && fin5.stderr === "", JSON.stringify([fin5.stdout, fin5.stderr]));
+  const fin6 = await run(sh, "echo hi > f; echo x 3<f | cat; echo st=$?");
+  check("redirects in: echo hi > f; echo x 3<f | cat; echo st=$? matches bash", fin6.stdout === "x\nst=0\n" && fin6.stderr === "", JSON.stringify([fin6.stdout, fin6.stderr]));
+  const fin7 = await run(sh, "echo x 3<nofile; echo st=$?");
+  check("redirects in: echo x 3<nofile; echo st=$? matches bash", fin7.stdout === "st=1\n" && fin7.stderr === "thebird: cannot open /workspace/nofile: No such file\n", JSON.stringify([fin7.stdout, fin7.stderr]));
+  const fin8 = await run(sh, "(( 1 )) 3<nofile; echo $?");
+  check("redirects in: (( 1 )) 3<nofile; echo $? matches bash", fin8.stdout === "1\n" && fin8.stderr === "thebird: cannot open /workspace/nofile: No such file\n", JSON.stringify([fin8.stdout, fin8.stderr]));
+  const fin9 = await run(sh, "{ echo x; } 3<nofile; echo st=$?");
+  check("redirects in: { echo x; } 3<nofile; echo st=$? matches bash", fin9.stdout === "st=1\n" && fin9.stderr === "thebird: cannot open /workspace/nofile: No such file\n", JSON.stringify([fin9.stdout, fin9.stderr]));
+  const fin10 = await run(sh, "echo hi > f; echo x 3<f 3<nofile; echo st=$?");
+  check("redirects in: echo hi > f; echo x 3<f 3<nofile; echo st=$? matches bash", fin10.stdout === "st=1\n" && fin10.stderr === "thebird: cannot open /workspace/nofile: No such file\n", JSON.stringify([fin10.stdout, fin10.stderr]));
+  const fin11 = await run(sh, "echo x 3<nofile | cat; echo st=$?");
+  check("redirects in: echo x 3<nofile | cat; echo st=$? matches bash", fin11.stdout === "st=0\n" && fin11.stderr === "thebird: cannot open /workspace/nofile: No such file\n", JSON.stringify([fin11.stdout, fin11.stderr]));
+});
+group('redirects: a heredoc or here-string on fd 3 to 9 is consumed and does not reach stdin, as bash does', async () => {
+  const sh = await shell({});
+  const fhd0 = await run(sh, "cat 3<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects heredoc: cat 3<<EOF / hi / EOF / echo st=$? matches bash", fhd0.stdout === "st=0\n" && fhd0.stderr === '', JSON.stringify([fhd0.stdout, fhd0.stderr]));
+  const fhd1 = await run(sh, "echo x 3<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects heredoc: echo x 3<<EOF / hi / EOF / echo st=$? matches bash", fhd1.stdout === "x\nst=0\n" && fhd1.stderr === '', JSON.stringify([fhd1.stdout, fhd1.stderr]));
+  const fhd2 = await run(sh, "cat 3<<<hi; echo st=$?");
+  check("redirects heredoc: cat 3<<<hi; echo st=$? matches bash", fhd2.stdout === "st=0\n" && fhd2.stderr === '', JSON.stringify([fhd2.stdout, fhd2.stderr]));
+  const fhd3 = await run(sh, "echo x 3<<<hi; echo st=$?");
+  check("redirects heredoc: echo x 3<<<hi; echo st=$? matches bash", fhd3.stdout === "x\nst=0\n" && fhd3.stderr === '', JSON.stringify([fhd3.stdout, fhd3.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
