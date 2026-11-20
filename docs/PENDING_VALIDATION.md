@@ -6181,3 +6181,18 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Green again after both restores: `RESULT PASS=1830 FAIL=0`.
 - Still not covered: the menu for ten or more items. Bash lays them out in tab-padded columns whose widths depend on `COLUMNS`; this shell prints one item per line, so the menu text differs from bash from ten items on (the answers and the loop behave the same). Also, the body reads the rest of the loop's standard input as its own, but a body that reads stdin does not hand back what it consumed. A `function` error with a body that is not a group or subshell uses this shell's message, not bash's text.
 - Commit: a7fea32 (lanmower, no trailers).
+
+### Defect fix U-s: the -s unary test, in [[ ]] and in test
+
+- Before: `[[ -s f ]]` and `test -s f` gave the evaluator's not-supported message (status 2). Bash tests that the file exists and is not empty.
+- Decision: `-s` is `size > 0` on the host's stat, as `-n`, `-f` and the others read their own host calls. The witness rows create their files with the shell itself, so one group runs the same way in bash (in a temporary directory) and in the memory host.
+- Files: `web/shell-core.js` (`evaluateTest`, the `-s` branch, which both `[[` and `test`/`[` use), `scripts/witness-shell.mjs` (the 3-row group `size test: -s and test -s give bash output`).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1833 FAIL=0` (1830 before, plus 3 rows).
+- Red check: the `-s` branch replaced by `return true;`. Witness `RESULT PASS=1830 FAIL=3`: all three rows fail (the empty file and the missing file read as non-empty). Restored from a copy, `cmp` matched; green again at `PASS=1833 FAIL=0`.
+- Commit: 2c39206 (lanmower, no trailers).
+
+### Open rows from the list, with their causes (from the source, this stretch)
+
+- `=~` does not set `BASH_REMATCH`: blocked. `BASH_REMATCH` is an indexed array, and shell core has no array values (no `a=(...)`, no `${a[i]}`), so there is nothing to set. `=~` itself matches as bash does on the probed inputs (`[[ x =~ ^x$ ]]`, a quoted right side is literal).
+- Unary tests `-r -w -x -O -G -N` and the other letters not listed above: missing. The host stat exposes no permission bits or owner for the files, so they cannot be answered faithfully yet.
+- `[[ a -eq 1 ]]` and other numeric operands that are not numbers: this evaluator compares them as false, where bash reports an arithmetic syntax error.
