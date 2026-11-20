@@ -1815,6 +1815,25 @@ group('redirects: N> N>> and N>&M with N from 3 to 9 are accepted on a command a
   const fd11 = await run(sh, "(( 1 )) 3>&1; echo $?");
   check("redirects fd: (( 1 )) 3>&1; echo $? matches bash", fd11.stdout === "0\n" && fd11.stderr === '', JSON.stringify([fd11.stdout, fd11.stderr]));
 });
+group('expr: a multi-character collating symbol is refused with status 2 in every locale, and a one-character one matches its character, as GNU expr does', async () => {
+  const sh = await shell({});
+  const cs0 = await run(sh, "expr ab : '[[.ab.]]'; echo rc=$?");
+  check("expr collation: expr ab : '[[.ab.]]'; echo rc=$? matches GNU expr", cs0.stdout === "rc=2\n" && cs0.stderr === "expr: Invalid collation character\n", JSON.stringify([cs0.stdout, cs0.stderr]));
+  const cs1 = await run(sh, "LC_ALL=C expr ab : '[[.ab.]]'; echo rc=$?");
+  check("expr collation: LC_ALL=C expr ab : '[[.ab.]]'; echo rc=$? matches GNU expr", cs1.stdout === "rc=2\n" && cs1.stderr === "expr: Invalid collation character\n", JSON.stringify([cs1.stdout, cs1.stderr]));
+  const cs2 = await run(sh, "LC_ALL=en_US.UTF-8 expr ab : '[[.ab.]]'; echo rc=$?");
+  check("expr collation: LC_ALL=en_US.UTF-8 expr ab : '[[.ab.]]'; echo rc=$? matches GNU expr", cs2.stdout === "rc=2\n" && cs2.stderr === "expr: Invalid collation character\n", JSON.stringify([cs2.stdout, cs2.stderr]));
+  const cs3 = await run(sh, "expr ab : '[[.ab.]]x'; echo rc=$?");
+  check("expr collation: expr ab : '[[.ab.]]x'; echo rc=$? matches GNU expr", cs3.stdout === "rc=2\n" && cs3.stderr === "expr: Invalid collation character\n", JSON.stringify([cs3.stdout, cs3.stderr]));
+  const cs4 = await run(sh, "expr ab : '[[.a'; echo rc=$?");
+  check("expr collation: expr ab : '[[.a'; echo rc=$? matches GNU expr", cs4.stdout === "rc=2\n" && cs4.stderr === "expr: Unmatched [, [^, [:, [., or [=\n", JSON.stringify([cs4.stdout, cs4.stderr]));
+  const cs5 = await run(sh, "expr a : '[[.a.]]'; echo rc=$?");
+  check("expr collation: expr a : '[[.a.]]'; echo rc=$? matches GNU expr", cs5.stdout === "1\nrc=0\n" && cs5.stderr === "", JSON.stringify([cs5.stdout, cs5.stderr]));
+  const cs6 = await run(sh, "expr b : '[[.a.]]'; echo rc=$?");
+  check("expr collation: expr b : '[[.a.]]'; echo rc=$? matches GNU expr", cs6.stdout === "0\nrc=1\n" && cs6.stderr === "", JSON.stringify([cs6.stdout, cs6.stderr]));
+  const cs7 = await run(sh, "expr ab : '[[.a.]]b'; echo rc=$?");
+  check("expr collation: expr ab : '[[.a.]]b'; echo rc=$? matches GNU expr", cs7.stdout === "2\nrc=0\n" && cs7.stderr === "", JSON.stringify([cs7.stdout, cs7.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

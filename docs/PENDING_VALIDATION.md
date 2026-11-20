@@ -3858,3 +3858,21 @@ Gaps found, not taken in this change set:
 - `N<` with N from 3 to 9 is not tokenized (`(( 1 )) 3<f` is `syntax error: unexpected 'undefined'`; bash status 0 with `f` present). It has a separate missing-file path to add. Reopen: a change set that adds `N<` with the existence check, bash rows for a present and an absent file.
 - A missing directory under `N>` is refused with status 2 and the `thebird: cannot create` text; bash gives status 1 and `No such file or directory` (probe: `echo a 3>/nodir/x; echo st=$?` gives `st=1` in bash). This is the existing refusal path, not changed here. Reopen: align the status and text for every output redirect in one change set.
 - `>&N` and `echo x >&3` (writing to a descriptor above 2) are not supported. Reopen: the descriptor table, which the shell does not keep.
+
+### Change set 30bj: expr refuses a multi-character collating symbol with status 2 in every locale, and a one-character one matches its character, as GNU expr does
+
+Reference: `/bin/gnuexpr` (GNU coreutils 9.7), run under `bash -c 'exec -a expr ...'` so its messages carry the name `expr:` as the plain command does. Locales: `LC_ALL=C` and `LC_ALL=en_US.UTF-8` (both present on this host), and the unset default, which is `LANG=en_US.UTF-8`. Results, identical in all three:
+- `expr ab : '[[.ab.]]'` prints nothing, status 2, `expr: Invalid collation character`.
+- `expr ab : '[[.ab.]]x'` the same, status 2.
+- `expr ab : '[[.a'` status 2, `expr: Unmatched [, [^, [:, [., or [=`.
+- `expr a : '[[.a.]]'` prints `1`, status 0; `expr b : '[[.a.]]'` prints `0`, status 1; `expr ab : '[[.a.]]b'` prints `2`, status 0.
+
+Correction to the probe that was taken before this change set: an earlier run that read `[[.ab.]]` as status 1 with no message used the plain `expr` on PATH, which is uutils coreutils 0.10.0 (see the memory note on GNU reference binaries). With `/bin/gnuexpr` the result is status 2 with the message, and this shell already gave that, so the rows pin behaviour that was already right.
+
+Locale model (decided here, following GNU's rule): the locale in effect is the first set of `LC_ALL`, `LC_CTYPE`, `LANG`, and it is UTF-8 when its codeset is `UTF-8` or `utf8`; otherwise it is C. Reason: that is the rule the reference binaries follow, and this host's default is `LANG=en_US.UTF-8`, so the existing `expr` groups (which say UTF-8) and the `stat %N` groups (which say C, with the locale pinned in their probes) are each a correct reference. The shell does not read these variables yet: each group pins the locale it was probed in, and this change set does not depend on it, since the rows are the same in C and UTF-8. Reopen: read `LC_ALL`, `LC_CTYPE` and `LANG` from the shell's variables, so one shell gives GNU's answer for `stat %N` and `expr` together.
+
+What changed: nothing in the shell. The existing refusal (`Invalid collation character` for a symbol that is not one character, in `web/shell-core.js`) is the behaviour the rows pin.
+
+Witness: group `expr: a multi-character collating symbol is refused with status 2 in every locale, and a one-character one matches its character, as GNU expr does`, 8 rows from GNU. Final: `RESULT PASS=1110 FAIL=0`.
+
+Red check: the message of that refusal changed to `Invalid collation symbol`, restored from a backup and confirmed with `cmp` against HEAD: `RESULT PASS=1104 FAIL=6`, the four new rows that check the message and two earlier rows that check the same message. Then `git status` showed only the witness and the ledger, and `bin/thebird-relay.js`.
