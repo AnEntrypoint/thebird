@@ -6206,3 +6206,10 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Witness: to be run in Phase B. Expected from the rows: the green count is the previous count plus 21.
 - Red check, to be run in Phase B: (1) the `[[` numeric operands through Number() in place of evaluateArithmetic (the rows with names, hex, octal and sums fail); (2) the test integer through Number() in place of testInteger (the test and [ rows with non-integers fail). Each mutation is applied to a copy, the witness runs under timeout with its PID captured, the file is restored from the copy, cmp matches, and git status is checked.
 - Commit: d747c22 (lanmower, no trailers).
+
+- Phase B results for N-num (run in one clear-gate window; gate cleared on attempt 7, second sample si 60, so 0, heavy-jobs clear, rc 0):
+  - Witness: RESULT PASS=1854 FAIL=0 (1833 before, plus 21 rows). Re-run after both red checks and restores: RESULT PASS=1854 FAIL=0.
+  - Red check 1, [[ numeric operands through Number(): RESULT PASS=1848 FAIL=6 (the rows x=5 -eq 5, 1.5 -eq 1, 010 -eq 8, 1+1 -eq 2, a+ -eq 1, x -lt y fail). Restored from a copy; cmp matched.
+  - Red check 2, test integer check removed: RESULT PASS=1849 FAIL=5 (the rows test x -eq 5, test 1.5 -eq 1, [ x -eq 5 ], [ "" -eq 0 ], [ 0x10 -eq 16 ] fail). Restored from a copy; cmp matched.
+  - Every witness and red check ran under timeout with its PID captured. Nine witnesses passed (witness-shell, prompt-path, tar-gzip, git-root, git-init-message, craft-cli, readme-claims, lint:comments, lint:architecture).
+  - Gate readings (second sample si/so in KB/s; heavy-jobs): pre-gate vmstat second sample si 100, so 0, heavy-jobs busy on Chromium PIDs 65599 and 65638, cwd /workspace/oscraft (a peer's browser; not stopped). Attempt 1: si 44, so 508, busy 3. Attempt 2: si 264, so 0, busy 3. Attempt 3: si 464, so 660, busy 1. Attempt 4: si 1044, so 0, busy 1. Attempt 5: si 68, so 0, busy 1. Attempt 6: si 1452, so 0, busy 1. Attempt 7: si 60, so 0, heavy-jobs clear.
