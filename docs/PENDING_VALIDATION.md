@@ -5029,3 +5029,24 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `f6de5c0b36b2eb61a0f09343ca141805ab037038 refs/heads/main`.
 
 Longest step: the window itself, about 5 min 3 s from 07:12:34 to 07:17:37, which was mostly waiting for heavy jobs (zig and chromium) to finish. Nothing was stopped; those processes belong to other sessions.
+
+### Change set 30cf: sort under LC_ALL=C is pinned to byte order in witness rows, qualified by locale; the en_US.UTF-8 collation gap stays open
+
+Reference: GNU coreutils 9.7 `sort` from `/bin/gnusort`, reached through the PATH shim `/tmp/gnubin`. The PATH here resolves `sort` to uutils 0.10.0, whose en_US output is not GNU's; that is why the first bash probe in this change set gave a different order from GNU, and the probe was rerun through the shim before any decision. Locale: `LANG=en_US.UTF-8` with `LC_ALL` unset for the en_US probes; `LC_ALL=C` on each command in the rows.
+
+Probed first, against HEAD f6de5c0:
+- Under `LANG=en_US.UTF-8` (GNU 9.7 via the shim) the order of `b A a B` is `a A b B`. Under `LC_ALL=C` it is `A B a b`. The shell prints `A B a b` in every locale, because its `sort` compares with JavaScript `<` (code-unit order), which is the C order.
+- A 30-line set with punctuation, digits, accents and case pairs was sorted by GNU under en_US. The GNU order was `10 1a 9 .a a a a. A ä a1 a b a,b a-b ab aB Ab AB ab1 a_c ac b B e é ea Éa f _x x z Z`. Two ICU collators were tried (`Intl.Collator('en-US')` and the same with `ignorePunctuation`). Neither matched the GNU order on that set (ICU 78.3).
+- The row that the earlier witness pinned, `printf "b\na\nc\n" \| sort`, and the other existing sort rows use lowercase letters and digits only. Those rows give the same output under both locales, so they were never wrong.
+
+Decision: a row qualifier, not an implementation change. Reasons: glibc's en_US collation is a multi-level table (punctuation weighted at a later level, digits before letters, lowercase before uppercase at a tie), and an ICU collator reproduces only part of it. Implementing it partially would replace one locale mismatch with others. The shell's `sort` is byte order in every locale, so the honest witness is the byte order itself, stated as `LC_ALL=C`.
+
+Change: eight new rows, each its own `run(sh, ...)` with the output of GNU `sort` under `LC_ALL=C` (the title says so). Cases: mixed case, reverse, punctuation before letters, digits then letters then the accented byte, `-u`, `-ru`, case pairs, and `x` against `X`. The existing rows are not changed.
+
+Witness: before the rows were added, the file held `RESULT PASS=1504 FAIL=0`. After: `RESULT PASS=1512 FAIL=0`.
+
+Red check: the mutation changes the default `sort` comparison to a case-insensitive one, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1507 FAIL=5`: the mixed-case, reverse, `-u`, case-pair and `x/X` rows. Restored from the copy, `cmp` matched; `git status` shows `web/shell-core.js` unchanged, and the witness is back at `PASS=1512 FAIL=0`.
+
+Still open, recorded:
+- G2, reachable but not implemented: `sort` under `LANG=en_US.UTF-8` prints byte order where bash and GNU print the glibc en_US order (`a A b B`). Reopen: port the glibc iso14651_t1 weights into a collation key for `sort` (the locale name is `en_US.UTF-8`, as `childLocaleMode()` reports it), then add rows under the default locale.
+- The same byte-order gap applies to `sort -n` with ties and to other sorts in the shell (for example `uniq` and `join`, which were not probed here).
