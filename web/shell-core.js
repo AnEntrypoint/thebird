@@ -584,11 +584,9 @@ function parse(tokens, partial = false) {
     const assigns = [];
     const words = [];
     const redirects = [];
-    let arrayAt;
     while (pos < tokens.length) {
       const token = tokens[pos];
       if (token.parts && !words.length && isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(') {
-        arrayAt = pos + 1;
         assigns.push({ name: token.parts[0].s.slice(0, -1), array: parseArrayValue() });
       } else if (token.parts && !words.length && isIndexedAssignment(token.parts)) {
         assigns.push(parseIndexedAssignment(token.parts));
@@ -602,9 +600,8 @@ function parse(tokens, partial = false) {
       } else if (REDIRECTS.has(token.op)) redirects.push(parseRedirect());
       else break;
     }
-    if (arrayAt !== undefined && words.length) throw nearToken(tokens[arrayAt]);
     if (!assigns.length && !words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
-    return { type: 'simple', assigns, words, redirects, line };
+    return { type: 'simple', assigns: words.length ? assigns.filter((assign) => !assign.array) : assigns, words, redirects, line };
   };
 
   const parseTrailingRedirects = () => {

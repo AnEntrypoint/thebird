@@ -4080,6 +4080,20 @@ group('permission tests: -O and -G compare the file owner and group with the she
   }
 });
 
+group('indexed arrays: NAME=(…) before a command is a prefix that the command does not keep (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["a=(p q) echo x; echo \"[${a[@]}]\"", "x\n[]\n", "", 0],
+  ["a=(p q) echo \"${a[@]}\"", "\n", "", 0],
+  ["a=(p q); a=(r) true; echo \"${a[@]}\"", "p q\n", "", 0],
+  ["a=(s); a=(p q) echo \"${a[@]}\"; echo \"${a[@]}\"", "s\ns\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('array prefix: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
