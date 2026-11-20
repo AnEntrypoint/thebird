@@ -5524,3 +5524,32 @@ To https://github.com/AnEntrypoint/thebird
 ```
 
 `git ls-remote origin main` after the push: `bfae2bc4b188c29c8e516b1400a82b0603073eb9 refs/heads/main`. The push carried bfae2bc (change set 30d7) and 0c45bd1, the window record for the previous window.
+
+### Change set 30d8: the G5 error text and line number. A parse error prints bash's text with its line, and the echoed source line where bash echoes it; a compound command left open at the end of the script names its keyword and the line it opened on; decided by bash output
+
+Locale: `en_US.UTF-8` (LANG and LC_ALL set for the bash probes). The messages do not depend on the locale; the locale is stated in each row title.
+
+Probe (bash, before the change), exact forms:
+- An operator or reserved word where a command was expected, or a redirect with no word after it: `bash: -c: line N: syntax error near unexpected token X'` and a second line `bash: -c: line N: source line'`. Seen for `;`, `&`, `)`, `fi` and `newline`. A redirect at the end of the script with no newline names `newline` on line 1 and echoes the line.
+- An unterminated quote or an unterminated parameter expansion (brace form): one line, `bash: -c: line N: unexpected EOF while looking for matching C'`, where N is the line the construct opens on.
+- An unterminated command substitution: the same message, with N the line the script ends on.
+- A compound command still open at the end of the script: `bash: -c: line N: syntax error: unexpected end of file from K' command on line M`, where N is the line the script ends on and M the line of the opening keyword (`if`, `while`, `until`, `for`, `case`, `{`, `(`).
+
+Before the change the shell printed `syntax error: <its own text>` with no line number and no echoed line, for example `expected 'done'`, `expected a file after '>'` and `unterminated double quote`.
+
+Change: the parser errors carry the bash fields (bash, line, at, echo) through `bashSyntaxError`. A failing token uses `nearToken(token)`; a redirect with no word uses it with a newline token. `unterminated(what, at)` takes the index of the opening quote or of the parameter expansion, and a command substitution takes the end of the script. `parseCommand` wraps `parseCommandBody`: a compound command that starts at a token and fails at the end of input reports `eofError(open)`. `syntaxReport(err, src)` prints the `bash: -c: line N: ` prefix and, for a token error, the echoed line, and the run path uses it. Errors without the bash fields keep their old text.
+
+The prefix is the one bash prints for `bash -c`, the form every witness row runs. The shell's other messages (expr, jq, and the parser errors not listed above) keep their own names.
+
+Witness rows: twenty-two rows changed in place (gs1 to gs5, gs8, gt1 to gt7, cs0, cs3, sox1 to sox5), where each expected stderr was a `syntax error` prefix or the old wording, and gs3 now expects the full bash text. Nine rows added (ge1 to ge9): while, until, for, case, a group, a subshell, an if with an else, a redirect at the end of the script, and an unterminated parameter expansion on line 2. Each takes stdout, status and stderr from bash. gs6 and gs7 have no error and are unchanged.
+
+Witness: with the twenty changed rows and the old code, `RESULT PASS=1533 FAIL=20`, wall 1.64 s. After the change, `RESULT PASS=1562 FAIL=0`, wall 1.74 s, and again after a title fix, wall 1.72 s. The nine ge rows were added after the change, so they were not run against the old code.
+
+Red checks, each under timeout with its PID, each restored and checked with cmp against the saved copy:
+- RED-M1 (pid 4945), the end-of-input line without its `+ 1`: exit 1, wall 1.73 s, `PASS=1545 FAIL=17`. Restored.
+- RED-M2 (pid 4962), the echoed line removed: exit 1, wall 1.73 s, `PASS=1549 FAIL=13`. Restored.
+
+Found by probes and left open:
+- `x=( ) ; echo ok`: the shell prints `syntax error: a function body must be a group or a subshell`. The bash text for this was not probed, so it is not converted.
+- Parser errors with no bash form yet: `expected ';;'`, `expected ')'` and `expected 'esac'` away from the end of input, and `unexpected end of input`.
+- Not checked: how a nested parse (a command substitution parsed by `parseScript`) prints these errors. `syntaxReport` is called from the top-level run path only.

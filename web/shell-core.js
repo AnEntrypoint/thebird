@@ -59,8 +59,24 @@ function syntaxError(message) {
   return new Error(`syntax error: ${message}`);
 }
 
-function unterminated(what) {
-  return syntaxError(`unterminated ${what}`);
+const BASH_CLOSERS = { 'double quote': '"', 'single quote': "'", 'command substitution': ')', 'parameter expansion': '}' };
+
+function bashSyntaxError(message, { line, at, echo = false } = {}) {
+  return Object.assign(new Error(message), { bash: true, line, at, echo });
+}
+
+function nearToken(token) {
+  const text = token.newline ? 'newline' : (token.op ?? token.text);
+  return bashSyntaxError("syntax error near unexpected token `" + text + "'", { line: token.line, echo: true });
+}
+
+function eofError(open) {
+  return bashSyntaxError('syntax error: unexpected end of file from `' + (open.text ?? open.op) + "' command on line " + open.line);
+}
+
+function unterminated(what, at) {
+  if (!(what in BASH_CLOSERS)) return syntaxError(`unterminated ${what}`);
+  return bashSyntaxError("unexpected EOF while looking for matching `" + BASH_CLOSERS[what] + "'", { at });
 }
 
 function skipDoubleQuote(src, start) {
@@ -68,7 +84,7 @@ function skipDoubleQuote(src, start) {
     if (src[j] === '\\') j++;
     else if (src[j] === '"') return j;
   }
-  throw unterminated('double quote');
+  throw unterminated('double quote', start);
 }
 
 function matchParen(src, start) {
@@ -78,7 +94,7 @@ function matchParen(src, start) {
     if (c === '\\') i++;
     else if (c === "'") {
       const end = src.indexOf("'", i + 1);
-      if (end < 0) throw unterminated('single quote');
+      if (end < 0) throw unterminated('single quote', i);
       i = end;
     } else if (c === '"') i = skipDoubleQuote(src, i);
     else if (c === '(') depth++;
@@ -156,7 +172,7 @@ function readDollar(src, i) {
   }
   if (next === '{') {
     const close = src.indexOf('}', i + 2);
-    if (close < 0) throw unterminated('parameter expansion');
+    if (close < 0) throw unterminated('parameter expansion', i);
     return { part: parameterPart(src.slice(i + 2, close)), end: close + 1 };
   }
   if (next !== undefined && /[?#@*$!0-9]/.test(next)) return { part: { k: 'param', name: next, op: null, word: [] }, end: i + 2 };
@@ -170,7 +186,7 @@ function readDouble(src, i) {
   let lit = '';
   let j = i + 1;
   while (src[j] !== '"') {
-    if (j >= src.length) throw unterminated('double quote');
+    if (j >= src.length) throw unterminated('double quote', i);
     const c = src[j];
     if (c === '\\' && src[j + 1] === '\n') {
       j += 2;
@@ -205,7 +221,7 @@ function readParts(src, start, breaks) {
     if (c === "'") {
       flush();
       const end = src.indexOf("'", i + 1);
-      if (end < 0) throw unterminated('single quote');
+      if (end < 0) throw unterminated('single quote', i);
       parts.push({ k: 'sq', s: src.slice(i + 1, end) });
       i = end + 1;
     } else if (c === '"') {
@@ -368,7 +384,7 @@ function parse(tokens, partial = false) {
     const { op } = opToken;
     if (op === '2>&1') return { op };
     const target = tokens[pos];
-    if (!target?.parts) throw syntaxError(`expected a file after '${op}'`);
+    if (!target?.parts) throw nearToken(target ?? { newline: true });
     pos++;
     return { op, target: target.parts, text: target.text, body: opToken.body };
   };
@@ -469,7 +485,7 @@ function parse(tokens, partial = false) {
       const patterns = [];
       for (;;) {
         const token = tokens[pos];
-        if (!token?.parts) throw syntaxError('expected a pattern');
+        if (!token?.parts) throw token ? nearToken(token) : syntaxError('expected a pattern');
         patterns.push(token.parts);
         pos++;
         if (tokens[pos]?.op !== '|') break;
@@ -487,7 +503,19 @@ function parse(tokens, partial = false) {
     return { type: 'case', word: word.parts, arms, redirects: parseTrailingRedirects() };
   };
 
+  const isCompoundOpen = (token) => ['if', 'for', 'while', 'until', 'case', '{'].some((word) => isWord(token, word)) || token.op === '(';
+
   const parseCommand = () => {
+    const open = tokens[pos];
+    try {
+      return parseCommandBody();
+    } catch (err) {
+      if (err.bash || pos < tokens.length || !open || !isCompoundOpen(open)) throw err;
+      throw eofError(open);
+    }
+  };
+
+  const parseCommandBody = () => {
     const token = tokens[pos];
     if (!token) throw syntaxError('unexpected end of input');
     if (isWord(token, 'if')) {
@@ -524,9 +552,9 @@ function parse(tokens, partial = false) {
       pos++;
       return { type: 'group', list, redirects: parseTrailingRedirects() };
     }
-    if (token.op !== undefined) throw syntaxError(`unexpected '${token.op}'`);
+    if (token.op !== undefined) throw nearToken(token);
     const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac'].find((word) => isWord(token, word));
-    if (closer) throw syntaxError("unexpected '" + closer + "'");
+    if (closer) throw nearToken(token);
     if (token.parts.length === 1 && token.parts[0].k === 'lit' && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
       pos += 3;
       while (tokens[pos]?.op === ';') pos++;
@@ -595,8 +623,8 @@ function parse(tokens, partial = false) {
         continue;
       }
       const command = parseSequence([], true);
-      if (pos < tokens.length && !tokens[pos - 1]?.newline) throw syntaxError("unexpected '" + (tokens[pos].op ?? tokens[pos].text ?? 'word') + "'");
-      if (!command.items.length) throw syntaxError("unexpected '" + tokens[pos].op + "'");
+      if (pos < tokens.length && !tokens[pos - 1]?.newline) throw tokens[pos].op !== undefined ? nearToken(tokens[pos]) : syntaxError("unexpected '" + (tokens[pos].text ?? 'word') + "'");
+      if (!command.items.length) throw nearToken(tokens[pos]);
       if (list.items.length) command.items[0].op = ';';
       list.items.push(...command.items);
     }
@@ -609,6 +637,14 @@ function parse(tokens, partial = false) {
 
 export function parseScript(src, firstLine, substitution = false) {
   return parse(tokenize(src, firstLine, substitution));
+}
+
+function syntaxReport(err, src) {
+  if (!err.bash) return err.message + '\n';
+  const line = err.line ?? 1 + (src.slice(0, err.at ?? src.length).match(/\n/g) ?? []).length;
+  const prefix = 'bash: -c: line ' + line + ': ';
+  const echoed = err.echo ? prefix + '`' + src.split('\n')[line - 1] + "'\n" : '';
+  return prefix + err.message + '\n' + echoed;
 }
 
 export function parseScriptPartial(src) {
@@ -3616,7 +3652,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         code = await runSequence(parsed.list, '', sink);
         if (parsed.error) {
           code = 2;
-          sink.err += parsed.error.message + '\n';
+          sink.err += syntaxReport(parsed.error, script);
         }
       } catch (err) {
         if (err instanceof ShellExit) code = err.code;
