@@ -3837,3 +3837,24 @@ Witness: group `pipes: |& runs the pipe with the left stage stderr on the pipe, 
 Red check: the join removed (the runner's `if (cmd.mergeStderr)` made false), restored from a backup and confirmed with `cmp`: `RESULT PASS=1088 FAIL=2`, the two rows whose left stage writes to stderr red. The other eight rows do not depend on the join. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
 
 Gap found while probing, not taken in this change set: the redirect `>&N` with no leading digit (`echo e >&2`, `echo e 1>&2`, and `{ echo e >&2; } 2>&1 | cat` in a group) is refused as `syntax error: expected a file after '>'`. Bash writes to stderr. The tokenizer has `2>&1` but no `>&` operator. Reopen: a change set that adds `>&` and `1>&2` with bash rows, which is ranked first in the next list.
+
+### Change set 30bi: redirects N>, N>> and N>&M with N from 3 to 9 are accepted on a command and on an arithmetic command, as bash does
+
+Reference: bash (this sandbox's version), run with `bash -c` in a fresh directory with the same fixture names. The rows are the bash stdout and stderr for each script; the directory mapping is the witness's own cwd (`/workspace` in memory), because the scripts only use relative names.
+
+Before this change set, `3>/dev/null` after `(( ))` was `syntax error: unexpected 'undefined'`, and `echo x 3>f` wrote the text `x 3` to `f` (the `3` was taken as an argument, not as a descriptor). Bash writes `x` to stdout and does not write the `3` at all.
+
+Rule: a digit from 3 to 9 directly before `>`, `>>` or `>&` is a descriptor operator, and the tokenizer reads it as one operator (the operators are listed before the words, as `2>` is). `N>` and `N>>` open the file for writing: `N>` truncates it, `N>>` keeps its content, and nothing is written to it, since no stage writes to descriptors above 2. `N>&M` is a no-op, which is what bash does with no output written to N.
+
+What changed in the shell: `FD_OPS` and `FD_OUTPUTS` are generated from the digits 3 to 9; `FD_OPS` is in the operator list and in the redirect set, `FD_OUTPUTS` is in the output-redirect set (so a missing directory is refused as for `>`), and `applyOutputRedirects` has a branch for `FD_OUTPUTS`.
+
+Witness: group `redirects: N> N>> and N>&M with N from 3 to 9 are accepted on a command and on an arithmetic command, as bash does`, 12 rows from bash. Final: `RESULT PASS=1102 FAIL=0`.
+
+Red check: the `FD_OUTPUTS` branch made false, restored from a backup and confirmed with `cmp`: `RESULT PASS=1098 FAIL=4`, the four rows that depend on the truncation or the append (`echo x 3>f; cat f`, `(( 1 )) 3>f; ...`, and the two that read `k` after `3>k`). Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Note: the rows about `k` share one shell across the group, so their result depends on the earlier rows that set `k` (the truncation row needs the `keep` written by the row before it). The fixture is the same in bash's probe (fresh directory) only for the first row that writes it.
+
+Gaps found, not taken in this change set:
+- `N<` with N from 3 to 9 is not tokenized (`(( 1 )) 3<f` is `syntax error: unexpected 'undefined'`; bash status 0 with `f` present). It has a separate missing-file path to add. Reopen: a change set that adds `N<` with the existence check, bash rows for a present and an absent file.
+- A missing directory under `N>` is refused with status 2 and the `thebird: cannot create` text; bash gives status 1 and `No such file or directory` (probe: `echo a 3>/nodir/x; echo st=$?` gives `st=1` in bash). This is the existing refusal path, not changed here. Reopen: align the status and text for every output redirect in one change set.
+- `>&N` and `echo x >&3` (writing to a descriptor above 2) are not supported. Reopen: the descriptor table, which the shell does not keep.

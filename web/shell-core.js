@@ -6,9 +6,11 @@ import { runAwk } from './shell-awk.js';
 export const COMMAND_TIMEOUT_MS = 900000;
 
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
-const OPERATORS = ['2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1']);
-const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '&>>', '2>', '2>>']);
+const FD_OPS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>>', fd + '>&', fd + '>']);
+const FD_OUTPUTS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>', fd + '>>']);
+const OPERATORS = [...FD_OPS, '2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', ...FD_OPS]);
+const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
@@ -2805,6 +2807,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const prior = redirect.op === '>>' && host.exists(path) ? host.read(path) : '';
         writeRedirect(path, prior + out);
         out = '';
+      } else if (FD_OUTPUTS.includes(redirect.op)) {
+        const path = await wordPath(redirect.target, sink);
+        const prior = redirect.op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
+        writeRedirect(path, prior);
       } else if (redirect.op === '2>' || redirect.op === '2>>') {
         const path = await wordPath(redirect.target, sink);
         const prior = redirect.op === '2>>' && host.exists(path) ? host.read(path) : '';
