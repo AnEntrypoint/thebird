@@ -2744,6 +2744,12 @@ group('text: sort, uniq, head, tail and cut read lines and pick from them', asyn
   check("text: en_US.UTF-8 sort puts the final sigma ς after σ and Σ (bash output)", gx4.stdout === "σ\nΣ\nς\nσa\nςa\nσb\nςb\n" && gx4.stderr === "" && gx4.exitCode === 0, JSON.stringify([gx4.stdout, gx4.stderr, gx4.exitCode]));
   const gx5 = await run(sh, "printf 'Œeoé\\nØ\\nt\\nt\\nς\\nœ\\nœ\\no\\nα\\na\\no\\nσ\\nς\\no\\nΣ\\nß\\næ\\ns\\nA\\ns\\ns\\nς\\na\\nB\\ns\\n' | sort");
   check("text: en_US.UTF-8 sort on random short lines with æ, ß, ø, œ, final sigma, bash output", gx5.stdout === "a\na\nA\næ\nB\no\no\no\nØ\nœ\nœ\nŒeoé\ns\ns\ns\ns\nß\nt\nt\nα\nσ\nΣ\nς\nς\nς\n" && gx5.stderr === "" && gx5.exitCode === 0, JSON.stringify([gx5.stdout, gx5.stderr, gx5.exitCode]));
+  const gy1 = await run(sh, "printf 'ð\\nÐ\\nđ\\nd\\nħ\\nh\\nł\\nl\\nŋ\\nn\\nŧ\\nt\\nþ\\nz\\nĳ\\nı\\nij\\n' | sort");
+  check("text: en_US.UTF-8 sort places the Latin letters ð, đ, ħ, ł, ŋ, ĳ, ı, ŧ, þ among ASCII as glibc does (bash output)", gy1.stdout === "d\nđ\nð\nÐ\nh\nħ\nij\nĳ\nı\nl\nł\nn\nŋ\nt\nŧ\nz\nþ\n" && gy1.stderr === "" && gy1.exitCode === 0, JSON.stringify([gy1.stdout, gy1.stderr, gy1.exitCode]));
+  const gy2 = await run(sh, "printf 'ў\\nу\\nфх\\nѓ\\nґ\\nг\\nђ\\nд\\nе\\nѐ\\nё\\nє\\nж\\nі\\nї\\nй\\nј\\nћ\\nџ\\n' | sort");
+  check("text: en_US.UTF-8 sort orders the Cyrillic alphabet with its accented and extended letters (bash output)", gy2.stdout === "г\nѓ\nґ\nд\nђ\nе\nѐ\nё\nє\nж\nі\nї\nй\nј\nћ\nу\nў\nфх\nџ\n" && gy2.stderr === "" && gy2.exitCode === 0, JSON.stringify([gy2.stdout, gy2.stderr, gy2.exitCode]));
+  const gy3 = await run(sh, "printf 'ŧa\\né\\n0\\nŧ\\n0\\nð\\nĳ\\na\\nł\\nł\\nĸ\\nŧ\\nŧ\\nа\\nł\\nа\\nŧ\\nð\\nа\\nα\\na\\nð\\n0\\nα\\nł\\n' | sort");
+  check("text: en_US.UTF-8 sort on random short lines with ð, ħ, ł, ŋ, ĳ, ı, ĸ, ſ, ŧ, þ, Greek, Cyrillic and accents (bash output)", gy3.stdout === "0\n0\n0\na\na\nð\nð\nð\né\nĳ\nł\nł\nł\nł\nĸ\nŧ\nŧ\nŧ\nŧ\nŧa\nα\nα\nа\nа\nа\n" && gy3.stderr === "" && gy3.exitCode === 0, JSON.stringify([gy3.stdout, gy3.stderr, gy3.exitCode]));
   const counted = await run(sh, 'printf "a\na\nb\n" | uniq -c');
   check('text: uniq -c counts each run of equal lines', counted.stdout === '      2 a\n      1 b\n', JSON.stringify(counted.stdout));
   const head = await run(sh, 'printf "1\n2\n3\n4\n" | head -n 2');

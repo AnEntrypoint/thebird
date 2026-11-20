@@ -5297,3 +5297,17 @@ Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-
 Fifteen readings had the gate clear, and heavy-jobs read busy in every reading except window 5, where the gate was not clear. The busy process at readings 16 to 20 was a Chromium renderer, pid 2317387, at about 107% CPU, which is over the 20% rule; it is not one of this stretch's processes. The window ran from 08:22:47 to 08:32:21, about 9 min 34 s, and ended with `WINDOW_NEVER_CLEARED` at 08:32:47.
 
 No green witness, red check, check or witness:shell ran, and no push happened. `git ls-remote origin main` at the end of the window: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`.
+
+### Change set 30d3: sort places the extended Latin letters and the Cyrillic alphabet with its accented and extended letters as glibc does for en_US.UTF-8; decided by bash output
+
+Locale: `en_US.UTF-8`, with the glibc source table `/usr/share/i18n/locales/iso14651_t1_common`. The rows come from GNU sort 9.7 (`/tmp/gnubin/sort`) and nothing else.
+
+Change: the primary order string gains the own-symbol letters `ı`, `ĸ`, `ŋ`, `ŧ`, `þ` and the Cyrillic lowercase alphabet with `і` and `й` as their own symbols. The table forms are `ð` (variant of `d`), `ſ` (variant of `s`), `ĳ` (two compatibility elements, `i` and `j`), `ґ` (variant of `г`), and the stroked `đ`, `ħ`, `ł` (oblique to `d`, `h`, `l`). `й` is looked up before the NFD split: glibc gives `<U0439>` its own symbol (`<S0439>`), while NFD would give it the weight of `и` with a breve.
+
+Witness rows: three rows added after the 92d9214 rows, titled with the locale and marked bash output: Latin extended letters placed among ASCII, the Cyrillic alphabet with accented and extended letters, and a seeded random mix of short lines with Greek, Cyrillic and Latin extended letters.
+
+Checks: a seeded model test against bash over five sets of 6000 lines (Latin extended up to length 4 and 6, Cyrillic extended up to length 4 and 6, mixed up to length 5), and a further 6000-line set over `и И й Й і І ї Ї ј ц ч ў Ў ё Ё ѝ ð ł ı а a`. All six sets give zero adjacent violations and zero index differences from bash's order. The model test ran in 1.09 s wall.
+
+Witness: green at this commit, `RESULT PASS=1527 FAIL=0` in 1.72 s wall (1524 rows before, 3 added). Before the code change the same witness gave `PASS=1524 FAIL=3`, all on the three new rows. Red check, mutation: the form line for `й` removed from `web/shell-core.js` gave `RESULT PASS=1526 FAIL=1`, the failing row being the Cyrillic row. The file was restored, `cmp` matched the saved copy, and the witness was green again at `PASS=1527 FAIL=0`.
+
+Still open after this change set: extended letters with no table entry in this set, and the G2 remainder (punctuation position rule), which stays blocked as in 30d1.

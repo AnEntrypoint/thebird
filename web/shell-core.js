@@ -1156,33 +1156,44 @@ function headEnd(text, count) {
 }
 const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
 
-const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_`{|}~$0123456789abcdefghijklmnopqrstuvwxyz';
-const COLLATION_ACCENTS = '̧́̀̂̊̈̃';
+const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_' + '\x60' + '{|}~$0123456789' + 'abcdefghiıjklmnŋopqĸrstŧuvwxyzþ' + 'αβγδεζηθικλμνξοπρστυφχψω' + 'абвгдђеєжзи\u0456\u0439јклљмнњопрстћуфхцчџшщъыьэюя';
+const COLLATION_ACCENTS = '̧́̀̂̊̈̃̆';
 const COLLATING_LOCALES = new Set(['en_US.UTF-8', 'en_US.utf8']);
-
 const COLLATION_VARIANT = 10;
 const COLLATION_OBLIQUE = 9;
-const COLLATION_EXPANSIONS = new Map([['ß', ['s', 's']], ['æ', ['a', 'e']], ['œ', ['o', 'e']]]);
+const COLLATION_FORMS = new Map([
+  ['ß', [{ base: 's', variant: true, compat: true }, { base: 's', compat: true }]],
+  ['æ', [{ base: 'a', variant: true, compat: true }, { base: 'e', compat: true }]],
+  ['œ', [{ base: 'o', variant: true, compat: true }, { base: 'e', compat: true }]],
+  ['ð', [{ base: 'd', variant: true, compat: true }]],
+  ['ſ', [{ base: 's', variant: true, compat: true }]],
+  ['ĳ', [{ base: 'i', compat: true }, { base: 'j', compat: true }]],
+  ['ґ', [{ base: 'г', variant: true, compat: true }]],
+  ['й', [{ base: 'й' }]],
+  ['đ', [{ base: 'd', oblique: true }]],
+  ['ħ', [{ base: 'h', oblique: true }]],
+  ['ł', [{ base: 'l', oblique: true }]],
+  ['ø', [{ base: 'o', oblique: true }]],
+  ['ς', [{ base: 'σ', final: true }]],
+]);
 
 const collationUnits = (text) => {
   const units = [];
-  for (const char of text.normalize('NFD')) {
-    if (COLLATION_ACCENTS.includes(char)) {
-      if (units.length) units.at(-1).accents.push(char);
+  const push = (base, upper, form) => units.push({ base, upper, accents: [], variant: form.variant === true, oblique: form.oblique === true, compat: form.compat === true, final: form.final === true });
+  for (const raw of text) {
+    const rawLower = raw.toLowerCase();
+    const forms = COLLATION_FORMS.get(rawLower);
+    if (forms) {
+      for (const form of forms) push(form.base, raw !== rawLower, form);
       continue;
     }
-    const lower = char.toLowerCase();
-    const upper = char !== lower;
-    const expansion = COLLATION_EXPANSIONS.get(lower);
-    if (expansion) {
-      units.push({ base: expansion[0], upper, accents: [], expansion: true, variant: true });
-      units.push({ base: expansion[1], upper, accents: [], expansion: true });
-    } else if (lower === 'ø') {
-      units.push({ base: 'o', upper, accents: [], oblique: true });
-    } else if (lower === 'ς') {
-      units.push({ base: 'σ', upper: false, accents: [], final: true });
-    } else {
-      units.push({ base: lower, upper, accents: [] });
+    for (const char of raw.normalize('NFD')) {
+      if (COLLATION_ACCENTS.includes(char)) {
+        if (units.length) units.at(-1).accents.push(char);
+        continue;
+      }
+      const lower = char.toLowerCase();
+      push(lower, char !== lower, {});
     }
   }
   return units;
@@ -1198,7 +1209,7 @@ const collationLevels = (text) => {
   const accentRank = (unit) => (unit.accents.length ? COLLATION_ACCENTS.indexOf(unit.accents[0]) + 1 : 0);
   const caseLevel = (unit) => {
     if (unit.final) return 2;
-    if (unit.expansion) return unit.upper ? 3 : 2;
+    if (unit.compat) return unit.upper ? 3 : 2;
     return unit.upper ? 1 : 0;
   };
   return [
