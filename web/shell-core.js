@@ -1426,11 +1426,19 @@ function expandSet(text) {
 function formatPrintf([format = '', ...args]) {
   let index = 0;
   const text = format.replace(/\\(?:([0-7]{1,3})|(.))/g, (match, octal, ch) => (octal !== undefined ? String.fromCharCode(parseInt(octal, 8)) : (ESCAPES[ch] ?? match)));
-  return text.replace(/%([sd%])/g, (match, spec) => {
+  const pass = () => text.replace(/%([sd%])/g, (match, spec) => {
     if (spec === '%') return '%';
     const value = args[index++] ?? '';
     return spec === 'd' ? String(parseInt(value, 10) || 0) : value;
   });
+  let out = '';
+  let used;
+  do {
+    const before = index;
+    out += pass();
+    used = index > before;
+  } while (used && index < args.length);
+  return out;
 }
 
 const OPERATOR_LEVELS = [['||'], ['&&'], ['==', '!='], ['<', '>', '<=', '>='], ['+', '-'], ['*', '/', '%']];

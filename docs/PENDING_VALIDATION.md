@@ -5346,3 +5346,19 @@ To https://github.com/AnEntrypoint/thebird
 ```
 
 `git ls-remote origin main` after the push: `5c823a273ed28fa6d1b7857c06ba393dcb8529f8 refs/heads/main`.
+
+### Change set 30d4: printf reuses the format for further arguments as bash does, and the item is the ranked list's printf format reuse (not the here-string G4 of change set 11); decided by bash output
+
+Locale: `en_US.UTF-8` (LC_ALL and LANG set for the probe). The output of `printf` with these formats does not depend on the locale, so the rows are the same in `C`; the locale is stated in each row title.
+
+Probe (bash, before the change): with a format of two conversions and four arguments, bash prints `a-b` and then `c-d`. With three arguments, the second pass prints `c-` and the rest of the format, so the output is `c-` and a newline. A format with no conversions prints once for any number of arguments. A format with `%%` and one conversion, given two arguments, prints `%|a` and `%|b`. The shell printed only the first pass, so it stopped after the first argument.
+
+Change: `formatPrintf` in `web/shell-core.js` runs the escape-processed format once per pass and repeats the pass while a pass consumed an argument and arguments remain. A pass that consumes nothing (for example a format of `%%` alone) ends the loop, so the function cannot loop forever.
+
+Witness rows: nine rows added after the awk printf row, each titled with the locale and marked bash output, from bash output only. They cover the reuse of `%s-%s` over four arguments and over three (the partial second pass), the no-argument pass, the `%d` and `%s` mix, the `%%` reuse, a format with no conversions, a single pass padded with empty values, several conversions on one line, and a one-conversion format over three arguments.
+
+Witness: green at this commit, `RESULT PASS=1536 FAIL=0` (1527 before, 9 added), wall 2.01 s. `npm run check` exit 0, 347 ms. `npm run witness:shell` `RESULT PASS=1536 FAIL=0`, 1.88 s.
+
+Red check, against the pre-change code with the new rows: `RESULT PASS=1530 FAIL=6` (the six reuse rows fail; the other three rows, which the old code already matched, pass). Red check, mutation: the loop condition replaced by `while (false)` (the format runs once), `RESULT PASS=1530 FAIL=6`, the same six rows. Each restore was followed by `cmp` (matched), and `git status` showed only the three expected files and the dirty relay.
+
+Still open after this change set: a `%d` argument that is not a number. bash reports `printf: ...: invalid number` on stderr for it, and the shell prints the value as 0 without that message (the `parseInt(value, 10) || 0` branch). Not probed as a row yet; the ranked list still shows the printf item as done for reuse only.
