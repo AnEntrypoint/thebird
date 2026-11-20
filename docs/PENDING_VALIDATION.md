@@ -3876,3 +3876,40 @@ What changed: nothing in the shell. The existing refusal (`Invalid collation cha
 Witness: group `expr: a multi-character collating symbol is refused with status 2 in every locale, and a one-character one matches its character, as GNU expr does`, 8 rows from GNU. Final: `RESULT PASS=1110 FAIL=0`.
 
 Red check: the message of that refusal changed to `Invalid collation symbol`, restored from a backup and confirmed with `cmp` against HEAD: `RESULT PASS=1104 FAIL=6`, the four new rows that check the message and two earlier rows that check the same message. Then `git status` showed only the witness and the ledger, and `bin/thebird-relay.js`.
+
+### Phase B record: change sets 30bf to 30bj, pushed as 8bbc8ba..ecab189
+
+Window: started 03:11:33 and cleared at reading 5 (03:13:34), about two minutes of the ten allowed. Readings, each from `vmstat 1 2` (the second sample is the gate) and `scripts/heavy-jobs.cjs` from bevy 495fff6, with the top CPU list read in the same sample:
+
+| reading | time | gate swap-in KB/s | gate swap-out KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 03:11:33 | 1028 | 0 | clear | gate above 1000, not started |
+| 2 | 03:12:04 | 1140 | 212 | busy | zig test compile (pid 1925469) |
+| 3 | 03:12:33 | 280 | 0 | busy | gm-core worker, freddie run, not handshake (pid 1925874, 94% CPU) |
+| 4 | 03:13:04 | 156 | 0 | clear | claude session 2225 above 20% in top, not a heavy job |
+| 5 | 03:13:34 | 52 | 0 | clear | none: gate and heavy-jobs clear, window started |
+
+Runs, in the window, each under `timeout 900` with its PID captured and its wall time read from the clock:
+
+- Green witness (pid 1930250): exit 0, wall 1.55 s, `RESULT PASS=1110 FAIL=0`.
+- Red check 0, realpath `-s` (e54e692; pid 1930293): exit 1, wall 1.53 s, `RESULT PASS=1101 FAIL=9`, restored and confirmed with `cmp`.
+- Red check 1, realpath `-m` (7ea37f1; pid 1930376): exit 1, wall 1.52 s, `RESULT PASS=1100 FAIL=10`, restored.
+- Red check 2, stat symlink line (63306ed; pid 1930453): exit 1, wall 1.54 s, `RESULT PASS=1109 FAIL=1`, restored.
+- Red check 3, `|&` merge (2082b27; pid 1930510): exit 1, wall 1.53 s, `RESULT PASS=1108 FAIL=2`, restored.
+- Red check 4, fd redirect `N>` (2f222c1; pid 1930572): exit 1, wall 1.53 s, `RESULT PASS=1106 FAIL=4`, restored.
+- Red check 5, collation message (ecab189; pid 1930620): exit 1, wall 1.53 s, `RESULT PASS=1104 FAIL=6`, restored.
+
+Each restore was confirmed with `cmp` against the HEAD copy, and `git status` showed only `bin/thebird-relay.js` after each one.
+
+`npm run check` (pid 1930660): exit 0, wall 0.29 s. `npm run witness:shell` (pid 1930715): exit 0, wall 1.63 s, `RESULT PASS=1110 FAIL=0`, with three `exit 124` rows: the `timeout` row and the two `loops` rows.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   8bbc8ba..ecab189  main -> main
+``
+
+`git ls-remote origin main` after the push: `ecab189b3fa1408715d2b41295c943d31cca3a52 refs/heads/main`.
+
+Longest step: the wait for the gate and heavy-jobs to clear (readings 1 to 5, about two minutes). Nothing was stopped: the zig compile and the freddie worker belong to other runs.
