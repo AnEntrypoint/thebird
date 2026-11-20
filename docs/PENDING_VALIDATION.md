@@ -6258,3 +6258,16 @@ Phase A was code and docs only. No build, test, witness or red check was run in 
 - `find -exec … +`: unsupported, not re-verified. Not in this stretch.
 - `${NAME[@]}` inside double quotes: element join uses a single space; bash keeps elements separate. Not covered by the witness rows; the first `"${arr[@]}"` probe would show it.
 - Phase B results, Phase A entries: to be appended after the gate-clear window.
+
+### Phase B: the gate window, and the shell witness result
+
+- Gate: `/tmp/k10-gate.sh` (the bevy copy of `scripts/heavy-jobs.cjs` is identical to `/tmp/heavy-jobs-495fff6.cjs`). Attempts 1 to 6 were not clear: heavy-jobs read busy on PID 2525 (gm worker, cwd `/workspace/oscraft`) and PID 80267 (zig test, cwd `/workspace/fx/fx`, exited by attempt 7). Attempt 7 read the gate clear: second sample si 64, so 0, heavy-jobs `HEAVY_JOBS clear`, rc 0.
+- Readings, in order: pre-gate `vmstat 1 2` first sample si 1287, so 2465 (since-boot row), second sample si 220, so 0. Attempt 1 second sample si 20, so 0, busy. Attempt 4 second sample si 172, so 0, busy. Attempt 7 second sample si 64, so 0, clear (`GATE_CLEAR attempt=7 si=64 so=0`). After the gate cleared, `vmstat 1 2 | tail -n 1` read si 9484, so 21748, and the next `vmstat 1 2` read si 1435, so 2765 (first row) and si 9616, so 0 (second row), with heavy-jobs busy on chromium PIDs 88214 and 88367 (`/usr/lib/chromium`, a peer browser, not stopped).
+- Window caveat: the shell witness below ran after the post-clear reading showed the gate not clear. It is recorded as the result of a run in an unclear window, not as a clear-window result.
+- Witness: `timeout 900 npm run -s witness:shell`, PID 88825, rc 1: `RESULT PASS=1887 FAIL=1` (expected 1888 from the Phase A count).
+- The one FAIL: `permission: "printf a > f; [[ -N f ]] || echo fresh; cat f > /dev/null; printf b >> f; [[ -N f ]] && echo modified; [[ -N missing ]] || echo nomissing"`. Bash prints `fresh`, `modified`, `nomissing`. Our shell printed `modified` and `nomissing`, so `-N f` was true right after the file was created.
+- Cause (read from `web/shell-core.js`, not run): `openFile` and the `1<>` branch created the file with `writeRedirect(path, '')`, which ticks the write clock, and the flush then wrote the data with a second tick. Right after creation the modification tick was later than the access tick, so `-N` was true. Bash creates and writes in one event, where mtime equals atime.
+- Fix (code only, not run): `createRedirect(path)` writes an absent file with `host.write` and no tick, and uses `writeRedirect` only for a file that already exists. Both creation sites use it. Commit: a03aadf (lanmower, no trailers).
+- Red check for the fix (to run when the gate is clear): revert `createRedirect` to `writeRedirect(path, '')`, and the failing `-N` row should fail again. Restore from a copy and `cmp`.
+- Not run in this window: `prompt-path`, `tar-gzip`, `git-root`, `git-init-message`, `craft-cli`, `readme-claims`, `lint:comments`, `lint:architecture`, and every red check (menu, permission, BASH_REMATCH and the new fix). Each stays to run in the next clear window.
+- Push: not done. A witness failed, so Phase B ends with `REPORT: open`.
