@@ -11,8 +11,9 @@ const FD_OUTPUTS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>'
 const FD_INPUTS = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<');
 const FD_HEREDOCS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '<<<', fd + '<<']);
 const FD_HEREDOC_BODIES = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<<');
-const OPERATORS = [...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
+const FD0_OPS = { '0<<<': '<<<', '0<<-': '<<-', '0<<': '<<', '0<': '<' };
+const OPERATORS = ['<<-', ...Object.keys(FD0_OPS), ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<-', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
 const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
 const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWith('>&'))]);
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
@@ -268,8 +269,9 @@ function readHeredocBody(src, start, doc) {
     const next = end < 0 ? src.length : end;
     const line = src.slice(i, next);
     i = next + 1;
-    if (line === doc.delim) break;
-    lines.push(line);
+    const bare = doc.strip ? line.replace(/^\t+/, '') : line;
+    if (bare === doc.delim) break;
+    lines.push(bare);
   }
   const text = lines.map((line) => line + '\n').join('');
   doc.token.body = doc.quoted ? [{ k: 'sq', s: text }] : readBodyParts(text);
@@ -318,16 +320,17 @@ export function tokenize(src, firstLine = 1, substitution = false) {
         i = arith.end;
         continue;
       }
-      const op = OPERATORS.find((candidate) => src.startsWith(candidate, i));
-      if (op) {
+      const raw = OPERATORS.find((candidate) => src.startsWith(candidate, i));
+      if (raw) {
+        const op = FD0_OPS[raw] ?? raw;
         const opToken = { op, line: lineAt(i) };
         tokens.push(opToken);
-        i += op.length;
-        if (op === '<<' || FD_HEREDOC_BODIES.includes(op)) {
+        i += raw.length;
+        if (op === '<<' || op === '<<-' || FD_HEREDOC_BODIES.includes(op)) {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
           tokens.push({ parts: word.parts, line: lineAt(i) });
-          heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted) });
+          heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted), strip: op === '<<-' });
           i = word.end;
         }
       } else {
@@ -2790,7 +2793,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     if (refused) return refused;
     let input = stdin;
     for (const redirect of node.redirects) {
-      if (redirect.op === '<<') input = await bodyText(redirect.body, sink);
+      if (redirect.op === '<<' || redirect.op === '<<-') input = await bodyText(redirect.body, sink);
       else if (redirect.op === '<<<') input = (await expandWord(redirect.target, sink)).join(' ') + '\n';
       else if (redirect.op === '<') {
         try {

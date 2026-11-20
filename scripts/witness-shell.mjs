@@ -1927,6 +1927,37 @@ group('redirects: a heredoc or here-string on fd 3 to 9 is consumed and does not
   const fhd3 = await run(sh, "echo x 3<<<hi; echo st=$?");
   check("redirects heredoc: echo x 3<<<hi; echo st=$? matches bash", fhd3.stdout === "x\nst=0\n" && fhd3.stderr === '', JSON.stringify([fhd3.stdout, fhd3.stderr]));
 });
+group('redirects: fd 0 with the heredoc, the tab-stripping heredoc and the here-string forms reads stdin, as bash does', async () => {
+  const sh = await shell({});
+  const f0_0 = await run(sh, "cat 0<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects fd0: cat 0<<EOF / hi / EOF / echo st=$? matches bash", f0_0.stdout === "hi\nst=0\n" && f0_0.stderr === '', JSON.stringify([f0_0.stdout, f0_0.stderr]));
+  const f0_1 = await run(sh, "cat 0<<-EOF\n\thi\n\tEOF\necho st=$?");
+  check("redirects fd0: cat 0<<-EOF / \thi / \tEOF / echo st=$? matches bash", f0_1.stdout === "hi\nst=0\n" && f0_1.stderr === '', JSON.stringify([f0_1.stdout, f0_1.stderr]));
+  const f0_2 = await run(sh, "cat <<-EOF\n\thi\n\tEOF\necho st=$?");
+  check("redirects fd0: cat <<-EOF / \thi / \tEOF / echo st=$? matches bash", f0_2.stdout === "hi\nst=0\n" && f0_2.stderr === '', JSON.stringify([f0_2.stdout, f0_2.stderr]));
+  const f0_3 = await run(sh, "cat <<-EOF\n\t\ta\n\tb\n\tEOF\necho st=$?");
+  check("redirects fd0: cat <<-EOF / \t\ta / \tb / \tEOF / echo st=$? matches bash", f0_3.stdout === "a\nb\nst=0\n" && f0_3.stderr === '', JSON.stringify([f0_3.stdout, f0_3.stderr]));
+  const f0_4 = await run(sh, "cat 0<<-\"EOF\"\n\t$((1+2))\n\tEOF\necho st=$?");
+  check("redirects fd0: cat 0<<-\"EOF\" / \t$((1+2)) / \tEOF / echo st=$? matches bash", f0_4.stdout === "$((1+2))\nst=0\n" && f0_4.stderr === '', JSON.stringify([f0_4.stdout, f0_4.stderr]));
+  const f0_5 = await run(sh, "cat 0<<<x; echo st=$?");
+  check("redirects fd0: cat 0<<<x; echo st=$? matches bash", f0_5.stdout === "x\nst=0\n" && f0_5.stderr === '', JSON.stringify([f0_5.stdout, f0_5.stderr]));
+  const f0_6 = await run(sh, "read a 0<<<hello; echo $a st=$?");
+  check("redirects fd0: read a 0<<<hello; echo $a st=$? matches bash", f0_6.stdout === "hello st=0\n" && f0_6.stderr === '', JSON.stringify([f0_6.stdout, f0_6.stderr]));
+  const f0_7 = await run(sh, "cat 0<<\"EOF\"\n$HOME\nEOF\n");
+  check("redirects fd0: cat 0<<\"EOF\" / $HOME / EOF /  matches bash", f0_7.stdout === "$HOME\n" && f0_7.stderr === '', JSON.stringify([f0_7.stdout, f0_7.stderr]));
+  const f0_8 = await run(sh, "cat 0<<'EOF'\n$((1+2))\nEOF\n");
+  check("redirects fd0: cat 0<<'EOF' / $((1+2)) / EOF /  matches bash", f0_8.stdout === "$((1+2))\n" && f0_8.stderr === '', JSON.stringify([f0_8.stdout, f0_8.stderr]));
+  const f0_9 = await run(sh, "cat 0<<EOF 0<<EOF2\na\nEOF\nb\nEOF2\necho st=$?");
+  check("redirects fd0: cat 0<<EOF 0<<EOF2 / a / EOF / b / EOF2 / echo st=$? matches bash", f0_9.stdout === "b\nst=0\n" && f0_9.stderr === '', JSON.stringify([f0_9.stdout, f0_9.stderr]));
+  const f0_10 = await run(sh, "echo x 0<<EOF\nhi\nEOF\necho st=$?");
+  check("redirects fd0: echo x 0<<EOF / hi / EOF / echo st=$? matches bash", f0_10.stdout === "x\nst=0\n" && f0_10.stderr === '', JSON.stringify([f0_10.stdout, f0_10.stderr]));
+  const f0_11 = await run(sh, "cat 0<<EOF | wc -l\nhi\nEOF\n");
+  check("redirects fd0: cat 0<<EOF | wc -l / hi / EOF /  matches bash", f0_11.stdout === "1\n" && f0_11.stderr === '', JSON.stringify([f0_11.stdout, f0_11.stderr]));
+  const f0_12 = await run(sh, "echo hi > f; cat 0<f; echo st=$?");
+  check("redirects fd0: echo hi > f; cat 0<f; echo st=$? matches bash", f0_12.stdout === "hi\nst=0\n" && f0_12.stderr === '', JSON.stringify([f0_12.stdout, f0_12.stderr]));
+  const f0_13 = await run(sh, "echo hi > f; cat 0<f | cat; echo st=$?");
+  check("redirects fd0: echo hi > f; cat 0<f | cat; echo st=$? matches bash", f0_13.stdout === "hi\nst=0\n" && f0_13.stderr === '', JSON.stringify([f0_13.stdout, f0_13.stderr]));
+});
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

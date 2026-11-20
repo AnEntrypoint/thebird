@@ -4009,3 +4009,27 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `b56fb89c8b4ade0bfe3b36080e9f5b1662352964 refs/heads/main`. The push carried 33cf932 (the record of the window that cleared at reading 1 for eab13de) and b56fb89.
 
 Longest step: the green witness, 1.57 s. Nothing was stopped.
+
+### Change set 30bo: fd 0 with the heredoc, the here-string and the input forms, and the tab-stripping heredoc `<<-`, read stdin as bash does
+
+Reference: bash (this sandbox), `bash -c`, fresh directory with `f` holding `fromfile` for the file rows. Probed shapes, bash stdout and status:
+- `cat 0<<EOF` with body `hi`: `hi`, status 0. `echo x 0<<EOF`: `x`, status 0. `cat 0<<EOF | wc -l`: `1`.
+- `cat 0<<-EOF` with a body line `\thi` and terminator `\tEOF`: `hi`, status 0. `cat <<-EOF` (no fd): the same. `cat <<-EOF` with body `\t\ta` and `\tb` and terminator `\tEOF`: `a` and `b` (every leading tab of a body line and of the terminator is removed).
+- `cat 0<<-"EOF"` with body `\t$((1+2))`: `$((1+2))` (quoted, so no expansion).
+- `cat 0<<<x`: `x`, status 0. `read a 0<<<hello; echo $a`: `hello`, status 0.
+- `cat 0<<"EOF"` with body `$HOME`: `$HOME` (quoted delimiter, no expansion). `cat 0<<'EOF'` with body `$((1+2))`: `$((1+2))`. Unquoted `cat 0<<EOF` with body `$((1+2))`: `3`.
+- `cat 0<<EOF 0<<EOF2` with two bodies: `b` (the last one wins, as for `<<`).
+- `cat 0<f` and `cat 0<f | cat` with `f` holding `fromfile`: `fromfile`, status 0.
+
+The rows check stdout and stderr, with stderr empty, except nothing else; the missing-file refusal of `0<` is the existing `<` path and is not a row here.
+
+Bash differences this change set does not take: `cat 1<<EOF` (fd 1 with a heredoc, which bash runs with status 0 and no output; ours is `cat: 1: No such file`); the bash prefix of a missing-file message (the shell keeps its own text).
+
+What changed in the shell: `0<<<`, `0<<-`, `0<<` and `0<` are operators that the tokenizer reads as `<<<`, `<<-`, `<<` and `<` (a table, `FD0_OPS`); `<<-` is an operator of its own, which takes a heredoc body with its leading tabs removed from each body line and from the terminator line (the reader gets `doc.strip`); the runner takes `<<-` as an input redirect like `<<`.
+
+Witness: group `redirects: fd 0 with the heredoc, the tab-stripping heredoc and the here-string forms reads stdin, as bash does`, 14 rows from bash. Final: `RESULT PASS=1166 FAIL=0`.
+
+Red checks, each restored from a copy of the good core and confirmed with `cmp`:
+- The fd 0 alias removed (the `0`-prefixed ops are read as they are, so no body or input is taken): `RESULT PASS=1154 FAIL=12`.
+- The tab stripping removed from the heredoc reader: `RESULT PASS=1162 FAIL=4`, the four rows with `<<-`.
+Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
