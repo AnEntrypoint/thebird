@@ -209,10 +209,10 @@ function splitRead(chars, count, ifs) {
 }
 
 function parameterPart(text) {
-  const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:(:?[-+=?])(.*))?$/s.exec(text);
+  const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:\[([^\]]*)\])?(?:(:?[-+=?])(.*))?$/s.exec(text);
   if (!m) throw syntaxError(`bad substitution ${text}`);
-  if (m[1]) return { k: 'len', name: m[2] };
-  return { k: 'param', name: m[2], op: m[3] ?? null, word: readParts(m[4] ?? '', 0, new Set()).parts };
+  if (m[1]) return { k: 'len', name: m[2], index: m[3] };
+  return { k: 'param', name: m[2], index: m[3], op: m[4] ?? null, word: readParts(m[5] ?? '', 0, new Set()).parts };
 }
 
 function readDollar(src, i) {
@@ -463,6 +463,18 @@ function parse(tokens, partial = false) {
   const condNear = (token) => (token?.parts ? token.text : token?.newline ? 'newline' : (token?.op ?? 'newline'));
   const condError = (message, token, near) => bashSyntaxError(message, { line: token?.line, echo: true, near });
 
+  const parseRegexOperand = (left) => {
+    const parts = [];
+    let end = pos + 2;
+    while (tokens[end]?.parts ? !isWord(tokens[end], ']]') : ['(', ')', '|'].includes(tokens[end]?.op)) {
+      parts.push(...(tokens[end].parts ?? [{ k: 'lit', s: tokens[end].op }]));
+      end++;
+    }
+    if (!parts.length) throw condError("unexpected argument `" + condNear(tokens[pos + 2]) + "' to conditional binary operator", tokens[pos + 2], condNear(tokens[pos + 2]));
+    pos = end;
+    return { type: 'binary', op: '=~', left: left.parts, right: parts };
+  };
+
   const parseCondLeaf = () => {
     const token = tokens[pos];
     if (isWord(token, ']]')) throw condError('', token, ']]');
@@ -477,6 +489,7 @@ function parse(tokens, partial = false) {
     const next = tokens[pos + 1];
     const binary = litText(next) ?? next?.op;
     if (CONDITIONAL_BINARY.has(binary)) {
+      if (binary === '=~') return parseRegexOperand(token);
       const right = tokens[pos + 2];
       if (!right?.parts || isWord(right, ']]')) throw condError(`unexpected argument \`${condNear(right)}' to conditional binary operator`, right, condNear(right));
       pos += 3;
@@ -1919,6 +1932,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
   exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
+  const arrays = new Map();
+  const arrayIndex = (part) => (/^\d+$/.test(part.index) ? Number(part.index) : evaluateArithmetic(part.index, (name) => variableValue(name) ?? '', setVariable));
+  const arrayLength = (part) => {
+    const items = arrays.get(part.name) ?? [];
+    if (part.index === '@' || part.index === '*') return items.length;
+    return characterCount(items[arrayIndex(part)] ?? '', shellLocale);
+  };
   const fileTicks = new Map();
   let fileClock = 0;
   const noteRead = (path) => {
@@ -3201,7 +3221,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
-      else if (part.k === 'len') add(String(characterCount(variableValue(part.name) ?? '', shellLocale)), inDouble);
+      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(variableValue(part.name) ?? '', shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
       else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
@@ -3210,6 +3230,12 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   }
 
   async function parameterText(part, sink) {
+    if (part.index !== undefined) {
+      const items = arrays.get(part.name) ?? [];
+      if (part.index === '@' || part.index === '*') return items.join(' ');
+      return items[arrayIndex(part)] ?? '';
+    }
+    if (arrays.has(part.name)) return arrays.get(part.name)[0] ?? '';
     const value = variableValue(part.name);
     const unset = part.op?.startsWith(':') ? !value : value === undefined;
     if (part.op === null) return value ?? '';
@@ -3916,7 +3942,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (expr.op === '=~') {
       try {
         const pattern = rightChars.map((ch) => (ch.q ? ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m) : ch.c)).join('');
-        return new RegExp(pattern).test(leftText) ? 0 : 1;
+        const match = new RegExp(pattern).exec(leftText);
+        arrays.set('BASH_REMATCH', match ? Array.from(match, (text) => text ?? '') : []);
+        return match ? 0 : 1;
       } catch {
         sink.err += `[[: ${rightText}: invalid regular expression\n`;
         return 2;

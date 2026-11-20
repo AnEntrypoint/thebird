@@ -3921,6 +3921,28 @@ group('permission tests: -r -w -x -O -G -N give bash output for each of these in
   }
 });
 
+group('BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME read them, with bash output (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["[[ abc123 =~ ([a-z]+)([0-9]+) ]]; echo \"${BASH_REMATCH[0]} ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}\"", "abc123 abc 123\n", "", 0],
+  ["[[ abc123 =~ ([a-z]+)([0-9]+) ]]; echo \"${#BASH_REMATCH[@]}\"", "3\n", "", 0],
+  ["[[ a =~ (b)?a ]]; echo \"n=${#BASH_REMATCH[@]} [${BASH_REMATCH[1]}]\"", "n=2 []\n", "", 0],
+  ["[[ a =~ b ]]; echo \"n=${#BASH_REMATCH[@]}\"", "n=0\n", "", 0],
+  ["[[ x123 =~ ^x([0-9]+)$ ]] && echo \"$BASH_REMATCH\"", "x123\n", "", 0],
+  ["re='^([a-z]+)-([0-9]+)$'; [[ abc-42 =~ $re ]] && echo \"${BASH_REMATCH[2]}\"", "42\n", "", 0],
+  ["[[ foo =~ (f)(o)(o) ]] && echo \"${BASH_REMATCH[3]}\"", "o\n", "", 0],
+  ["[[ ab =~ (a|x)(b) ]] && echo \"${BASH_REMATCH[1]}${BASH_REMATCH[2]}\"", "ab\n", "", 0],
+  ["[[ abc =~ ^(a)(x)?bc$ ]]; echo \"[${BASH_REMATCH[2]}] ${#BASH_REMATCH[@]}\"", "[] 3\n", "", 0],
+  ["[[ 5 =~ [0-9] ]] && echo digit", "digit\n", "", 0],
+  ["[[ abc123 =~ ([a-z]+)([0-9]+) ]]; [[ x =~ y ]]; echo \"${#BASH_REMATCH[@]}\"", "0\n", "", 0],
+  ["[[ abc =~ b ]]; echo \"${BASH_REMATCH[0]}\"", "b\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('BASH_REMATCH: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
