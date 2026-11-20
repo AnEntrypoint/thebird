@@ -3849,6 +3849,38 @@ group('size test: -s and test -s give bash output for each of these inputs, stdo
   }
 });
 
+group('numeric operands: [[ ]] evaluates them as arithmetic, test and [ take integers, with bash output (locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["x=5; [[ x -eq 5 ]] && echo same", "same\n", 0, ""],
+  ["[[ a -eq 1 ]]; echo rc=$?", "rc=1\n", 0, ""],
+  ["[[ 1.5 -eq 1 ]]; echo rc=$?", "rc=1\n", 0, "arithmetic syntax error"],
+  ["[[ 0x10 -eq 16 ]] && echo hex", "hex\n", 0, ""],
+  ["[[ 010 -eq 8 ]] && echo oct", "oct\n", 0, ""],
+  ["[[ 1+1 -eq 2 ]] && echo sum", "sum\n", 0, ""],
+  ["[[ -1 -lt 0 ]] && echo neg", "neg\n", 0, ""],
+  ["[[ \"\" -eq 0 ]]; echo rc=$?", "rc=0\n", 0, ""],
+  ["[[ \" 3\" -eq 3 ]] && echo sp", "sp\n", 0, ""],
+  ["[[ a+ -eq 1 ]]; echo rc=$?", "rc=1\n", 0, "arithmetic syntax error"],
+  ["x=3; y=4; [[ x -lt y ]] && echo lt", "lt\n", 0, ""],
+  ["[[ 2 -ge 2 && 3 -ne 3 ]] || echo none", "none\n", 0, ""],
+  ["test x -eq 5; echo rc=$?", "rc=2\n", 0, "integer expected"],
+  ["test 1.5 -eq 1; echo rc=$?", "rc=2\n", 0, "integer expected"],
+  ["[ x -eq 5 ]; echo rc=$?", "rc=2\n", 0, "integer expected"],
+  ["[ \"\" -eq 0 ]; echo rc=$?", "rc=2\n", 0, "integer expected"],
+  ["[ \" 3\" -eq 3 ]; echo rc=$?", "rc=0\n", 0, ""],
+  ["[ 2 -gt 10 ]; echo rc=$?", "rc=1\n", 0, ""],
+  ["echo $((0x10)) $((010)) $((1+2*3)) $((0x1F))", "16 8 7 31\n", 0, ""],
+  ["[ 0x10 -eq 16 ]; echo rc=$?", "rc=2\n", 0, "integer expected"],
+  ["if [[ 3 -gt 2 ]]; then echo big; fi", "big\n", 0, ""],
+  ];
+  for (const [script, stdout, status, fragment] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    const stderrOk = fragment === '' ? r.stderr === '' : r.stderr.includes(fragment);
+    check('numeric: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.exitCode === status && stderrOk, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');

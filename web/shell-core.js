@@ -21,6 +21,14 @@ const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWit
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+class TestFailure extends Error {}
+
+const testInteger = (text) => {
+  if (!/^[ \t\n]*[+-]?[0-9]+[ \t\n]*$/.test(text)) throw new TestFailure(text + ': integer expected');
+  return Number(text.trim());
+};
+
+const INTEGER_COMPARE = { '-eq': (x, y) => x === y, '-ne': (x, y) => x !== y, '-lt': (x, y) => x < y, '-le': (x, y) => x <= y, '-gt': (x, y) => x > y, '-ge': (x, y) => x >= y };
 const CONDITIONAL_BINARY = new Set(['==', '=', '!=', '=~', '<', '>', '-eq', '-ne', '-lt', '-le', '-gt', '-ge']);
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
 const SHELL_PID = 100;
@@ -1746,7 +1754,7 @@ function applyOperator(op, left, right) {
 
 export function evaluateArithmetic(src, lookup, assign) {
   const compact = src.replace(/\\\n/g, '').replace(/\s+/g, '');
-  const tokens = compact.match(/\d+|[A-Za-z_]\w*|\+\+|--|[-+*/%]=|<=|>=|==|!=|&&|\|\||=|[-+*/%<>()!]/g) ?? [];
+  const tokens = compact.match(/0[xX][0-9a-fA-F]+|\d+|[A-Za-z_]\w*|\+\+|--|[-+*/%]=|<=|>=|==|!=|&&|\|\||=|[-+*/%<>()!]/g) ?? [];
   if (tokens.join('') !== compact) throw new Error(`arithmetic: bad expression '${src.trim()}'`);
   let pos = 0;
   const peek = () => tokens[pos];
@@ -1759,6 +1767,8 @@ export function evaluateArithmetic(src, lookup, assign) {
       if (tokens[pos++] !== ')') throw new Error('arithmetic: expected )');
       return value;
     }
+    if (/^0[xX][0-9a-fA-F]+$/.test(token)) return parseInt(token.slice(2), 16);
+    if (/^0[0-7]+$/.test(token)) return parseInt(token, 8);
     if (/^\d+$/.test(token)) return Number(token);
     if (/^[A-Za-z_]/.test(token)) {
       if (peek() === '++' || peek() === '--') {
@@ -2860,10 +2870,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
       return ok('');
     },
-    test: ({ argv }) => ({ code: evaluateTest(argv) ? 0 : 1, out: '', err: '' }),
+    test: ({ argv }) => testBuiltin(argv, 'test'),
     '[': ({ argv }) => {
       if (argv.at(-1) !== ']') return { code: 2, out: '', err: "[: missing ']'\n" };
-      return { code: evaluateTest(argv.slice(0, -1)) ? 0 : 1, out: '', err: '' };
+      return testBuiltin(argv.slice(0, -1), '[');
     },
     which: ({ argv }) => lookupNames(argv),
     type: ({ argv }) => typeNames(argv),
@@ -3014,6 +3024,15 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out, err };
   };
 
+  const testBuiltin = (args, name) => {
+    try {
+      return { code: evaluateTest(args) ? 0 : 1, out: '', err: '' };
+    } catch (err) {
+      if (!(err instanceof TestFailure)) throw err;
+      return { code: 2, out: '', err: name + ': ' + err.message + '\n' };
+    }
+  };
+
   const evaluateTest = (args) => {
     if (args[0] === '!' && args.length > 1) return !evaluateTest(args.slice(1));
     if (args.length === 0) return false;
@@ -3036,7 +3055,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       if (op === '=' || op === '==') return a === b;
       if (op === '!=') return a !== b;
       const numeric = { '-eq': (x, y) => x === y, '-ne': (x, y) => x !== y, '-lt': (x, y) => x < y, '-gt': (x, y) => x > y, '-le': (x, y) => x <= y, '-ge': (x, y) => x >= y };
-      if (numeric[op]) return numeric[op](Number(a), Number(b));
+      if (numeric[op]) return numeric[op](testInteger(a), testInteger(b));
       throw new Error(`test: ${op}: binary operator not supported`);
     }
     throw new Error('test: too many arguments');
@@ -3838,7 +3857,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     }
     if (expr.op === '<') return collate(leftText, rightText) < 0 ? 0 : 1;
     if (expr.op === '>') return collate(leftText, rightText) > 0 ? 0 : 1;
-    return evaluateTest([leftText, expr.op, rightText]) ? 0 : 1;
+    const values = [];
+    for (const text of [leftText, rightText]) {
+      try {
+        values.push(text.trim() === '' ? 0 : evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable));
+      } catch {
+        sink.err += '[[: ' + text + ': arithmetic syntax error\n';
+        return 1;
+      }
+    }
+    return INTEGER_COMPARE[expr.op](values[0], values[1]) ? 0 : 1;
   }
 
   async function runSelect(node, stdin, sink) {
