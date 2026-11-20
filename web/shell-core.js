@@ -1978,7 +1978,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (index === '@' && inDouble) return values.flatMap((value) => [{ start: true }, ...[...value].map((c) => ({ c, q: true, split: false }))]);
     return [...values.join(' ')].map((c) => ({ c, q: inDouble, split: !inDouble }));
   };
-  const onlyAtArray = (part) => part.parts.length === 1 && (part.parts[0].k === 'keys' || part.parts[0].k === 'param') && part.parts[0].index === '@';
+  const onlyAtArray = (part) => part.parts.length === 1 && (part.parts[0].k === 'keys' || part.parts[0].k === 'param' || part.parts[0].k === 'slice') && part.parts[0].index === '@';
   const arraySlice = (part) => {
     const items = arrays.get(part.name);
     const keys = [...(items?.keys() ?? [])].sort((a, b) => a - b);
