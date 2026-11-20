@@ -5382,3 +5382,34 @@ Red check, mutation 1 (the run path parses the whole script again): `RESULT PASS
 Other checks at this commit: `npm run check` exit 0, 318 ms. `npm run witness:shell` `RESULT PASS=1544 FAIL=0`, 1.85 s. `npm run lint:comments` exit 0, 763 ms, 0 comments in 140 repo-owned files. `npm run lint:architecture` exit 0, 8.0 s, 399 claims pass. `npm test` exit 0, 66 pass, 0 fail, 30.5 s (the longest step in this stretch).
 
 Still open after this change set: a tokenizer error (an unterminated quote, or an unterminated `$(`) anywhere in the script still stops the whole script before any line runs, because the tokenizer runs on the whole source first. bash runs the lines before it. Not probed as a row yet. The error text differs from bash's `bash: -c: line N: syntax error near unexpected token ...`; the line number is not reported.
+
+### Phase B window that did not clear for 320b4d3 (change set 30d5, G5 whole-script parse), with its readings; nothing was pushed
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s. `scripts/heavy-jobs.cjs` (bevy 495fff6) read in the same reading. The waiter (pid 2350592) sampled the gate at 09:30:56 (si 228, so 0) and started the window then, but the window's own first reading at 09:30:59 was not clear, so the gate and heavy-jobs were checked again on every reading below.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| 1 | 09:30:59 | 4072 | 0 | not clear | clear, hot count 1 | one hot process in the window's own top check |
+| 2 | 09:31:30 | 44 | 0 | clear | busy, n=4 | |
+| 3 | 09:32:00 | 376 | 0 | clear | busy, n=1 | |
+| 4 | 09:32:29 | 32 | 0 | clear | busy, n=1 | |
+| 5 | 09:33:00 | 136 | 0 | clear | busy, n=1 | |
+| 6 | 09:33:29 | 120 | 8532 | not clear | busy, n=1 | |
+| 7 | 09:34:00 | 352 | 13732 | not clear | busy, n=4 | |
+| 8 | 09:34:30 | 6360 | 27880 | not clear | busy, n=1 | |
+| 9 | 09:34:59 | 260 | 17352 | not clear | busy, n=1 | |
+| 10 | 09:35:30 | 524 | 0 | clear | busy, n=1 | |
+| 11 | 09:36:00 | 384 | 0 | clear | busy, n=1 | |
+| 12 | 09:36:29 | 5584 | 41600 | not clear | busy, n=2 | |
+| 13 | 09:37:00 | 684 | 0 | clear | busy, n=5 | |
+| 14 | 09:37:29 | 40 | 0 | clear | busy, n=1 | |
+| 15 | 09:38:00 | 0 | 0 | clear | busy, n=1 | |
+| 16 | 09:38:30 | 68 | 0 | clear | busy, n=1 | |
+| 17 | 09:38:59 | 44 | 10208 | not clear | busy, n=1 | |
+| 18 | 09:39:30 | 40 | 0 | clear | busy, n=4 | |
+| 19 | 09:39:59 | 176 | 0 | clear | busy, n=1 | |
+| 20 | 09:40:30 | 12 | 0 | clear | busy, n=1 | the last reading; the window ended at 09:40:55 |
+
+Thirteen readings had the gate clear. Heavy-jobs was busy in readings 2 to 20. The hot processes were Chromium (pid 2353943, the main process; pid 2353996, the GPU process; pid 2354035, a renderer), and a claude session (pid 2341543) that was above 20% CPU in top. None of them was started in this stretch, and I did not stop them. No green witness, red check or push ran. The window log ends with `WINDOW_NEVER_CLEARED`. `git ls-remote origin main` after the window: `24fca7d45bc069b1c8bea2c937fbb884e4c3359d refs/heads/main`.
+
+The window ran from 09:30:59 to 09:40:30, about 9 min 31 s, within the ten-minute allowance.
