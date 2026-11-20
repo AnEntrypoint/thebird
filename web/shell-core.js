@@ -1980,7 +1980,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
         continue;
       }
       const candidate = (current === '/' ? '' : current) + '/' + parts[i];
-      if (host.lstat(candidate)?.link && depth < 40 && (followLast || i < parts.length - 1)) {
+      if (host.lstat?.(candidate)?.link && depth < 40 && (followLast || i < parts.length - 1)) {
         const target = host.readlink(candidate);
         const inner = searchedDirectories(target.startsWith('/') ? target : (current === '/' ? '' : current) + '/' + target, true, depth + 1);
         searched.push(...inner.searched);
@@ -1997,7 +1997,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return ((parseInt(info.mode, 8) >> 6) & bit) !== 0;
   };
   const statInfo = (path) => {
-    const link = host.lstat(path);
+    const link = host.lstat?.(path);
     if (!link && !host.stat(path)) return null;
     if (link?.link) return { type: 'symbolic link', size: link.size ?? 0, mode: modes.get(path) ?? '777' };
     const info = host.stat(path);
