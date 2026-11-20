@@ -210,6 +210,8 @@ function splitRead(chars, count, ifs) {
 }
 
 function parameterPart(text) {
+  const keys = /^!([A-Za-z_][A-Za-z0-9_]*)\[([@*])\]$/.exec(text);
+  if (keys) return { k: 'keys', name: keys[1], index: keys[2] };
   const m = /^(#)?([A-Za-z_][A-Za-z0-9_]*|[0-9]|[?#@*$!])(?:\[([^\]]*)\])?(?:(:?[-+=?])(.*))?$/s.exec(text);
   if (!m) throw syntaxError(`bad substitution ${text}`);
   if (m[1]) return { k: 'len', name: m[2], index: m[3] };
@@ -1973,6 +1975,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const items = arrays.get(name);
     return items ? [...items.keys()].sort((a, b) => a - b).map((key) => items.get(key)) : [];
   };
+  const arrayKeys = (name) => [...(arrays.get(name)?.keys() ?? [])].sort((a, b) => a - b).map(String);
+  const elementChars = (values, index, inDouble) => {
+    if (index === '@' && inDouble) return values.flatMap((value) => [{ start: true }, ...[...value].map((c) => ({ c, q: true, split: false }))]);
+    return [...values.join(' ')].map((c) => ({ c, q: inDouble, split: !inDouble }));
+  };
+  const onlyAtArray = (part) => part.parts.length === 1 && (part.parts[0].k === 'keys' || part.parts[0].k === 'param') && part.parts[0].index === '@';
   const arrayElement = (name, index) => {
     const items = arrays.get(name);
     if (!items) return undefined;
@@ -3277,6 +3285,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       if (part.k === 'lit') add(part.s, false);
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
+      else if (part.k === 'param' && part.index === '@') chars.push(...elementChars(arrayItems(part.name), '@', inDouble));
+      else if (part.k === 'keys') chars.push(...elementChars(arrayKeys(part.name), part.index, inDouble));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
       else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name).get(0) ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
@@ -3327,13 +3337,18 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   function splitFields(chars) {
     const fields = [];
     let current = [];
+    let started = false;
     for (const ch of chars) {
-      if (ch.split && /[ \t\n]/.test(ch.c)) {
+      if (ch.start) {
+        if (started) fields.push(current);
+        current = [];
+        started = true;
+      } else if (ch.split && /[ \t\n]/.test(ch.c)) {
         if (current.length) fields.push(current);
         current = [];
       } else current.push(ch);
     }
-    if (current.length) fields.push(current);
+    if (started || current.length) fields.push(current);
     return fields;
   }
 
@@ -3362,7 +3377,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   async function expandWord(parts, sink) {
     const fields = splitFields(await expandChars(parts, false, sink));
-    if (!fields.length && parts.some((part) => part.k === 'sq' || part.k === 'dq')) return [''];
+    if (!fields.length && parts.some((part) => part.k === 'sq' || (part.k === 'dq' && !onlyAtArray(part)))) return [''];
     const words = [];
     for (const field of fields) {
       const matches = field.some(isWildcard) ? globField(field) : [];
