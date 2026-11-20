@@ -3463,6 +3463,15 @@ group("awk gsub and sub: gsub replaces every match and sub the first, & stands f
   const wgs5 = await run(sh, "echo abab | awk '{ s = $0; n = gsub(/b/, \"X\", s); print n, s, $0 }'");
   check("awk gsub on a named variable leaves the record unchanged (bash output, locale en_US.UTF-8)", wgs5.stdout === "2 aXaX abab\n" && wgs5.exitCode === 0 && wgs5.stderr === "", JSON.stringify([wgs5.stdout, wgs5.stderr, wgs5.exitCode]));
 });
+group("sed ranges with +N: sed addr,+N selects the matching line and the N lines after it, as bash sed does", async () => {
+  const sh = await shell({});
+  const wsd1 = await run(sh, "printf 'a\\nb\\nc\\n' | sed -n '/a/,+1p'");
+  check("sed -n /a/,+1p prints the match and the next line (bash output, locale en_US.UTF-8)", wsd1.stdout === "a\nb\n" && wsd1.exitCode === 0 && wsd1.stderr === "", JSON.stringify([wsd1.stdout, wsd1.stderr, wsd1.exitCode]));
+  const wsd2 = await run(sh, "printf 'a\\nb\\nc\\nd\\n' | sed -n '2,+1p'");
+  check("sed -n 2,+1p prints line two and the line after it (bash output, locale en_US.UTF-8)", wsd2.stdout === "b\nc\n" && wsd2.exitCode === 0 && wsd2.stderr === "", JSON.stringify([wsd2.stdout, wsd2.stderr, wsd2.exitCode]));
+  const wsd3 = await run(sh, "printf 'a\\nb\\nc\\n' | sed -n '/b/,+0p'");
+  check("sed -n /b/,+0p prints only the match when N is zero (bash output, locale en_US.UTF-8)", wsd3.stdout === "b\n" && wsd3.exitCode === 0 && wsd3.stderr === "", JSON.stringify([wsd3.stdout, wsd3.stderr, wsd3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

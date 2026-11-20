@@ -5834,3 +5834,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-awk.js`. `sub` and `gsub` leave the keyword set and become builtins with two or three arguments. The regex is a literal or a string; the replacement treats `&` as the match and `\&` as a literal ampersand; the target is the record by default, or a named variable or field, and it is written back only when a replacement was made. The return value is the count.
 - Witness: `scripts/witness-shell.mjs`, group "awk gsub and sub: gsub replaces every match and sub the first, & stands for the match, and each returns the count, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
 - Red check: the write-back disabled by mutation (the record and the named variable are not changed); green PASS=1637 FAIL=0; red PASS=1632 FAIL=5, restored, cmp matches.
+
+### Defect fix S1-19: sed ranges with +N
+
+- Row: S1-19 of the full-feature run (commit 8d52612). Command: `printf 'a\nb\nc\n' \| sed -n '/a/,+1p'`. Before: `sed: -e expression #1, char 5: unexpected ','`, rc 1. Expected: `a` then `b` (bash sed, locale en_US.UTF-8).
+- File: `web/shell-sed.js`. A range end may be `+N`: the range starts at the line that matches the start address and ends N lines later; `+0` selects the one line.
+- Witness: `scripts/witness-shell.mjs`, group "sed ranges with +N: sed addr,+N selects the matching line and the N lines after it, as bash sed does", three rows with the expected output taken from bash sed. Before the change all three failed against bash.
+- Red check: the `+N` end read as a line end by mutation (the range then never closes at N); green PASS=1640 FAIL=0; red PASS=1638 FAIL=2, restored, cmp matches.

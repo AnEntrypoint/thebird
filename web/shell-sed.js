@@ -127,7 +127,12 @@ function sedParse(script) {
     if (start && script[state.pos] === ',') {
       state.pos++;
       sedSkipBlanks(state);
-      end = sedParseAddress(state);
+      if (script[state.pos] === '+') {
+        state.pos++;
+        let digits = '';
+        while (state.pos < script.length && script[state.pos] >= '0' && script[state.pos] <= '9') digits += script[state.pos++];
+        end = { kind: 'plus', count: Number(digits) };
+      } else end = sedParseAddress(state);
       if (!end) sedFail(state, "unexpected `,'");
       sedSkipBlanks(state);
     }
@@ -163,12 +168,17 @@ function sedSelects(command, range, pattern, lineNumber, isLast) {
   if (range.active) {
     if (command.end.kind === 'line') {
       if (lineNumber >= command.end.line) range.active = false;
+    } else if (command.end.kind === 'plus') {
+      if (lineNumber >= range.stop) range.active = false;
     } else if (sedAddressMatches(command.end, pattern, lineNumber, isLast)) range.active = false;
     return true;
   }
   if (!sedAddressMatches(command.start, pattern, lineNumber, isLast)) return false;
   if (command.end.kind === 'line') range.active = command.end.line > lineNumber;
-  else range.active = !isLast;
+  else if (command.end.kind === 'plus') {
+    range.stop = lineNumber + command.end.count;
+    range.active = range.stop > lineNumber;
+  } else range.active = !isLast;
   return true;
 }
 
