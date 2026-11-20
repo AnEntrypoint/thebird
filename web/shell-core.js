@@ -13,9 +13,9 @@ const FD_HEREDOCS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '<
 const FD1_HEREDOCS = ['1<<<', '1<<-', '1<<'];
 const FD_HEREDOC_BODIES = ['3', '4', '5', '6', '7', '8', '9'].map((fd) => fd + '<<').concat(['1<<', '1<<-']);
 const FD0_OPS = { '0<<<': '<<<', '0<<-': '<<-', '0<<': '<<', '0<': '<' };
-const OPERATORS = ['<<-', ...FD1_HEREDOCS, ...Object.keys(FD0_OPS), ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<-', '<<<', ...FD1_HEREDOCS, '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
-const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
+const OPERATORS = ['<<-', ...FD1_HEREDOCS, '1<>', '1<', ...Object.keys(FD0_OPS), ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<-', '<<<', ...FD1_HEREDOCS, '1<', '1<>', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS, ...FD_HEREDOCS, ...FD_INPUTS]);
+const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '1<>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
 const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWith('>&'))]);
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
@@ -2767,7 +2767,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   async function refuseMissingInputs(redirects, sink) {
     for (const redirect of redirects) {
-      if (!FD_INPUTS.includes(redirect.op)) continue;
+      if (!FD_INPUTS.includes(redirect.op) && redirect.op !== '1<') continue;
       const path = await wordPath(redirect.target, sink);
       if (path !== NULL_DEVICE && !host.exists(path)) return { code: 1, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
     }
@@ -2812,8 +2812,12 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         }
         else if (!open.has(dup.fd)) return badFdResult(String(dup.fd));
         else open.add(fd);
-      } else if (FD1_HEREDOCS.includes(op) || FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
+      } else if (FD1_HEREDOCS.includes(op) || op === '1<' || FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
         open.add(Number(op[0]));
+      } else if (op === '1<>') {
+        const path = await wordPath(redirect.target, sink);
+        if (path !== NULL_DEVICE && !host.exists(path)) writeRedirect(path, '');
+        open.add(1);
       } else if (FD_OUTPUTS.includes(op) || FILE_FDS[op]) {
         await openFile(redirect, sink);
         for (const fd of FILE_FDS[op] ?? [Number(op[0])]) open.add(fd);
@@ -2915,8 +2919,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           fds[2] = target;
         } else if (!(dup.fd in fds)) return badFdResult(String(dup.fd));
         else fds[fd] = fds[dup.fd];
-      } else if (FD1_HEREDOCS.includes(op)) {
+      } else if (FD1_HEREDOCS.includes(op) || op === '1<') {
         fds[1] = 'readonly';
+      } else if (op === '1<>') {
+        fds[1] = { path: await wordPath(redirect.target, sink), rw: true };
       } else if (FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
         fds[op[0]] = 'readonly';
       } else if (FD_OUTPUTS.includes(op)) {
@@ -2930,17 +2936,27 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     let outText = '';
     let errText = '';
     let writeFailed = false;
-    for (const [fd, text] of [[1, out], [2, err]]) {
+    const route = (fd, text) => {
       const target = fds[fd];
       if (target === 'out') outText += text;
       else if (target === 'err') errText += text;
       else if (target === undefined || target === 'readonly') writeFailed = writeFailed || text !== '';
-      else files.set(target.path, (files.get(target.path) ?? '') + text);
+      else {
+        const entry = files.get(target.path) ?? { text: '', rw: false };
+        entry.text += text;
+        entry.rw = entry.rw || target.rw === true;
+        files.set(target.path, entry);
+      }
+    };
+    route(1, out);
+    route(2, err);
+    if (writeFailed) route(2, 'thebird: write error: Bad file descriptor\n');
+    for (const [path, { text, rw }] of files) {
+      if (text === '') continue;
+      const prior = host.exists(path) ? host.read(path) : '';
+      writeRedirect(path, rw ? text + prior.slice(text.length) : prior + text);
     }
-    for (const [path, text] of files) {
-      if (text !== '') writeRedirect(path, (host.exists(path) ? host.read(path) : '') + text);
-    }
-    if (writeFailed) return { out: outText, err: errText + 'thebird: write error: Bad file descriptor\n', code: 1 };
+    if (writeFailed) return { out: outText, err: errText, code: 1 };
     return { out: outText, err: errText };
   }
 

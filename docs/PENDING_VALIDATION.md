@@ -4224,3 +4224,25 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the push, about three seconds (04:15:33 to 04:15:36). Nothing was stopped.
 
+### Change set 30bs: `1<f` makes fd 1 a read-only input file, so a write to it fails with status 1 as bash does, `1<>f` opens fd 1 read-write without truncating, a missing `1<` file fails before the command runs, and a write-error message follows fd 2
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape, stdout, status and stderr compared. A premise checked first: `cat 1<f` does not read `f`. `cat` with no argument reads stdin, which is empty here, so the command prints nothing; `1<f` only changes fd 1. Probed shapes, bash output:
+- `echo hi > f; cat 1<f; echo st=$?`: `st=0`, no output. `echo hi > f; cat 1< f`: the same (a space after the `<` is allowed).
+- `cat 1<f; echo st=$?` with `f` absent: status 1 and the command does not run, stderr `bash: line 1: f: No such file or directory`.
+- `echo hi > f; echo x 1<f; echo st=$?`: status 1, stderr `bash: line 1: echo: write error: Bad file descriptor`, nothing written. `echo x 1<f 2>&1` and `echo x 1<f 2>/dev/null`: status 1 and no stderr, because the write-error message goes to the target of fd 2 (the read-only fd 1, or /dev/null).
+- `echo x 1<f >&2`: `x` on stderr, status 0 (the later `>&2` replaces fd 1). `{ cat 1<f; echo b; }`: `b`, status 0. `{ echo x; } 1<f`: status 1, write error.
+- `exec 3>g; echo hi > f; echo x 1<f; echo st=$?; cat g`: status 1, write error, and `g` is empty. `exec 3>g; echo hi > f; cat 1<f; echo st=$?; cat g`: status 0.
+- `cat 1<f 1>g`: the later `1>g` wins, `g` is created and empty. `cat 1<f 2>/dev/null`: status 0.
+- `echo x 1<>g; echo st=$?; cat g` with `g` absent: status 0, `x`, so `1<>` creates the file. `echo hi > f; cat 1<>f; cat f`: status 0, `hi`, so reading nothing leaves the file as it is.
+- `echo hi > f; echo x 1<>f; echo st=$?; cat f`: status 0 and the file is `x\n\n` (the write starts at offset 0 and overwrites the first bytes; the third byte of `hi\n` is a newline, so it stays). So `1<>` does not truncate. `echo hi > f; echo x 1<>f; echo y 1<>f`: `y\n\n`, the same overwrite again. `{ echo x; echo y; } 1<>f`: `x\ny\n`, the overwrite of `hi\n`. `echo longer text 1<>f`: the whole text, `longer text`.
+
+What changed in the shell: `1<>` and `1<` are operators, placed after the `1<<` heredocs so the heredocs are not changed. `1<` puts fd 1 in the read-only state, the same state `1<<EOF` uses. `1<>` puts fd 1 on a file target marked read-write: the open pass creates the file when it is missing and does not truncate it, and the routing writes the text at offset 0 over the start of the existing content and keeps the rest. The routing now sends the write-error message to the target of fd 2, so `2>&1` and `2>/dev/null` after a read-only fd 1 match bash. A missing `1<` file fails in the same check as `<` and `N<`, with this shell's own text.
+
+Where this shell's text differs from bash: the missing-file message is `thebird: cannot open /workspace/f: No such file`, the form `N<` already uses, where bash prints `bash: line 1: f: No such file or directory`. The generator maps that one message to this form and changes no other stderr text. The write-error message keeps this shell's prefix `thebird: write error: Bad file descriptor`, as in 30bp. This change set closes the 30bp note about `2>&1` after a read-only fd 1: the message now goes where fd 2 points, so that shape matches bash.
+
+Not taken in this change set (see the REPORT ranked list): `1<&2` (an input dup, item 4; still a syntax error, where bash writes `x` to stderr); `cat 1<f <f` and `echo x | cat 1<f`, where bash prints cat's own message `cat: -: Bad file descriptor` and this shell prints the write-error text, so no row pins them; a bad-fd message raised after a redirect (item 9), which is not routed into the file; `1<>nodir/w`, which gives status 2 where bash gives 1, the missing-directory gap of item 6.
+
+Witness: group `redirects: 1<f makes fd 1 a read-only input file, so a write to it fails with status 1, 1<>f opens fd 1 read-write without truncating, and a missing input file fails as bash does`, 19 rows from bash output (with the stderr mapping above). Final: `RESULT PASS=1249 FAIL=0` (green, wall 1.6 s).
+
+Red check: the `1<` case removed from the read-only branch (so `echo x 1<f` writes to stdout), restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1244 FAIL=5`, the five rows with `echo x 1<f` in them. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+
