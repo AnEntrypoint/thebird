@@ -1,4 +1,5 @@
 import { runTjs } from './txiki-in-page.js';
+import { existsSync } from './shims/fs.js';
 
 const PROGRAM = new URL('./git-program.js', import.meta.url).href;
 const ISOMORPHIC = new URL('./vendor/isomorphic-git.mjs', import.meta.url).href;
@@ -37,7 +38,7 @@ const namespaceFactory = (text) => {
   return `(function () {\n${text.slice(0, match.index)}\nreturn { ${exported.join(', ')} };\n})()`;
 };
 
-const programFor = ({ program, isomorphic, acorn, gate, buffer }, argv) => [
+const programFor = ({ program, isomorphic, acorn, gate, buffer }, argv, dir) => [
   'const native = globalThis.__thebirdFs;',
   'delete globalThis.__thebirdFs;',
   `globalThis.Buffer = (function () {\n${moduleBody(buffer)}\nreturn Buffer;\n})();`,
@@ -46,7 +47,7 @@ const programFor = ({ program, isomorphic, acorn, gate, buffer }, argv) => [
   `const isomorphic = ${namespaceFactory(isomorphic)}.default;`,
   `const acornModule = ${namespaceFactory(acorn)};`,
   `const gate = (function (parse, fsp) {\n${moduleBody(gate)}\nreturn { runCommitGate, NOT_COVERED };\n})(acornModule.parse, fsp);`,
-  `try {\n  console.log(await gitMain(${JSON.stringify(argv)}, ${JSON.stringify(DIR)}));\n} catch (err) {\n  throw new Error(String(err?.message ?? err));\n}`,
+  `try {\n  console.log(await gitMain(${JSON.stringify(argv)}, ${JSON.stringify(dir)}));\n} catch (err) {\n  throw new Error(String(err?.message ?? err));\n}`,
 ].join('\n');
 
 const failureText = (output) => output.split('\n')
@@ -54,10 +55,21 @@ const failureText = (output) => output.split('\n')
   .join('\n')
   .trim() || 'git failed';
 
-export async function gitBuiltin(argv) {
+const parentOf = (dir) => dir.slice(0, dir.lastIndexOf('/')) || '/';
+
+export function repositoryDirFor(verb, cwd, exists) {
+  if (verb === 'init') return cwd;
+  for (let dir = cwd; ; dir = parentOf(dir)) {
+    if (exists(`${dir === '/' ? '' : dir}/.git`)) return dir;
+    if (dir === '/') return cwd;
+  }
+}
+
+export async function gitBuiltin(argv, cwd = DIR) {
   const [sub] = argv;
   if (REMOTE_VERBS.has(sub)) throw new Error(`git ${sub}: remote access is refused in the in-page shell before any request is made`);
-  const { output, status } = await runTjs(programFor(await loadSources(), argv), DIR);
+  const dir = repositoryDirFor(sub, cwd, existsSync);
+  const { output, status } = await runTjs(programFor(await loadSources(), argv, dir), cwd);
   if (status !== 0) throw new Error(failureText(output));
   return output.trimEnd();
 }

@@ -13,7 +13,7 @@ import { applyFeatureRequest } from './features-bridge.js';
 export const BUILTIN_NAMES = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'node', 'npm', 'npx', 'curl', 'wget', 'fx', 'playwriter', 'feature'];
 
 const RUNNERS = {
-  git: ({ argv }) => gitBuiltin(argv),
+  git: ({ argv, cwd }) => gitBuiltin(argv, cwd),
   sqlite3: ({ argv, cwd }) => sqliteBuiltin(argv, cwd),
   python3: ({ argv, signal }) => pythonBuiltin(argv, signal),
   pip: ({ argv, signal }) => pipBuiltin(argv, signal),
