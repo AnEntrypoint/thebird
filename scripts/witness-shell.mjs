@@ -3350,6 +3350,17 @@ group("jq -S and --arg: jq -S sorts the keys of each object, and --arg binds a n
   const wjs4 = await run(sh, "jq -n --arg x 'a b' '$x'");
   check("jq --arg keeps a value with a space whole (bash output, locale en_US.UTF-8)", wjs4.stdout === "\"a b\"\n" && wjs4.exitCode === 0 && wjs4.stderr === "", JSON.stringify([wjs4.stdout, wjs4.stderr, wjs4.exitCode]));
 });
+group("env prefix: a command-prefix assignment reaches the environment that env prints, as bash does for an external command", async () => {
+  const sh = await shell({});
+  const wep1 = await run(sh, "X=1 env | grep '^X='; echo rc=$?");
+  check("X=1 env prints the prefix assignment (bash output, locale en_US.UTF-8)", wep1.stdout === "X=1\nrc=0\n" && wep1.exitCode === 0 && wep1.stderr === "", JSON.stringify([wep1.stdout, wep1.stderr, wep1.exitCode]));
+  const wep2 = await run(sh, "X=1 env | grep -c '^X=1$'");
+  check("X=1 env counts the prefix assignment once (bash output, locale en_US.UTF-8)", wep2.stdout === "1\n" && wep2.exitCode === 0 && wep2.stderr === "", JSON.stringify([wep2.stdout, wep2.stderr, wep2.exitCode]));
+  const wep3 = await run(sh, "X=1 env | grep '^X=' ; env | grep -c '^X='");
+  check("a prefix assignment is gone after the env command (bash output, locale en_US.UTF-8)", wep3.stdout === "X=1\n0\n" && wep3.exitCode === 1 && wep3.stderr === "", JSON.stringify([wep3.stdout, wep3.stderr, wep3.exitCode]));
+  const wep4 = await run(sh, "export Y=2; env | grep '^Y='; echo rc=$?");
+  check("export Y=2 is printed by env (bash output, locale en_US.UTF-8)", wep4.stdout === "Y=2\nrc=0\n" && wep4.exitCode === 0 && wep4.stderr === "", JSON.stringify([wep4.stdout, wep4.stderr, wep4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

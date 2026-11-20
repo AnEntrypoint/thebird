@@ -5771,3 +5771,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-jq.js`. `-S` (and `--sort-keys`) sorts the keys of each output value. `--arg name value` binds a string to `$name`. The tokenizer reads `$name` as a variable, the parser makes a variable node, and the evaluator looks it up; a name that is not bound is a runtime error, not the compile error jq gives, which is recorded as an open note.
 - Witness: `scripts/witness-shell.mjs`, group "jq -S and --arg: jq -S sorts the keys of each object, and --arg binds a named variable that the filter reads, as jq does", four rows with the expected output taken from bash. Before the change all four failed against bash.
 - Red checks, two: the `-S` sort disabled by mutation, and the variable binding disabled by mutation (each run's counts are in the amended line that follows).
+
+### Defect fix S1-08: a prefix assignment reaches env
+
+- Row: S1-08 of the full-feature run (commit 8d52612). Command: `X=1 env \| grep '^X='; echo rc=$?`. Before: nothing and `rc=1`. Expected: `X=1` and `rc=0` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `env` builtin with no command. It prints the active command-prefix assignments as well as the exported variables; a prefix assignment is not exported, so before the change it was missing from the list.
+- Witness: `scripts/witness-shell.mjs`, group "env prefix: a command-prefix assignment reaches the environment that env prints, as bash does for an external command", four rows with the expected output taken from bash. Before the change three failed against bash.
+- Red check: the prefix list disabled by mutation; green RESULT PASS=1598 FAIL=0 (1.73 s); red, with the prefix list disabled (pid 37993), RESULT PASS=1595 FAIL=3, the three prefix rows failing; restored, cmp matches. The first attempt at this row inserted the group with a replace that treated a dollar-quote in the group as a pattern; the witness file was restored from HEAD before the row was committed, and the insert now splits and joins.

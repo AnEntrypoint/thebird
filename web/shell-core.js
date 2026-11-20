@@ -2529,7 +2529,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         assigns.set(argv[at].slice(0, eq), argv[at].slice(eq + 1));
       }
       if (argv[at]?.startsWith('-')) return { code: 125, out: '', err: `env: unsupported option ${argv[at]}\n` };
-      if (at === argv.length) return ok(environmentLines(assigns));
+      if (at === argv.length) {
+        const prefixed = [...prefixNames].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)]);
+        return ok(environmentLines(new Map([...prefixed, ...assigns])));
+      }
       const command = argv[at];
       if (!functions.has(command) && !Object.hasOwn(commands, command) && !inPage.has(command)) return { code: 127, out: '', err: "env: '" + command + "': No such file or directory\n" };
       const restore = [...assigns.keys()].map((name) => [name, vars.get(name), exported.has(name)]);
