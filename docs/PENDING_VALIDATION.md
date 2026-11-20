@@ -3605,3 +3605,20 @@ Witness: 9 rows (6 that changed, 1 error row, 2 heredoc regression rows). Final 
 Red check, run in the same window and restored with `cmp` (the file matched the good copy again, and `git status` showed only the intended files): the one-line change removed from `web/shell-core.js`. Result: `RESULT PASS=963 FAIL=6`, with the six continuation rows red and the doubled-backslash and heredoc rows unchanged.
 
 Gaps still open, not probed: a backslash-newline inside a heredoc body that is itself an arithmetic expansion, and inside a `(( ))` command.
+
+### Change set 30aw: a backslash-newline inside $(( )) in an unquoted heredoc body is removed before the expression is read, as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Probed shapes (bash stdout), each a row in the group `heredoc: a backslash-newline inside $(( )) in an unquoted heredoc body is removed before the expression is read, as bash does`:
+- `cat <<E`, a body line `$((1+\` newline `2))`, then `E`, prints `3`.
+- `cat <<'E'` (quoted delimiter) with the same body prints `$((1+\` newline `2))`: the quoted body is kept as written.
+- `cat <<E`, a body line `$((\` newline `5*2))`, prints `10`.
+- `cat <<E`, a body line `x $((2\` newline `*3)) y`, prints `x 6 y`.
+- `echo "$(cat <<E`, a body line `$((4\` newline `*5))`, then `E` and `)"` prints `20`.
+
+Our shell matched all five before this change set, so no shell change is made. These rows are regression coverage, not a fix. Each branch alone is redundant for them: the unquoted heredoc body branch from change set 30at removes the pair before the expression is read, and the arithmetic strip from change set 30av removes it when the expression is read. Either is enough, so the red check removes both together.
+
+Red check, run locally and restored with `cmp`, with `git status` showing only the intended files afterward: both branches removed from `web/shell-core.js` gives `RESULT PASS=962 FAIL=12`. Of the 12 red rows, 4 are the rows of this change set (the quoted body row stays green either way), 6 are the arithmetic rows from change set 30av, and 2 are the rows from change sets 30at and 30au that depend on the same branches.
+
+Final green witness: `RESULT PASS=974 FAIL=0`.
+
+Gaps still open, not probed here: the `(( ))` arithmetic command, which the shell does not implement yet (taken in the next change set).

@@ -1539,6 +1539,19 @@ group('arithmetic: a backslash-newline inside $(( )) is removed before the expre
   check('quoting: a backslash-newline after an unquoted and a quoted part of a heredoc delimiter word joins the lines, as bash does', hd1.stdout === 'a\n' && hd1.stderr === '', JSON.stringify([hd1.stdout, hd1.stderr]));
 });
 
+group('heredoc: a backslash-newline inside $(( )) in an unquoted heredoc body is removed before the expression is read, as bash does', async () => {
+  const hb0 = await run(await shell({}), 'cat <<E\n$((1+\\\n2))\nE');
+  check('heredoc: a backslash-newline between operands of $(( )) in an unquoted heredoc body is removed, as bash does', hb0.stdout === '3\n' && hb0.stderr === '', JSON.stringify([hb0.stdout, hb0.stderr]));
+  const hb1 = await run(await shell({}), "cat <<'E'\n$((1+\\\n2))\nE");
+  check('heredoc: a backslash-newline inside $(( )) in a quoted heredoc body is kept, as bash does', hb1.stdout === '$((1+\\\n2))\n' && hb1.stderr === '', JSON.stringify([hb1.stdout, hb1.stderr]));
+  const hb2 = await run(await shell({}), 'cat <<E\n$((\\\n5*2))\nE');
+  check('heredoc: a backslash-newline right after the opening parentheses of $(( )) in a heredoc body is removed, as bash does', hb2.stdout === '10\n' && hb2.stderr === '', JSON.stringify([hb2.stdout, hb2.stderr]));
+  const hb3 = await run(await shell({}), 'cat <<E\nx $((2\\\n*3)) y\nE');
+  check('heredoc: a backslash-newline before an operator of $(( )) in a heredoc body is removed, as bash does', hb3.stdout === 'x 6 y\n' && hb3.stderr === '', JSON.stringify([hb3.stdout, hb3.stderr]));
+  const hb4 = await run(await shell({}), 'echo "$(cat <<E\n$((4\\\n*5))\nE\n)"');
+  check('heredoc: a heredoc body inside a command substitution in double quotes removes a backslash-newline in $(( )), as bash does', hb4.stdout === '20\n' && hb4.stderr === '', JSON.stringify([hb4.stdout, hb4.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
