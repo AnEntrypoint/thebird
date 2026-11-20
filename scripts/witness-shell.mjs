@@ -4080,6 +4080,20 @@ group('permission tests: -O and -G compare the file owner and group with the she
   }
 });
 
+group('permission owner with a host that has no lstat: -O and -G still answer from stat, as bash does', async () => {
+  const cases = [
+  ["printf x > f; [ -O f ] && echo owner; [ -G f ] && echo group", "owner\ngroup\n", "", 0],
+  ["[ -O /etc/passwd ]; echo rc=$?; [ -G /etc/passwd ]; echo rc=$?", "rc=1\nrc=1\n", "", 0, {"/etc/passwd": "root:x:0:0\n"}, {"/etc/passwd": {"uid": 0, "gid": 0}, "/": {"uid": 0, "gid": 0}}],
+  ];
+  for (const [script, stdout, stderr, status, files = {}, owners = {}] of cases) {
+    const host = memoryHost(files, {}, owners);
+    delete host.lstat;
+    const sh = await core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+    const r = await run(sh, script);
+    check('permission owner without lstat: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('indexed arrays: NAME=(…) before a command is a prefix that the command does not keep (bash output, locale en_US.UTF-8)', async () => {
   const cases = [
   ["a=(p q) echo x; echo \"[${a[@]}]\"", "x\n[]\n", "", 0],
