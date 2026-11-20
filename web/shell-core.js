@@ -78,6 +78,8 @@ function matchParen(src, start) {
 }
 
 const SHELL_USER = 'user';
+const SHELL_UID = 1000;
+const SHELL_GID = 1000;
 const SHELL_GROUP = 'user';
 const SHELL_HOST = 'thebird';
 
@@ -1469,6 +1471,35 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { type: dir ? 'directory' : 'regular file', size: info?.size ?? 0, mode: modes.get(path) ?? (dir ? '755' : '644') };
   };
 
+  const inodeNumbers = new Map();
+  const inodeOf = (path) => {
+    if (!inodeNumbers.has(path)) inodeNumbers.set(path, inodeNumbers.size + 1);
+    return inodeNumbers.get(path);
+  };
+  const statLayout = (name, real, info) => {
+    const link = info.type === 'symbolic link';
+    const dir = info.type === 'directory';
+    const digits = info.mode.padStart(4, '0');
+    const kind = link ? 'l' : dir ? 'd' : '-';
+    const symbolic = kind + Array.from(digits.slice(-3)).map((digit) => ['r', 'w', 'x'].map((bit, i) => ((Number(digit) & (4 >> i)) ? bit : '-')).join('')).join('');
+    const size = dir ? 4096 : info.size;
+    const blocks = dir ? 8 : link || info.size === 0 ? 0 : Math.ceil(info.size / 4096) * 8;
+    const base = real === '/' ? '' : real;
+    const subdirs = dir ? host.list(real).filter((child) => host.lstat(base + '/' + child)?.link !== true && host.stat(base + '/' + child)?.dir === true).length : 0;
+    const links = dir ? 2 + subdirs : 1;
+    const fileName = link ? expandStat('%N', name, info, host.readlink(real)) : name;
+    const time = '1970-01-01 00:00:00.000000000 +0000';
+    return [
+      '  File: ' + fileName,
+      '  Size: ' + String(size).padEnd(10) + '\tBlocks: ' + String(blocks).padEnd(10) + ' IO Block: ' + '4096'.padEnd(6) + ' ' + info.type,
+      'Device: 0,0\tInode: ' + String(inodeOf(real)).padEnd(10) + '  Links: ' + links,
+      'Access: (' + digits + '/' + symbolic + ')  Uid: (' + String(SHELL_UID).padStart(5) + '/' + SHELL_USER.padStart(8) + ')   Gid: (' + String(SHELL_GID).padStart(5) + '/' + SHELL_GROUP.padStart(8) + ')',
+      'Access: ' + time,
+      'Modify: ' + time,
+      'Change: ' + time,
+      ' Birth: -',
+    ].join('\n');
+  };
   const realPath = (path) => {
     let current = normalize(path);
     for (let hops = 0; hops < 40; hops++) {
@@ -2193,7 +2224,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         if (!info) {
           err += "stat: cannot statx '" + name + "': No such file or directory\n";
           code = 1;
-        } else if (format === null) out += '  File: ' + name + '\n  Size: ' + info.size + '\n  Type: ' + info.type + '\n';
+        } else if (format === null) out += statLayout(name, walk.real, info) + '\n';
         else out += expandStat(format, name, info, info.type === 'symbolic link' ? host.readlink(walk.real) : null) + '\n';
       }
       return { code, out, err };

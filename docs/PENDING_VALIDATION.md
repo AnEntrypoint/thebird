@@ -3741,3 +3741,29 @@ Red checks, each restored from a backup and confirmed with `cmp`:
 - (3) the single-letter rule loosened to accept one or more letters: `RESULT PASS=1020 FAIL=1`, the U+1F12D row red.
 
 Gap still open, not probed here: the classes beyond the seven new ranges (for example U+2C60 and other Latin Extended-C letters), and collating symbols `[.x.]` for the new glyphs.
+
+### Change set 30bc: stat with no -c prints GNU's nine-line layout, as GNU stat prints it for ASCII names, in the sandbox locale (no locale was varied)
+
+Reference: GNU stat (coreutils, this sandbox), run on files under `/tmp/stw` with `cat -A` to read the exact bytes. Probed shapes: a 2-byte regular file (mode 644); a dangling symbolic link (`'dl.txt' -> 'nosuch'`, size 6, blocks 0); a directory with one subdirectory (size 4096, blocks 8, links 3); a file after `chmod 600` (`Access: (0600/-rw-------)`); `stat -L` on a link to a regular file (plain name, regular file); two operands (two `File:` blocks, no separator); a name with a space (printed plain). GNU's line structure, with the padding: `  Size: %-10s<TAB>Blocks: %-10s IO Block: %-6s TYPE`, `Device: 0,85<TAB>Inode: %-10s  Links: N` with no trailing padding, `Access: (%04o/SYMBOLIC)  Uid: ( %5u/%8U)   Gid: ( %5g/%8G)`, three time lines, and ` Birth: ...` with a leading space.
+
+Before this change set, `stat` with no `-c` printed three lines (`File:`, `Size:`, `Type:`), which is not GNU's output, and the row that pinned it was `stat: with no -c it prints the file, size and type`.
+
+Fidelity choice, recorded with its reason: the in-memory host (the `host` the shell is given) holds only the size, the type and the mode of a path. It keeps no times, device, inode, owner or birth time. GNU's layout is kept line for line, so a line-by-line comparison with GNU works, and each field is filled as follows:
+- `File:` is the name as given, and a symbolic link (not followed) is `'name' -> 'target'` with each part quoted as `%N` quotes it.
+- `Size:` is the size of the file; a directory is 4096, as on the common filesystems GNU reports.
+- `Blocks:` is 8 for a directory, 0 for a symbolic link, and 8 for each started 4096 bytes of a regular file, in 512-byte units.
+- `IO Block:` is 4096.
+- `Device:` is the model constant `0,0` (the host has no device number).
+- `Inode:` is a number the shell assigns per path on first use, starting at 1, so it is stable within one shell and not GNU's number.
+- `Links:` is 1, or for a directory 2 plus its subdirectories.
+- `Access:` is the mode from the model (644 for a file, 755 for a directory, 777 for a link), shown as GNU shows it, with the user and group as the shell's own user (uid 1000 and gid 1000, named `user`, the same as `id`).
+- `Access:`, `Modify:` and `Change:` are the model epoch, `1970-01-01 00:00:00.000000000 +0000`, because the host keeps no times. GNU prints real times; the witness checks the epoch and the layout only.
+- ` Birth:` is `-`, which is what GNU prints when the filesystem does not record a birth time.
+
+What changed in the shell: the stat branch without `-c` calls a new `statLayout`, which builds these lines from `statInfo`, `expandStat` and the model constants, and two new constants `SHELL_UID` and `SHELL_GID` (1000).
+
+Witness: the group `stat: ...` keeps its rows, and the row that pinned the old three-line output is replaced by 10 rows: the eight lines of a regular file, a symbolic link, a directory's size and links, the 0600 mode line, `stat -L` on a link, and two operands. Final: `RESULT PASS=1030 FAIL=0`.
+
+Red check: the stat branch restored to the old three-line text (`File:`, `Size:`, `Type:`): `RESULT PASS=1022 FAIL=8`, with the eight new rows red (the size line, the device line, the access line, the time line, the link, the directory, the mode and the `-L` rows). Restored from a backup and confirmed with `cmp`, then `git status` showed only the three files of this change set and `bin/thebird-relay.js`.
+
+Gaps still open, not probed here: a File name with a control character or a quote inside the default output (GNU quotes such names; the shell prints them plain); a symbolic link whose target is 60 bytes or more (GNU counts blocks for it, the shell says 0); a four-digit mode with setuid, setgid or sticky bits (the symbolic column ignores the high digit); real times, device and inode are not claimed.
