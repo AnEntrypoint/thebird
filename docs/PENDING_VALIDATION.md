@@ -5226,3 +5226,38 @@ Red check: the mutation disables the expansions, the `ø` case and the final-sig
 Still open (item 2 of the ranked list, the rest of it):
 - Extended Latin letters (`ð þ ł đ ħ ŧ ŋ ı ĸ ſ ŉ ĳ`) and extended Cyrillic letters (`ђ ѓ ћ џ ј љ њ ќ ѝ ў ѐ ї є і ґ`) still sort by code point after the ASCII table. Reopen: read each character's line in `iso14651_t1_common`, add it to the expansion table in `collationUnits` with its level-2 and level-3 elements, then probe bash with rows for each character in a neighbourhood of its neighbours.
 - Final-sigma and uppercase variants beyond the listed letters (for example `ẞ`) were not probed.
+
+### Phase B window that did not clear for 92d9214 (change set 30d2), with its readings; nothing was pushed
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-jobs.cjs (bevy 495fff6) must read clear in the same reading. Every reading from the window log is below.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 08:04:17 | 1448 | 0 | not clear | not run | `vmstat 1 2`, second sample |
+| wait 1 | 08:04:21 | 912 | 0 | clear | not run | the waiter (pid 2298063) started the window on this reading |
+| window 1 | 08:04:25 | 3440 | 0 | not clear | busy, n=2 | |
+| window 2 | 08:04:55 | 4276 | 0 | not clear | busy, n=1 | |
+| window 3 | 08:05:24 | 5320 | 9888 | not clear | busy, n=1 | |
+| window 4 | 08:05:55 | 196 | 0 | clear | busy, n=1 | |
+| window 5 | 08:06:25 | 672 | 0 | clear | busy, n=1 | |
+| window 6 | 08:06:54 | 512 | 0 | clear | busy, n=1 | |
+| window 7 | 08:07:25 | 3104 | 0 | not clear | busy, n=1 | |
+| window 8 | 08:07:54 | 76 | 0 | clear | busy, n=3 | |
+| window 9 | 08:08:25 | 8080 | 0 | not clear | busy, n=2 | |
+| window 10 | 08:08:55 | 244 | 1180 | not clear | busy, n=1 | |
+| window 11 | 08:09:24 | 60 | 1520 | not clear | busy, n=1 | |
+| window 12 | 08:09:55 | 244 | 0 | clear | busy, n=1 | |
+| window 13 | 08:10:24 | 1468 | 0 | not clear | busy, n=1 | |
+| window 14 | 08:10:55 | 5064 | 0 | not clear | busy, n=1 | |
+| window 15 | 08:11:25 | 772 | 0 | clear | busy, n=1 | |
+| window 16 | 08:11:54 | 1824 | 14460 | not clear | busy, n=1 | |
+| window 17 | 08:12:25 | 2772 | 17200 | not clear | busy, n=1 | |
+| window 18 | 08:12:55 | 7428 | 0 | not clear | busy, n=1 | |
+| window 19 | 08:13:24 | 624 | 0 | clear | busy, n=1 | |
+| window 20 | 08:13:55 | 436 | 0 | clear | busy, n=1 | the last reading; the window ended here |
+
+Eight readings had the gate clear (4, 5, 6, 8, 12, 15, 19, 20), and heavy-jobs read busy in every one of the twenty. The busy process recorded at reading 20 was `zig build-exe` pid 2302370, which belongs to another session. The window ran its full budget (08:04:21 to 08:13:55, about 9 min 34 s).
+
+Because the window did not clear, no green witness, red check, `npm run check` or `npm run witness:shell` ran, and no push happened. `git ls-remote origin main` at the end of the window: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`, which is the commit origin had before this stretch.
+
+Still unpushed when the window ended: `67c54f1` (window record), `c73b1d9` (G2 probe findings) and `92d9214` (change set 30d2). They are carried into the next window.
