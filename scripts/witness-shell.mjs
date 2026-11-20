@@ -4047,6 +4047,24 @@ group('indexed arrays: "${NAME[@]}" is one word per element, "${!NAME[@]}" is th
   }
 });
 
+group('indexed arrays: "${NAME[@]:OFFSET:LENGTH}" slices the elements, with bash output (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["a=(1 2 3); printf \"[%s]\n\" \"${a[@]:1}\"", "[2]\n[3]\n", "", 0],
+  ["a=(1 2 3); printf \"[%s]\n\" \"${a[@]:1:1}\"", "[2]\n", "", 0],
+  ["a=(1 2 3); printf \"[%s]\n\" \"${a[*]:0:2}\"", "[1 2]\n", "", 0],
+  ["a=(1 2 3); printf \"[%s]\" ${a[@]:-1}; echo", "[1][2][3]\n", "", 0],
+  ["a=(1 2 3); printf \"[%s]\n\" \"${a[@]: -2}\"", "[2]\n[3]\n", "", 0],
+  ["a=(); printf \"[%s]\n\" \"${a[@]:0}\"; echo done", "[]\ndone\n", "", 0],
+  ["a=(1 2 3); echo \"${a[@]:5}\" end", "end\n", "", 0],
+  ["a=(1 2 3); n=2; echo \"${a[@]:n}\"", "3\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('array slice: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
