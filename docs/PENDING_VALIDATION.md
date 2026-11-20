@@ -6024,3 +6024,21 @@ P-02, git init in a subdirectory (page path)
 - Red check: the nearest-ancestor branch mutated to return cwd (sed on the line `) return dir;`), node --test red: ℹ pass 3, ℹ fail 3; restored and cmp matched; green again ℹ pass 6, ℹ fail 0.
 - Not verified: the page run (git init in a subdirectory creating k/.git, and the init message text from the txiki program) needs playwriter and was not run. The message text is unchanged in the program; it now prints the repository directory it receives.
 - Limit: a cwd with a trailing slash is not normalized by repositoryDirFor; the shell passes normalized paths.
+
+## Page runs of P-01 and P-02 in playwriter
+
+Setup: the thebird host served the built site at `http://127.0.0.1:4173/` (`node bin/thebird-web-host.js start` after `node scripts/build-pages.mjs`). The page was driven by `playwriter-project` session 1 on the project browser (gate pid 77079, Chromium pid 77094, headed on `DISPLAY=:1.0`, profile `/workspace/thebird/.playwriter/browser-profile`). Each command was typed into the page's terminal and read back with `globalThis.thebird.text()`. No other browser tool was started.
+
+| Case | Command typed in the page | Output in the page | Result |
+|---|---|---|---|
+| P-01 new file | `cd /workspace && touch k8t.txt; echo rc=$?; ls k8t.txt` | `rc=0`, then `k8t.txt`, no message | pass |
+| P-01 existing file | `cd /workspace && touch k8r.txt; echo rc=$?` | `rc=0`, no message | pass |
+| P-02 init, before the wording fix | `cd /workspace && mkdir -p k8n && cd k8n && git init; echo rc=$?` | `initialized empty repository in /workspace/k8n/.git/`, `rc=0` | location pass; wording fail (real git: `Initialized empty Git repository in ...`) |
+| P-02 where, before the wording fix | `ls -d /workspace/k8n/.git; ls -d /workspace/.git` | `/workspace/k8n/.git`, then `No such file` for `/workspace/.git` | pass |
+| P-02 nested verb | `cd /workspace/k8n && mkdir -p sub && cd sub && git status; echo rc=$?` | `## master`, `rc=0` | pass |
+| P-02 init, after the wording fix | `cd /workspace && mkdir -p k8r3 && cd k8r3 && git init; echo rc=$?` | `Initialized empty Git repository in /workspace/k8r3/.git/`, `rc=0`; `/workspace/k8r3/.git` exists and `/workspace/.git` does not | pass |
+
+The post-fix run needed two steps in the project browser. The page's service worker (`sw.js`) served the previous build from its cache, so the first post-fix reloads still printed the old text. The worker was unregistered and its cache (`thebird-site-c7b0ae...`) was deleted in that browser, and the host (old pid 77826, stopped by pid) was restarted to serve the rebuilt site (new pid 79474). After that the page served the new `git-program.js`. Both steps are reported; they touch only the project test browser.
+
+P-02 is fixed in full: the location (commit 1236a78) and the message wording (commit 19bad90, file `web/git-program.js`, witness `test/git-init-message.test.mjs`, which compares the program's template with the output of real git for the same directory; red check: the old wording put back, `ℹ fail 1`; restored, cmp matched; green `ℹ pass 1`). The browser witness `scripts/witness.mjs` assertion for this line was updated in the same commit and was not run in this stretch.
+
