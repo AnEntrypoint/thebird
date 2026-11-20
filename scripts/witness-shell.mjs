@@ -3437,6 +3437,19 @@ group("awk arrays: an awk array takes subscripts, for (k in arr) visits each key
   const wak5 = await run(sh, "awk 'BEGIN { a[1]=1; a[2]=2; delete a; n=0; for (k in a) n++; print n }'");
   check("awk delete with no subscript removes every element (bash output, locale en_US.UTF-8)", wak5.stdout === "0\n" && wak5.exitCode === 0 && wak5.stderr === "", JSON.stringify([wak5.stdout, wak5.stderr, wak5.exitCode]));
 });
+group("awk split: split fills an array from a string, with a separator string, a regex, or the field separator, and returns the count, as bash awk does", async () => {
+  const sh = await shell({});
+  const wsp1 = await run(sh, "echo a,b | awk '{ n = split($0, p, \",\"); print n, p[2] }'");
+  check("awk split on a comma fills the array (bash output, locale en_US.UTF-8)", wsp1.stdout === "2 b\n" && wsp1.exitCode === 0 && wsp1.stderr === "", JSON.stringify([wsp1.stdout, wsp1.stderr, wsp1.exitCode]));
+  const wsp2 = await run(sh, "echo 'x y z' | awk '{ n = split($0, p); print n, p[3] }'");
+  check("awk split with no separator uses the field separator (bash output, locale en_US.UTF-8)", wsp2.stdout === "3 z\n" && wsp2.exitCode === 0 && wsp2.stderr === "", JSON.stringify([wsp2.stdout, wsp2.stderr, wsp2.exitCode]));
+  const wsp3 = await run(sh, "echo '' | awk '{ print split($0, p, \",\") }'");
+  check("awk split of an empty string returns 0 (bash output, locale en_US.UTF-8)", wsp3.stdout === "0\n" && wsp3.exitCode === 0 && wsp3.stderr === "", JSON.stringify([wsp3.stdout, wsp3.stderr, wsp3.exitCode]));
+  const wsp4 = await run(sh, "echo 'a1b22c' | awk '{ n = split($0, p, /[0-9]+/); print n, p[3] }'");
+  check("awk split with a regex separator (bash output, locale en_US.UTF-8)", wsp4.stdout === "3 c\n" && wsp4.exitCode === 0 && wsp4.stderr === "", JSON.stringify([wsp4.stdout, wsp4.stderr, wsp4.exitCode]));
+  const wsp5 = await run(sh, "echo a:b | awk '{ split($0, p, \":\"); print p[1] p[2] }'");
+  check("awk split with a colon separator (bash output, locale en_US.UTF-8)", wsp5.stdout === "ab\n" && wsp5.exitCode === 0 && wsp5.stderr === "", JSON.stringify([wsp5.stdout, wsp5.stderr, wsp5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

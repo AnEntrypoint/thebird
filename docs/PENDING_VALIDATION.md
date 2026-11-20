@@ -5820,3 +5820,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-awk.js`. Arrays are added: `name[subscripts]` is an element (several subscripts join with SUBSEP, `\x1c`), an element is an lvalue, a read of a missing element creates it as uninitialized, `for (k in arr)` visits a snapshot of the keys, and `delete arr[k]` and `delete arr` remove an element or the whole array. The `in` operator outside the for header is not part of this row and is open.
 - Witness: `scripts/witness-shell.mjs`, group "awk arrays: an awk array takes subscripts, for (k in arr) visits each key, and delete removes an element or the whole array, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
 - Red check: the loop variable set to 0 instead of the key by mutation; green PASS=1627 FAIL=0; red PASS=1624 FAIL=3, restored, cmp matches.
+
+### Defect fix S1-17: awk split fills an array
+
+- Row: S1-17 of the full-feature run (commit 8d52612). Command: `echo a,b \| awk '{ n = split($0, p, ","); print n, p[2] }'`. Before: `awk: syntax error at source line 1`, rc 2. Expected: `2 b` (bash awk, locale en_US.UTF-8).
+- File: `web/shell-awk.js`. `split` is a builtin, not a keyword, so the parser reads it as a call; `split(s, arr, sep)` fills `arr` with the pieces keyed 1, 2, ... and returns the count. The separator is a string, a regex literal, or the field separator when absent; an empty string gives 0.
+- Witness: `scripts/witness-shell.mjs`, group "awk split: split fills an array from a string, with a separator string, a regex, or the field separator, and returns the count, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
+- Red check: the separator forced to the field separator by mutation (the comma row gives 1, not 2); green PASS=1632 FAIL=0; red PASS=1629 FAIL=3, restored, cmp matches.
