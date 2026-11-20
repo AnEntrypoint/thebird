@@ -4089,3 +4089,35 @@ What changed in the shell: `FD1_HEREDOCS` (`1<<<`, `1<<-`, `1<<`) are operators;
 Witness: group `redirects: a heredoc or here-string on fd 1 is consumed, and a command that writes to it fails with a write error and status 1, as bash does`, 12 rows from bash. Final: `RESULT PASS=1178 FAIL=0`.
 
 Red check: the write failure no longer set for a read-only stdout, restored from a copy of the good core and confirmed with `cmp`: `RESULT PASS=1174 FAIL=4`, the four rows that expect the write error. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+### Phase B record: change set 30bp, pushed as 4f8257a..bcd3690
+
+Window: started 03:52:13 and cleared at reading 5 (03:54:14), about two minutes of the ten allowed. The gate was above 1000 KB/s at readings 1 to 3 (swap-in 7160, 3096 and 5840 KB/s) with heavy-jobs clear on those samples, and reading 4 had the gate at 880 KB/s in and 25620 KB/s out, with heavy-jobs busy on one process.
+
+Readings, each from `vmstat 1 2` (the second sample is the gate) and `scripts/heavy-jobs.cjs` from bevy 495fff6, with the top CPU list read in the same sample:
+
+| reading | time | gate swap-in KB/s | gate swap-out KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 03:52:13 | 7160 | 0 | clear | none; gate above 1000, not started |
+| 2 | 03:52:44 | 3096 | 0 | clear | none; gate above 1000, not started |
+| 3 | 03:53:14 | 5840 | 1200 | clear | none; gate above 1000, not started |
+| 4 | 03:53:43 | 880 | 25620 | busy (1) | Claude session pid 1998 at 20.8% CPU in top, not a handshake worker |
+| 5 | 03:54:14 | 92 | 0 | clear | none: gate and heavy-jobs clear, window started |
+
+Runs, in the window, each with its PID captured and its wall time read from the clock:
+
+- Green witness (pid 2053653): exit 0, wall 1.57 s, `RESULT PASS=1178 FAIL=0`.
+- Red check 1, the read-only stdout write failure removed (bcd3690; pid 2053703): exit 1, wall 1.53 s, `RESULT PASS=1174 FAIL=4`, restored and confirmed with `cmp`.
+- `npm run check` (pid 2053756): exit 0, wall 0.30 s.
+- `npm run witness:shell` (pid 2053811): exit 0, wall 1.63 s, `RESULT PASS=1178 FAIL=0`, with three `exit 124` rows.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   4f8257a..bcd3690  main -> main
+``
+
+`git ls-remote origin main` after the push: `bcd369077da99919b3ae1dab37870dbdcc8b8192 refs/heads/main`. The push carried 9c8d41f (the record of the window that cleared at reading 8 for 4f8257a) and bcd3690.
+
+Longest step: the wait for the gate and heavy-jobs to clear, readings 1 to 5 (about two minutes). Nothing was stopped.
