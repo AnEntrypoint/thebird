@@ -4660,3 +4660,33 @@ Gaps, recorded, not implemented in this change set:
 - Found while probing, not part of this item: `printf '%s\n' a b` prints only `a` here, because the format is not reused for further arguments (G4 in the ranked list).
 
 Correction: the note at line 4139 of change set 30bu, which said exec takes only redirects, was true before this change set. It is corrected in place.
+
+### Phase B window for cfd4d05 (change set 30bz, exec with a command argument)
+
+Readings: the second sample of `vmstat 1 2` (the gate, both directions under 1000 KB/s), and the heavy-jobs check (`scripts/heavy-jobs.cjs` from bevy commit 495fff6) with the hot-process count, one reading every 30 s.
+
+| Reading | Clock | si KB/s | so KB/s | heavy-jobs | hot count | Note |
+|---|---|---|---|---|---|---|
+| before | 06:03:51 | 628 | 0 | not run | not run | a manual `vmstat 1 2` before the window; its first line is the average since boot (si 5216, so 7212), not the gate; the gate sample was clear, heavy-jobs was not read |
+| 1 | 06:04:00 | 880 | 0 | busy, n=2 | 3 | another run's Chromium GPU process (pid 2188878) at 995% CPU, a `standalone-dump.mjs` node process (pid 2188950) at 85%, and a Chromium renderer (pid 2182070) above 20% |
+| 2 | 06:04:30 | 848 | 0 | clear | 0 | gate and heavy-jobs clear in the same reading |
+
+The hot check reads each process's arguments cut to 200 characters before it looks for `--handshake`, so a flag beyond that point is not seen. That can only count an extra process, never hide one. The processes above belong to other runs and were left running; nothing was stopped.
+
+Runs, each under `timeout` with the PID of the timeout process captured:
+
+- Green witness (pid 2190664): exit 0, wall 1.66 s, `RESULT PASS=1402 FAIL=0`.
+- Red check (pid 2190706): the mutation makes the exec branch of `runCommand` return instead of ending the shell, on the HEAD copy of web/shell-core.js. Exit 1, wall 1.62 s, `RESULT PASS=1392 FAIL=10`, the ten exec rows. Restored with cp from the HEAD copy, and cmp matched.
+- `npm run check` (pid 2190781): exit 0, wall 0.31 s.
+- `npm run witness:shell` (pid 2190836): exit 0, wall 1.71 s, `RESULT PASS=1402 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout and loop tests.
+
+Push, once, after every check passed. It carried 70d994b and cfd4d05:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   e2d5612..cfd4d05  main -> main
+```
+
+`git ls-remote origin main` after the push: `cfd4d05f0360a3d5801718a563d618fe4fda0dc2 refs/heads/main`.
+
+Longest step: reading 1, busy with another run's Chromium GPU process and dump script, followed by the 30 s wait for reading 2. The window job ran 43.6 s in all. The push took about 4 s. Nothing was stopped.
