@@ -4402,3 +4402,11 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the gate wait, readings 1 to 12 (about five and a half minutes), held by swap readings and by other runs' heavy processes. The push took about three seconds. Nothing was stopped.
 
+### Correction to the 30bu note on ordering (ledger only)
+
+The 30bu note says `echo x >nodir/w <nofile` gives the `cannot open` message in this shell. That shape was not probed, and the claim is wrong. Probed now: bash gives the output message (`bash: line 1: nodir/w: No such file or directory`, status 1), and this shell gives the same message (`thebird: nodir/w: No such file or directory`, status 1). That shape matches.
+
+The shape that differs is the reverse order, `echo x <nofile >nodir/w; echo st=$?`. Bash reports the missing input first (`bash: line 1: nofile: No such file or directory`, status 1). This shell reports `thebird: nodir/w: No such file or directory`, status 1. The status matches and the message does not. The output check in the ordered open pass runs before the stdin input file is read, so the output message comes first here. The cause is consistent with that observation but has not been traced in source. Before 30bu, this shape gave status 2 with the output message, so the message was already wrong.
+
+This is ranked item 16 (reachable): the stdin input file (`<file`) must be checked in redirect order with the output checks. Reopen by probing the two shapes above and changing the open pass or the stdin read so the first failing redirect in order reports.
+
