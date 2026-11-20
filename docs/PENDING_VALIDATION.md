@@ -5553,3 +5553,29 @@ Found by probes and left open:
 - `x=( ) ; echo ok`: the shell prints `syntax error: a function body must be a group or a subshell`. The bash text for this was not probed, so it is not converted.
 - Parser errors with no bash form yet: `expected ';;'`, `expected ')'` and `expected 'esac'` away from the end of input, and `unexpected end of input`.
 - Not checked: how a nested parse (a command substitution parsed by `parseScript`) prints these errors. `syntaxReport` is called from the top-level run path only.
+
+### Browser check of the work since bfae2bc (no code change)
+
+Scope: the commits on top of bfae2bc, namely 320b4d3 (G5 whole-script parse), a44df46 (G5 tail), af51e7b (G5 error text and line number), 92d9214 (ligatures and final sigma) and 24fca7d (printf format reuse), with bfae2bc (Cyrillic collation). The page was the built site of the worktree at af51e7b (`buildPages` in `scripts/build-pages.mjs`, into a directory outside the repo, served by `scripts/serve-web-host.mjs` with coop-coep). Browser: the playwriter tab only. Locale: `en_US.UTF-8` for the bash side (LC_ALL and LANG set); the browser shell reports `LANG=en_US.UTF-8` with `LC_ALL` unset.
+
+Two ways into the page were tested. `shell-core.js` runs in the page only through `web/shell-in-txiki.js` (`runShellInTxiki`); the typed prompt runs `web/bash-shell.js` over the vendored bashkit, and nothing on the prompt path imports `shell-core.js`. So the commits above are browser-visible through `runShellInTxiki` and not through the prompt.
+
+Result through `runShellInTxiki`: 47 of 47 witness scripts match bash on stdout, stderr and exit status. Groups: printf 24fca7d, pf1 to pf9 (9); G5 parse and tail, gs1 to gs8 and gt1 to gt7 (15); G5 error text, ge1 to ge9, cs0, cs3, sox1 to sox5 (16); Cyrillic bfae2bc, hy1 and hy2 (2); ligatures and final sigma 92d9214, gx1 to gx5 (5). A control with a wrong expected stdout is reported as different, so the comparison is not vacuous.
+
+Result at the typed prompt (each script typed as one line with `?run=`; the captured lines are the screen lines between the echoed command and the next echoed command):
+
+| Case | Command | Browser prompt output | Bash output (en_US.UTF-8) | Result |
+|---|---|---|---|---|
+| pf1 | `printf '%s-%s\n' a b c d` | `a-b` then `c-d` | `a-b` then `c-d` | pass |
+| pf8 | `printf '%s:%s|' a b c d e` | `a:b|c:d|e:|` then a line break | `a:b|c:d|e:|` with no line break | pass in content; the line break is added by the terminal before the next prompt (harness note, not a defect) |
+| gx1 | `printf 'AE\nÆ\næ\nae\nAF\n' ^| sort` | `AE`, `AF`, `ae`, `Æ`, `æ` (byte order) | `ae`, `AE`, `æ`, `Æ`, `AF` | fail (defect D1) |
+| hy1 | the hy1 row of the witness, `printf ... ` `^| sort` | starts `а г к о у х ѡ ѣ ѧ ѵ ѷ ѹ ѽ ѿ ғ қ ү ҳ ӏ ә ө` (byte order) | starts `а ә г ғ к қ о ө у ү ѹ х ҳ ѡ ѿ ѽ ѣ ѧ ѵ ѷ ӏ` | fail (defect D1) |
+| ge8 | `echo a >` | `error: parse error at line 1, column 8: expected word` | `bash: -c: line 1: syntax error near unexpected token `newline'`, then `bash: -c: line 1: `echo a >'`; stdout empty; status 2 | fail (defect D2) |
+| gs2s | `echo a; echo )` | `error: parse error at line 1, column 14: syntax error near unexpected token `)'`; stdout empty | `bash: -c: line 1: syntax error near unexpected token `)'`, then `bash: -c: line 1: `echo a; echo )'`; stdout empty; status 2 | fail (defect D2) |
+
+Defects recorded:
+- D1, sort at the typed prompt uses byte order, not the en_US.UTF-8 collation that `shell-core.js` implements (rows gx1 and hy1). The bashkit sort on the prompt does not take the locale; the collation changes of 92d9214 and bfae2bc do not reach it. Reopen: find the locale handling of the bashkit `sort` in `web/vendor/bashkit` or route `sort` at the prompt to `shell-core.js`.
+- D2, the typed prompt prints the bashkit parse-error text (`error: parse error at line N, column C: ...`), with no `bash: -c: line N:` prefix and no echoed source line. Reopen: the parse-error formatter of the bashkit prompt path, or route the prompt through `shell-core.js`.
+- Scope, not a code defect: the G5 whole-script parse, the error text and line numbers, the printf reuse, the Cyrillic and ligature collation do not reach the typed prompt. They are reached only through `runShellInTxiki`. Reopen: decide whether the prompt should run `shell-core.js` (the txiki path) or the bashkit behaviour should be made to match.
+
+Setup notes (not check results): the first attempts failed because the host had exited with the shell call that started it (ERR_CONNECTION_REFUSED), and because the page served from `web/` loads `web/web/terminal.js`; the site was then built to a directory outside the repo and served from its root.
