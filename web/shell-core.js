@@ -59,7 +59,7 @@ function syntaxError(message) {
   return new Error(`syntax error: ${message}`);
 }
 
-const BASH_CLOSERS = { 'double quote': '"', 'single quote': "'", 'command substitution': ')', 'parameter expansion': '}' };
+const BASH_CLOSERS = { 'double quote': '"', 'single quote': "'", 'command substitution': ')', 'parameter expansion': '}', backquote: '`' };
 
 function bashSyntaxError(message, { line, at, echo = false, eof = false } = {}) {
   return Object.assign(new Error(message), { bash: true, line, at, echo, eof });
@@ -76,7 +76,15 @@ function eofError(open) {
 
 function unterminated(what, at) {
   if (!(what in BASH_CLOSERS)) return syntaxError(`unterminated ${what}`);
-  return bashSyntaxError("unexpected EOF while looking for matching `" + BASH_CLOSERS[what] + "'", { at });
+  return bashSyntaxError("unexpected EOF while looking for matching `" + BASH_CLOSERS[what] + "'", { at, eof: at === undefined });
+}
+
+function backquoteEnd(src, start) {
+  for (let i = start; i < src.length; i++) {
+    if (src[i] === '\\') i++;
+    else if (src[i] === '`') return i;
+  }
+  return -1;
 }
 
 function skipDoubleQuote(src, start) {
@@ -193,6 +201,13 @@ function readDouble(src, i) {
     } else if (c === '\\' && '$`"\\\n'.includes(src[j + 1])) {
       lit += src[j + 1];
       j += 2;
+    } else if (c === '`') {
+      if (lit) parts.push({ k: 'sq', s: lit });
+      lit = '';
+      const end = backquoteEnd(src, j + 1);
+      if (end < 0) throw unterminated('backquote', j);
+      parts.push({ k: 'cmd', src: src.slice(j + 1, end).replace(/\\([`\\$])/g, '$1') });
+      j = end + 1;
     } else if (c === '$') {
       if (lit) parts.push({ k: 'sq', s: lit });
       lit = '';
@@ -235,6 +250,12 @@ function readParts(src, start, breaks) {
       flush();
       parts.push({ k: 'sq', s: src[i + 1] ?? '' });
       i += 2;
+    } else if (c === '`') {
+      flush();
+      const end = backquoteEnd(src, i + 1);
+      if (end < 0) throw unterminated('backquote', i);
+      parts.push({ k: 'cmd', src: src.slice(i + 1, end).replace(/\\([`\\$])/g, '$1') });
+      i = end + 1;
     } else if (c === '$') {
       flush();
       const r = readDollar(src, i);
@@ -352,6 +373,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
         if (op === '<<' || op === '<<-' || FD_HEREDOC_BODIES.includes(op)) {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
+          if (!word.parts.length) throw nearToken({ newline: true });
           tokens.push({ parts: word.parts, line: lineAt(i) });
           heredocs.push({ token: opToken, delim: word.parts.map(textOf).join(''), quoted: word.parts.some(isQuoted), strip: op.endsWith('<<-') });
           i = word.end;
@@ -421,20 +443,27 @@ function parse(tokens, partial = false) {
     pos++;
   };
 
+  const parseBody = (stops) => {
+    const start = pos;
+    const list = parseSequence(stops);
+    if (!list.items.length && start < tokens.length) throw nearToken(tokens[start]);
+    return list;
+  };
+
   const parseIf = () => {
     const branches = [];
     let elseBody = null;
     for (;;) {
-      const cond = parseSequence(['then']);
+      const cond = parseBody(['then']);
       expectWord('then');
-      branches.push({ cond, body: parseSequence(['elif', 'else', 'fi']) });
+      branches.push({ cond, body: parseBody(['elif', 'else', 'fi']) });
       if (isWord(tokens[pos], 'elif')) {
         pos++;
         continue;
       }
       if (isWord(tokens[pos], 'else')) {
         pos++;
-        elseBody = parseSequence(['fi']);
+        elseBody = parseBody(['fi']);
       }
       expectWord('fi');
       return { type: 'if', branches, elseBody, redirects: parseTrailingRedirects() };
@@ -448,6 +477,7 @@ function parse(tokens, partial = false) {
     const name = token.parts[0].s;
     let words = null;
     let wordText = null;
+    if (tokens[pos] && !isWord(tokens[pos], 'in') && !isWord(tokens[pos], 'do') && tokens[pos].op !== ';' && !tokens[pos].newline) throw nearToken(tokens[pos]);
     if (isWord(tokens[pos], 'in')) {
       pos++;
       words = [];
@@ -459,15 +489,15 @@ function parse(tokens, partial = false) {
     }
     while (tokens[pos]?.op === ';') pos++;
     expectWord('do');
-    const body = parseSequence(['done']);
+    const body = parseBody(['done']);
     expectWord('done');
     return { type: 'for', name, words, wordText, body, line, redirects: parseTrailingRedirects() };
   };
 
   const parseWhile = (negate) => {
-    const cond = parseSequence(['do']);
+    const cond = parseBody(['do']);
     expectWord('do');
-    const body = parseSequence(['done']);
+    const body = parseBody(['done']);
     expectWord('done');
     return { type: 'while', negate, cond, body, redirects: parseTrailingRedirects() };
   };
@@ -540,20 +570,21 @@ function parse(tokens, partial = false) {
     }
     if (token.op === '(') {
       pos++;
-      const list = parseSequence([]);
+      const list = parseBody([]);
       if (tokens[pos]?.op !== ')') throw syntaxError("expected ')'");
       pos++;
       return { type: 'subshell', list, redirects: parseTrailingRedirects() };
     }
     if (isWord(token, '{')) {
       pos++;
-      const list = parseSequence(['}']);
+      const list = parseBody(['}']);
       if (!isWord(tokens[pos], '}')) throw syntaxError("expected '}'");
       pos++;
       return { type: 'group', list, redirects: parseTrailingRedirects() };
     }
     if (token.op !== undefined) throw nearToken(token);
-    const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac'].find((word) => isWord(token, word));
+    if ((isWord(token, 'function') || isWord(token, 'select')) && !tokens[pos + 1]?.parts) throw nearToken(tokens[pos + 1] ?? { newline: true });
+    const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac', '}'].find((word) => isWord(token, word));
     if (closer) throw nearToken(token);
     if (token.parts.length === 1 && token.parts[0].k === 'lit' && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
       pos += 3;
@@ -567,14 +598,16 @@ function parse(tokens, partial = false) {
   };
 
   const parsePipeline = () => {
-    const cmds = [parseCommand()];
+    const negate = isWord(tokens[pos], '!');
+    if (negate) pos++;
+    const cmds = negate && (pos >= tokens.length || tokens[pos].op === ';') ? [] : [parseCommand()];
     while (tokens[pos]?.op === '|' || tokens[pos]?.op === '|&') {
       if (tokens[pos].op === '|&') cmds[cmds.length - 1].mergeStderr = true;
       pos++;
       while (tokens[pos]?.newline) pos++;
       cmds.push(parseCommand());
     }
-    return { cmds };
+    return { cmds, negate };
   };
 
   const atCloser = (stops) => tokens[pos].op === ')' || tokens[pos].op === ';;' || stops.some((word) => isWord(tokens[pos], word));
@@ -588,6 +621,7 @@ function parse(tokens, partial = false) {
       return true;
     };
     while (pos < tokens.length && !atCloser(stops)) {
+      if (tokens[pos].op === ';' && !tokens[pos].newline) throw nearToken(tokens[pos]);
       if (tokens[pos].op === ';') {
         pos++;
         continue;
@@ -621,6 +655,7 @@ function parse(tokens, partial = false) {
   let error = null;
   try {
     while (pos < tokens.length) {
+      if (tokens[pos].op === ';' && !tokens[pos].newline) throw nearToken(tokens[pos]);
       if (tokens[pos].op === ';') {
         pos++;
         continue;
@@ -3765,7 +3800,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         settleLocale();
       }
     }
-    return code;
+    return pipe.negate ? (code === 0 ? 1 : 0) : code;
   }
 
   async function suspendErrexit(work) {

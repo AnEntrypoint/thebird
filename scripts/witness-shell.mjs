@@ -3681,6 +3681,70 @@ group('tar: an archive written to stdout is bytes, so gzip output passes through
   check('tar: GNU tar lists the stdout bytes of tar -czf - (GNU tar output)', listed === 'x.txt\n', JSON.stringify(listed));
 });
 
+group('parse: shell core gives bash output for each of these inputs (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["echo ;;", "", "bash: -c: line 1: syntax error near unexpected token `;;'\nbash: -c: line 1: `echo ;;'\n", 2],
+  ["echo a;;b", "", "bash: -c: line 1: syntax error near unexpected token `;;'\nbash: -c: line 1: `echo a;;b'\n", 2],
+  ["if; then echo a; fi", "", "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `if; then echo a; fi'\n", 2],
+  ["then echo a", "", "bash: -c: line 1: syntax error near unexpected token `then'\nbash: -c: line 1: `then echo a'\n", 2],
+  ["do echo a", "", "bash: -c: line 1: syntax error near unexpected token `do'\nbash: -c: line 1: `do echo a'\n", 2],
+  ["done", "", "bash: -c: line 1: syntax error near unexpected token `done'\nbash: -c: line 1: `done'\n", 2],
+  ["esac", "", "bash: -c: line 1: syntax error near unexpected token `esac'\nbash: -c: line 1: `esac'\n", 2],
+  ["elif true; then echo a", "", "bash: -c: line 1: syntax error near unexpected token `elif'\nbash: -c: line 1: `elif true; then echo a'\n", 2],
+  ["else echo a", "", "bash: -c: line 1: syntax error near unexpected token `else'\nbash: -c: line 1: `else echo a'\n", 2],
+  ["fi", "", "bash: -c: line 1: syntax error near unexpected token `fi'\nbash: -c: line 1: `fi'\n", 2],
+  ["function", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `function'\n", 2],
+  ["echo a >", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `echo a >'\n", 2],
+  ["cat <", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `cat <'\n", 2],
+  ["echo a 2>", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `echo a 2>'\n", 2],
+  ["echo a &>", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `echo a &>'\n", 2],
+  ["echo a || || echo b", "", "bash: -c: line 1: syntax error near unexpected token `||'\nbash: -c: line 1: `echo a || || echo b'\n", 2],
+  ["echo a && && echo b", "", "bash: -c: line 1: syntax error near unexpected token `&&'\nbash: -c: line 1: `echo a && && echo b'\n", 2],
+  ["| echo a", "", "bash: -c: line 1: syntax error near unexpected token `|'\nbash: -c: line 1: `| echo a'\n", 2],
+  ["&& echo a", "", "bash: -c: line 1: syntax error near unexpected token `&&'\nbash: -c: line 1: `&& echo a'\n", 2],
+  ["; echo a", "", "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `; echo a'\n", 2],
+  ["{ echo a; }}", "", "bash: -c: line 2: syntax error: unexpected end of file from `{' command on line 1\n", 2],
+  ["( echo a ))", "", "bash: -c: line 1: syntax error near unexpected token `)'\nbash: -c: line 1: `( echo a ))'\n", 2],
+  ["echo $(", "", "bash: -c: line 2: unexpected EOF while looking for matching `)'\n", 2],
+  ["echo `echo", "", "bash: -c: line 1: unexpected EOF while looking for matching ``'\n", 2],
+  ["for in a; do echo; done", "", "bash: -c: line 1: syntax error near unexpected token `a'\nbash: -c: line 1: `for in a; do echo; done'\n", 2],
+  ["for i in; do echo; done", "", "", 0],
+  ["while; do echo; done", "", "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `while; do echo; done'\n", 2],
+  ["case x in a) echo a", "", "bash: -c: line 2: syntax error: unexpected end of file from `case' command on line 1\n", 2],
+  ["echo a #c ) ", "a\n", "", 0],
+  ["echo <<", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `echo <<'\n", 2],
+  ["echo ((", "", "bash: -c: line 1: syntax error near unexpected token `('\nbash: -c: line 1: `echo (('\n", 2],
+  ["echo a |& |& cat", "", "bash: -c: line 1: syntax error near unexpected token `|&'\nbash: -c: line 1: `echo a |& |& cat'\n", 2],
+  ["!", "", "", 1],
+  ["if true; then echo a; else; fi", "", "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `if true; then echo a; else; fi'\n", 2],
+  ["echo a; }", "", "bash: -c: line 1: syntax error near unexpected token `}'\nbash: -c: line 1: `echo a; }'\n", 2],
+  ["until; do :; done", "", "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `until; do :; done'\n", 2],
+  ["select", "", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `select'\n", 2],
+  ["echo `echo hi`", "hi\n", "", 0],
+  ["echo \"`echo q`\"", "q\n", "", 0],
+  ["echo a &&\necho b", "a\nb\n", "", 0],
+  ["if true; then\necho a\nfi", "a\n", "", 0],
+  ["echo a;\necho b", "a\nb\n", "", 0],
+  ["if true; then fi", "", "bash: -c: line 1: syntax error near unexpected token `fi'\nbash: -c: line 1: `if true; then fi'\n", 2],
+  ["while true; do done", "", "bash: -c: line 1: syntax error near unexpected token `done'\nbash: -c: line 1: `while true; do done'\n", 2],
+  ["{ }", "", "bash: -c: line 1: syntax error near unexpected token `}'\nbash: -c: line 1: `{ }'\n", 2],
+  ["( )", "", "bash: -c: line 1: syntax error near unexpected token `)'\nbash: -c: line 1: `( )'\n", 2],
+  ["for i in 1; do done", "", "bash: -c: line 1: syntax error near unexpected token `done'\nbash: -c: line 1: `for i in 1; do done'\n", 2],
+  ["! true", "", "", 1],
+  ["! false; echo $?", "0\n", "", 0],
+  ["x=`echo a`; echo $x", "a\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    if (status === 2) {
+      check('parse: ' + JSON.stringify(script) + ' is a syntax error with the bash text, and is not run', core.syntaxText(script) === stderr && stdout === '', JSON.stringify([script, stderr]));
+      continue;
+    }
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('parse: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
