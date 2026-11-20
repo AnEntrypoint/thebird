@@ -4433,3 +4433,37 @@ Witness: group `redirects order: an input and an output failure follow redirect 
 
 Red check: the call to `inputFailure` in the ordered pass replaced by `const failure = null;`, so a missing input is no longer refused in the pass. Red run: `RESULT PASS=1305 FAIL=33`. Restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B window for ab58c51 (change set 30bv, redirect order)
+
+Gate: `vmstat 1 2` read first, second sample `si 36, so 0` (both under 1000 KB/s). The window ran from 05:04:13 and cleared at reading 7 (05:07:13), about three minutes of the ten allowed. Readings (si/so from the second sample; heavy-jobs from `scripts/heavy-jobs.cjs` from bevy 495fff6; hot count from the top check):
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 05:04:13 | 96 | 0 | clear | claude session pid 2225 over 20% in top (hot count 1) |
+| 2 | 05:04:43 | 552 | 64 | busy (1) | zig test pid 2114065 (`./.zig-cache/.../test`, a test run) |
+| 3 | 05:05:12 | 104 | 0 | busy (1) | zig test pid 2114065 |
+| 4 | 05:05:43 | 3016 | 0 | busy (1) | zig test pid 2114065 |
+| 5 | 05:06:12 | 104 | 0 | busy (1) | zig test pid 2114065 |
+| 6 | 05:06:43 | 1768 | 0 | busy (1) | zig test pid 2114065 |
+| 7 | 05:07:13 | 436 | 0 | clear | none; gate and heavy-jobs clear, window cleared |
+
+A gm-core worker (pid 1002562, about 50% CPU, full command line with `--handshake`) was in the top list and does not count. The zig test belongs to another run and was not stopped.
+
+Runs, each with its PID and wall time from the clock. Each ran under `timeout` with its PID captured:
+
+- Green witness (pid 2121546): exit 0, wall 1.59 s, `RESULT PASS=1338 FAIL=0`.
+- Red check (pid 2121603, the input check disabled in the ordered pass on the HEAD copy of ab58c51's core): exit 1, wall 1.56 s, `RESULT PASS=1305 FAIL=33`. Restored from the copy and confirmed with `cmp`. The red check runs only for ab58c51, the code commit; d6dd52c and fc3865a are ledger-only.
+- `npm run check` (pid 2121644): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2121699): exit 0, wall 1.68 s, `RESULT PASS=1338 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed (it carried d6dd52c, fc3865a and ab58c51):
+
+```
+To https://github.com/AnEntrypoint/thebird
+   46bc650..ab58c51  main -> main
+```
+
+`git ls-remote origin main` after the push: `ab58c51e53c493cb7da3d02289ec544de5142167 refs/heads/main`.
+
+Longest step: the gate wait for the zig test, readings 2 to 6 (about three minutes). The push took about three seconds. Nothing was stopped.
+
