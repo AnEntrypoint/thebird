@@ -119,8 +119,14 @@ function touch(path) {
   }
 }
 
-export function touchSync(path) {
-  touch(path);
+export function touchSync(path, access = true, modify = true) {
+  if (modify) touch(path);
+  if (access) touchAccess(path);
+}
+
+function touchAccess(path) {
+  attrs.set(path, { ...(attrs.get(path) ?? {}), atimeMs: Date.now() });
+  saveAttrs();
 }
 
 function forgetAttrs(path) {

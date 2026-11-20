@@ -162,21 +162,32 @@ group('playwriter-hello', async () => {
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
 });
 
-group('touch -m sets the modification time that stat reports in the page, after the file was written two seconds earlier', async () => {
+group('touch -m and -a change only the time they name, as tjs.stat reports them in the page', async () => {
   const touched = await terminal([
     ['run', "printf x > /workspace/touchrow-f && sleep 2 && touch -m /workspace/touchrow-f && echo touched"],
-    ['run', "tjs -e \"tjs.stat('/workspace/touchrow-f').then((s) => console.log('touchrow-age', Date.now() - s.mtimeMs < 1000))\""]
+    ['run', "tjs -e \"tjs.stat('/workspace/touchrow-f').then((s) => console.log('touchrow-age', Date.now() - s.mtim.getTime() < 1000))\""],
+    ['run', "printf x > /workspace/touchrow-a && sleep 2 && touch -a /workspace/touchrow-a && echo touched-a"],
+    ['run', "tjs -e \"tjs.stat('/workspace/touchrow-a').then((s) => console.log('touchrow-a-kept', Date.now() - s.mtim.getTime() >= 1000))\""]
   ]);
   const touchLines = touched.out.split('\n');
-  check('touch -m moves the mtime that tjs.stat reports to now, after the file was written two seconds earlier', touchLines.includes('touchrow-age true'), JSON.stringify(touchLines.filter((line) => line.startsWith('touchrow-')).slice(0, 4)));
+  check('touch -m moves the mtime that tjs.stat reports to now, after the file was written two seconds earlier', touchLines.includes('touchrow-age true'), JSON.stringify(touchLines.slice(-12)));
+  check('touch -a leaves the mtime that tjs.stat reports where the write left it', touchLines.includes('touchrow-a-kept true'), JSON.stringify(touchLines.slice(-12)));
 });
 
-group('permission owner in the page: a file the page creates is owned by the shell user, so -O and -G are true', async () => {
+group('tjs.utime sets the modification time that tjs.stat reports, through tjs_fs_setattr', async () => {
+  const set = await terminal([
+    ['run', "printf x > /workspace/utrow-f && tjs -e \"Promise.resolve(tjs.utime('/workspace/utrow-f', 1700000000000, 1600000000000)).then(() => tjs.stat('/workspace/utrow-f')).then((s) => console.log('utrow-mtime', s.mtim.getTime()))\""]
+  ]);
+  const setLines = set.out.split('\n');
+  check('tjs.utime sets the mtime to 1600000000000 ms, and tjs.stat reports it back, through tjs_fs_setattr', setLines.includes('utrow-mtime 1600000000000'), JSON.stringify(setLines.slice(-6)));
+});
+
+group('permission owner in the page: [ -O ] and [ -G ] are true for a file the page creates', async () => {
   const owner = await terminal([
     ['run', "printf x > /workspace/ownrow-f && [ -O /workspace/ownrow-f ] && echo owner-yes; [ -G /workspace/ownrow-f ] && echo group-yes"]
   ]);
   const ownerLines = owner.out.split('\n');
-  check('-O and -G are true for a file the page creates, because the shim gives it uid and gid 1000', ownerLines.includes('owner-yes') && ownerLines.includes('group-yes'), JSON.stringify(ownerLines.filter((line) => line.endsWith('-yes')).slice(0, 4)));
+  check('[ -O ] and [ -G ] are true for a file the page creates, answered by the bashkit test of the page, which does not read the shim uid', ownerLines.includes('owner-yes') && ownerLines.includes('group-yes'), JSON.stringify(ownerLines.filter((line) => line.endsWith('-yes')).slice(0, 4)));
 });
 
 group('uv-fs', async () => {

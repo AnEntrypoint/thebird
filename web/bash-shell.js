@@ -18,7 +18,7 @@ const coreHost = (host) => ({
   },
   write: (path, text) => host.write(path, new TextEncoder().encode(text)),
   exists: (path) => host.exists(path),
-  touch: (path) => host.touch(path),
+  touch: (path, access, modify) => host.touch(path, access, modify),
   stat: (path) => {
     try {
       const info = host.stat(path);
