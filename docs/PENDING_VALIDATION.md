@@ -6092,3 +6092,11 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Limits, not fixed: `find -exec ... +` (batch form) is not supported, only the `\;` form. The `i` and `a` commands take only the one-line form (`1i top`), not the `i\` multi-line form. Both are unknown to this shell and still fail with a message.
 - Commit: fbf7cd8 (lanmower, no trailers). This one commit covers the four changes above, since they share one witness group.
 
+### Defect fix D2-andor: a list that ends in && or || is a syntax error at the end of input
+
+- Gap found by comparing shell core with bash on 27 parse-error inputs (the 16 in the first pass and 11 in the second, on this machine): `echo a &&`, `echo a ||`, `true &&   ` and `echo a ||\n\n` ran without error (status 0 for `echo a &&`), where bash reports `bash: -c: line 2: syntax error: unexpected end of file` with status 2 and runs nothing. The other 23 inputs matched bash on stderr and status.
+- Files: `web/shell-core.js` (in `parseSequence`, after an `&&` or `||` operator the parser skips newline tokens, the same way the pipe loop does, and raises the end-of-file error when no tokens remain; a continuation on the next line still runs), `scripts/witness-shell.mjs` (group "parse errors: a list that ends in && or || at the end of the input is a syntax error, as bash reports it", six rows: four error rows with bash's stderr and no stdout, and two continuation rows with bash's stdout).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1703 FAIL=0` (1697 before, plus six rows).
+- Red check: the end-of-input throw disabled by `if (false)`; witness `RESULT PASS=1699 FAIL=4` (the four error rows); the two continuation rows still pass; restored from a copy, `cmp` matched; green again `RESULT PASS=1703 FAIL=0`.
+- Commit: 85ba536 (lanmower, no trailers).
+
