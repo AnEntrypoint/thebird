@@ -612,7 +612,23 @@ export function parseScript(src, firstLine, substitution = false) {
 }
 
 export function parseScriptPartial(src) {
-  return parse(tokenize(src), true);
+  let failure;
+  try {
+    return parse(tokenize(src), true);
+  } catch (err) {
+    failure = err;
+  }
+  const lines = src.split('\n');
+  for (let k = lines.length - 1; k >= 0; k--) {
+    const prefix = lines.slice(0, k).map((line) => line + '\n').join('');
+    try {
+      const { list, error } = parse(tokenize(prefix), true);
+      return { list, error: error ?? failure };
+    } catch {
+      continue;
+    }
+  }
+  return { list: { items: [] }, error: failure };
 }
 
 const ok = (out) => ({ code: 0, out, err: '' });

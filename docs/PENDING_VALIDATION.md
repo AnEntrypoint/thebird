@@ -5413,3 +5413,23 @@ Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s. `scrip
 Thirteen readings had the gate clear. Heavy-jobs was busy in readings 2 to 20. The hot processes were Chromium (pid 2353943, the main process; pid 2353996, the GPU process; pid 2354035, a renderer), and a claude session (pid 2341543) that was above 20% CPU in top. None of them was started in this stretch, and I did not stop them. No green witness, red check or push ran. The window log ends with `WINDOW_NEVER_CLEARED`. `git ls-remote origin main` after the window: `24fca7d45bc069b1c8bea2c937fbb884e4c3359d refs/heads/main`.
 
 The window ran from 09:30:59 to 09:40:30, about 9 min 31 s, within the ten-minute allowance.
+
+### Change set 30d6: a tokenizer error (an unterminated quote or command substitution) on a later line runs the complete lines before it, as bash does; the G5 tail
+
+Locale: `en_US.UTF-8` (LC_ALL and LANG set for the bash probe). The output of these scripts does not depend on the locale; each row title states it.
+
+Probe (bash, `bash -c`, before the change): an unterminated quote or `$(` on line N stops the script at the command that contains it, exit 2. Every complete command before it runs. A quote opened on line 2 and closed on line 3 is one complete command, so it runs (`echo 'x`, a line break, then `y'` prints `x` and `y`), and the unterminated quote on line 4 stops the script after it. An unterminated quote on line 1 runs nothing. The error message is `bash: -c: line N: unexpected EOF while looking for matching ...`.
+
+Before the change the shell tokenized the whole script first, so six of the seven rows printed nothing.
+
+Change: `parseScriptPartial(src)` keeps the whole-source parse when tokenizing succeeds. When tokenizing fails, it takes the longest prefix of lines that tokenizes (line by line from the end), parses that prefix into its complete commands, and reports the tokenizer error unless the prefix already has a syntax error. A prefix that cannot be tokenized is skipped. The longest good prefix is the one bash runs, because the open construct is the one that starts after it. The run path is unchanged and runs the commands, then sets exit 2 and writes the error.
+
+Witness rows: seven rows (gt1 to gt7) added after the G5 rows, bash output only. Each checks stdout and the exit status against bash. stderr is empty when bash's is empty, and starts with `syntax error` when bash's is not; the shell's message is `syntax error: unterminated ...`, with no line number, as in change set 30d5.
+
+Witness: before the change (HEAD code with the rows), `RESULT PASS=1545 FAIL=6`, wall 1.69 s (gt1, gt2, gt3, gt4, gt6, gt7). After the change, green: `RESULT PASS=1551 FAIL=0`, wall 1.66 s.
+
+Red check, mutation 1 (no prefix of complete lines is parsed): `RESULT PASS=1545 FAIL=6`, wall 1.7 s, the same six rows. Mutation 2 (the tokenizer error is not reported): `RESULT PASS=1544 FAIL=7`, wall 1.7 s, the six rows plus gt5 (where the shell then exits 0 instead of 2). Each was restored and `cmp` matched. `git status` showed only the three expected files and the dirty relay.
+
+Other checks at this commit: `npm run check` exit 0, 347 ms. `npm run witness:shell` `RESULT PASS=1551 FAIL=0`, 1.79 s. `npm run lint:comments` exit 0, 727 ms, 0 comments in 140 repo-owned files. `npm test` exit 0, 66 pass, 0 fail, 30.5 s (the longest step).
+
+Still open after this change set: the error message has no line number and does not match bash's wording (the G5 message item). The prefix search tokenizes the source once per line in the worst case, which is quadratic on a long script with an error; that is acceptable for the scripts here but is not measured.
