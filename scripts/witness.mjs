@@ -171,6 +171,14 @@ group('touch -m sets the modification time that stat reports in the page, after 
   check('touch -m moves the mtime that tjs.stat reports to now, after the file was written two seconds earlier', touchLines.includes('touchrow-age true'), JSON.stringify(touchLines.filter((line) => line.startsWith('touchrow-')).slice(0, 4)));
 });
 
+group('permission owner in the page: a file the page creates is owned by the shell user, so -O and -G are true', async () => {
+  const owner = await terminal([
+    ['run', "printf x > /workspace/ownrow-f && [ -O /workspace/ownrow-f ] && echo owner-yes; [ -G /workspace/ownrow-f ] && echo group-yes"]
+  ]);
+  const ownerLines = owner.out.split('\n');
+  check('-O and -G are true for a file the page creates, because the shim gives it uid and gid 1000', ownerLines.includes('owner-yes') && ownerLines.includes('group-yes'), JSON.stringify(ownerLines.filter((line) => line.endsWith('-yes')).slice(0, 4)));
+});
+
 group('uv-fs', async () => {
   const uvSeed = "printf 'abcdefghijklmnop' > /workspace/uvfs-c0";
   const uvDoubling = Array.from({ length: 13 }, (_, i) => `cat /workspace/uvfs-c${i} /workspace/uvfs-c${i} > /workspace/uvfs-c${i + 1}`).join(' && ');
