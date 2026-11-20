@@ -1919,6 +1919,21 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
   exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
+  const fileTicks = new Map();
+  let fileClock = 0;
+  const noteRead = (path) => {
+    fileTicks.set(path, { m: fileTicks.get(path)?.m ?? 0, a: ++fileClock });
+  };
+  const readFileText = (path) => {
+    noteRead(path);
+    return host.read(path);
+  };
+  const writeFileText = (path, data) => {
+    const t = ++fileClock;
+    const record = fileTicks.get(path);
+    fileTicks.set(path, record ? { m: t, a: record.a } : { m: t, a: t });
+    host.write(path, data);
+  };
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
   const jobs = new Map();
@@ -1952,6 +1967,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return { real: current, searched };
   };
   const blockedAncestor = (path) => searchedDirectories(path).searched.some((dir) => !(ownerBits(dir) & 1));
+  const permissionBit = (text, bit) => {
+    const path = resolvePath(text);
+    const info = statInfo(searchedDirectories(path).real);
+    if (!info || blockedAncestor(path)) return false;
+    return ((parseInt(info.mode, 8) >> 6) & bit) !== 0;
+  };
   const statInfo = (path) => {
     const link = host.lstat(path);
     if (!link && !host.stat(path)) return null;
@@ -2111,7 +2132,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         continue;
       }
       try {
-        out += hex(utf8Bytes(host.read(resolvePath(name)))) + '  ' + name + '\n';
+        out += hex(utf8Bytes(readFileText(resolvePath(name)))) + '  ' + name + '\n';
       } catch {
         err += verb + ': ' + name + ': No such file or directory\n';
         code = 1;
@@ -2300,7 +2321,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         if (!host.stat(parentOf(path))?.dir) {
           err += "touch: cannot touch '" + name + "': No such file or directory\n";
           code = 1;
-        } else host.write(path, '');
+        } else writeFileText(path, '');
       }
       return { code, out: '', err };
     },
@@ -2317,8 +2338,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           code = 1;
           continue;
         }
-        const prior = append && host.exists(path) ? host.read(path) : '';
-        host.write(path, prior + (stdin ?? ''));
+        const prior = append && host.exists(path) ? readFileText(path) : '';
+        writeFileText(path, prior + (stdin ?? ''));
       }
       return { code, out: stdin ?? '', err };
     },
@@ -2466,7 +2487,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       let code = 0;
       for (const name of files) {
         try {
-          found.push({ name, count: counts(host.read(resolvePath(name))) });
+          found.push({ name, count: counts(readFileText(resolvePath(name))) });
         } catch {
           err += `wc: ${name}: No such file or directory\n`;
           code = 1;
@@ -2550,7 +2571,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         let text = stdin;
         if (name !== null) {
           try {
-            text = host.read(resolvePath(name));
+            text = readFileText(resolvePath(name));
           } catch {
             err += `grep: ${name}: No such file or directory\n`;
             code = 2;
@@ -2619,7 +2640,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           continue;
         }
         try {
-          texts.push(host.read(resolvePath(name)));
+          texts.push(readFileText(resolvePath(name)));
         } catch {
           err += 'diff: ' + name + ': No such file or directory\n';
         }
@@ -2928,7 +2949,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           continue;
         }
         try {
-          out += host.read(resolvePath(name));
+          out += readFileText(resolvePath(name));
         } catch {
           err += `cat: ${name}: No such file or directory\n`;
           code = 1;
@@ -3086,6 +3107,13 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         return Boolean(info) && (op === '-d') === info.dir;
       }
       if (op === '-L' || op === '-h') return Boolean(host.lstat(resolvePath(value))?.link);
+      if (op === '-r' || op === '-w' || op === '-x') return permissionBit(value, { '-r': 4, '-w': 2, '-x': 1 }[op]);
+      if (op === '-O' || op === '-G') return Boolean(statInfo(searchedDirectories(resolvePath(value)).real));
+      if (op === '-N') {
+        const real = searchedDirectories(resolvePath(value)).real;
+        const record = fileTicks.get(real);
+        return Boolean(statInfo(real)) && record !== undefined && record.m > record.a;
+      }
       if (op === '-s') return (host.stat(resolvePath(value))?.size ?? 0) > 0;
       throw new Error(`test: ${op}: unary operator not supported`);
     }
@@ -3359,7 +3387,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   }
 
   function writeRedirect(path, text) {
-    if (path !== NULL_DEVICE) host.write(path, text);
+    if (path !== NULL_DEVICE) writeFileText(path, text);
   }
 
   async function openFile(redirect, sink) {
@@ -3482,7 +3510,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   function inputText(entry) {
     if (entry?.heredoc !== undefined) return entry.heredoc;
     if (entry?.read === undefined || entry.read === NULL_DEVICE) return '';
-    return host.read(entry.read);
+    return readFileText(entry.read);
   }
 
   async function resolveInput(redirects, stdin, sink, seekable0) {
@@ -3501,7 +3529,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         seekable = false;
       } else if (redirect.op === '<') {
         const path = await wordPath(redirect.target, sink);
-        input = path === NULL_DEVICE ? '' : host.read(path);
+        input = path === NULL_DEVICE ? '' : readFileText(path);
         entry = null;
         seekable = true;
       } else if (INPUT_DUP_OPS.has(redirect.op)) {
@@ -3575,7 +3603,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         } else if (redirect.op === '<') {
           try {
             const path = await wordPath(redirect.target, sink);
-            input = path === NULL_DEVICE ? '' : host.read(path);
+            input = path === NULL_DEVICE ? '' : readFileText(path);
           } catch {
             return { code: 1, out: '', err: argv[0] + ': no such file\n' };
           }
@@ -3672,7 +3700,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (writeFailed) route(2, 'thebird: write error: Bad file descriptor\n');
     for (const [path, { text, rw }] of files) {
       if (text === '') continue;
-      const prior = host.exists(path) ? host.read(path) : '';
+      const prior = host.exists(path) ? readFileText(path) : '';
       writeRedirect(path, rw ? text + prior.slice(text.length) : prior + text);
     }
     if (writeFailed) return { out: outText, err: errText, code: 1, bytes: outBytes };
@@ -3718,7 +3746,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         continue;
       }
       try {
-        text += host.read(resolvePath(name));
+        text += readFileText(resolvePath(name));
       } catch {
         err += missing(name);
         code = failure;
@@ -3733,7 +3761,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return;
     }
     if (!host.stat(src)?.dir) {
-      host.write(dst, host.read(src));
+      writeFileText(dst, readFileText(src));
       return;
     }
     host.mkdir(dst, true);

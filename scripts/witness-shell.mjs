@@ -3901,6 +3901,26 @@ group('select menu: ten or more items are laid out in columns as bash lays them 
   }
 });
 
+group('permission tests: -r -w -x -O -G -N give bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["printf x > f; chmod 000 f; [ -r f ]; echo r=$?; [ -w f ]; echo w=$?; [ -x f ]; echo x=$?", "r=1\nw=1\nx=1\n", "", 0],
+  ["printf x > f; chmod 600 f; [ -r f ] && echo r; [ -w f ] && echo w; [ -x f ] || echo nx", "r\nw\nnx\n", "", 0],
+  ["printf x > f; chmod 700 f; [ -x f ] && echo x; [[ -w f ]] && echo w2", "x\nw2\n", "", 0],
+  ["mkdir d; chmod 755 d; [[ -x d ]] && echo dx; [[ -w d ]] && echo dw; chmod 500 d; [[ -w d ]] || echo dnw", "dx\ndw\ndnw\n", "", 0],
+  ["[[ -r missing ]] || echo none; [ -O missing ]; echo rc=$?; [ -G missing ]; echo rc=$?", "none\nrc=1\nrc=1\n", "", 0],
+  ["printf x > f; [[ -O f ]] && echo owner; [[ -G f ]] && echo group; [ -O f ] && echo O2", "owner\ngroup\nO2\n", "", 0],
+  ["printf a > f; [[ -N f ]] || echo fresh; cat f > /dev/null; printf b >> f; [[ -N f ]] && echo modified; [[ -N missing ]] || echo nomissing", "nomissing\n", "", 0],
+  ["printf a > f; cat f > /dev/null; [[ -N f ]] || echo readnotmod", "readnotmod\n", "", 0],
+  ["printf x > f; chmod 000 f; [[ -r f ]] || echo unread; chmod 400 f; [[ -r f ]] && echo readable", "unread\nreadable\n", "", 0],
+  ["mkdir -p a/b; printf x > a/b/f; chmod 644 a/b/f; chmod 600 a; [[ -r a/b/f ]] || echo blocked; chmod 700 a", "blocked\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('permission: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
