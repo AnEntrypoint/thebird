@@ -4750,3 +4750,31 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `9aca69d20b27fd72493af7210f48ef22f6389b51 refs/heads/main`.
 
 Longest step: the wait for the zig test process to finish, readings 1 to 4 (the window job ran 134.4 s in all). The push took about 4 s. Nothing was stopped.
+
+### Change set 30cb: a group, function, loop or subshell that reads an fd moves its offset as bash does, head moves it by the lines it reads from a seekable input, and a group's heredoc or here-string input is applied
+
+Reference: `bash -c` in the sandbox locale (`LANG=en_US.UTF-8`, `LC_ALL` unset), each case in a fresh directory. Rows take stdout and status from bash; stderr is empty in every row.
+
+Probed first, against HEAD 3b2c55d:
+- Groups and loops: `{ cat; } <&3` then `cat <&3` prints the file once, and the second cat gets nothing. `{ read x; read y; } <&3` takes two lines. `while read l; do ...; break; done <&3` takes one, and the next cat gets the rest. `( read x ) <&3` moves the shared offset although x is unset in the parent. The shell gave every reader the whole file.
+- Functions: `f() { read a; }; f <&3` moves the offset by one line; `g() { echo x; }; g <&3` moves nothing. The shell moved every fd by its whole content for any command name.
+- `head`: `head -n 1 <&3` leaves the offset after line 1; `head -n 2` and `head -2` after line 2; `head -n 0` moves nothing; a bare `head` reads all, since the file has fewer than ten lines. The shell's head read everything.
+- Seekable and not: GNU head seeks back only when its input is a file (`< f`, or an fd opened on a file with `exec 3<f`). A heredoc, a here-string or a pipe is drained: `exec 3<<EOF ... head -n 1 <&3; cat <&3` prints only the first line; `printf 'x\ny\n' | { head -n 1; cat; }` prints only x.
+- Group input redirects: `{ cat; cat; } <<<x` and `{ cat; } <<EOF` are applied in bash. The shell's group ignored heredoc and here-string input, because resolveInput handled only `<` and fd dup. Found while writing the rows; fixed here.
+- Already matching, kept as regression rows: `head <&3`, `wc -l <&3`, `grep a <&3`, `sed -n 1p <&3`, and `{ cat | wc -l; } <&3` (prints 3, then nothing).
+
+What changed in web/shell-core.js:
+- `resolveInput` returns the input, the fd entry it came from, and whether the input is seekable (a file is; a heredoc, here-string or pipe is not). It applies heredoc and here-string input to a group. A dup of fd 0 keeps the current input and its cursor (`shared`).
+- `withRedirects` gives a group, function body, loop, subshell or if its own cursor `{ text, pos, seekable }`, and moves the fd entry by the cursor's position when it ends.
+- `runCommand` carries the same cursor. A command that is not a function, not in NON_READERS and not in PARTIAL_READERS consumes all its input, so its cursor and fd entry move to the end. `read` and `head` move the cursor themselves.
+- `head` with no file operands moves the cursor past its first N lines when the cursor is seekable (a negative count, or a non-seekable input, drains all of it). `headEnd` is the helper.
+
+Witness: 24 new rows, from bash output. The first 17 were added before the change: `RESULT PASS=1424 FAIL=14` (the 14 failures are the group, group-with-two-reads, loop, subshell, function, head with -n 1 and -n 2 and -2 and the two head-twice cases, the pipeline and file-group rows, and the here-string group). After the change, `RESULT PASS=1438 FAIL=0`. The 7 seekable rows were added after the change and passed at once: `RESULT PASS=1445 FAIL=0` (was 1421 before this change set).
+
+Red check: the mutation removes the line that moves a withRedirects cursor's position back into its fd entry, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1440 FAIL=5`: the group, the group with two reads, the loop, the subshell, and the pipeline inside a group. The function rows do not fail under this mutation, because a function's cursor moves through runCommand, not withRedirects. Restored from the copy, `cmp` matched, and the witness is back at `PASS=1445 FAIL=0`.
+
+Found, not in this change set:
+- G6, reachable, open: `grep -m 1`, `sed 1q` and `head -c 2` are not implemented here (grep reads its pattern as a file, sed reports unknown command q, head reports an invalid number). Bash prints the lines and, for the first two, moves the offset after the first line.
+- `cmd <&0` inside a group shares the group's cursor (one row covers it, the head case); other shared-fd forms were not probed.
+- Positions count characters, not bytes (as recorded in 30ca).
+- G5 (a syntax error stops every line here, where bash runs the earlier lines) is unchanged.

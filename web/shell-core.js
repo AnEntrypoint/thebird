@@ -1144,6 +1144,16 @@ const LOCALE_NAMES = ['LC_ALL', 'LC_CTYPE', 'LANG'];
 const LOCALE_MODES = new Map([['C', 'bytes'], ['POSIX', 'bytes'], ['C.UTF-8', 'characters'], ['C.utf8', 'characters'], ['en_US.UTF-8', 'characters'], ['en_US.utf8', 'characters']]);
 const DEFAULT_LANG = 'en_US.UTF-8';
 const NON_READERS = new Set(['true', 'false', 'echo', 'printf', 'exit', 'cd', 'export', 'unset', 'return', 'test', '[', ':', 'pwd', 'set', 'shift', 'local']);
+const PARTIAL_READERS = new Set(['read', 'head']);
+function headEnd(text, count) {
+  let end = 0;
+  for (let line = 0; line < count; line++) {
+    const next = text.indexOf('\n', end);
+    if (next === -1) return text.length;
+    end = next + 1;
+  }
+  return end;
+}
 const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
 
 function localeChoice(get) {
@@ -1864,11 +1874,12 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       }
       return { code, out: stdin ?? '', err };
     },
-    head: ({ argv, stdin = '' }) => {
+    head: ({ argv, stdin = '', stream }) => {
       const { flags, operands } = argsOf(argv, ['-n']);
       const count = Number(flags.get('-n') ?? 10);
       if (!Number.isInteger(count)) return { code: 1, out: '', err: 'head: invalid number of lines\n' };
       const input = textInputs('head', operands, stdin);
+      if (stream && !operands.length) stream.pos += count < 0 || !stream.seekable ? stdin.length : headEnd(stdin, count);
       return { code: input.code, out: joinLines(linesOf(input.text).slice(0, count)), err: input.err };
     },
     tail: ({ argv, stdin = '' }) => {
@@ -2923,10 +2934,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   async function inputDup(redirect, input, sink) {
     const dup = await dupOf(redirect, sink);
-    if (dup.close) return { text: '', entry: null };
-    if (dup.fd === 0) return { text: input, entry: null };
+    if (dup.close) return { text: '', entry: null, shared: false };
+    if (dup.fd === 0) return { text: input, entry: null, shared: true };
     const entry = fdTable.get(dup.fd);
-    return { text: inputText(entry).slice(entry?.pos ?? 0), entry: entry?.pos === undefined ? null : entry };
+    return { text: inputText(entry).slice(entry?.pos ?? 0), entry: entry?.pos === undefined ? null : entry, shared: false };
   }
 
   function inputText(entry) {
@@ -2935,16 +2946,35 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return host.read(entry.read);
   }
 
-  async function resolveInput(redirects, stdin, sink) {
+  async function resolveInput(redirects, stdin, sink, seekable0) {
     let input = stdin;
+    let entry = null;
+    let seekable = seekable0;
     for (const redirect of redirects) {
       if (/^[3-9]/.test(redirect.op)) await applyTableRedirects([redirect], sink);
-      else if (redirect.op === '<') {
+      else if (redirect.op === '<<' || redirect.op === '<<-') {
+        input = await bodyText(redirect.body, sink);
+        entry = null;
+        seekable = false;
+      } else if (redirect.op === '<<<') {
+        input = (await expandWord(redirect.target, sink)).join(' ') + '\n';
+        entry = null;
+        seekable = false;
+      } else if (redirect.op === '<') {
         const path = await wordPath(redirect.target, sink);
         input = path === NULL_DEVICE ? '' : host.read(path);
-      } else if (INPUT_DUP_OPS.has(redirect.op)) input = (await inputDup(redirect, input, sink)).text;
+        entry = null;
+        seekable = true;
+      } else if (INPUT_DUP_OPS.has(redirect.op)) {
+        const dup = await inputDup(redirect, input, sink);
+        input = dup.text;
+        if (!dup.shared) {
+          entry = dup.entry;
+          seekable = dup.entry !== null && dup.entry.read !== undefined;
+        }
+      }
     }
-    return input;
+    return { input, entry, seekable };
   }
 
   async function withRedirects(node, stdin, sink, run, stream) {
@@ -2953,17 +2983,22 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     const descriptors = node.redirects.filter((redirect) => /^[3-9]/.test(redirect.op));
     const saved = descriptors.map((redirect) => [Number(redirect.op[0]), fdTable.get(Number(redirect.op[0]))]);
     let result;
+    let entry = null;
+    let cursor = stream;
     try {
-      const input = await resolveInput(node.redirects, stdin, sink);
-      const hasInput = node.redirects.some((redirect) => redirect.op === '<' || INPUT_DUP_OPS.has(redirect.op));
-      const scratch = { out: '', err: '', signal: sink.signal, stream: hasInput ? { text: input, pos: 0 } : stream };
+      const resolved = await resolveInput(node.redirects, stdin, sink, stream?.seekable === true);
+      entry = resolved.entry;
+      const hasInput = node.redirects.some((redirect) => /^<</.test(redirect.op) || redirect.op === '<' || INPUT_DUP_OPS.has(redirect.op));
+      cursor = hasInput ? { text: resolved.input, pos: 0, seekable: resolved.seekable } : stream;
+      const scratch = { out: '', err: '', signal: sink.signal, stream: cursor };
       try {
-        result = await run(node, input, scratch);
+        result = await run(node, resolved.input, scratch);
       } catch (err) {
         if (err && typeof err === 'object') err.output = await applyOutputRedirects(node.redirects, scratch.out, scratch.err, sink);
         throw err;
       }
     } finally {
+      if (entry) entry.pos += cursor.pos;
       for (const [fd, value] of saved) {
         if (value === undefined) fdTable.delete(fd);
         else fdTable.set(fd, value);
@@ -2983,27 +3018,47 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     let result;
     try {
       let input = stdin;
+      let redirected = false;
+      let seekable = stream?.seekable === true;
       let fdEntry = null;
       for (const redirect of node.redirects) {
         if (/^[3-9]/.test(redirect.op)) await applyTableRedirects([redirect], sink);
-        else if (redirect.op === '<<' || redirect.op === '<<-') input = await bodyText(redirect.body, sink);
-        else if (redirect.op === '<<<') input = (await expandWord(redirect.target, sink)).join(' ') + '\n';
-        else if (redirect.op === '<') {
+        else if (redirect.op === '<<' || redirect.op === '<<-') {
+          input = await bodyText(redirect.body, sink);
+          redirected = true;
+          fdEntry = null;
+          seekable = false;
+        } else if (redirect.op === '<<<') {
+          input = (await expandWord(redirect.target, sink)).join(' ') + '\n';
+          redirected = true;
+          fdEntry = null;
+          seekable = false;
+        } else if (redirect.op === '<') {
           try {
             const path = await wordPath(redirect.target, sink);
             input = path === NULL_DEVICE ? '' : host.read(path);
           } catch {
             return { code: 1, out: '', err: argv[0] + ': no such file\n' };
           }
+          redirected = true;
+          fdEntry = null;
+          seekable = true;
         } else if (INPUT_DUP_OPS.has(redirect.op)) {
           const dup = await inputDup(redirect, input, sink);
           input = dup.text;
-          fdEntry = dup.entry;
+          if (!dup.shared) {
+            redirected = true;
+            fdEntry = dup.entry;
+            seekable = dup.entry !== null && dup.entry.read !== undefined;
+          }
         }
       }
-      const inputStream = input === stdin ? stream : { text: input, pos: 0 };
+      const inputStream = redirected ? { text: input, pos: 0, seekable } : stream;
       result = execute && !commandKnown(argv[0]) ? { code: 127, out: '', err: 'thebird: exec: ' + argv[0] + ': not found\n' } : await dispatch(argv, input, sink.signal, inputStream);
-      if (fdEntry && !NON_READERS.has(argv[0])) fdEntry.pos += argv[0] === 'read' ? inputStream.pos : input.length;
+      if (inputStream?.text === input) {
+        if (!NON_READERS.has(argv[0]) && !functions.has(argv[0]) && !PARTIAL_READERS.has(argv[0])) inputStream.pos = input.length;
+        if (fdEntry) fdEntry.pos += inputStream.pos;
+      }
     } finally {
       for (const [fd, value] of saved) {
         if (value === undefined) fdTable.delete(fd);
