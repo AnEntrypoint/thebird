@@ -3963,6 +3963,20 @@ group('stray ]] at the start of a command is a syntax error near ]], and an argu
   }
 });
 
+group('a word after a compound command is a syntax error near that word, as bash reports it (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["[[ a ]] b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `[[ a ]] b'\n", 2],
+  ["(echo) b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `(echo) b'\n", 2],
+  ["{ echo; } b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `{ echo; } b'\n", 2],
+  ["if true; then echo; fi b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `if true; then echo; fi b'\n", 2],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('leftover word: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
