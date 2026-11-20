@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { connect } from 'node:net';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -65,6 +66,33 @@ function check(name, ok, detail = '') {
   console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`);
 }
 
+const dotenvValue = (key) => {
+  const file = join(root, '.env');
+  const line = existsSync(file) ? readFileSync(file, 'utf8').split('\n').find((text) => text.startsWith(key + '=')) : undefined;
+  return line?.slice(key.length + 1).trim().replace(/^(['"])(.*)\1$/, '$2') || undefined;
+};
+const listening = (port) => new Promise((resolve) => {
+  const socket = connect({ host: '127.0.0.1', port });
+  socket.setTimeout(1000);
+  socket.once('connect', () => { socket.destroy(); resolve(true); });
+  socket.once('timeout', () => { socket.destroy(); resolve(false); });
+  socket.once('error', () => resolve(false));
+});
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODEL = 'anthropic/claude-haiku-5.5';
+const LIVE_UNAVAILABLE = 'needs a live provider: OPENROUTER_KEY is unset, and nothing listens on 127.0.0.1:8793 (the repo does not start that gateway)';
+const liveProvider = async () => {
+  const openrouterKey = process.env.OPENROUTER_KEY ?? dotenvValue('OPENROUTER_KEY');
+  if (openrouterKey) return { url: OPENROUTER_URL, key: openrouterKey, model: OPENROUTER_MODEL };
+  if (!(await listening(8793))) return null;
+  const key = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
+  return { url: 'http://127.0.0.1:8793/v1/chat/completions', key, model: 'claude-hy4[1m]' };
+};
+const skip = (name, reason) => {
+  current().results.push({ name, ok: null, skipped: true });
+  console.log('SKIP ' + name + ' — ' + reason);
+};
+const skipLive = (names) => names.map((name) => skip(name, LIVE_UNAVAILABLE));
 const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
 const DEFAULT_CONTEXT_GROUPS = new Set(['pip']);
 let sharedBrowserStart = null;
@@ -394,13 +422,13 @@ group('fx-tui-registry', async () => {
 });
 
 group('fx-tui-live', async () => {
-  const liveKey = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
-  if (!liveKey) throw new Error('fx-tui-live needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
-  const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
+  const live = await liveProvider();
+  if (!live) return skipLive(['the TUI on the live provider answers hi with a reply line below the typed hi']);
+  const { url: liveUrl, key: liveKey, model: liveModel } = live;
   const surfaces = {};
   const tui = await terminal([], {
     timeoutMs: COLD_START_MS,
-    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
+    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: liveModel, gatewayChatUrl: liveUrl })};`,
     interact: async ({ type, press, evaluate, waitFor }) => {
       const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
       await type('fx');
@@ -414,7 +442,7 @@ group('fx-tui-live', async () => {
   });
   const gatewayStatuses = tui.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const gatewayErrors = tui.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d/.test(line));
-  check('the TUI on the live 8793 gateway answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
+  check('the TUI on the live provider answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
 });
 
 group('fx-approval', async () => {
@@ -476,16 +504,16 @@ group('fx-approval', async () => {
 });
 
 group('fx-provider', async () => {
-  const liveKey = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
-  if (!liveKey) throw new Error('fx-provider needs THEBIRD_LIVE_FX_KEY or the gy4 key in /config/.fx/settings.json');
-  const liveUrl = 'http://127.0.0.1:8793/v1/chat/completions';
+  const live = await liveProvider();
+  if (!live) return skipLive(['fx ask on the live provider prints ok with rc 0', 'the live chat request returns 200 and the page logs no HTTP error']);
+  const { url: liveUrl, key: liveKey, model: liveModel } = live;
   const ask = await terminal([['run', 'fx ask reply with only the word ok'], ['run', 'echo rc=$?']], {
-    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: 'claude-hy4[1m]', gatewayChatUrl: liveUrl })};`,
+    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: liveModel, gatewayChatUrl: liveUrl })};`,
   });
   const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
-  check('fx ask on the live 8793 gateway prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
-  check('the 8793 chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
+  check('fx ask on the live provider prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
+  check('the live chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
 
 group('fx-ask', async () => {
@@ -1899,11 +1927,12 @@ await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () 
     outcomes.push(await (entry.heavy ? runHeavy(entry) : runGroup(entry)));
   }
 }));
-const failures = outcomes.flatMap((outcome) => outcome.results).filter((result) => !result.ok).length;
-const passed = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok).length;
+const failures = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok === false).length;
+const skipped = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.skipped === true).length;
+const passed = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok === true).length;
 console.log('\nGROUP WALL TIMES (slowest first)');
 for (const outcome of [...outcomes].sort((a, b) => b.seconds - a.seconds)) console.log(`${outcome.seconds.toFixed(1).padStart(8)}s  ${outcome.name}`);
-console.log(`\ntotals: PASS ${passed} FAIL ${failures} GROUPS ${outcomes.length} WALL ${((performance.now() - startedAll) / 1000).toFixed(1)}s`);
+console.log(`\ntotals: PASS ${passed} FAIL ${failures} SKIP ${skipped} GROUPS ${outcomes.length} WALL ${((performance.now() - startedAll) / 1000).toFixed(1)}s`);
 clearInterval(sampler);
 console.log(`peak witness tree RSS ${treeRss.mb.toFixed(0)} MB across ${treeRss.processes} descendant processes`);
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
