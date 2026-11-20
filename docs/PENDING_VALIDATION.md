@@ -5889,18 +5889,76 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - Row: C-01 of the full-feature run (commit 8d52612). Command: `node bin/thebird-craft.js open /tmp/k8-does-not-exist.pdf; echo rc=$?`. Before: a JSON body with `"ok": false` and `rc=0`. Expected: a non-zero status when the result is not ok.
 - File: `bin/thebird-craft.js`, the `open` and `call` branch. The result is printed as before, and `process.exitCode` is 1 when `result.ok === false`.
 - Witness: `test/craft-cli.test.mjs`, a node test that runs the CLI on a missing file and asserts a non-zero status and `ok: false` in the JSON. Before the change the status was 0.
-- Red check: the exit status line removed by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
+- Red check: the exit status line removed by mutation, the test run red, the file restored and matched with `cmp` (green `ℹ pass 1`, `ℹ fail 0`, exit 0; red under the mutation `ℹ fail 1`, exit 1; restored, cmp matches).
 
 ### Defect fix P-03: the README says node exits 127, and node is a builtin
 
 - Row: P-03 of the full-feature run (commit 8d52612). The README Limits list said `No node and no host binaries; they exit 127`. Before: `node -v` prints `v26.11.0` and `node -e "console.log(2+2)"` prints `4`, rc 0, on the page. Expected: the README states what node is (the in-page builtin, run by txiki.js).
 - File: `README.md`, the Limits list. The line now names host binaries as the ones that exit 127, and says node is the in-page builtin.
 - Witness: `test/readme-claims.test.mjs`, a node test that asserts the Limits section does not say node exits 127, and that `web/builtins.js` registers the node builtin. The page run of `node` itself needs playwriter, which did not answer in this run, so the witness checks the README against the source.
-- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
+- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (green `ℹ pass 1`, `ℹ fail 0`, exit 0; red under the mutation `ℹ fail 1`, exit 1; restored, cmp matches).
 
 ### Defect fix P-04: a pasted newline submits a line, which the page does not do
 
 - Row: P-04 of the full-feature run (commit 8d52612). The README Keys list said `each pasted newline submits a line`. Before: pasting text with line breaks does not run the lines, because `web/pty-adapter.js` turns each line break into a space (`PASTE_BREAKS`, the same rule the paste group of the browser witness asserts). Expected: the README says what the page does.
 - File: `README.md`, the Keys list. It now says each pasted line break becomes a space, so pasting does not run the lines, and Enter submits.
 - Witness: `test/readme-claims.test.mjs`, a second test that asserts the README sentence, and reads the `PASTE_BREAKS` expression from `web/pty-adapter.js` and applies it to a string with a line break, a CRLF and a tab, expecting `one two three four`. The browser paste group needs playwriter, which did not answer in this run.
-- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
+- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (green `ℹ pass 2`, `ℹ fail 0`, exit 0; red under the mutation `ℹ pass 1`, `ℹ fail 1`, exit 1; restored, cmp matches).
+
+### Defect rows of 8d52612 and aa2c507: the outcome of each row
+
+Each fixed row has its own commit, with a witness, a red check (mutation, witness, restore, cmp, status) and its ledger line in that commit. The counts are the RESULT line of the witness, `scripts/witness-shell.mjs`, green (the fix in place) and red (the mutation). Node rows show the `node --test` summary. Rows are in table order.
+
+| Row | Result | Commit | Witness, green / red |
+|---|---|---|---|
+| S1-01 sort -t and -k | fixed | 207950c | 1567 / 0; red 1564 / 3 |
+| S1-02 uniq -d | fixed | 2822431 | 1570 / 0; red 1568 / 2 |
+| S1-03 printf %q | fixed | d3edfc0 | 1578 / 0; red 1575 / 3 |
+| S1-04 tr -d | fixed | 05798bf | 1581 / 0; red 1578 / 3 |
+| S1-05 tr -s | fixed | 127a66d | 1585 / 0; red 1581 / 4 |
+| S1-06 jq -e | fixed | e907ca1 | 1590 / 0; red 1586 / 4 |
+| S1-07 jq -S and --arg | fixed | e33260d | 1594 / 0; red 1592 / 2 for -S, 1592 / 2 for --arg |
+| S1-08 prefix assignment reaches env | fixed | 2ab6313 | 1598 / 0; red 1595 / 3 |
+| S1-09 sha256sum | fixed | 58385a3 | 1604 / 0; red 1599 / 5 |
+| S1-10 xargs | fixed | 4e88c06 | 1609 / 0; red 1608 / 1, a weak mutation: only the row with an explicit command fails |
+| S1-11 grep -w | fixed | fa93661 | 1574 / 0; red 1571 / 3 |
+| S1-12 grep -r on a directory | fixed | abd5bfb | 1614 / 0; red 1613 / 1 |
+| S1-13 grep -l | fixed | abd5bfb | 1614 / 0; red 1611 / 3 |
+| S1-14 find -maxdepth | fixed | 8aac6ab | 1617 / 0; red 1616 / 1, the depth-0 row; the depth-2 row cannot show the mutation, because the tree is two levels deep |
+| S1-15 cut -c | fixed | 2c3c3c6 | 1622 / 0; red 1618 / 4 |
+| S1-16 awk for (k in arr), with arrays and delete | fixed | d2132e0 | 1627 / 0; red 1624 / 3 |
+| S1-17 awk split | fixed | b094998 | 1632 / 0; red 1629 / 3 |
+| S1-18 awk sub and gsub | fixed | e189d6c | 1637 / 0; red 1632 / 5 |
+| S1-19 sed addr,+N | fixed | 10aa501 | 1640 / 0; red 1638 / 2 |
+| S1-20 sed a | fixed | 2143c3b | 1644 / 0; red 1640 / 4 |
+| S1-21 sed s with an occurrence number | fixed | 07b5cc4 | 1649 / 0; red 1645 / 4 |
+| S1-22 sed y | fixed | 7ce1dc6 | 1652 / 0; red 1649 / 3 |
+| S1-23 date -d and %F, %T | fixed | 4734589 | 1656 / 0; red 1652 / 4 |
+| S1-24 wc padding | fixed | 96ee797 | 1661 / 0; red 1659 / 2 |
+| S1-31 wc total line (found while fixing S1-24) | fixed | 1b75ba0 | 1664 / 0; red 1662 / 2 |
+| C-01 craft open exit status | fixed | 49985f1 | node test, green ℹ pass 1; red ℹ fail 1 |
+| P-03 README node | fixed | 07ec820 | node test, green ℹ pass 1; red ℹ fail 1 |
+| P-04 README paste | fixed | 01a36af | node test, green ℹ pass 2; red ℹ fail 1 |
+| S1-25 tar -z | open | none | see the cause below |
+| P-01 touch on the page path | open | none | see the cause below |
+| P-02 git init in a subdirectory | open | none | see the cause below |
+| D1 sort at the typed prompt | open | none | see the cause below |
+| D2 parse-error text at the typed prompt | open | none | see the cause below |
+
+Causes of the open rows, none of which can be fixed in this checkout without the change named:
+
+- S1-25, tar -z. `web/shell-tar.js` refuses `-z`, `-j` and `-J` with `compression is not supported`. Writing a gzip stream needs a byte-capable write, and the shell host stores text (`host.write(path, text)`). Reading a `.tgz` needs an inflate. Neither exists. Reopen: a byte-capable host write, and a gzip and inflate module.
+- P-01, touch on the page path. The typed prompt runs bashkit (`web/bash-shell.js` over the vendored `web/vendor/bashkit` WASM). Its `touch` creates the file and then returns status 1, and reports `set_modified_time not supported` on an existing file. The vendored WASM is not changed here. Reopen: a bashkit build with a fixed `touch`, or routing `touch` to `shell-core.js`.
+- P-02, git init in a subdirectory. `web/git-in-page.js` sets `DIR = '/workspace'`, so every git verb runs on that repository, and `git init` in a subdirectory makes `/workspace/.git`. A fix passes the working directory through and searches for the repository root for the other verbs. Its witness runs in the page (txiki), and playwriter did not answer in this run, so no witness could be run.
+- D1, sort at the typed prompt. The bashkit sort on the prompt compares bytes and does not read the locale, so the en_US collation of `shell-core.js` does not reach the prompt. Reopen: route `sort` at the prompt to `shell-core.js`, or fix the locale in bashkit.
+- D2, parse-error text at the typed prompt. The prompt prints bashkit's `error: parse error at line N, column C` text, and the bash syntax report of `shell-core.js` is not on the prompt path. Reopen: format bashkit's error in `web/bash-shell.js`, or route the prompt through `shell-core.js`.
+
+Not rows, but found while fixing them:
+
+- S1-30 (sed s with 2g) already passes after 07b5cc4: `s/a/X/2g` gives `aXX` and `s/a/X/3g` gives `aaXX`, as bash does.
+- S1-26 to S1-29 come from the a6406f2 section, not from 8d52612 or aa2c507, and were not worked in this run. They are still open.
+- awk: the `in` operator outside a for header is not implemented. The awk reference here is mawk, not gawk.
+- jq: an unbound `$name` is a runtime error (exit 5), where jq 1.8.2 reports a compile error (exit 3) before reading input.
+- date: the invalid-date message uses straight quotes; GNU date uses curly quotes in a UTF-8 locale. No witness row covers it.
+- wc: the width of a file's count uses characters, where GNU uses bytes. The two differ only for multi-byte text.
+- Reference tools: the coreutils on PATH are uutils 0.10.0. The expectations for sort, uniq, tr, cut, sha256sum and env were checked again against GNU coreutils 9.7 (through `/tmp/gnubin3`, symlinks to `/bin/gnu<tool>`), and every case matched. The date and wc rows were generated from GNU.
