@@ -4410,3 +4410,26 @@ The shape that differs is the reverse order, `echo x <nofile >nodir/w; echo st=$
 
 This is ranked item 16 (reachable): the stdin input file (`<file`) must be checked in redirect order with the output checks. Reopen by probing the two shapes above and changing the open pass or the stdin read so the first failing redirect in order reports.
 
+### Change set 30bv: an input and an output failure follow redirect order; the first failing redirect in the command line decides the status and message, as bash does
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory for each case. Probed shapes, bash status, whether the command ran, and the message:
+- `echo x <&3 3<f` with f absent: status 1, `bash: line 1: 3: Bad file descriptor`. The descriptor check at `<&3` comes before the `3<f` open, and the command did not run. `echo x 3<f <&3`: status 1, `f: No such file or directory`.
+- `echo x <nofile >nodir/w`: status 1, `nofile: No such file or directory`. `echo x >nodir/w <nofile`: status 1, `nodir/w: No such file or directory`. The first failing redirect in the line is the one reported.
+- Missing input before a valid output: `echo x <nofile >ok` gives status 1, `nofile`, and `ok` is not created. Valid output before a missing input: `echo x >ok3 <nofile 3>nodir/w` creates `ok3`, then reports `nofile` (the later output is not reached).
+- Valid input before a missing output: `echo data > f; echo x <f >nodir/w` gives status 1 and `nodir/w`. Missing output before a valid input: `echo x >nodir/w <f` gives `nodir/w`.
+- `<&N` with N closed before a missing output: `echo x <&5 >nodir/w` gives `5: Bad file descriptor`. `echo x >nodir/w <&5` gives `nodir/w`. A closed fd with a missing input after it: `echo x 5<&- <nofile` gives `nofile`. `echo x <nofile <&5` gives `nofile` (the input is first).
+- The command does not run in any failing shape. A function that writes `made.txt` and is called with a failing redirect leaves no file (`test -e made.txt` prints nothing), for a missing input and for a bad descriptor. A group `{ echo x; } <nofile >nodir/w` is refused the same way.
+- The message is the word as written (`nofile`, not the resolved path). The output of the failing command's earlier redirects is routed as before: `echo x 2>/dev/null <nofile` prints nothing; `echo x <nofile 2>/dev/null` prints the message on stderr; `cat 2>&1 <nofile` prints it on stdout; `cat <nofile 2>&1` prints it on stderr.
+- `exec 3<nofile`: status 1, `nofile: No such file or directory`.
+- Piped: `echo x <nofile | cat` gives the message and status 0 (from `cat`), as in the group rows.
+
+What changed in the shell: `refuseMissingInputs` and its two call sites are removed, so a missing input no longer runs before the ordered pass. `inputFailure` is the missing-input check inside `openRedirects`, the same pass that already checks outputs, dups and bad descriptors in redirect order, and it reports through `failAt`. The stdin read in `runCommand` and `resolveInput` (compound commands) run after the pass, so they read a file known to exist; `resolveInput` now returns the input directly. The message for a missing input changes from `thebird: cannot open <absolute path>: No such file` (a dash-shaped message) to `thebird: <word>: No such file or directory`, bash's shape.
+
+Rows: 40 new rows, generated from bash output (stdout and stderr, with `bash: line 1:` replaced by `thebird:`). Seven existing rows were pinned to the old `cannot open` message while being titled `as bash does` or `matches bash`. Their stdout matched bash, but their stderr was not from bash output. The generator checked each stdout literal against bash and rewrote only the stderr literal: the group from a missing input file, the `3<nofile` rows in the input group (including the `(( 1 ))` and group forms and the pipeline), the `3<f 3<nofile` row, and `cat 1<f` (stderr now `f: No such file or directory`).
+
+Closed by this change set: ranked item 13 (a missing `N<f` after a failed `<&N`) and the 30bu correction (item 16, a missing stdin file after a missing output).
+
+Witness: group `redirects order: an input and an output failure follow redirect order, the first failing redirect decides the message and status, as bash does`, 40 rows. Green: `RESULT PASS=1338 FAIL=0`, wall 1.61 s.
+
+Red check: the call to `inputFailure` in the ordered pass replaced by `const failure = null;`, so a missing input is no longer refused in the pass. Red run: `RESULT PASS=1305 FAIL=33`. Restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+

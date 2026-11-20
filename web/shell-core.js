@@ -2756,15 +2756,6 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     if (path !== NULL_DEVICE) host.write(path, text);
   }
 
-  async function refuseMissingInputs(redirects, sink) {
-    for (const redirect of redirects) {
-      if (!FD_INPUTS.includes(redirect.op) && redirect.op !== '1<') continue;
-      const path = await wordPath(redirect.target, sink);
-      if (path !== NULL_DEVICE && !host.exists(path)) return { code: 1, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' };
-    }
-    return null;
-  }
-
   async function openFile(redirect, sink) {
     const path = await wordPath(redirect.target, sink);
     const append = redirect.op.endsWith('>>');
@@ -2799,6 +2790,13 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return { code: 1, out: '', err: 'thebird: ' + word + ': ' + (found && found.dir !== true ? 'Not a directory' : 'No such file or directory') + '\n' };
   }
 
+  async function inputFailure(redirect, sink) {
+    const path = await wordPath(redirect.target, sink);
+    if (path === NULL_DEVICE || host.exists(path)) return null;
+    const word = (await expandWord(redirect.target, sink)).join('');
+    return { code: 1, out: '', err: 'thebird: ' + word + ': No such file or directory\n' };
+  }
+
   async function failAt(redirects, index, failure, sink) {
     const routed = await applyOutputRedirects(redirects.slice(0, index), '', failure.err, sink);
     return { code: failure.code, out: routed.out, err: routed.err };
@@ -2820,7 +2818,11 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           open.add(1).add(2);
         } else if (!open.has(dup.fd)) return failAt(redirects, index, badFdResult(String(dup.fd)), sink);
         else open.add(fd);
-      } else if (FD1_HEREDOCS.includes(op) || op === '1<' || FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
+      } else if (op === '<' || op === '1<' || FD_INPUTS.includes(op)) {
+        const failure = await inputFailure(redirect, sink);
+        if (failure) return failAt(redirects, index, failure, sink);
+        if (op !== '<') open.add(Number(op[0]));
+      } else if (FD1_HEREDOCS.includes(op) || FD_HEREDOCS.includes(op)) {
         open.add(Number(op[0]));
       } else if (op === '1<>' || FD_OUTPUTS.includes(op) || FILE_FDS[op]) {
         const failure = await outputFailure(redirect, sink);
@@ -2877,25 +2879,20 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       if (/^[3-9]/.test(redirect.op)) await applyTableRedirects([redirect], sink);
       else if (redirect.op === '<') {
         const path = await wordPath(redirect.target, sink);
-        if (path !== NULL_DEVICE && !host.exists(path)) return { refused: { code: 1, out: '', err: 'thebird: cannot open ' + path + ': No such file\n' } };
         input = path === NULL_DEVICE ? '' : host.read(path);
       } else if (INPUT_DUP_OPS.has(redirect.op)) input = await inputDup(redirect, input, sink);
     }
-    return { input };
+    return input;
   }
 
   async function withRedirects(node, stdin, sink, run, stream) {
-    const refused = await refuseMissingInputs(node.redirects, sink);
-    if (refused) return refused;
     const opened = await openRedirects(node.redirects, sink);
     if (opened) return opened;
     const descriptors = node.redirects.filter((redirect) => /^[3-9]/.test(redirect.op));
     const saved = descriptors.map((redirect) => [Number(redirect.op[0]), fdTable.get(Number(redirect.op[0]))]);
     let result;
     try {
-      const resolved = await resolveInput(node.redirects, stdin, sink);
-      if (resolved.refused) return resolved.refused;
-      const { input } = resolved;
+      const input = await resolveInput(node.redirects, stdin, sink);
       const hasInput = node.redirects.some((redirect) => redirect.op === '<' || INPUT_DUP_OPS.has(redirect.op));
       const scratch = { out: '', err: '', signal: sink.signal, stream: hasInput ? { text: input, pos: 0 } : stream };
       try {
@@ -2914,8 +2911,6 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   }
 
   async function runCommand(node, argv, stdin, sink, stream) {
-    const refused = await refuseMissingInputs(node.redirects, sink);
-    if (refused) return refused;
     const opened = await openRedirects(node.redirects, sink);
     if (opened) return opened;
     if (argv.length === 1 && argv[0] === 'exec') return applyExecRedirects(node.redirects, sink);
