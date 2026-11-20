@@ -5433,3 +5433,41 @@ Red check, mutation 1 (no prefix of complete lines is parsed): `RESULT PASS=1545
 Other checks at this commit: `npm run check` exit 0, 347 ms. `npm run witness:shell` `RESULT PASS=1551 FAIL=0`, 1.79 s. `npm run lint:comments` exit 0, 727 ms, 0 comments in 140 repo-owned files. `npm test` exit 0, 66 pass, 0 fail, 30.5 s (the longest step).
 
 Still open after this change set: the error message has no line number and does not match bash's wording (the G5 message item). The prefix search tokenizes the source once per line in the worst case, which is quadratic on a long script with an error; that is acceptable for the scripts here but is not measured.
+
+### Phase B window that cleared for 320b4d3, 0f94558 and a44df46, with its readings, red checks and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s. `scripts/heavy-jobs.cjs` (bevy 495fff6) read in the same reading. The waiter (pid 2365806) sampled the gate from 09:51:11, and its readings are the first seven below. The window started at 09:54:18 (si 148, so 0), and its own readings started at 09:54:21.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| waiter 1 | 09:51:11 | 852 | 1208 | not clear | not run | |
+| waiter 2 | 09:51:42 | 204 | 18864 | not clear | not run | |
+| waiter 3 | 09:52:13 | 2912 | 20756 | not clear | not run | |
+| waiter 4 | 09:52:45 | 2204 | 340 | not clear | not run | |
+| waiter 5 | 09:53:16 | 3696 | 17316 | not clear | not run | |
+| waiter 6 | 09:53:47 | 55820 | 0 | not clear | not run | |
+| waiter 7 | 09:54:18 | 148 | 0 | clear | not run | the waiter started the window here |
+| window 1 | 09:54:21 | 19708 | 4 | not clear | busy, n=1 | |
+| window 2 | 09:54:52 | 1816 | 0 | not clear | clear, hot count 0 | the gate not clear in this reading |
+| window 3 | 09:55:22 | 32 | 0 | clear | clear, hot count 0 | the witnesses started here |
+
+The witnesses started at window 3, the first reading with the gate and heavy-jobs both clear in the same reading. The window ran from 09:54:18 to 09:55:35, about 1 min 17 s, well inside the ten-minute allowance.
+
+Green witness at a44df46 (pid 2367977): exit 0, wall 1.64 s, `RESULT PASS=1551 FAIL=0`.
+
+Red checks, each under timeout with its PID, each restored and checked with `cmp`:
+- RED5 (pid 2368015), G5 mutation 1, the whole-script parse in the run path: exit 1, wall 1.63 s, `PASS=1539 FAIL=12`. Restored.
+- RED6 (pid 2368071), G5 mutation 2, completed lines dropped after a syntax error: exit 1, wall 1.63 s, `PASS=1545 FAIL=6`. Restored.
+- RED7 (pid 2368131), G5 tail mutation 1, no prefix of complete lines is parsed: exit 1, wall 1.65 s, `PASS=1545 FAIL=6`. Restored.
+- RED8 (pid 2368172), G5 tail mutation 2, the tokenizer error is not reported: exit 1, wall 1.64 s, `PASS=1544 FAIL=7`. Restored.
+
+`npm run check` (pid 2368203): exit 0, wall 301 ms. `npm run witness:shell` (pid 2368258): exit 0, wall 1.73 s, `RESULT PASS=1551 FAIL=0`. The three `exit 124` lines in the output are passing rows whose titles contain that text.
+
+Push (`git push origin main`, exit 0):
+
+```
+To https://github.com/AnEntrypoint/thebird
+   24fca7d..a44df46  main -> main
+```
+
+`git ls-remote origin main` after the push: `a44df46b18461c64b4cb65973adaf131cea9189c refs/heads/main`. This carried 320b4d3 (G5), 0f94558 (the window record for the earlier window) and a44df46 (the G5 tail).
