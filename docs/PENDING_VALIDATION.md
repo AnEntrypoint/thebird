@@ -5897,3 +5897,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `README.md`, the Limits list. The line now names host binaries as the ones that exit 127, and says node is the in-page builtin.
 - Witness: `test/readme-claims.test.mjs`, a node test that asserts the Limits section does not say node exits 127, and that `web/builtins.js` registers the node builtin. The page run of `node` itself needs playwriter, which did not answer in this run, so the witness checks the README against the source.
 - Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
+
+### Defect fix P-04: a pasted newline submits a line, which the page does not do
+
+- Row: P-04 of the full-feature run (commit 8d52612). The README Keys list said `each pasted newline submits a line`. Before: pasting text with line breaks does not run the lines, because `web/pty-adapter.js` turns each line break into a space (`PASTE_BREAKS`, the same rule the paste group of the browser witness asserts). Expected: the README says what the page does.
+- File: `README.md`, the Keys list. It now says each pasted line break becomes a space, so pasting does not run the lines, and Enter submits.
+- Witness: `test/readme-claims.test.mjs`, a second test that asserts the README sentence, and reads the `PASTE_BREAKS` expression from `web/pty-adapter.js` and applies it to a string with a line break, a CRLF and a tab, expecting `one two three four`. The browser paste group needs playwriter, which did not answer in this run.
+- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).

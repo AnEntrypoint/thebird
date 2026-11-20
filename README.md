@@ -79,7 +79,7 @@ fx and page scripts can program visible cards through `window.THEBIRD_FEATURES` 
 - Ctrl-C: cancels the running command and drops queued lines.
 - Touch: tap the terminal to focus it. Drag on it to scroll the output.
 - Ctrl-L clears the output. Ctrl-U clears the line. Ctrl-A and Ctrl-E move to the start and end of the line.
-- Left, Right, Home, End and Delete edit the line, Ctrl-K cuts to the end and Ctrl-W cuts the word before the cursor. Paste inserts the text, and each pasted newline submits a line.
+- Left, Right, Home, End and Delete edit the line, Ctrl-K cuts to the end and Ctrl-W cuts the word before the cursor. Paste inserts the text. Each pasted line break becomes a space, so pasting does not run the lines; press Enter to submit.
 
 History is kept in localStorage under `thebird.history`. It holds the submitted command lines only, capped at 500.
 
