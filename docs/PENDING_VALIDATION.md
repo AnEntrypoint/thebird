@@ -5848,3 +5848,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-sed.js`. The `a TEXT` command reads the rest of its line (after the blanks) as the text. The text is queued while the line's commands run and printed after the line's output, even with `-n` and even when `d` deletes the line, as GNU sed does.
 - Witness: `scripts/witness-shell.mjs`, group "sed a: sed a text appends the text after the line, also with -n, and after a d, as bash sed does", four rows with the expected output taken from bash sed. Before the change all four failed against bash.
 - Red check: the queued text replaced by an empty line by mutation; green PASS=1644 FAIL=0; red PASS=1640 FAIL=4, restored, cmp matches.
+
+### Defect fix S1-21: sed s with an occurrence number
+
+- Row: S1-21 of the full-feature run (commit 8d52612). Command: `printf 'aXa\n' \| sed 's/a/X/2'`. Before: `sed: ... unknown option to 's'`, rc 1. Expected: `aXX` (bash sed, locale en_US.UTF-8).
+- File: `web/shell-sed.js`. A number among the `s` flags names the match to replace. Matches before it are passed over without a change, and with `g` that match and every later one are replaced. The match counter runs after the empty-match check, so the empty-match rules are unchanged.
+- Witness: `scripts/witness-shell.mjs`, group "sed s occurrence: sed s/re/x/N replaces only the Nth match, and with g the N-th and every later one, as bash sed does", five rows with the expected output taken from bash sed. Before the change all five failed against bash.
+- Red check: the occurrence test disabled by mutation (every match is replaced); green PASS=1649 FAIL=0; red PASS=1645 FAIL=4, restored, cmp matches.

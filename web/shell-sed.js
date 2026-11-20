@@ -100,8 +100,16 @@ function sedParseSubstitute(state) {
   let global = false;
   let ignoreCase = false;
   let print = false;
-  while (state.pos < script.length && 'gipI'.includes(script[state.pos])) {
-    const flag = script[state.pos++];
+  let occurrence = 1;
+  while (state.pos < script.length && 'gipI0123456789'.includes(script[state.pos])) {
+    const flag = script[state.pos];
+    if (flag >= '0' && flag <= '9') {
+      let digits = '';
+      while (state.pos < script.length && script[state.pos] >= '0' && script[state.pos] <= '9') digits += script[state.pos++];
+      occurrence = Number(digits);
+      continue;
+    }
+    state.pos++;
     if (flag === 'g') global = true;
     else if (flag === 'p') print = true;
     else ignoreCase = true;
@@ -112,7 +120,7 @@ function sedParseSubstitute(state) {
   if (highest > groups) sedFail(state, `invalid reference \\${highest} on \`s' command's RHS`);
   sedSkipBlanks(state);
   if (state.pos < script.length && !SED_COMMAND_ENDS.includes(script[state.pos])) sedFail(state, "unknown option to `s'");
-  return { name: 's', regex, replacement, global, print };
+  return { name: 's', regex, replacement, global, print, occurrence };
 }
 
 function sedParse(script) {
@@ -211,6 +219,7 @@ function sedSubstitute(command, pattern) {
   let copied = 0;
   let changed = false;
   let nonEmptyEnd = -1;
+  let seen = 0;
   for (;;) {
     const match = regex.exec(pattern);
     if (!match) break;
@@ -218,6 +227,13 @@ function sedSubstitute(command, pattern) {
     if (empty && match.index === nonEmptyEnd) {
       if (match.index >= pattern.length) break;
       regex.lastIndex = match.index + 1;
+      continue;
+    }
+    if (++seen < command.occurrence) {
+      if (empty) {
+        if (match.index >= pattern.length) break;
+        regex.lastIndex = match.index + 1;
+      } else nonEmptyEnd = match.index + match[0].length;
       continue;
     }
     changed = true;

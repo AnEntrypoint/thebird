@@ -3483,6 +3483,19 @@ group("sed a: sed a text appends the text after the line, also with -n, and afte
   const wsa4 = await run(sh, "printf 'a\\nb\\n' | sed '1a x;1d'");
   check("sed prints the appended text even when d deletes the line (bash output, locale en_US.UTF-8)", wsa4.stdout === "a\nx;1d\nb\n" && wsa4.exitCode === 0 && wsa4.stderr === "", JSON.stringify([wsa4.stdout, wsa4.stderr, wsa4.exitCode]));
 });
+group("sed s occurrence: sed s/re/x/N replaces only the Nth match, and with g the N-th and every later one, as bash sed does", async () => {
+  const sh = await shell({});
+  const wso1 = await run(sh, "printf 'aXa\\n' | sed 's/a/X/2'");
+  check("sed s/a/X/2 replaces the second match only (bash output, locale en_US.UTF-8)", wso1.stdout === "aXX\n" && wso1.exitCode === 0 && wso1.stderr === "", JSON.stringify([wso1.stdout, wso1.stderr, wso1.exitCode]));
+  const wso2 = await run(sh, "printf 'aaaa\\n' | sed 's/a/X/3g'");
+  check("sed s/a/X/3g replaces the third match and every later one (bash output, locale en_US.UTF-8)", wso2.stdout === "aaXX\n" && wso2.exitCode === 0 && wso2.stderr === "", JSON.stringify([wso2.stdout, wso2.stderr, wso2.exitCode]));
+  const wso3 = await run(sh, "printf 'aaa\\n' | sed 's/a/X/1'");
+  check("sed s/a/X/1 replaces the first match only (bash output, locale en_US.UTF-8)", wso3.stdout === "Xaa\n" && wso3.exitCode === 0 && wso3.stderr === "", JSON.stringify([wso3.stdout, wso3.stderr, wso3.exitCode]));
+  const wso4 = await run(sh, "printf 'abab\\n' | sed 's/b/Y/2'");
+  check("sed s/b/Y/2 counts the matches in the line (bash output, locale en_US.UTF-8)", wso4.stdout === "abaY\n" && wso4.exitCode === 0 && wso4.stderr === "", JSON.stringify([wso4.stdout, wso4.stderr, wso4.exitCode]));
+  const wso5 = await run(sh, "printf 'a\\n' | sed 's/a/X/2'");
+  check("sed s/a/X/2 leaves a line with one match unchanged (bash output, locale en_US.UTF-8)", wso5.stdout === "a\n" && wso5.exitCode === 0 && wso5.stderr === "", JSON.stringify([wso5.stdout, wso5.stderr, wso5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
