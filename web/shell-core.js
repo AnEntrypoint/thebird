@@ -2077,12 +2077,14 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return ok('');
     },
     touch: ({ argv }) => {
-      if (!argv.length) return { code: 1, out: '', err: 'touch: missing file operand\n' };
+      const noCreate = argv.includes('-c') || argv.includes('--no-create');
+      const names = argv.filter((arg) => arg !== '-c' && arg !== '--no-create');
+      if (!names.length) return { code: 1, out: '', err: "touch: missing file operand\nTry 'touch --help' for more information.\n" };
       let err = '';
       let code = 0;
-      for (const name of argv) {
+      for (const name of names) {
         const path = resolvePath(name);
-        if (host.exists(path)) continue;
+        if (host.exists(path) || noCreate) continue;
         if (!host.stat(parentOf(path))?.dir) {
           err += "touch: cannot touch '" + name + "': No such file or directory\n";
           code = 1;
