@@ -6326,3 +6326,34 @@ Phase A was code and docs only. No build, test, witness or red check was run in 
 - What the two NOT-detected red checks mean: no witness row decides create-then-write against bash, because bash itself varies there (see the Witness fix entry). The creation and internal-read changes are kept as the logical-clock model, and they are not witnessed. This is a known gap, not a passing witness.
 - Push: made once, because every witness run passed (W1–W9, rc 0). Carries all local commits, including the two unwitnessed model changes named above.
 - -N stat values from bash 5.3.9 on this host (the bash rule is mtime later than atime at nanosecond resolution): create `atime=2026-11-20 15:31:04.235004118 mtime=2026-11-20 15:31:04.236026644`; read leaves mtime unchanged and moves atime to `…04.243004298`; append moves mtime to `…04.247004387`. The `-N` answer for create-then-write is not stable across runs (see Witness fix). The stored rows use the read-then-append-after-sleep case, which bash answers `modified` 40 of 40.
+
+### Round: removed claims (creation, internal read), a helper merge, and the stray ]] fix
+
+- C1 `19eee49`, creation claim removed: `createRedirect` and its two calls are gone; a redirect that creates a file is written with `writeRedirect`, like any write. Why: the claim that a file created by a redirect is fresh after its write has no deterministic bash witness (bash gives fresh in quiet runs and modified under load). Red check (mutation, to run in Phase B): the first creation site writes with `host.write` (no tick). Expected: no witness row fails, because the claim is removed. This is the confirmation that no row depends on it.
+- C2 `66d1530`, internal-read claim removed: the `tee` append and the redirect flush read prior content with `readFileText`, as before. The internal read only changed behaviour through the removed creation path. Red check (mutation): the flush reads with `host.read` (no tick). Expected: no row fails, for the same reason as C1.
+- C3 `cca0d9a`, helper merged: `noteRead` had one caller, so its body moved into `readFileText`. Behaviour unchanged. Red check (mutation): the access tick set to 0 in `readFileText`. Witness: the permission group (the `-N` rows) must fail.
+- C6 `3642f1f` (code) and `7782cde` (witness rows from bash): `]]` at the start of a command is `syntax error near unexpected token \`]]'`, as bash reports it; `]]` as an argument (`echo x ]]`, `[[ a ]] && echo ok ]]`) is an ordinary word. Witness group: `stray ]] at the start of a command…` (8 rows). Red check (mutation): the `]]` test replaced by a different word, so the error is never raised. Witness: the stray group must fail.
+- C7 `b701c81` (code) and `be352ec` (witness rows from bash): a word left after a compound command (`[[ a ]] b`, `(echo) b`, `{ echo; } b`, `if …; fi b`) is `syntax error near unexpected token \`b'`, as bash reports it. Before: the generic `syntax error: unexpected 'b'` message, which bash does not print. Found when the stray `]]` row `[[ a ]] ]]` failed in the first window (PID stopped by PID). Witness group: `a word after a compound command…` (4 rows). Red check (mutation): the generic message put back. Witness: the leftover group must fail.
+- Dedup and YAGNI pass on the code touched: `createRedirect` removed (single caller, no claim left); `noteRead` merged (single caller); the generic leftover-word branch removed (replaced by the shared `nearToken`).
+
+#### Ranked remaining list, from current source and the ledger (status as of this round)
+
+1. stray `]]` outside `[[`: DONE in C6 and C7 (this round).
+2. `"${NAME[@]}"` in double quotes joins elements with a space, where bash keeps them separate words: OPEN, reachable (next top row; not taken this round).
+3. `find -exec … +`: OPEN, not re-verified; reachable.
+4. nested backquote error prefix: OPEN, unverified; reachable (probe needed).
+5. `expr` with more than three words (operator precedence): OPEN, reachable (known gap).
+6. `sort -k`, `sort -t`, `uniq -d`, `uniq -u`, `cut -c`, `cut -b`, multi-file headers for `head`/`tail`, locale collation for `sort`: OPEN, reachable (known gaps, one row each).
+7. `realpath -m`, `-e`, `-s`: OPEN, reachable (known gap).
+8. `stat -f`: OPEN, reachable (known gap).
+9. `cp -r` and `mv` of a directory: OPEN, the recorded cause ("the host has no way to list a directory tree") needs re-checking, because `host.list` exists in the stat layout code.
+10. `touch` does not update times; `-a` and `-c`: OPEN, blocked: the host has no time setter; changing it needs a txiki C change and a WASM rebuild, and emscripten is not available here.
+11. `-O` and `-G` on a file another user owns: BLOCKED on the same host change as 10 (owner bits are not in the host stat).
+12. `diff` minimal script choice differs from GNU in some cases: OPEN, reachable but algorithmic (large).
+13. `~` with HOME unset and `~name`: OWNER DECISION (policy for a shell with no user database).
+14. `$HOME` empty and `$ENV` exported-only: OWNER DECISION (design).
+15. Ctrl-C on the Pages site without cross-origin isolation: OWNER DECISION (accept the restart or isolate with a service worker).
+16. Browser witness and page runs: BLOCKED (browser work only through playwriter; not run in this round).
+17. `Date.now()` durations in the witness and host-check (ledger items 3 and 4): OPEN, reachable; not taken this round.
+
+Taken this round: item 1 (stray `]]`). Items 2 to 17 are listed, not taken.
