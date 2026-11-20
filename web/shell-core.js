@@ -2190,31 +2190,52 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       if (!info?.link) return { code: 1, out: '', err: '' };
       return ok(host.readlink(path) + '\n');
     },
-    find: ({ argv }) => {
+    find: async ({ argv, signal }) => {
       let i = 0;
       const roots = [];
       while (i < argv.length && !argv[i].startsWith('-')) roots.push(argv[i++]);
       if (!roots.length) roots.push('.');
       const predicates = [];
       let maxDepth = Infinity;
-      for (; i < argv.length; i += 2) {
-        const [flag, value] = [argv[i], argv[i + 1] ?? ''];
+      let execArgv = null;
+      while (i < argv.length) {
+        const flag = argv[i];
+        const value = argv[i + 1] ?? '';
+        if (flag === '-empty') {
+          predicates.push((_name, info, path) => (info.dir ? host.list(path).length === 0 : info.size === 0));
+          i += 1;
+          continue;
+        }
+        if (flag === '-exec') {
+          const end = argv.indexOf(';', i + 1);
+          if (end === -1) throw new Error("find: missing argument to `-exec'");
+          execArgv = argv.slice(i + 1, end);
+          i = end + 1;
+          continue;
+        }
         if (flag === '-name') predicates.push((name) => globRegExp(value).test(name));
         else if (flag === '-iname') predicates.push((name) => globRegExp(value, true).test(name));
         else if (flag === '-type') predicates.push((_name, info) => (value === 'd' ? info.dir : !info.dir));
         else if (flag === '-maxdepth') maxDepth = Number(value);
         else throw new Error(`find: unknown predicate '${flag}'`);
+        i += 2;
       }
       let out = '';
       let err = '';
       let code = 0;
-      const visit = (display, path, depth = 0) => {
+      const visit = async (display, path, depth = 0) => {
         const info = host.stat(path);
         if (!info) return;
         const base = display.slice(display.lastIndexOf('/') + 1) || display;
-        if (predicates.every((test) => test(base, info))) out += display + '\n';
+        if (predicates.every((test) => test(base, info, path))) {
+          if (execArgv) {
+            const result = await dispatch([execArgv[0], ...execArgv.slice(1).map((arg) => arg.split('{}').join(display))], '', signal);
+            out += result.out;
+            err += result.err;
+          } else out += display + '\n';
+        }
         if (info.dir && depth < maxDepth) {
-          for (const entry of host.list(path).sort()) visit(`${display.replace(/\/$/, '')}/${entry}`, `${path === '/' ? '' : path}/${entry}`);
+          for (const entry of host.list(path).sort()) await visit(`${display.replace(/\/$/, '')}/${entry}`, `${path === '/' ? '' : path}/${entry}`);
         }
       };
       for (const root of roots) {
@@ -2222,7 +2243,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         if (!host.stat(path)) {
           err += `find: '${root}': No such file or directory\n`;
           code = 1;
-        } else visit(root, path);
+        } else await visit(root, path);
       }
       return { code, out, err };
     },

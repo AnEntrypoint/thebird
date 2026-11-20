@@ -3630,6 +3630,24 @@ group('tar -z: a tar stream split across two gzip members is read as one archive
   check('tar -z: tar -xzf extracts the members of both gzip members (GNU tar output)', extracted.stdout === 'rc=0\nalpha\nbeta\n' && extracted.stderr === '', JSON.stringify([extracted.stdout, extracted.stderr]));
 });
 
+group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
+  const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
+  const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
+  check('find: -empty lists the empty file and the empty directory (GNU find output)', empty.stdout === './empty.txt\n./sub\nrc=0\n' && empty.stderr === '', JSON.stringify([empty.stdout, empty.stderr]));
+  const exec = await run(sh, "cd /workspace/fe && find . -name full.txt -exec cat {} \\; ; echo rc=$?");
+  check('find: -exec runs the command for each match, with {} replaced by the path (GNU find output)', exec.stdout === 'x\nrc=0\n' && exec.stderr === '', JSON.stringify([exec.stdout, exec.stderr]));
+  const replaced = await run(sh, "cd /workspace/fe && find . -name full.txt -exec echo got {} done \\; ; echo rc=$?");
+  check('find: -exec with a {} inside a longer argument prints the path there (GNU find output)', replaced.stdout === 'got ./full.txt done\nrc=0\n' && replaced.stderr === '', JSON.stringify([replaced.stdout, replaced.stderr]));
+  const failing = await run(sh, "cd /workspace/fe && find . -name full.txt -exec false \\; ; echo rc=$?");
+  check('find: a failing -exec command does not change find\'s exit status, as GNU find does', failing.stdout === 'rc=0\n' && failing.stderr === '', JSON.stringify([failing.stdout, failing.stderr]));
+  const insert = await run(sh, "printf 'a\\nb\\n' | sed '1i top'; echo rc=$?");
+  check('sed: the i command prints its text before the line (GNU sed output)', insert.stdout === 'top\na\nb\nrc=0\n' && insert.stderr === '', JSON.stringify([insert.stdout, insert.stderr]));
+  const lines = await run(sh, "printf 'a\\nb\\n' | sed '$='; echo rc=$?");
+  check('sed: the = command prints the line number before the last line (GNU sed output)', lines.stdout === 'a\n2\nb\nrc=0\n' && lines.stderr === '', JSON.stringify([lines.stdout, lines.stderr]));
+  const quiet = await run(sh, "printf 'a\\nb\\n' | sed -n '$='; echo rc=$?");
+  check('sed: with -n, the = command still prints the line count (GNU sed output)', quiet.stdout === '2\nrc=0\n' && quiet.stderr === '', JSON.stringify([quiet.stdout, quiet.stderr]));
+});
+
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

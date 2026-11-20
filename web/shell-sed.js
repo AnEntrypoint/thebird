@@ -162,7 +162,7 @@ function sedParse(script) {
     }
     const letter = script[state.pos];
     let command;
-    if (letter === 'p' || letter === 'd') {
+    if (letter === 'p' || letter === 'd' || letter === '=') {
       state.pos++;
       sedSkipBlanks(state);
       if (state.pos < script.length && !SED_COMMAND_ENDS.includes(script[state.pos])) sedFail(state, 'extra characters after command');
@@ -173,12 +173,12 @@ function sedParse(script) {
     } else if (letter === 'y') {
       state.pos++;
       command = sedParseTransliterate(state);
-    } else if (letter === 'a') {
+    } else if (letter === 'a' || letter === 'i') {
       state.pos++;
       sedSkipBlanks(state);
       let text = '';
       while (state.pos < script.length && script[state.pos] !== '\n') text += script[state.pos++];
-      command = { name: 'a', text };
+      command = { name: letter, text };
     } else sedFail(state, `unknown command: '${letter}'`);
     command.start = start;
     command.end = end;
@@ -278,6 +278,8 @@ function sedRunStream(commands, lines, quiet) {
       const command = commands[c];
       if (!sedSelects(command, ranges[c], pattern, lineNumber, isLast)) continue;
       if (command.name === 'p') printed.push(pattern);
+      else if (command.name === 'i') printed.push(command.text);
+      else if (command.name === '=') printed.push(String(lineNumber));
       else if (command.name === 'a') queued.push(command.text);
       else if (command.name === 'y') pattern = [...pattern].map((c) => command.map.get(c) ?? c).join('');
       else if (command.name === 'd') {
