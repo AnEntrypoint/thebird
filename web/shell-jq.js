@@ -10,6 +10,30 @@ function jqVariable(name) {
   if (!jqVariables.has(name)) throw jqFail('$' + name + ' is not defined');
   return jqVariables.get(name);
 }
+const jqGlobalVariables = new Set(['ENV', '__loc__']);
+
+function jqUnboundVariables(program, bound) {
+  const found = [];
+  const visit = (node) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+    } else if (node && typeof node === 'object') {
+      if (node.kind === 'var' && !bound.has(node.name) && !jqGlobalVariables.has(node.name)) found.push(node);
+      for (const value of Object.values(node)) visit(value);
+    }
+  };
+  visit(program);
+  return found.sort((a, b) => a.pos - b.pos);
+}
+
+function jqCompileMessage(node, filter) {
+  const before = filter.slice(0, node.pos);
+  const line = before.split('\n').length;
+  const column = node.pos - before.lastIndexOf('\n');
+  const text = filter.split('\n')[line - 1];
+  return `jq: error: $${node.name} is not defined at <top-level>, line ${line}, column ${column}:\n    ${text}\n    ${' '.repeat(column - 1)}${'^'.repeat(node.name.length + 1)}\n`;
+}
+
 const jqLongOptions = new Map([['--raw-output', 'r'], ['--compact-output', 'c'], ['--null-input', 'n'], ['--slurp', 's'], ['--exit-status', 'e'], ['--sort-keys', 'S']]);
 const jqBuiltinArities = new Map([
   ['empty', [0]],
@@ -127,7 +151,7 @@ function jqTokenize(text) {
       }
     } else if (c === '$' && jqIdentifier.test(text.slice(i + 1))) {
       const name = jqIdentifier.exec(text.slice(i + 1))[0];
-      tokens.push({ type: 'var', value: name });
+      tokens.push({ type: 'var', value: name, pos: i });
       i += 1 + name.length;
     } else if (jqIdentifier.test(rest)) {
       const word = jqIdentifier.exec(rest)[0];
@@ -315,7 +339,7 @@ function jqParse(text) {
     }
     if (token.type === 'var') {
       pos++;
-      return { kind: 'var', name: token.value };
+      return { kind: 'var', name: token.value, pos: token.pos };
     }
     if (isOp('(')) {
       pos++;
@@ -991,6 +1015,11 @@ export function runJq(argv, ctx) {
   } catch (error) {
     if (!error || !error.jqSyntax) throw error;
     return { code: 3, out: '', err: `jq: error: ${error.message}\njq: 1 compile error\n` };
+  }
+
+  const unbound = jqUnboundVariables(program, namedArgs);
+  if (unbound.length) {
+    return { code: 3, out: '', err: unbound.map((node) => jqCompileMessage(node, filter)).join('') + `jq: ${unbound.length} compile error${unbound.length === 1 ? '' : 's'}\n` };
   }
 
   let out = '';

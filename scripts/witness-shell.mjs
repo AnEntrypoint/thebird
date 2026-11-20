@@ -368,6 +368,22 @@ group('tar: create, list, extract and errors', async () => {
   check('tar: an archive written to stdout lists from stdin', piped.stdout === 'a.txt\n', JSON.stringify(piped.stdout));
 });
 
+group('jq: an unbound variable is a compile error with status 3, reported as jq 1.8.2 reports it', async () => {
+  const sh = await shell({});
+  const bare = await run(sh, "jq -n '$x'; echo rc=$?");
+  check('jq: $x with no binding is a compile error at column 1 (jq 1.8.2 output)', bare.stdout === 'rc=3\n' && bare.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x\n    ^^\njq: 1 compile error\n', JSON.stringify(bare));
+  const column = await run(sh, "jq -n '1 + $x'; echo rc=$?");
+  check('jq: an unbound variable reports its column in the filter (jq 1.8.2 output)', column.stdout === 'rc=3\n' && column.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 5:\n    1 + $x\n        ^^\njq: 1 compile error\n', JSON.stringify(column));
+  const two = await run(sh, "jq -n '$x, $y'; echo rc=$?");
+  check('jq: two unbound variables are both reported, then the count (jq 1.8.2 output)', two.stdout === 'rc=3\n' && two.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x, $y\n    ^^\njq: error: $y is not defined at <top-level>, line 1, column 5:\n    $x, $y\n        ^^\njq: 2 compile errors\n', JSON.stringify(two));
+  const long = await run(sh, "jq -n '$longname'; echo rc=$?");
+  check('jq: the caret run is as long as the variable name (jq 1.8.2 output)', long.stdout === 'rc=3\n' && long.stderr === 'jq: error: $longname is not defined at <top-level>, line 1, column 1:\n    $longname\n    ^^^^^^^^^\njq: 1 compile error\n', JSON.stringify(long));
+  const lines = await run(sh, "jq -n '1 |\n  $z'; echo rc=$?");
+  check('jq: a variable on a later line reports that line and column (jq 1.8.2 output)', lines.stdout === 'rc=3\n' && lines.stderr === 'jq: error: $z is not defined at <top-level>, line 2, column 3:\n      $z\n      ^^\njq: 1 compile error\n', JSON.stringify(lines));
+  const bound = await run(sh, "jq -n --arg x 1 '$x'; echo rc=$?");
+  check('jq: a variable bound by --arg is not a compile error (jq 1.8.2 output)', bound.stdout === '"1"\nrc=0\n' && bound.stderr === '', JSON.stringify(bound));
+});
+
 group('jq: filters, output and errors', async () => {
   const sh = await shell({
     '/workspace/a.json': '{"name":"x","n":2,"items":[1,2,3],"people":[{"name":"ann","age":30},{"name":"bob","age":20}]}',
