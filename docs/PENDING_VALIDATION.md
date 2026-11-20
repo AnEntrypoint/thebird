@@ -6115,3 +6115,12 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - scripts/witness.mjs (the browser witness that P-02's wording edit touched): not run. It starts its own Chromium through `scripts/browser-driver.mjs`, and the rule for this run is that browser work goes through playwriter only, so it was not started here. Its run needs a playwriter-based route and is a separate step.
 - The txiki path for touch (the mtime limit): see the P-01 entry above; the cause is the missing utime call in `scripts/txiki/browser/fs-browser.c`.
 
+### Defect fix J-env: jq reads $ENV as the shell's environment object
+
+- Limit recorded in the jq entry above: jq 1.8.2 accepts `$ENV` and prints the environment as an object, while shell core rejected `$ENV` at run time with rc 5. Probe against jq 1.8.2 on this machine: `export FOO=bar; jq -n -r '$ENV.FOO'` prints `bar`; `jq -n '$ENV | type'` prints `"object"`; `$ENV.NOPE` prints `null`; `--arg ENV x` does not replace `$ENV` (checked with `$ENV.FOO`, since printing the whole object would show the full environment).
+- Files: `web/shell-core.js` (the `jq` command passes `environment`, an object of the exported variables that have values, built the same way `env` builds its set), `web/shell-jq.js` (`runJq` binds `ENV` after the `--arg` names, so `--arg ENV` cannot replace it), `scripts/witness-shell.mjs` (group "jq: $ENV is the environment of the shell as an object, and --arg ENV does not replace it, as jq 1.8.2 does", five rows, expected text from jq 1.8.2).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1708 FAIL=0` (1703 before, plus five rows).
+- Red check: the `ENV` binding removed from `runJq` (`jqVariables = new Map([...namedArgs])`); witness `RESULT PASS=1703 FAIL=5` (all five rows); restored from a copy, `cmp` matched; green again `RESULT PASS=1708 FAIL=0`.
+- Still not covered: the environment values come from the shell's exported variables only, so a variable the host sets but the shell did not export (`LANG` is the one the shell treats as inherited) follows the shell's own rules, as `env` does. The witness does not compare the full object, since its contents depend on the host.
+- Commit: 35afbac (lanmower, no trailers).
+
