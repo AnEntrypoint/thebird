@@ -4281,3 +4281,30 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the gate wait, readings 1 to 8 (about three and a half minutes). The push took about three seconds. Nothing was stopped.
 
+### Change set 30bt: `<&N` and `0<&N` dup an input descriptor as bash does (a file opened with `N<f` or `exec N<f` is read, a closed or write-only one gives empty input), `<&-` closes stdin with the rest of the text as an argument, `<&0` keeps stdin, `<&word` is an ambiguous redirect, and an empty dup word reports its own quoted text or its fd number as `>&` does
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape, with an empty regular file as stdin (read-only, so `echo e >&0` is a write error, as it is with a read-only stdin), stdout, status and stderr compared. Probed shapes, bash output:
+- `echo hi > f; exec 3<f; cat <&3; echo st=$?` and `echo hi > f; cat 3<f <&3`: `hi`, status 0. `echo hi > f; exec 3<f; cat 0<&3`: the same.
+- `cat <&3` with fd 3 closed: status 1, `bash: line 1: 3: Bad file descriptor`. `echo x <&3`: the same message and status 1 (the dup is checked whether or not the command reads).
+- `cat <&0`: status 0, nothing (stdin is empty). `echo x <&-`: `x`, status 0 (a command that does not read is not affected by a closed stdin). `cat <&-`: status 0, nothing. `echo x <&-1`: `x 1`, status 0 (the close takes `-` and `1` is an argument).
+- `echo x 1<&2`: `x` on stderr, status 0. `echo x 2<&1`: `x` on stdout, status 0. `echo x 1<&0` and `echo e >&0`: status 1, `bash: line 1: echo: write error: Bad file descriptor` (stdin is read-only). `echo x 1<&-`: status 1, the same write error.
+- `cat <&x` and `v="a b"; cat <&$v`: status 1, `bash: line 1: x: ambiguous redirect` and `bash: line 1: $v: ambiguous redirect`, the command does not run.
+- `exec 3>g; cat <&3`: status 0, nothing (a write-only descriptor is read as empty input).
+- `echo hi > f; cat 0<&3 3<f` and `echo hi > f; cat <&3 3<f`: status 1, `3: Bad file descriptor`: the dup is checked in order, so a file opened after it is not yet open.
+- `echo x 2>&""` and `echo x 3>&""`: status 1, `bash: line 1: 2: Bad file descriptor` and `3: Bad file descriptor`, the fd number, not the word. `echo x <&""`: status 1, `bash: line 1: "": Bad file descriptor`, the quoted word (the same as `>&""` in 30br, which this change set now matches).
+- `echo hi > f; exec 3<f; exec 3<&-; cat <&3`: status 1, `3: Bad file descriptor`.
+- `echo hi > f; exec 3<f; cat <&3 3>&-` and `echo hi > f; cat 3<f <&3 3<&-`: `hi`, status 0. The input dup happens before the close in the same command, because the redirects apply left to right.
+- `echo hi > f; cat 0<f <&0`: `hi`, status 0 (`<&0` keeps the input that `0<f` set).
+
+Not probed or not pinned: `exec 3<<EOF` followed by `<&3` (a heredoc on fd 3 is still read as empty here, as before this change set); `cat <&3 >&0`, where bash prints cat's own message `cat: -: Bad file descriptor` and this shell prints the write-error text, so no row pins it.
+
+What changed in the shell: `<&`, `0<&`, `1<&`, `2<&` and `N<&` for N in 3 to 9 are operators (before the `1<` and `N<` operators, so `N<&` is not read as `N<` then `&`), and join `DUP_OPS`, so the dup classifier `dupOf` and the open pass and the output routing handle them with the same rules as `>&`. The output table starts with fd 0 read-only (stdin is a write error, as in bash), and fd 0 is open at the start of the open pass, so `>&0` is valid. `<&-` closes fd 0 and a later `>&0` in the same command is a bad descriptor. `N<f` and `exec N<f` store a read target `{ read: path }` instead of a plain read-only flag, so `<&N` can read the file; a write to it is still a write error. Input dups are applied in `resolveInput` (compound commands) and in the `runCommand` loop, and per-command descriptors 3 to 9 are applied in the same left-to-right loop, so a dup can read a descriptor opened earlier in the same command and a close later in the command does not affect it. An empty word on any dup operator is a bad descriptor: named by its fd number when the operator has one (`2>&`, `3<&`), and by its quoted word when it does not (`>&`, `<&`).
+
+Where this shell\'s text differs from bash: a write error caused by a read-only stdin or fd 1 uses this shell\'s prefix `thebird: write error: Bad file descriptor` (as in 30bp and 30bs). The stderr expectations are bash\'s text with the `bash: line 1:` prefix replaced by `thebird:`, and the same for the quoted empty-word message, which now matches bash after that replacement.
+
+Known gaps this change set does not fix (listed in the REPORT): a missing `N<f` after a failed `<&N` in the same command is reported as the missing file, because the missing-input check runs before the open pass, where bash checks in order; a file read through `<&N` is read whole each time, so `exec 3<f; cat <&3; cat <&3` prints the file twice, where bash prints it once (the second read starts at the end of the file).
+
+Witness: group `redirects: <&N and 0<&N dup an input descriptor as bash does, <&- closes stdin, <&0 keeps it, and an input dup of a non-numeric word is ambiguous`, 27 rows from bash output (the stdin is an empty read-only file). Final: `RESULT PASS=1276 FAIL=0` (green, wall 1.7 s).
+
+Red check: the table lookup for `<&N` replaced by `null`, so every shape that reads a descriptor gets empty input. Restored from a copy of the good core, confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1271 FAIL=5`, the five rows that read fd 3 by `<&3` or `0<&3`. `git status` shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+
