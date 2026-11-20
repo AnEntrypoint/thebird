@@ -3803,3 +3803,15 @@ Witness: group `realpath: -m allows missing components with no check, and the la
 Red check: the check skipped for `-m` removed (every mode checks), restored from a backup and confirmed with `cmp`: `RESULT PASS=1070 FAIL=10`, the ten `-m` rows red that GNU resolves without an error. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
 
 Gap still open, with its GNU evidence: `-L` (logical). It is not a lexical pre-pass: GNU checks the components as written, then resolves. `realpath -L dl2/x/..` is ENOENT (`x` is missing), `realpath -L -m dl2/x/../y` resolves to `sub/deep/y`, and `realpath -L dl2/..` resolves to the working directory. Reopen: a second change set that does the check on the written components and pops `..` on the logical path. `-z`, `-q` and `--relative-to` are not implemented.
+
+### Change set 30bg: stat with no -c names a symbolic link as name -> target, unquoted, as GNU stat does (correction to 30bc)
+
+Cause of the error in 30bc: the GNU shapes in 30bc were read from the plain `stat` on this PATH, which is uutils coreutils 0.10.0, not GNU. GNU coreutils 9.7 is installed as `/bin/gnustat` (and `/bin/gnurealpath`, `/bin/gnuexpr`, and so on). uutils quotes both parts of a symbolic link's default `File:` line (`'dl.txt' -> 'nosuch'`); GNU does not. The other lines of 30bc agree with GNU, and they were checked again against `/bin/gnustat` in this change set.
+
+GNU probes (`/bin/gnustat`, default output, `cat -A`): a link to `a b` is `lnk x -> a b`; a link to `it's` is `l2 -> it's`; a link to `a"b` is `l3 -> a"b`; a link to a name with a control character prints the raw byte (`l4 -> x^Ay`). A regular file with an apostrophe or a double quote is printed plain (`File: it's`). `stat -L` on the same link prints the followed name plain (`File: lnk x`). So the default `File:` line is never quoted.
+
+What changed in the shell: the `File:` line of a symbolic link is the name, then ` -> `, then the target, with no quoting. The `%N` format for `stat -c` is unchanged, and its quoting was checked against `/bin/gnustat -c %N` on names with a space, an apostrophe, a double quote, a tab and a control character: GNU and uutils agree on those, so the `%N` rows stand.
+
+Witness: the link row of 30bc now expects `  File: /st/l -> /st/t` (the quoted form was the wrong one). Final: `RESULT PASS=1080 FAIL=0`.
+
+Red check: the link line put back to the quoted `%N` form, restored from a backup and confirmed with `cmp`: `RESULT PASS=1079 FAIL=1`, the link row red. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.

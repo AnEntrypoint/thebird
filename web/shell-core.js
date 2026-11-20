@@ -1487,7 +1487,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const base = real === '/' ? '' : real;
     const subdirs = dir ? host.list(real).filter((child) => host.lstat(base + '/' + child)?.link !== true && host.stat(base + '/' + child)?.dir === true).length : 0;
     const links = dir ? 2 + subdirs : 1;
-    const fileName = link ? expandStat('%N', name, info, host.readlink(real)) : name;
+    const fileName = link ? name + ' -> ' + host.readlink(real) : name;
     const time = '1970-01-01 00:00:00.000000000 +0000';
     return [
       '  File: ' + fileName,
