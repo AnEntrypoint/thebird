@@ -3419,10 +3419,15 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (path !== NULL_DEVICE) writeFileText(path, text);
   }
 
+  function createRedirect(path) {
+    if (host.exists(path)) writeRedirect(path, '');
+    else host.write(path, '');
+  }
+
   async function openFile(redirect, sink) {
     const path = await wordPath(redirect.target, sink);
     const append = redirect.op.endsWith('>>');
-    if (path !== NULL_DEVICE && (!append || !host.exists(path))) writeRedirect(path, '');
+    if (path !== NULL_DEVICE && (!append || !host.exists(path))) createRedirect(path);
     return path;
   }
 
@@ -3492,7 +3497,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         if (failure) return failAt(redirects, index, failure, sink);
         if (op === '1<>') {
           const path = await wordPath(redirect.target, sink);
-          if (path !== NULL_DEVICE && !host.exists(path)) writeRedirect(path, '');
+          if (path !== NULL_DEVICE && !host.exists(path)) createRedirect(path);
           open.add(1);
         } else {
           await openFile(redirect, sink);
