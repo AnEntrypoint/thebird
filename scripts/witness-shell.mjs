@@ -3909,11 +3909,11 @@ group('permission tests: -r -w -x -O -G -N give bash output for each of these in
   ["mkdir d; chmod 755 d; [[ -x d ]] && echo dx; [[ -w d ]] && echo dw; chmod 500 d; [[ -w d ]] || echo dnw", "dx\ndw\ndnw\n", "", 0],
   ["[[ -r missing ]] || echo none; [ -O missing ]; echo rc=$?; [ -G missing ]; echo rc=$?", "none\nrc=1\nrc=1\n", "", 0],
   ["printf x > f; [[ -O f ]] && echo owner; [[ -G f ]] && echo group; [ -O f ] && echo O2", "owner\ngroup\nO2\n", "", 0],
-  ["printf a > f; [[ -N f ]] || echo fresh; cat f > /dev/null; printf b >> f; [[ -N f ]] && echo modified; [[ -N missing ]] || echo nomissing", "nomissing\n", "", 0],
   ["printf a > f; cat f > /dev/null; [[ -N f ]] || echo readnotmod", "readnotmod\n", "", 0],
+  ["printf a > f; cat f > /dev/null; sleep 0.05; printf b >> f; [[ -N f ]] && echo modified; [[ -N missing ]] || echo nomissing", "modified\nnomissing\n", "", 0],
+  ["printf a > f; ln -s f l; cat l > /dev/null; sleep 0.05; printf b >> f; [[ -N l ]] && echo modified; [[ -N f ]] && echo fmod", "modified\nfmod\n", "", 0],
   ["printf x > f; chmod 000 f; [[ -r f ]] || echo unread; chmod 400 f; [[ -r f ]] && echo readable", "unread\nreadable\n", "", 0],
   ["mkdir -p a/b; printf x > a/b/f; chmod 644 a/b/f; chmod 600 a; [[ -r a/b/f ]] || echo blocked; chmod 700 a", "blocked\n", "", 0],
-  ["printf a > f; ln -s f l; cat l > /dev/null; printf b >> f; [[ -N l ]] && echo modified; [[ -N f ]] && echo fmod", "modified\nfmod\n", "", 0],
   ];
   for (const [script, stdout, stderr, status] of cases) {
     const sh = await shell({});
