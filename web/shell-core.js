@@ -21,6 +21,7 @@ const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWit
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+const INDEXED_ASSIGN = /^([A-Za-z_][A-Za-z0-9_]*)\[([^\]]*)\]=/;
 class TestFailure extends Error {}
 
 const testInteger = (text) => {
@@ -439,6 +440,14 @@ export function tokenize(src, firstLine = 1, substitution = false) {
 const isWord = (token, text) => token?.parts?.length === 1 && token.parts[0].k === 'lit' && token.parts[0].s === text;
 
 const isAssignment = (parts) => parts[0]?.k === 'lit' && ASSIGNMENT.test(parts[0].s);
+const isArrayAssignment = (parts) => parts.length === 1 && parts[0].k === 'lit' && /^[A-Za-z_][A-Za-z0-9_]*=$/.test(parts[0].s);
+const isIndexedAssignment = (parts) => parts[0]?.k === 'lit' && INDEXED_ASSIGN.test(parts[0].s);
+
+function parseIndexedAssignment(parts) {
+  const [head, name, index] = INDEXED_ASSIGN.exec(parts[0].s);
+  const rest = parts[0].s.slice(head.length);
+  return { name, index: [{ k: 'lit', s: index }], value: rest ? [{ k: 'lit', s: rest }, ...parts.slice(1)] : parts.slice(1) };
+}
 
 function parseAssignment(parts) {
   const [, name] = ASSIGNMENT.exec(parts[0].s);
@@ -547,6 +556,23 @@ function parse(tokens, partial = false) {
     return { type: 'cond', expr, line: open.line, redirects: parseTrailingRedirects() };
   };
 
+  const parseArrayValue = () => {
+    pos += 2;
+    const words = [];
+    for (;;) {
+      const token = tokens[pos];
+      if (!token) throw bashSyntaxError('syntax error: unexpected end of file', { eof: true });
+      if (token.op === ')') {
+        pos++;
+        return words;
+      }
+      if (!token.parts) {
+        if (!token.newline) throw nearToken(token);
+      } else words.push(token.parts);
+      pos++;
+    }
+  };
+
   const parseSimple = () => {
     if (isWord(tokens[pos], '[[')) return parseConditional();
     const first = tokens[pos];
@@ -554,9 +580,16 @@ function parse(tokens, partial = false) {
     const assigns = [];
     const words = [];
     const redirects = [];
+    let arrayAt;
     while (pos < tokens.length) {
       const token = tokens[pos];
-      if (token.parts && !words.length && isAssignment(token.parts)) {
+      if (token.parts && !words.length && isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(') {
+        arrayAt = pos + 1;
+        assigns.push({ name: token.parts[0].s.slice(0, -1), array: parseArrayValue() });
+      } else if (token.parts && !words.length && isIndexedAssignment(token.parts)) {
+        assigns.push(parseIndexedAssignment(token.parts));
+        pos++;
+      } else if (token.parts && !words.length && isAssignment(token.parts)) {
         assigns.push(parseAssignment(token.parts));
         pos++;
       } else if (token.parts) {
@@ -565,6 +598,7 @@ function parse(tokens, partial = false) {
       } else if (REDIRECTS.has(token.op)) redirects.push(parseRedirect());
       else break;
     }
+    if (arrayAt !== undefined && words.length) throw nearToken(tokens[arrayAt]);
     if (!assigns.length && !words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
     return { type: 'simple', assigns, words, redirects, line };
   };
@@ -1935,10 +1969,26 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const modes = new Map(saved?.modes ?? []);
   const arrays = new Map();
   const arrayIndex = (part) => (/^\d+$/.test(part.index) ? Number(part.index) : evaluateArithmetic(part.index, (name) => variableValue(name) ?? '', setVariable));
+  const arrayItems = (name) => {
+    const items = arrays.get(name);
+    return items ? [...items.keys()].sort((a, b) => a - b).map((key) => items.get(key)) : [];
+  };
+  const arrayElement = (name, index) => {
+    const items = arrays.get(name);
+    if (!items) return undefined;
+    return items.get(index < 0 ? Math.max(...items.keys()) + 1 + index : index);
+  };
   const arrayLength = (part) => {
-    const items = arrays.get(part.name) ?? [];
-    if (part.index === '@' || part.index === '*') return items.length;
-    return characterCount(items[arrayIndex(part)] ?? '', shellLocale);
+    if (part.index === '@' || part.index === '*') return arrayItems(part.name).length;
+    return characterCount(arrayElement(part.name, arrayIndex(part)) ?? '', shellLocale);
+  };
+  const setArray = (name, items) => arrays.set(name, new Map(items.map((value, i) => [i, value])));
+  const setElement = (name, index, value) => {
+    if (!arrays.has(name)) {
+      arrays.set(name, new Map(vars.has(name) ? [[0, vars.get(name)]] : []));
+      vars.delete(name);
+    }
+    arrays.get(name).set(index, value);
   };
   const fileTicks = new Map();
   let fileClock = 0;
@@ -3210,6 +3260,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   };
 
   const setVariable = (name, value, quiet = false) => {
+    if (arrays.has(name)) return setElement(name, 0, value);
     const frame = frames.at(-1);
     if (frame?.has(name)) frame.set(name, value);
     else vars.set(name, value);
@@ -3227,7 +3278,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
-      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name)[0] ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
+      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name).get(0) ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
       else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
@@ -3237,11 +3288,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   async function parameterText(part, sink) {
     if (part.index !== undefined) {
-      const items = arrays.get(part.name) ?? [];
-      if (part.index === '@' || part.index === '*') return items.join(' ');
-      return items[arrayIndex(part)] ?? '';
+      if (part.index === '@' || part.index === '*') return arrayItems(part.name).join(' ');
+      return arrayElement(part.name, arrayIndex(part)) ?? '';
     }
-    if (arrays.has(part.name)) return arrays.get(part.name)[0] ?? '';
+    if (arrays.has(part.name)) return arrays.get(part.name).get(0) ?? '';
     const value = variableValue(part.name);
     const unset = part.op?.startsWith(':') ? !value : value === undefined;
     if (part.op === null) return value ?? '';
@@ -3392,7 +3442,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     vars.set('LINENO', String(node.line));
     const argv = await expandWords(node.words, sink);
     const assigned = [];
-    for (const { name, value } of node.assigns) assigned.push([name, await expandText(value, sink)]);
+    for (const assign of node.assigns) {
+      if (assign.array) setArray(assign.name, await expandWords(assign.array, sink));
+      else if (assign.index) setElement(assign.name, arrayIndex({ index: await expandText(assign.index, sink) }), await expandText(assign.value, sink));
+      else assigned.push([assign.name, await expandText(assign.value, sink)]);
+    }
     const trace = xtrace ? traceLines(assigned, argv, await tracePrefix(sink)) : '';
     sink.err += trace;
     if (!argv.length) {
@@ -3949,7 +4003,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       try {
         const pattern = rightChars.map((ch) => (ch.q ? ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m) : ch.c)).join('');
         const match = new RegExp(pattern).exec(leftText);
-        arrays.set('BASH_REMATCH', match ? Array.from(match, (text) => text ?? '') : []);
+        arrays.set('BASH_REMATCH', new Map(match ? Array.from(match, (text, i) => [i, text ?? '']) : []));
         return match ? 0 : 1;
       } catch {
         sink.err += `[[: ${rightText}: invalid regular expression\n`;

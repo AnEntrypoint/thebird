@@ -3993,6 +3993,34 @@ group('permission tests read the host mode bits when the shell has no chmod for 
   }
 });
 
+group('indexed arrays: NAME=(…), NAME[i]=, element and count reads, and unquoted or joined expansion, with bash output (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["a=(one two three); echo \"${a[1]}\"", "two\n", "", 0],
+  ["a=(one two three); echo \"${#a[@]} ${#a[1]}\"", "3 3\n", "", 0],
+  ["a=(one two three); echo \"$a\"", "one\n", "", 0],
+  ["a=(x y); a[5]=z; echo \"${a[5]}\" \"${#a[@]}\"", "z 3\n", "", 0],
+  ["a=(1 2); a=9; echo \"${a[@]}\"", "9 2\n", "", 0],
+  ["a=(); echo \"${#a[@]}\"", "0\n", "", 0],
+  ["a=(a b); i=1; echo \"${a[i]}\"", "b\n", "", 0],
+  ["a=( \"x y\" z ); echo \"${a[0]}\" \"${a[1]}\"", "x y z\n", "", 0],
+  ["a=(p q); echo \"${a[*]}\"", "p q\n", "", 0],
+  ["a=(p q); echo ${a[@]}", "p q\n", "", 0],
+  ["a=(p q); echo ${a[1]} ${a[0]}", "q p\n", "", 0],
+  ["a=(p q) echo x", "x\n", "", 0],
+  ["a[2]=c; echo \"${#a[@]}\" \"${a[2]}\"", "1 c\n", "", 0],
+  ["a=(1 2); echo \"${a[-1]}\" \"${a[-2]}\"", "2 1\n", "", 0],
+  ["a=(3 4); n=0; a[n+1]=x; echo \"${a[@]}\"", "3 x\n", "", 0],
+  ["a=(); a[3]=d; echo \"${#a[@]}\"; echo \"${a[3]}\"", "1\nd\n", "", 0],
+  ["a=(7 8 9); echo \"${#a[1]}\" \"${a[2]}x\"", "1 9x\n", "", 0],
+  ["a=(1 2); echo \"${a[5]}\" \"${#a[5]}\"", " 0\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('array: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
