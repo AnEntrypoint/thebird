@@ -276,10 +276,28 @@ function tarInflate(input, start) {
 }
 
 function tarGunzip(bytes) {
-  if (bytes.length < 18) throw new Error('unexpected end of file');
-  if (bytes[2] !== 8) throw new Error('unknown compression method');
-  const flags = bytes[3];
-  let position = 10;
+  const parts = [];
+  let offset = 0;
+  do {
+    const member = tarGunzipMember(bytes, offset);
+    parts.push(member.data);
+    offset = member.end;
+  } while (bytes[offset] === 0x1f && bytes[offset + 1] === 0x8b);
+  if (parts.length === 1) return parts[0];
+  const data = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let fill = 0;
+  for (const part of parts) {
+    data.set(part, fill);
+    fill += part.length;
+  }
+  return data;
+}
+
+function tarGunzipMember(bytes, start) {
+  if (bytes.length - start < 18) throw new Error('unexpected end of file');
+  if (bytes[start + 2] !== 8) throw new Error('unknown compression method');
+  const flags = bytes[start + 3];
+  let position = start + 10;
   if (flags & 4) position += 2 + (bytes[position] | (bytes[position + 1] << 8));
   for (const flag of [8, 16]) {
     if (flags & flag) {
@@ -293,7 +311,7 @@ function tarGunzip(bytes) {
   const trailer = new DataView(bytes.buffer, bytes.byteOffset + end, 8);
   if (trailer.getUint32(0, true) !== tarCrc32(data)) throw new Error('invalid compressed data--crc error');
   if (trailer.getUint32(4, true) !== data.length) throw new Error('invalid compressed data--length error');
-  return data;
+  return { data, end: end + 8 };
 }
 
 function tarGzipChildFailure(reason) {

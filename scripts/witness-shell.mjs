@@ -3611,6 +3611,25 @@ group('tar -z: tar writes and reads a gzip archive, as GNU tar does', async () =
   check('tar -z: tar -tzf on a missing archive reports the child failure as GNU tar does', missing.stdout === 'rc=2\n' && missing.stderr === 'tar (child): missing.tgz: Cannot open: No such file or directory\ntar (child): Error is not recoverable: exiting now\ntar: Child returned status 2\ntar: Error is not recoverable: exiting now\n', JSON.stringify([missing.stdout, missing.stderr]));
 });
 
+group('tar -z: a tar stream split across two gzip members is read as one archive, as GNU tar reads it', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, readFileSync: readFs, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { gzipSync } = await import('node:zlib');
+  const dir = mkdtempSync(join(tmpdir(), 'tar-split-'));
+  writeFileSync(join(dir, 'a.txt'), 'alpha\n');
+  writeFileSync(join(dir, 'b.txt'), 'beta\n');
+  execFileSync('tar', ['-cf', 'whole.tar', 'a.txt', 'b.txt'], { cwd: dir });
+  const whole = readFs(join(dir, 'whole.tar'));
+  rmSync(dir, { recursive: true, force: true });
+  const split = Buffer.concat([gzipSync(whole.subarray(0, 1024)), gzipSync(whole.subarray(1024))]);
+  const sh = await shell({ '/workspace/split.tgz': new Uint8Array(split) });
+  const listed = await run(sh, 'cd /workspace && tar -tzf split.tgz; echo rc=$?');
+  check('tar -z: tar -tzf lists the members from both gzip members (GNU tar output)', listed.stdout === 'a.txt\nb.txt\nrc=0\n' && listed.stderr === '', JSON.stringify([listed.stdout, listed.stderr]));
+  const extracted = await run(sh, 'cd /workspace && mkdir -p d && tar -xzf split.tgz -C d; echo rc=$?; cat d/a.txt d/b.txt');
+  check('tar -z: tar -xzf extracts the members of both gzip members (GNU tar output)', extracted.stdout === 'rc=0\nalpha\nbeta\n' && extracted.stderr === '', JSON.stringify([extracted.stdout, extracted.stderr]));
+});
+
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
