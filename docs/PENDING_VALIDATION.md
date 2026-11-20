@@ -4136,7 +4136,7 @@ Reference: bash (this sandbox), `bash -c` in a fresh directory. Probed with a pr
 
 What changed in the shell: a shell-level `fdTable` (a map from fd number to `out`, `err`, `readonly`, or `{ path }`) holds the descriptors opened by `exec` and by the redirects of a command or group, and a subshell saves and restores it. `openRedirects` runs first, in order, so a dup of a closed descriptor fails with `thebird: N: Bad file descriptor` and status 1 before anything runs, and a file truncates or creates once. `applyTableRedirects` applies the descriptors 3 to 9 of a command or group, and the table is restored after the group. `applyOutputRedirects` starts from the table, so `N>f` and `N>>f` write their text to the file at the end of the command, `N>&-` and `N>&M` follow the table, and a write to a closed or read-only descriptor sets the write error. The parser accepts `-` as the dup target (`N>&-`, `>&-`).
 
-Not taken in this change set: `<&N` (input dup, `cat <&3` is still a syntax error); `>&0` (dup of stdin); `1<f` (input file on fd 1); `>&word` for a file name. `exec` with a command argument is not implemented; `exec` takes only redirects.
+Not taken in this change set: `<&N` (input dup, `cat <&3` is still a syntax error); `>&0` (dup of stdin); `1<f` (input file on fd 1); `>&word` for a file name. `exec` with a command argument is not implemented; `exec` takes only redirects. (Corrected by 30bz: it is implemented now.)
 
 Witness: group `redirects: fd 3 to 9 written with exec or a redirect on a command or group reach a file, a closed or read-only fd fails with status 1, as bash does`, 24 rows from bash output. Final: `RESULT PASS=1202 FAIL=0`.
 
@@ -4638,3 +4638,25 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `e2d5612f949ebad5fe2f6fabd5e85405658726af refs/heads/main`.
 
 Longest step: the wait for a clear gate, readings 1 to 4, held by another run's zig compile and test jobs (the window job ran 133.9 s in all). Nothing was stopped, and the window script waited for the gate rather than pushing early.
+
+### Change set 30bz: exec with a command argument runs the command with its redirects and then ends the shell, or only its pipeline stage, as bash does
+
+Reference: `bash -c` in the sandbox locale (`LANG=en_US.UTF-8`, `LC_ALL` unset), each case in a fresh directory. The rows take bash's stdout, stderr and status, with bash's prefix `bash: line 1: ` written as `thebird: ` (the witness convention). Sixteen cases, covering the plain command, a redirect on the command, a missing command, a subshell, a pipeline, a heredoc, a function, a command substitution, a status of 0 and 1, an fd 3 redirect, and exit inside a function.
+
+Probed first: at HEAD every case printed `exec: command not found` and the script went on, so the rest of the line ran, and the command's own output was lost. bash runs the command in place of the shell: nothing after it runs, the redirects apply to that command (`exec echo hi >f` writes the file), a missing command gives `thebird: exec: NAME: not found` with status 127, and in a pipeline the stage is a subshell, so an exec there ends only that stage (`echo x | exec cat; echo after` prints x and after).
+
+What changed in the shell:
+- `runCommand`: a command whose first word is `exec` with arguments runs the rest of the words through the normal path, with the exec's redirects on that command. A name that is not a function, a builtin or an in-page command gives status 127 and `thebird: exec: NAME: not found`. The run then throws `ShellExit` carrying the routed output, and the existing flush in `runPipeline` and the existing `ShellExit` catches in a subshell, a command substitution and the top level take it from there.
+- `runPipeline`: in a pipeline of more than one stage, an exit from a stage ends only that stage, and its output goes on to the next stage (or to the sink for the last stage), as each stage is a subshell in bash.
+- `callFunction`: a `ShellExit` now carries the output the function body had already produced. Before this change, `f() { echo a; exit 3; }; f` lost the `a`, which bash prints. The row for that case pins the fix.
+
+Witness: sixteen rows, `RESULT PASS=1402 FAIL=0` (was 1386). Each row checks stdout, stderr and the status against bash.
+
+Red check: the mutation removes the throw that ends the shell after the exec command, on the working-tree copy of `web/shell-core.js` (HEAD did not yet have the change). Witness: exit 1, `RESULT PASS=1392 FAIL=10`, the ten exec rows whose output shows the script ran on past the exec. Restored from the copy, `cmp` matched, and the witness is back at `PASS=1402 FAIL=0`.
+
+Gaps, recorded, not implemented in this change set:
+- The exec options `-a`, `-c` and `-l` are not read. The shell takes `-a` as the command name, so `exec -a name cmd` reports `exec: -a: not found`.
+- The status of an exec under `set -e` is not probed.
+- Found while probing, not part of this item: `printf '%s\n' a b` prints only `a` here, because the format is not reused for further arguments (G4 in the ranked list).
+
+Correction: the note at line 4139 of change set 30bu, which said exec takes only redirects, was true before this change set. It is corrected in place.

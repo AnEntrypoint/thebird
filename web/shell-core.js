@@ -2969,6 +2969,8 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     const opened = await openRedirects(node.redirects, sink);
     if (opened) return opened;
     if (argv.length === 1 && argv[0] === 'exec') return applyExecRedirects(node.redirects, sink);
+    const execute = argv[0] === 'exec';
+    if (execute) argv = argv.slice(1);
     const descriptors = node.redirects.filter((redirect) => /^[3-9]/.test(redirect.op));
     const saved = descriptors.map((redirect) => [Number(redirect.op[0]), fdTable.get(Number(redirect.op[0]))]);
     let result;
@@ -2987,7 +2989,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           }
         } else if (INPUT_DUP_OPS.has(redirect.op)) input = await inputDup(redirect, input, sink);
       }
-      result = await dispatch(argv, input, sink.signal, input === stdin ? stream : { text: input, pos: 0 });
+      result = execute && !commandKnown(argv[0]) ? { code: 127, out: '', err: 'thebird: exec: ' + argv[0] + ': not found\n' } : await dispatch(argv, input, sink.signal, input === stdin ? stream : { text: input, pos: 0 });
     } finally {
       for (const [fd, value] of saved) {
         if (value === undefined) fdTable.delete(fd);
@@ -2995,7 +2997,9 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       }
     }
     const applied = await applyOutputRedirects(node.redirects, result.out, result.err, sink);
-    return { code: result.code, ...applied };
+    const finished = { code: result.code, ...applied };
+    if (execute) throw Object.assign(new ShellExit(finished.code), { output: { out: finished.out, err: finished.err } });
+    return finished;
   }
 
   async function applyOutputRedirects(redirects, out, err, sink) {
@@ -3164,6 +3168,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     return { code, out: '', err };
   }
 
+  function commandKnown(name) {
+    return functions.has(name) || Object.hasOwn(commands, name) || inPage.has(name);
+  }
+
   async function dispatch(argv, stdin, signal, stream) {
     const name = argv[0];
     if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal, stream);
@@ -3262,6 +3270,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     try {
       result = body.type === 'subshell' ? await runSubshell(body, stdin, bodySink) : await runGroup(body, stdin, bodySink);
     } catch (err) {
+      if (err instanceof ShellExit) {
+        err.output = { out: bodySink.out, err: bodySink.err };
+        throw err;
+      }
       if (!(err instanceof ReturnSignal)) throw err;
       result = { code: err.code, out: bodySink.out, err: bodySink.err };
     } finally {
@@ -3309,13 +3321,17 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         try {
           result = await runStage(cmd, input, sink, stream);
         } catch (err) {
-          if (err && typeof err === 'object' && err.output) {
-            const partial = err.output;
-            delete err.output;
-            sink.err += partial.err;
-            if (last) sink.out += partial.out;
+          if (err instanceof ShellExit && err.output && pipe.cmds.length > 1) {
+            result = { code: err.code, out: err.output.out, err: err.output.err };
+          } else {
+            if (err && typeof err === 'object' && err.output) {
+              const partial = err.output;
+              delete err.output;
+              sink.err += partial.err;
+              if (last) sink.out += partial.out;
+            }
+            throw err;
           }
-          throw err;
         }
         code = result.code;
         if (cmd.mergeStderr) {
