@@ -30,6 +30,8 @@ static JSValue stat_object(JSContext *ctx, int32_t status, const double *slots) 
     JS_SetPropertyStr(ctx, info, "size", JS_NewFloat64(ctx, slots[1]));
     JS_SetPropertyStr(ctx, info, "mtimeMs", JS_NewFloat64(ctx, slots[2]));
     JS_SetPropertyStr(ctx, info, "mode", JS_NewFloat64(ctx, slots[3]));
+    JS_SetPropertyStr(ctx, info, "uid", JS_NewFloat64(ctx, slots[4]));
+    JS_SetPropertyStr(ctx, info, "gid", JS_NewFloat64(ctx, slots[5]));
     return info;
 }
 
