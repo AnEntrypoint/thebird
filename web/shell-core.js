@@ -2012,11 +2012,14 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     fileTicks.set(key, { m: fileTicks.get(key)?.m ?? 0, a: ++fileClock });
     return host.read(path);
   };
-  const writeFileText = (path, data) => {
+  const touchTicks = (path, access, modify) => {
     const t = ++fileClock;
     const key = clockKey(path);
-    const record = fileTicks.get(key);
-    fileTicks.set(key, record ? { m: t, a: record.a } : { m: t, a: t });
+    const record = fileTicks.get(key) ?? { m: t, a: t };
+    fileTicks.set(key, { m: modify ? t : record.m, a: access ? t : record.a });
+  };
+  const writeFileText = (path, data) => {
+    touchTicks(path, false, true);
     host.write(path, data);
   };
   const functions = new Map(saved?.functions ?? []);
@@ -2396,8 +2399,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return ok('');
     },
     touch: ({ argv }) => {
-      const noCreate = argv.includes('-c') || argv.includes('--no-create');
-      const names = argv.filter((arg) => arg !== '-c' && arg !== '--no-create');
+      const options = argv.filter((arg) => /^-[acm]+$/.test(arg)).join('');
+      const noCreate = options.includes('c') || argv.includes('--no-create');
+      const names = argv.filter((arg) => !/^-[acm]+$/.test(arg) && arg !== '--no-create');
+      const access = options.includes('a') || !options.includes('m');
+      const modify = options.includes('m') || !options.includes('a');
       if (!names.length) return { code: 1, out: '', err: "touch: missing file operand\nTry 'touch --help' for more information.\n" };
       let err = '';
       let code = 0;
@@ -2405,6 +2411,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         const path = resolvePath(name);
         if (host.exists(path)) {
           host.touch?.(path);
+          touchTicks(path, access, modify);
           continue;
         }
         if (noCreate) continue;

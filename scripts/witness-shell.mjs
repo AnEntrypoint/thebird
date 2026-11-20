@@ -4094,6 +4094,22 @@ group('indexed arrays: NAME=(…) before a command is a prefix that the command 
   }
 });
 
+group('touch: -m, -a and plain touch set the times that -N reads, and -c creates nothing, with bash output (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["printf a > f; cat f >/dev/null; sleep 0.05; touch -m f; [[ -N f ]] && echo modified || echo notmod", "modified\n", "", 0],
+  ["printf a > f; cat f >/dev/null; sleep 0.05; touch f; [[ -N f ]] && echo modified || echo notmod", "notmod\n", "", 0],
+  ["printf a > f; sleep 0.05; touch -a f; [[ -N f ]] && echo modified || echo notmod", "notmod\n", "", 0],
+  ["printf a > f; sleep 0.05; touch -m f; [[ -N f ]] && echo modified || echo notmod", "modified\n", "", 0],
+  ["printf a > f; sleep 0.05; touch -am f; [[ -N f ]] && echo modified || echo notmod", "notmod\n", "", 0],
+  ["touch -c nofile; [ -e nofile ] && echo created || echo absent", "absent\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('touch: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
