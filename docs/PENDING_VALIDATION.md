@@ -4492,3 +4492,45 @@ Witness: group `locale: the length and index of a word follow the locale` (31 ro
 
 Red check: the precedence in the one lookup swapped (`const LOCALE_NAMES = ['LC_CTYPE', 'LC_ALL', 'LANG']`). Red run: `RESULT PASS=1370 FAIL=4`, the four rows that set LC_ALL and LC_CTYPE together. Restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+
+### Phase B window for f5d3abe (change set 30bw, locale)
+
+Gate: `vmstat 1 2` read first, second sample `si 1188, so 0` (above the 1000 KB/s gate in one direction, so the window waited). The window ran from 05:18:21 and cleared at reading 15 (05:25:21), about seven minutes of the ten allowed. At reading 15 the second sample was `si 520, so 0` and heavy-jobs read clear. Readings (si/so from the second sample of `vmstat 1 2`, heavy-jobs from `scripts/heavy-jobs.cjs` from bevy 495fff6, and the hot processes from the top check):
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 05:18:21 | 1068 | 0 | clear | none; heavy-jobs clear, gate not clear (si over 1000) |
+| 2 | 05:18:50 | 516 | 0 | busy | pid 2130056 node scripts/check-etc2-endpoint-search.cjs |
+| 3 | 05:19:21 | 976 | 1740 | busy | pid 2130056 node scripts/check-etc2-endpoint-search.cjs |
+| 4 | 05:19:51 | 84 | 0 | busy | pid 2130056 node scripts/check-etc2-endpoint-search.cjs |
+| 5 | 05:20:20 | 428 | 0 | busy | pid 2130056 node scripts/check-etc2-endpoint-search.cjs |
+| 6 | 05:20:51 | 992 | 0 | busy | pid 2131332 /tmp/zig-toolchain/zig-x86_64-linux-0.17.0/zig test .zig-cache/o/3d6a4 |
+| 7 | 05:21:20 | 1116 | 0 | clear | none; heavy-jobs clear, gate not clear (si over 1000) |
+| 8 | 05:21:51 | 360 | 180 | busy | pid 2132284 node scripts/check-etc2-endpoint-search.cjs |
+| 9 | 05:22:21 | 80 | 620 | busy | pid 2132284 node scripts/check-etc2-endpoint-search.cjs |
+| 10 | 05:22:50 | 672 | 0 | busy | pid 2132284 node scripts/check-etc2-endpoint-search.cjs; pid 1998 claude --dangerously-skip-permissions --model claude-haiku-5-5 --resum |
+| 11 | 05:23:21 | 180 | 0 | busy | pid 2132284 node scripts/check-etc2-endpoint-search.cjs |
+| 12 | 05:23:50 | 448 | 0 | busy | pid 2133663 node scripts/.check-etc2-endpoint-search.mutant.cjs |
+| 13 | 05:24:21 | 272 | 0 | busy | pid 2133663 node scripts/.check-etc2-endpoint-search.mutant.cjs |
+| 14 | 05:24:52 | 52 | 0 | busy | pid 2133663 node scripts/.check-etc2-endpoint-search.mutant.cjs |
+| 15 | 05:25:21 | 520 | 0 | clear | none; gate and heavy-jobs clear |
+
+The processes that counted belong to other runs (check runs `scripts/check-etc2-endpoint-search.cjs` and its mutant, a zig test, and a claude session at over 20%). A gm-core worker with `--handshake` was not counted. Nothing was stopped.
+
+Runs, each with its PID and wall time from the clock. Each ran under `timeout` with its PID captured:
+
+- Green witness (pid 2135059): exit 0, wall 1.64 s, `RESULT PASS=1374 FAIL=0`.
+- Red check (pid 2135104, the precedence swapped in the one lookup on the HEAD copy of f5d3abe): exit 1, wall 1.57 s, `RESULT PASS=1370 FAIL=4`, the four rows that set LC_ALL and LC_CTYPE together. Restored from the copy and confirmed with `cmp`.
+- `npm run check` (pid 2135139): exit 0, wall 0.30 s.
+- `npm run witness:shell` (pid 2135194): exit 0, wall 1.67 s, `RESULT PASS=1374 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed (it carried a6ca3a8 and f5d3abe):
+
+```
+To https://github.com/AnEntrypoint/thebird
+   ab58c51..f5d3abe  main -> main
+```
+
+`git ls-remote origin main` after the push: `f5d3abee14fa281a66a647974bd8066e8033d617 refs/heads/main`.
+
+Longest step: the gate wait, readings 1 to 14 (about seven minutes), held by other runs' check and zig test jobs and a claude session. The push took about three seconds. Nothing was stopped.
