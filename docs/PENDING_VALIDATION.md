@@ -5095,3 +5095,34 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `08ade2385b104f2e5872c81ad22ba14990d5dcf3 refs/heads/main`.
 
 Longest step: the window, about 8 min 3 s from 07:22:31 to 07:30:34, waiting for the zig and grep jobs to clear. Nothing was stopped.
+
+### Change set 30d0: sort collates under en_US.UTF-8 as glibc does for ASCII and Latin-1 letters, decided by bash output; the qualified rows and the remaining gap are recorded
+
+Reference: GNU coreutils 9.7 `sort` from `/bin/gnusort` through the PATH shim `/tmp/gnubin`, and bash with that PATH. The PATH here resolves `sort` to uutils 0.10.0, whose en_US order is not GNU's; every reference order below comes from the shim. Locale: `LANG=en_US.UTF-8` with `LC_ALL` unset for the reference, and in the witness rows the default locale of the shell (also `en_US.UTF-8`). The C order is pinned only where a row says `LC_ALL=C`.
+
+Decision: implement, for the classes below, because the bash output has a rule that can be written down and checked, and byte order is wrong for most mixed-case input. The rule is a four-level key, which is glibc's shape for this locale:
+- level 1: letters and digits by base letter (case and accents removed), plus the currency sign `$` (non-ignorable, below digits); other punctuation and spaces are ignored here;
+- level 2: accent on each letter (acute, grave, circumflex, ring, diaeresis, tilde, cedilla in that order, none first);
+- level 3: case, lowercase first;
+- level 4: every character by its base weight, with punctuation ordered by the glibc single-character order (space, then `!"#%&'()*+,-./:;<=>?@[\\]^_`{|}~`, then `$`, digits, letters).
+
+Probed first, against the shell at HEAD 08ade23 (before this change set):
+- `printf 'b\nA\na\nB\n' \| sort` under en_US: bash and GNU print `a A b B`; the shell printed `A B a b`.
+- A 30-line set with punctuation and accents gave a GNU order that neither ICU collator (`Intl.Collator('en-US')`, with and without `ignorePunctuation`, ICU 78.3) matched; so the rule above was derived from the bash output instead of from a library.
+- 3000 random ASCII lines of length 1 to 4 (all printable ASCII): the four-level rule gave zero differences from bash.
+- 6000 random accented-letter lines of length up to 6 (letters, digits, `$`, and accented letters from Latin-1, no punctuation): zero differences.
+- 6000 random ASCII lines of length up to 6 with punctuation: five adjacent pairs differ from bash (for example `4-g` before `(4g`, and `8&P` before `-8P`). The lengths 1 to 4 had zero differences. These pairs are not fixed by this change set (see the open part below).
+- Mixed accents with punctuation: the failures are in the same class as above, so they are recorded as open.
+
+Change: `web/shell-core.js` adds `collationLevels` and `collate` next to `localeChoice`. The `sort` builtin uses `collate` when the locale the child command sees (`childLocale()`, from the same source as `childLocaleMode()`) is `en_US.UTF-8` or `en_US.utf8`; in every other locale it keeps byte order, and `-n` is unchanged. The last-resort byte comparison breaks ties, so distinct lines always have a fixed order.
+
+Witness, rows from bash output (locale stated in each title, the default locale of the shell):
+- seven new rows: case pairs, punctuation and letters, digits before letters, accented letters, currency sign before digits, and two random sets (25 lines of length up to 4 with punctuation; 25 lines of length up to 4 with accents and `$`). Before the change: `RESULT PASS=1514 FAIL=5` (the two digit and currency rows already agree with byte order). After the change: `RESULT PASS=1519 FAIL=0`.
+- eleven `chmod` rows with a `sort` step (`sort /cm/t/o`, `sort /cm/t/e`) were qualified to `LC_ALL=C sort`. Their expected text was already in C byte order: for nine of the eleven, the sorted lines equal `LC_ALL=C sort` output and not en_US output (the other two combine two sorted groups). The expected text is unchanged; the change is only the locale of the step, which is what the row pins. Before this qualifier the same rows failed under the new collation (seven of them).
+
+Red check: the mutation empties the set of collating locales, so `sort` compares in byte order under en_US, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1514 FAIL=5`, the five en_US rows that the new model had changed. Restored from the copy, `cmp` matched; `git status` shows `web/shell-core.js` modified only by this change set (the commit adds it); the witness after restore reads `PASS=1519 FAIL=0`. `npm run check` (pid 2280676) exit 0, wall 0.49 s.
+
+Still open, recorded (reopen rules):
+- Punctuation inside strings of more than four characters, mixed with letters that tie at levels 1 to 3: the five pairs above (for example `4-g` and `(4g`). The bash order follows a position rule for ignored punctuation that this model does not reproduce. Reopen: read the glibc `LC_COLLATE` rule for `forward,position` at level 4, then add rows for each pair before changing the model.
+- Letters outside Latin-1 with combining marks other than the seven above, ligatures (`ß`, `æ`, `œ`, `ø`) and non-Latin scripts: they sort after the table by code point and have no witness rows. Reopen: add the glibc weights for each script, then probe bash with rows.
+- `sort -n` ties, `uniq`, `join` and other collating tools were not probed in this change set.

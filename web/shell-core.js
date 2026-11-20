@@ -1156,6 +1156,49 @@ function headEnd(text, count) {
 }
 const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
 
+const COLLATION_PRIMARY = ' !"#%&\'()*+,-./:;<=>?@[\\]^_`{|}~$0123456789abcdefghijklmnopqrstuvwxyz';
+const COLLATION_ACCENTS = '̧́̀̂̊̈̃';
+const COLLATING_LOCALES = new Set(['en_US.UTF-8', 'en_US.utf8']);
+
+const collationLevels = (text) => {
+  const units = [];
+  for (const char of text.normalize('NFD')) {
+    if (COLLATION_ACCENTS.includes(char)) {
+      if (units.length) units.at(-1).accents.push(char);
+      continue;
+    }
+    units.push({ base: char.toLowerCase(), upper: char !== char.toLowerCase(), accents: [] });
+  }
+  const weight = (base) => {
+    const at = COLLATION_PRIMARY.indexOf(base);
+    return at === -1 ? COLLATION_PRIMARY.length + base.codePointAt(0) : at;
+  };
+  const letters = units.filter((unit) => /[\p{L}\p{N}]/u.test(unit.base));
+  return [
+    units.filter((unit) => /[\p{L}\p{N}]/u.test(unit.base) || unit.base === '$').map((unit) => weight(unit.base)),
+    letters.map((unit) => (unit.accents.length ? COLLATION_ACCENTS.indexOf(unit.accents[0]) + 1 : 0)),
+    letters.map((unit) => (unit.upper ? 1 : 0)),
+    units.map((unit) => weight(unit.base)),
+  ];
+};
+
+const compareSequences = (left, right) => {
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return left.length - right.length;
+};
+
+const collate = (left, right) => {
+  const a = collationLevels(left);
+  const b = collationLevels(right);
+  for (let level = 0; level < a.length; level++) {
+    const order = compareSequences(a[level], b[level]);
+    if (order !== 0) return order;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+};
+
 function localeChoice(get) {
   for (const name of LOCALE_NAMES) {
     const value = get(name);
@@ -1458,10 +1501,8 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const inherited = new Set(saved ? [] : ['LANG']);
   const prefixNames = new Set();
   const localeWarnings = [];
-  const childLocaleMode = () => {
-    const choice = localeChoice((name) => (exported.has(name) || prefixNames.has(name) ? vars.get(name) : undefined));
-    return LOCALE_MODES.get(choice.value) ?? 'bytes';
-  };
+  const childLocale = () => localeChoice((name) => (exported.has(name) || prefixNames.has(name) ? vars.get(name) : undefined));
+  const childLocaleMode = () => LOCALE_MODES.get(childLocale().value) ?? 'bytes';
   let shellLocale = LOCALE_MODES.get(localeChoice((name) => vars.get(name)).value) ?? 'bytes';
   const settleLocale = (warnAbout = null, clearing = false) => {
     const named = LOCALE_NAMES.map((name) => ({ name, value: variableValue(name) })).filter((entry) => entry.value);
@@ -1898,7 +1939,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     sort: ({ argv, stdin = '' }) => {
       const { flags, operands } = argsOf(argv, []);
       const input = textInputs('sort', operands, stdin);
-      const compare = flags.has('-n') ? (a, b) => (Number.parseFloat(a) || 0) - (Number.parseFloat(b) || 0) : (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+      const byText = COLLATING_LOCALES.has(childLocale().value) ? collate : (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+      const compare = flags.has('-n') ? (a, b) => (Number.parseFloat(a) || 0) - (Number.parseFloat(b) || 0) : byText;
       let lines = linesOf(input.text).sort(compare);
       if (flags.has('-r')) lines.reverse();
       if (flags.has('-u')) lines = lines.filter((line, i) => i === 0 || line !== lines[i - 1]);
