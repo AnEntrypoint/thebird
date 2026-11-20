@@ -3028,6 +3028,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         return Boolean(info) && (op === '-d') === info.dir;
       }
       if (op === '-L' || op === '-h') return Boolean(host.lstat(resolvePath(value))?.link);
+      if (op === '-s') return (host.stat(resolvePath(value))?.size ?? 0) > 0;
       throw new Error(`test: ${op}: unary operator not supported`);
     }
     if (args.length === 3) {

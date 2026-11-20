@@ -3836,6 +3836,19 @@ group('function keyword and select: shell core gives bash output for each of the
   }
 });
 
+group('size test: -s and test -s give bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["printf x > f; [[ -s f ]] && echo full; : > e; [[ -s e ]] || echo empty; [[ -s missing ]] || echo none", "full\nempty\nnone\n", "", 0],
+  ["printf x > f; test -s f && echo tfull; : > e; test -s e || echo tempty", "tfull\ntempty\n", "", 0],
+  ["printf 'ab' > f; [[ -s f && -n x ]] && echo both; [[ ! -s e ]] 2>/dev/null; echo rc=$?", "both\nrc=0\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('size test: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
