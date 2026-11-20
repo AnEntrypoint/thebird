@@ -5806,3 +5806,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `find` command. `-maxdepth N` is read as a predicate that sets the depth limit, and the walk does not descend below it.
 - Witness: `scripts/witness-shell.mjs`, group "find -maxdepth: find -maxdepth stops the walk at the given depth below each start point, as bash does", three rows with the expected output taken from bash. Before the change all three failed against bash.
 - Red check: the depth limit removed by mutation (the walk descends at any depth); the counts are in the amended line that follows.
+
+### Defect fix S1-15: cut -c picks characters
+
+- Row: S1-15 of the full-feature run (commit 8d52612). Command: `printf 'hello\n' \| cut -c2-4`. Before: `cut: you must specify the list of fields`, rc 1. Expected: `ell` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `cut` command. `-c LIST` picks characters by position, with the same list syntax as `-f` (single, ranges, open ends); the field path is unchanged.
+- Witness: `scripts/witness-shell.mjs`, group "cut -c: cut -c picks characters by position, with open and closed ranges, as bash does", five rows with the expected output taken from bash (the last is the existing `-f` path, kept as a regression). Before the change the four `-c` rows failed against bash.
+- Red check: the character branch disabled by mutation; the counts are in the amended line that follows.

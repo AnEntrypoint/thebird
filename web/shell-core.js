@@ -2160,13 +2160,15 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code: input.code, out, err: input.err };
     },
     cut: ({ argv, stdin = '' }) => {
-      const { flags, operands } = argsOf(argv, ['-d', '-f']);
-      if (!flags.has('-f')) return { code: 1, out: '', err: 'cut: you must specify the list of fields\n' };
+      const { flags, operands } = argsOf(argv, ['-d', '-f', '-c']);
+      if (!flags.has('-f') && !flags.has('-c')) return { code: 1, out: '', err: 'cut: you must specify the list of fields\n' };
+      const characters = flags.has('-c');
       const delim = flags.get('-d') ?? '\t';
-      const picks = fieldPicks(flags.get('-f'));
+      const picks = fieldPicks(flags.get(characters ? '-c' : '-f'));
       if (picks.some(([from, to]) => !(from >= 1) || Number.isNaN(to))) return { code: 1, out: '', err: 'cut: fields are numbered from 1\n' };
       const input = textInputs('cut', operands, stdin);
       const out = joinLines(linesOf(input.text).map((line) => {
+        if (characters) return [...line].filter((_, i) => picks.some(([from, to]) => i + 1 >= from && i + 1 <= to)).join('');
         if (!line.includes(delim)) return line;
         return line.split(delim).filter((_, i) => picks.some(([from, to]) => i + 1 >= from && i + 1 <= to)).join(delim);
       }));

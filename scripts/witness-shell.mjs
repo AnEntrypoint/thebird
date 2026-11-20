@@ -3411,6 +3411,19 @@ group("find -maxdepth: find -maxdepth stops the walk at the given depth below ea
   const wfd3 = await run(sh, "mkdir -p d/e/f; find d -maxdepth 2 -type d; echo rc=$?");
   check("find -maxdepth 2 with -type d lists the directories two levels down (bash output, locale en_US.UTF-8)", wfd3.stdout === "d\nd/e\nd/e/f\nrc=0\n" && wfd3.exitCode === 0 && wfd3.stderr === "", JSON.stringify([wfd3.stdout, wfd3.stderr, wfd3.exitCode]));
 });
+group("cut -c: cut -c picks characters by position, with open and closed ranges, as bash does", async () => {
+  const sh = await shell({});
+  const wcc1 = await run(sh, "printf 'hello\\n' | cut -c2-4");
+  check("cut -c2-4 picks the characters two to four (bash output, locale en_US.UTF-8)", wcc1.stdout === "ell\n" && wcc1.exitCode === 0 && wcc1.stderr === "", JSON.stringify([wcc1.stdout, wcc1.stderr, wcc1.exitCode]));
+  const wcc2 = await run(sh, "printf 'hello\\n' | cut -c1,3");
+  check("cut -c1,3 picks the first and third characters (bash output, locale en_US.UTF-8)", wcc2.stdout === "hl\n" && wcc2.exitCode === 0 && wcc2.stderr === "", JSON.stringify([wcc2.stdout, wcc2.stderr, wcc2.exitCode]));
+  const wcc3 = await run(sh, "printf 'hello\\n' | cut -c-2");
+  check("cut -c-2 picks from the start to the second character (bash output, locale en_US.UTF-8)", wcc3.stdout === "he\n" && wcc3.exitCode === 0 && wcc3.stderr === "", JSON.stringify([wcc3.stdout, wcc3.stderr, wcc3.exitCode]));
+  const wcc4 = await run(sh, "printf 'hello\\n' | cut -c3-");
+  check("cut -c3- picks from the third character to the end (bash output, locale en_US.UTF-8)", wcc4.stdout === "llo\n" && wcc4.exitCode === 0 && wcc4.stderr === "", JSON.stringify([wcc4.stdout, wcc4.stderr, wcc4.exitCode]));
+  const wcc5 = await run(sh, "printf 'a:b:c\\n' | cut -d: -f2");
+  check("cut -d with -f still picks fields (bash output, locale en_US.UTF-8)", wcc5.stdout === "b\n" && wcc5.exitCode === 0 && wcc5.stderr === "", JSON.stringify([wcc5.stdout, wcc5.stderr, wcc5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
