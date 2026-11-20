@@ -4363,3 +4363,42 @@ Witness: group `redirects: an output to a missing directory or to a path under a
 
 Red check: the status of the missing-directory refusal set to 2 (the old status), restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1274 FAIL=24`, the new rows and the five rewritten rows. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B window for 46bc650 (change set 30bu, missing-directory status)
+
+Window: started 04:43:30 and cleared at reading 12 (04:49:01), about five and a half minutes of the ten allowed. The gate needs both `vmstat 1 2` samples (si and so) under 1000 KB/s and heavy-jobs clear in the same reading. Only reading 12 met all three. Readings (si/so from the second sample of `vmstat 1 2`, heavy-jobs from `scripts/heavy-jobs.cjs` from bevy 495fff6, hot count from the top check):
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 04:43:30 | 6892 | 8032 | clear | gate closed by si and so; hot count 0 |
+| 2 | 04:43:59 | 6492 | 0 | clear | gate closed by si; Chromium renderer pid 2088866 over 20% (hot count 1) |
+| 3 | 04:44:30 | 236 | 208 | busy (1) | Chromium renderer pid 2088866 at 24.8% |
+| 4 | 04:45:01 | 4360 | 9920 | busy (1) | claude session pid 2356 at 22% (hot count 0 in top) |
+| 5 | 04:45:30 | 62080 | 0 | clear | gate closed by si; hot count 0 |
+| 6 | 04:46:01 | 3256 | 0 | clear | gate closed by si; hot count 0 |
+| 7 | 04:46:31 | 236 | 200 | busy (1) | gm-core worker pid 2102064 at 99% CPU (started without --handshake, `--workspace /workspace/freddie`) |
+| 8 | 04:47:00 | 136 | 3984 | clear | gate closed by so; hot count 0 |
+| 9 | 04:47:31 | 344 | 41404 | clear | gate closed by so; hot count 0 |
+| 10 | 04:48:00 | 23040 | 0 | clear | gate closed by si; Chromium headless pid 2104502 and renderer pid 2104584 over 20% (hot count 2) |
+| 11 | 04:48:31 | 1964 | 0 | clear | gate closed by si; hot count 0 |
+| 12 | 04:49:01 | 384 | 0 | clear | gate and heavy-jobs clear; window cleared |
+
+The processes that counted belong to other runs (Chromium renderers, a claude session, a gm-core worker); nothing was stopped.
+
+Runs, each with its PID and wall time from the clock. Each ran under `timeout` with its PID captured:
+
+- Green witness (pid 2106024): exit 0, wall 1.59 s, `RESULT PASS=1298 FAIL=0`.
+- Red check (pid 2106073, the mutation of status 2 on the HEAD copy of 46bc650's core): exit 1, wall 1.55 s, `RESULT PASS=1274 FAIL=24`, the new missing-directory rows and the five rewritten rows. Restored from the copy and confirmed with `cmp`.
+- `npm run check` (pid 2106104): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2106159): exit 0, wall 1.65 s, `RESULT PASS=1298 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   f38b7c7..46bc650  main -> main
+```
+
+`git ls-remote origin main` after the push: `46bc650c361905e8ffa87478ccececb4f5377ed0 refs/heads/main`. The push carried 532f4cf (the window record for f38b7c7) and 46bc650 (change set 30bu, with its ledger line).
+
+Longest step: the gate wait, readings 1 to 12 (about five and a half minutes), held by swap readings and by other runs' heavy processes. The push took about three seconds. Nothing was stopped.
+
