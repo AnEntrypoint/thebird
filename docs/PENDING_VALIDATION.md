@@ -6100,3 +6100,12 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Red check: the end-of-input throw disabled by `if (false)`; witness `RESULT PASS=1699 FAIL=4` (the four error rows); the two continuation rows still pass; restored from a copy, `cmp` matched; green again `RESULT PASS=1703 FAIL=0`.
 - Commit: 85ba536 (lanmower, no trailers).
 
+### Defect fix P-01-mtime: touch at the typed prompt updates an existing file's modification time
+
+- Gap recorded in the earlier ledger as a limit: at the typed prompt, `touch` on an existing file did nothing, so its modification time did not move. GNU touch sets it to now. Probe: `touch a; [ a -nt b ]` after `b` was written later gave no `newer` (bash and GNU touch print `newer`).
+- Files: `web/shims/fs.js` (exports `touchSync`, which calls the shim's existing `touch` to set the in-memory mtime), `web/shims/bashkit-host.js` (the host gets a `touch` method that calls `touchSync`), `web/bash-shell.js` (the core host adapter passes `touch` through), `web/shell-core.js` (an existing file is touched through `host.touch?.(path)`, with or without `-c`; a missing file is created as before, and `-c` still creates nothing), `test/prompt-path.test.mjs` (one test: touch an older file and check it is newer than a later one with bash's `-nt`, expecting `newer` and rc 0).
+- Witness: `node --test test/prompt-path.test.mjs` gave `pass 18 fail 0` (17 before, plus one). The shell witness, `npm run witness:shell`, gave `RESULT PASS=1703 FAIL=0`.
+- Red check: the `host.touch?.(path)` call replaced by `void path`; `pass 17 fail 1` (the new test); restored from a copy, `cmp` matched; green again `pass 18 fail 0`.
+- Limit, not fixed: the txiki host (the shell program in `web/shell-program.js`) has no `touch` method, so `host.touch?.(path)` does nothing there. A fix needs a utime call in `scripts/txiki/browser/fs-browser.c` and a rebuild of the vendored txiki WASM, which this run does not do. The prompt path is fixed; the txiki path is recorded.
+- Commit: 6ce74ad (lanmower, no trailers).
+
