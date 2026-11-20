@@ -2633,11 +2633,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out, err };
     },
     tr({ argv, stdin = '' }) {
-      const from = expandSet(argv[0] ?? '');
-      const to = expandSet(argv[1] ?? '');
+      const { flags, operands } = argsOf(argv, []);
+      const from = expandSet(operands[0] ?? '');
+      const to = expandSet(operands[1] ?? '');
       let out = '';
       for (const c of stdin) {
         const index = from.indexOf(c);
+        if (flags.has('-d')) {
+          if (index < 0) out += c;
+          continue;
+        }
         out += index < 0 ? c : to[Math.min(index, to.length - 1)];
       }
       return ok(out);

@@ -5743,3 +5743,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `formatPrintf` function. `%q` joins the conversions it handles; an empty argument prints two single quotes, and a character outside the safe set is backslash-escaped.
 - Witness: `scripts/witness-shell.mjs`, group "printf %q: printf %q quotes an argument so the shell reads it back as one word, as bash does", four rows with the expected output taken from bash.
 - Red check: the `%q` conversion disabled by mutation; green RESULT PASS=1578 FAIL=0 (1.71 s); red, with the %q branch disabled (pid 36032), RESULT PASS=1575 FAIL=3, the three rows with a space, an empty argument, or a dollar sign failing; restored, cmp matches.
+
+### Defect fix S1-04: tr -d deletes the characters of a set
+
+- Row: S1-04 of the full-feature run (commit 8d52612). Command: `echo a1b2 \| tr -d 0-9`. Before: `a1b2` (`-d` was read as the source set). Expected: `ab` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `tr` command. Its options are read with `argsOf`; with `-d` each character of the source set is removed and the rest pass through.
+- Witness: `scripts/witness-shell.mjs`, group "tr -d: tr -d deletes each character of a set, and a range in the set counts each character in it, as bash does", three rows with the expected output taken from bash.
+- Red check: the `-d` branch disabled by mutation; green RESULT PASS=1581 FAIL=0 (1.68 s); red, with the -d branch disabled (pid 36399), RESULT PASS=1578 FAIL=3, the three -d rows failing; restored, cmp matches.

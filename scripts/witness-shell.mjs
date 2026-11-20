@@ -3306,6 +3306,15 @@ group("printf %q: printf %q quotes an argument so the shell reads it back as one
   const wpq4 = await run(sh, "printf '%q\\n' 'plain-word_1.2'");
   check("printf %q leaves a plain word unchanged (bash output, locale en_US.UTF-8)", wpq4.stdout === "plain-word_1.2\n" && wpq4.exitCode === 0 && wpq4.stderr === "", JSON.stringify([wpq4.stdout, wpq4.stderr, wpq4.exitCode]));
 });
+group("tr -d: tr -d deletes each character of a set, and a range in the set counts each character in it, as bash does", async () => {
+  const sh = await shell({});
+  const wtd1 = await run(sh, "echo a1b2 | tr -d 0-9");
+  check("tr -d 0-9 deletes the digits of a range (bash output, locale en_US.UTF-8)", wtd1.stdout === "ab\n" && wtd1.exitCode === 0 && wtd1.stderr === "", JSON.stringify([wtd1.stdout, wtd1.stderr, wtd1.exitCode]));
+  const wtd2 = await run(sh, "echo hello | tr -d l");
+  check("tr -d deletes every occurrence of a single character (bash output, locale en_US.UTF-8)", wtd2.stdout === "heo\n" && wtd2.exitCode === 0 && wtd2.stderr === "", JSON.stringify([wtd2.stdout, wtd2.stderr, wtd2.exitCode]));
+  const wtd3 = await run(sh, "echo abc | tr -d 'a-c'; echo rc=$?");
+  check("tr -d with a quoted range deletes the letters a to c (bash output, locale en_US.UTF-8)", wtd3.stdout === "\nrc=0\n" && wtd3.exitCode === 0 && wtd3.stderr === "", JSON.stringify([wtd3.stdout, wtd3.stderr, wtd3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
