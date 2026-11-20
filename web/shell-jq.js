@@ -5,7 +5,7 @@ const jqStringEscapes = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', '"': '"',
 const jqIdentifier = /^[A-Za-z_][A-Za-z0-9_]*/;
 const jqNumber = /^[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?/;
 const jqNumericText = /^\s*-?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?\s*$/;
-const jqLongOptions = new Map([['--raw-output', 'r'], ['--compact-output', 'c'], ['--null-input', 'n'], ['--slurp', 's']]);
+const jqLongOptions = new Map([['--raw-output', 'r'], ['--compact-output', 'c'], ['--null-input', 'n'], ['--slurp', 's'], ['--exit-status', 'e']]);
 const jqBuiltinArities = new Map([
   ['empty', [0]],
   ['error', [0, 1]],
@@ -932,7 +932,7 @@ function jqReadFile(ctx, name) {
 }
 
 export function runJq(argv, ctx) {
-  const flags = { r: false, c: false, n: false, s: false };
+  const flags = { r: false, c: false, n: false, s: false, e: false };
   let filter = null;
   const files = [];
   let optionsEnded = false;
@@ -969,7 +969,11 @@ export function runJq(argv, ctx) {
   let inputFailed = false;
   let parseFailed = false;
   let runtimeFailed = false;
+  let lastValue;
+  let emitted = false;
   const emit = (value) => {
+    lastValue = value;
+    emitted = true;
     out += `${flags.r && typeof value === 'string' ? value : jqFormat(value, !flags.c, 0)}\n`;
   };
   const runOne = (input, location) => {
@@ -1020,6 +1024,7 @@ export function runJq(argv, ctx) {
     if (flags.s && !parseFailed) runOne(slurped, `${lastName}:${index}`);
   }
 
-  const code = inputFailed ? 2 : runtimeFailed ? 5 : 0;
+  const exitStatus = !emitted ? 4 : lastValue === false || lastValue === null ? 1 : 0;
+  const code = inputFailed ? 2 : runtimeFailed ? 5 : flags.e ? exitStatus : 0;
   return { code, out, err };
 }

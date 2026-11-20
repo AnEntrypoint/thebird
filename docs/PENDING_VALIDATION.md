@@ -5757,3 +5757,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `tr` command. With `-s` a character of the squeeze set (the second set when translating, else the first) is written once for each run of it. The `-d` rows from S1-04 still pass.
 - Witness: `scripts/witness-shell.mjs`, group "tr -s: tr -s squeezes each run of a character in the set to one, and with two sets it translates before squeezing, as bash does", four rows with the expected output taken from bash.
 - Red check: the `-s` branch disabled by mutation; green RESULT PASS=1585 FAIL=0 (1.64 s); red, with the -s branch disabled (pid 36659), RESULT PASS=1581 FAIL=4, the four -s rows failing; restored, cmp matches.
+
+### Defect fix S1-06: jq -e sets the exit status from the last output
+
+- Row: S1-06 of the full-feature run (commit 8d52612). Command: `echo false \| jq -e .; echo rc=$?`. Before: `jq: Unknown option: -e` and `rc=2`. Expected: `false` then `rc=1` (jq 1.8.2 under bash).
+- File: `web/shell-jq.js`, the `runJq` option parser and the exit status. `-e` (and `--exit-status`) exits 1 when the last output is false or null, 4 when there is no output, and 0 otherwise. Input and runtime errors keep their codes.
+- Witness: `scripts/witness-shell.mjs`, group "jq -e: jq -e sets the exit status from the last output, 1 for false or null, 4 for no output, and 0 otherwise, as jq does", five rows with the expected output taken from bash.
+- Red check: the `-e` exit status replaced by mutation with a constant 0; green RESULT PASS=1590 FAIL=0 (1.79 s); red, with the -e status replaced by a constant 0 (pid 37170), RESULT PASS=1586 FAIL=4, the four rows that expect a non-zero status failing; restored, cmp matches.

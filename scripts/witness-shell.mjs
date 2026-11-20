@@ -3326,6 +3326,19 @@ group("tr -s: tr -s squeezes each run of a character in the set to one, and with
   const wts4 = await run(sh, "echo hello | tr -s 'a-z' 'A-Z'");
   check("tr -s with two sets translates, then squeezes the second set (bash output, locale en_US.UTF-8)", wts4.stdout === "HELO\n" && wts4.exitCode === 0 && wts4.stderr === "", JSON.stringify([wts4.stdout, wts4.stderr, wts4.exitCode]));
 });
+group("jq -e: jq -e sets the exit status from the last output, 1 for false or null, 4 for no output, and 0 otherwise, as jq does", async () => {
+  const sh = await shell({});
+  const wje1 = await run(sh, "echo false | jq -e .; echo rc=$?");
+  check("jq -e exits 1 when the last output is false (bash output, locale en_US.UTF-8)", wje1.stdout === "false\nrc=1\n" && wje1.exitCode === 0 && wje1.stderr === "", JSON.stringify([wje1.stdout, wje1.stderr, wje1.exitCode]));
+  const wje2 = await run(sh, "echo null | jq -e .; echo rc=$?");
+  check("jq -e exits 1 when the last output is null (bash output, locale en_US.UTF-8)", wje2.stdout === "null\nrc=1\n" && wje2.exitCode === 0 && wje2.stderr === "", JSON.stringify([wje2.stdout, wje2.stderr, wje2.exitCode]));
+  const wje3 = await run(sh, "echo '{}' | jq -e '.a'; echo rc=$?");
+  check("jq -e exits 1 for a missing key, which is null (bash output, locale en_US.UTF-8)", wje3.stdout === "null\nrc=1\n" && wje3.exitCode === 0 && wje3.stderr === "", JSON.stringify([wje3.stdout, wje3.stderr, wje3.exitCode]));
+  const wje4 = await run(sh, "echo 1 | jq -e empty; echo rc=$?");
+  check("jq -e exits 4 when there is no output (bash output, locale en_US.UTF-8)", wje4.stdout === "rc=4\n" && wje4.exitCode === 0 && wje4.stderr === "", JSON.stringify([wje4.stdout, wje4.stderr, wje4.exitCode]));
+  const wje5 = await run(sh, "echo 1 | jq -e .; echo rc=$?");
+  check("jq -e exits 0 when the last output is truthy (bash output, locale en_US.UTF-8)", wje5.stdout === "1\nrc=0\n" && wje5.exitCode === 0 && wje5.stderr === "", JSON.stringify([wje5.stdout, wje5.stderr, wje5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
