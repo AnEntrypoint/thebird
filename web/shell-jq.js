@@ -5,7 +5,12 @@ const jqStringEscapes = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', '"': '"',
 const jqIdentifier = /^[A-Za-z_][A-Za-z0-9_]*/;
 const jqNumber = /^[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?/;
 const jqNumericText = /^\s*-?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?\s*$/;
-const jqLongOptions = new Map([['--raw-output', 'r'], ['--compact-output', 'c'], ['--null-input', 'n'], ['--slurp', 's'], ['--exit-status', 'e']]);
+let jqVariables = new Map();
+function jqVariable(name) {
+  if (!jqVariables.has(name)) throw jqFail('$' + name + ' is not defined');
+  return jqVariables.get(name);
+}
+const jqLongOptions = new Map([['--raw-output', 'r'], ['--compact-output', 'c'], ['--null-input', 'n'], ['--slurp', 's'], ['--exit-status', 'e'], ['--sort-keys', 'S']]);
 const jqBuiltinArities = new Map([
   ['empty', [0]],
   ['error', [0, 1]],
@@ -120,6 +125,10 @@ function jqTokenize(text) {
         tokens.push({ type: 'dot' });
         i++;
       }
+    } else if (c === '$' && jqIdentifier.test(text.slice(i + 1))) {
+      const name = jqIdentifier.exec(text.slice(i + 1))[0];
+      tokens.push({ type: 'var', value: name });
+      i += 1 + name.length;
     } else if (jqIdentifier.test(rest)) {
       const word = jqIdentifier.exec(rest)[0];
       tokens.push({ type: 'ident', value: word });
@@ -303,6 +312,10 @@ function jqParse(text) {
     if (token.type === 'num' || token.type === 'str') {
       pos++;
       return { kind: 'literal', value: token.value };
+    }
+    if (token.type === 'var') {
+      pos++;
+      return { kind: 'var', name: token.value };
     }
     if (isOp('(')) {
       pos++;
@@ -748,6 +761,9 @@ function* jqEval(node, input) {
     case 'literal':
       yield node.value;
       return;
+    case 'var':
+      yield jqVariable(node.name);
+      return;
     case 'field':
       for (const base of jqEval(node.target, input)) yield jqIndexField(base, node.name);
       return;
@@ -846,6 +862,12 @@ function jqFormatNumber(value) {
   return JSON.stringify(value);
 }
 
+function jqSortKeys(value) {
+  if (Array.isArray(value)) return value.map(jqSortKeys);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, jqSortKeys(value[key])]));
+}
+
 function jqFormat(value, pretty, depth) {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -932,13 +954,19 @@ function jqReadFile(ctx, name) {
 }
 
 export function runJq(argv, ctx) {
-  const flags = { r: false, c: false, n: false, s: false, e: false };
+  const flags = { r: false, c: false, n: false, s: false, e: false, S: false };
+  const namedArgs = new Map();
   let filter = null;
   const files = [];
   let optionsEnded = false;
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
     if (!optionsEnded && arg === '--') {
       optionsEnded = true;
+    } else if (!optionsEnded && arg === '--arg') {
+      if (i + 2 >= argv.length) return { code: 2, out: '', err: 'jq: --arg takes two parameters (e.g. --arg varname value)\n' };
+      namedArgs.set(argv[i + 1], argv[i + 2]);
+      i += 2;
     } else if (!optionsEnded && arg.startsWith('--')) {
       const letter = jqLongOptions.get(arg);
       if (!letter) return { code: 2, out: '', err: `jq: Unknown option: ${arg}\n` };
@@ -956,6 +984,7 @@ export function runJq(argv, ctx) {
   }
   if (filter === null) return { code: 2, out: '', err: 'jq: error: no filter given\n' };
 
+  jqVariables = namedArgs;
   let program;
   try {
     program = jqParse(filter);
@@ -974,7 +1003,8 @@ export function runJq(argv, ctx) {
   const emit = (value) => {
     lastValue = value;
     emitted = true;
-    out += `${flags.r && typeof value === 'string' ? value : jqFormat(value, !flags.c, 0)}\n`;
+    const shown = flags.S ? jqSortKeys(value) : value;
+    out += `${flags.r && typeof shown === 'string' ? shown : jqFormat(shown, !flags.c, 0)}\n`;
   };
   const runOne = (input, location) => {
     try {

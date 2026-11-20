@@ -5764,3 +5764,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-jq.js`, the `runJq` option parser and the exit status. `-e` (and `--exit-status`) exits 1 when the last output is false or null, 4 when there is no output, and 0 otherwise. Input and runtime errors keep their codes.
 - Witness: `scripts/witness-shell.mjs`, group "jq -e: jq -e sets the exit status from the last output, 1 for false or null, 4 for no output, and 0 otherwise, as jq does", five rows with the expected output taken from bash.
 - Red check: the `-e` exit status replaced by mutation with a constant 0; green RESULT PASS=1590 FAIL=0 (1.79 s); red, with the -e status replaced by a constant 0 (pid 37170), RESULT PASS=1586 FAIL=4, the four rows that expect a non-zero status failing; restored, cmp matches.
+
+### Defect fix S1-07: jq -S sorts the keys, and --arg binds a variable
+
+- Row: S1-07 of the full-feature run (commit 8d52612). Commands: `jq -S .` on an object, and `jq --arg x hi .`. Before: `jq: Unknown option` for both. Expected: the object with its keys in order, and the bound value (bash with jq 1.8.2, locale en_US.UTF-8).
+- File: `web/shell-jq.js`. `-S` (and `--sort-keys`) sorts the keys of each output value. `--arg name value` binds a string to `$name`. The tokenizer reads `$name` as a variable, the parser makes a variable node, and the evaluator looks it up; a name that is not bound is a runtime error, not the compile error jq gives, which is recorded as an open note.
+- Witness: `scripts/witness-shell.mjs`, group "jq -S and --arg: jq -S sorts the keys of each object, and --arg binds a named variable that the filter reads, as jq does", four rows with the expected output taken from bash. Before the change all four failed against bash.
+- Red checks, two: the `-S` sort disabled by mutation, and the variable binding disabled by mutation (each run's counts are in the amended line that follows).

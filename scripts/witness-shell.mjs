@@ -3339,6 +3339,17 @@ group("jq -e: jq -e sets the exit status from the last output, 1 for false or nu
   const wje5 = await run(sh, "echo 1 | jq -e .; echo rc=$?");
   check("jq -e exits 0 when the last output is truthy (bash output, locale en_US.UTF-8)", wje5.stdout === "1\nrc=0\n" && wje5.exitCode === 0 && wje5.stderr === "", JSON.stringify([wje5.stdout, wje5.stderr, wje5.exitCode]));
 });
+group("jq -S and --arg: jq -S sorts the keys of each object, and --arg binds a named variable that the filter reads, as jq does", async () => {
+  const sh = await shell({});
+  const wjs1 = await run(sh, "printf '{\"b\":1,\"a\":2}\\n' | jq -S -c .");
+  check("jq -S sorts the keys of an object (bash output, locale en_US.UTF-8)", wjs1.stdout === "{\"a\":2,\"b\":1}\n" && wjs1.exitCode === 0 && wjs1.stderr === "", JSON.stringify([wjs1.stdout, wjs1.stderr, wjs1.exitCode]));
+  const wjs2 = await run(sh, "printf '{\"b\":{\"d\":1,\"c\":2}}\\n' | jq -S -c .");
+  check("jq -S sorts the keys of a nested object (bash output, locale en_US.UTF-8)", wjs2.stdout === "{\"b\":{\"c\":2,\"d\":1}}\n" && wjs2.exitCode === 0 && wjs2.stderr === "", JSON.stringify([wjs2.stdout, wjs2.stderr, wjs2.exitCode]));
+  const wjs3 = await run(sh, "jq -n --arg x hi -c '$x'");
+  check("jq --arg binds a variable to a string (bash output, locale en_US.UTF-8)", wjs3.stdout === "\"hi\"\n" && wjs3.exitCode === 0 && wjs3.stderr === "", JSON.stringify([wjs3.stdout, wjs3.stderr, wjs3.exitCode]));
+  const wjs4 = await run(sh, "jq -n --arg x 'a b' '$x'");
+  check("jq --arg keeps a value with a space whole (bash output, locale en_US.UTF-8)", wjs4.stdout === "\"a b\"\n" && wjs4.exitCode === 0 && wjs4.stderr === "", JSON.stringify([wjs4.stdout, wjs4.stderr, wjs4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
