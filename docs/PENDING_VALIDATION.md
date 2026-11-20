@@ -4142,3 +4142,37 @@ Witness: group `redirects: fd 3 to 9 written with exec or a redirect on a comman
 
 Red check: the file append in the routing replaced by an empty text, so a file write loses its text, restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). The red run: `RESULT PASS=1113 FAIL=89`. The mutation also breaks ordinary file redirects, so the check shows the routing appends, not a check of fd 3 alone. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B record: change set 30bq, pushed as bcd3690..5dca8e0
+
+Window: started 04:05:15 and cleared at reading 7 (04:08:15), about three minutes of the ten allowed. Readings 1 to 6 did not clear: heavy-jobs was busy at each, and the swap-in was above 1000 KB/s at readings 2 to 5 (20664, 8500, 3192 and 1432). Reading 1 (372) and reading 6 (792) were under 1000 but heavy-jobs was busy, so nothing ran until reading 7. Readings:
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 04:05:15 | 372 | 0 | busy (1) | `grep -rl ETC2 ... /config/.cargo/registry` pid 2063038 at 53% CPU; Claude session pid 2510 |
+| 2 | 04:05:45 | 20664 | 4 | busy (6) | playwriter-ws-server pid 3627 at 44.6%; serve-local.mjs pid 2063567 at 31.7%; Chromium pids 2063585 at 62.4%, 2063632 (gpu) at 186.1%, 2063635 (network) at 44.6%; renderer pid 2063765 over 1 GB RSS |
+| 3 | 04:06:14 | 8500 | 128 | busy (2) | gpu pid 2063632 at 190.1%; renderer pid 2063765 at 5.8 GB RSS; Claude session pid 2510 |
+| 4 | 04:06:45 | 3192 | 0 | busy (6) | Chromium pid 2063585 at 163.4%; gpu pid 2063632 at 214.9%; holder-memdump.mjs pid 2064157 at 82.2%; tracing utility pid 2064165 at 107.9%; `find /` pid 2064346 at 40.6% |
+| 5 | 04:07:15 | 1432 | 0 | busy (2) | Claude session pid 2109 at 26.7%; `find /` pid 2064346 at 34.7% |
+| 6 | 04:07:44 | 792 | 0 | busy (1) | `find /` pid 2064346 at 37.6% |
+| 7 | 04:08:15 | 444 | 0 | clear | none; window started |
+
+The processes that counted (Chromium, the find, the holder, the Claude sessions) belong to other runs. Nothing was stopped. The window job (pid 2063052) exited 0 after the push.
+
+Runs in the window, each with its PID and wall time from the clock:
+
+- Green witness (pid 2065251): exit 0, wall 1.61 s, `RESULT PASS=1202 FAIL=0`.
+- Red check 1, the file append in the routing emptied (5dca8e0; pid 2065282): exit 1, wall 1.53 s, `RESULT PASS=1113 FAIL=89`. Restored from a copy of HEAD and confirmed with `cmp`.
+- `npm run check` (pid 2065313): exit 0, wall 0.30 s.
+- `npm run witness:shell` (pid 2065368): exit 0, wall 1.63 s, `RESULT PASS=1202 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests (a command past timeoutMs, a while that never ends, a for over a large list).
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   bcd3690..5dca8e0  main -> main
+``
+
+`git ls-remote origin main` after the push: `5dca8e0411e487bfa8b6bb9d40ebdbaf70ac0eb7 refs/heads/main`. The push carried b65b1ba (the record of the window that cleared at reading 5 for bcd3690) and 5dca8e0 (change set 30bq).
+
+Longest step: the gate wait, readings 1 to 7 (about three minutes). The runs took under two seconds each. Nothing was stopped.
+
