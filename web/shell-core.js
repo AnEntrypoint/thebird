@@ -2282,28 +2282,43 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         const out = hits.map(({ line, number }) => `${label}${numbered ? number + ':' : ''}${line}\n`).join('');
         return { count: hits.length, out: counting ? `${label}${hits.length}\n` : out };
       };
-      if (!files.length) {
-        const result = scan('', stdin);
-        return { code: result.count ? 0 : 1, out: result.out, err: '' };
-      }
-      const labelled = files.length > 1;
+      const recursive = flags.includes('r');
+      const implicit = !files.length && recursive;
+      const targets = files.length ? files : recursive ? ['.'] : [null];
+      const labelled = files.length > 1 || recursive;
+      const childName = (dir, entry) => (implicit ? entry : dir.replace(/\/$/, '') + '/' + entry);
       let out = '';
       let err = '';
       let code = 1;
       let matched = 0;
-      for (const name of files) {
-        let text;
-        try {
-          text = host.read(resolvePath(name));
-        } catch {
-          err += `grep: ${name}: No such file or directory\n`;
-          code = 2;
-          continue;
+      const visit = (name) => {
+        const info = name === null ? null : host.stat(resolvePath(name));
+        if (info?.dir) {
+          if (!recursive) {
+            err += `grep: ${name}: Is a directory\n`;
+            code = 2;
+            return;
+          }
+          for (const entry of host.list(resolvePath(name)).sort()) visit(childName(name, entry));
+          return;
         }
-        const result = scan(labelled ? name + ':' : '', text);
+        let text = stdin;
+        if (name !== null) {
+          try {
+            text = host.read(resolvePath(name));
+          } catch {
+            err += `grep: ${name}: No such file or directory\n`;
+            code = 2;
+            return;
+          }
+        }
+        const result = scan(labelled && name !== null ? `${name}:` : '', text);
         matched += result.count;
-        out += result.out;
-      }
+        if (flags.includes('l')) {
+          if (result.count) out += (name ?? '(standard input)') + '\n';
+        } else out += result.out;
+      };
+      for (const name of targets) visit(name);
       if (code !== 2 && matched) code = 0;
       return { code, out, err };
     },

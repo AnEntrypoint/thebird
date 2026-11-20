@@ -5792,3 +5792,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, a new `xargs` command beside `sed`. It splits stdin on white space, runs the command (default `echo`) once per group of `-n` words, and returns 123 when an invocation fails, as GNU xargs does. It runs each invocation through the same dispatch as `env`.
 - Witness: `scripts/witness-shell.mjs`, group "xargs: xargs runs the command with the words of stdin, in groups of -n, and echo when no command is given, as bash does", five rows with the expected output taken from bash. Before the change all five failed against bash.
 - Red check: the command taken from the wrong position by mutation (pid 38831): green RESULT PASS=1609 FAIL=0 (1.62 s); red RESULT PASS=1608 FAIL=1. This mutation is weak: only the one row with an explicit command fails. Restored, cmp matches.
+
+### Defect fix S1-12 and S1-13: grep -r searches a directory, and grep -l prints the file names
+
+- Rows: S1-12, grep -r on a directory, command `mkdir -p d; echo hit > d/x.txt; grep -r hit d; echo rc=$?`. Before: `grep: d: No such file or directory`, rc 2. Expected: `d/x.txt:hit`, rc 0. S1-13, grep -l, command `grep -l hit d/*`. Before: the matching line. Expected: `d/x.txt` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `grep` command. `-r` walks a directory (with the names joined as the shell path, and no ./ prefix when no file is named); `-l` prints each matching name once, or `(standard input)`. A directory without `-r` is `grep: d: Is a directory` with status 2, as bash prints it.
+- Witness: `scripts/witness-shell.mjs`, group "grep -r and -l: grep -r searches a directory and prefixes each line with the file, grep -l prints each file that matches once, and a directory without -r is an error, as bash does", five rows with the expected output taken from bash. Before the change four of the five failed against bash.
+- Red checks, two: `-r` treated as absent (the directory error for every directory), and `-l` disabled. The counts are in the amended line that follows.

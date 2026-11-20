@@ -3389,6 +3389,19 @@ group("xargs: xargs runs the command with the words of stdin, in groups of -n, a
   const wxa5 = await run(sh, "printf '' | xargs echo");
   check("xargs with no words runs the command once with no arguments (bash output, locale en_US.UTF-8)", wxa5.stdout === "\n" && wxa5.exitCode === 0 && wxa5.stderr === "", JSON.stringify([wxa5.stdout, wxa5.stderr, wxa5.exitCode]));
 });
+group("grep -r and -l: grep -r searches a directory and prefixes each line with the file, grep -l prints each file that matches once, and a directory without -r is an error, as bash does", async () => {
+  const sh = await shell({});
+  const wgr1 = await run(sh, "mkdir -p d; echo hit > d/x.txt; grep -r hit d; echo rc=$?");
+  check("grep -r prints the file path before each matching line (bash output, locale en_US.UTF-8)", wgr1.stdout === "d/x.txt:hit\nrc=0\n" && wgr1.exitCode === 0 && wgr1.stderr === "", JSON.stringify([wgr1.stdout, wgr1.stderr, wgr1.exitCode]));
+  const wgr2 = await run(sh, "mkdir -p d; echo hit > d/x.txt; grep -l hit d/*; echo rc=$?");
+  check("grep -l prints the name of each file that matches (bash output, locale en_US.UTF-8)", wgr2.stdout === "d/x.txt\nrc=0\n" && wgr2.exitCode === 0 && wgr2.stderr === "", JSON.stringify([wgr2.stdout, wgr2.stderr, wgr2.exitCode]));
+  const wgr3 = await run(sh, "printf 'hit\\n' | grep -l hit; echo rc=$?");
+  check("grep -l prints standard input when it matches (bash output, locale en_US.UTF-8)", wgr3.stdout === "(standard input)\nrc=0\n" && wgr3.exitCode === 0 && wgr3.stderr === "", JSON.stringify([wgr3.stdout, wgr3.stderr, wgr3.exitCode]));
+  const wgr4 = await run(sh, "mkdir -p d; grep hit d; echo rc=$?");
+  check("grep on a directory without -r says it is a directory and exits 2 (bash output, locale en_US.UTF-8)", wgr4.stdout === "rc=2\n" && wgr4.exitCode === 0 && wgr4.stderr === "grep: d: Is a directory\n", JSON.stringify([wgr4.stdout, wgr4.stderr, wgr4.exitCode]));
+  const wgr5 = await run(sh, "echo hit > x.txt; grep -l hit x.txt nothing.txt; echo rc=$?");
+  check("grep -l with a missing file keeps the error status (bash output, locale en_US.UTF-8)", wgr5.stdout === "x.txt\nrc=2\n" && wgr5.exitCode === 0 && wgr5.stderr === "grep: nothing.txt: No such file or directory\n", JSON.stringify([wgr5.stdout, wgr5.stderr, wgr5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
