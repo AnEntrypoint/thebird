@@ -6077,3 +6077,18 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Limit, not fixed: bytes after the last gzip member that are not gzip are still ignored without GNU gzip's `trailing garbage ignored` warning. The shell has no gzip command, so this cannot be checked against one here.
 - Commit: 08ba108 (lanmower, no trailers).
 
+### Defect fix F-S: find takes -empty and -exec, and sed takes the i and = commands
+
+- Gaps found by probe against GNU find and GNU sed on this machine: `find . -empty`, `find . -exec cat {} \;`, `sed '1i top'` and `sed '$='` each failed in shell core with `unknown predicate` or `unknown command` and rc 2. (These are S1-26 to S1-29 from the earlier ledger.)
+- Files: `web/shell-core.js` (find is async, and its argument loop is a while loop, so `-empty` takes no value and `-exec` takes the words up to `;`; `-empty` is a directory with no entries or a file of size 0; `-exec` calls `dispatch` for each match with each `{}` replaced by the path, prints the command's output, and does not change find's exit status, as GNU find does), `web/shell-sed.js` (the `i` command is parsed as the one-line form of `a` and prints its text at once, before the line; the `=` command prints the line number at once, also under `-n`), `scripts/witness-shell.mjs` (group "find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do", eight rows).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1697 FAIL=0` (1690 before, plus seven rows; the eighth row is a failing `-exec` with rc 0, see the next point).
+- Correction found while writing the rows: my first version of find set exit 1 when an `-exec` command failed, and I had written the row to expect rc 1. GNU find (checked with `find . -name full.txt -exec false \;; echo rc=$?`) prints rc 0. The find line that set the status was removed, and the row now expects rc 0.
+- Red checks (each with its own mutation, witness, restore, `cmp`):
+  - `-empty` predicate replaced by `false`: `RESULT PASS=1696 FAIL=1` (the `-empty` row).
+  - `-exec` branch disabled by `if (false)`: `RESULT PASS=1694 FAIL=3` (the three `-exec` rows).
+  - `=` line number off by one: `RESULT PASS=1695 FAIL=2` (the two `=` rows).
+  - `i` text queued after the line instead of printed before it: `RESULT PASS=1696 FAIL=1` (the `1i` row).
+  - Each restore matched with `cmp`; green again `RESULT PASS=1697 FAIL=0`.
+- Limits, not fixed: `find -exec ... +` (batch form) is not supported, only the `\;` form. The `i` and `a` commands take only the one-line form (`1i top`), not the `i\` multi-line form. Both are unknown to this shell and still fail with a message.
+- Commit: fbf7cd8 (lanmower, no trailers). This one commit covers the four changes above, since they share one witness group.
+
