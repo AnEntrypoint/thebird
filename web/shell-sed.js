@@ -123,6 +123,19 @@ function sedParseSubstitute(state) {
   return { name: 's', regex, replacement, global, print, occurrence };
 }
 
+function sedParseTransliterate(state) {
+  const unterminated = "unterminated `y' command";
+  const delimiter = state.script[state.pos];
+  if (delimiter === undefined || delimiter === '\n' || delimiter === '\\') sedFail(state, unterminated);
+  state.pos++;
+  const from = [...sedReadDelimited(state, delimiter, false, unterminated)];
+  const to = [...sedReadDelimited(state, delimiter, false, unterminated)];
+  if (from.length !== to.length) sedFail(state, "strings for `y' command are different lengths");
+  sedSkipBlanks(state);
+  if (state.pos < state.script.length && !SED_COMMAND_ENDS.includes(state.script[state.pos])) sedFail(state, 'extra characters after command');
+  return { name: 'y', map: new Map(from.map((c, i) => [c, to[i]])) };
+}
+
 function sedParse(script) {
   const state = { script, pos: 0 };
   const commands = [];
@@ -157,6 +170,9 @@ function sedParse(script) {
     } else if (letter === 's') {
       state.pos++;
       command = sedParseSubstitute(state);
+    } else if (letter === 'y') {
+      state.pos++;
+      command = sedParseTransliterate(state);
     } else if (letter === 'a') {
       state.pos++;
       sedSkipBlanks(state);
@@ -263,6 +279,7 @@ function sedRunStream(commands, lines, quiet) {
       if (!sedSelects(command, ranges[c], pattern, lineNumber, isLast)) continue;
       if (command.name === 'p') printed.push(pattern);
       else if (command.name === 'a') queued.push(command.text);
+      else if (command.name === 'y') pattern = [...pattern].map((c) => command.map.get(c) ?? c).join('');
       else if (command.name === 'd') {
         deleted = true;
         break;

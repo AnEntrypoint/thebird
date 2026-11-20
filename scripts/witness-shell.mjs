@@ -3496,6 +3496,15 @@ group("sed s occurrence: sed s/re/x/N replaces only the Nth match, and with g th
   const wso5 = await run(sh, "printf 'a\\n' | sed 's/a/X/2'");
   check("sed s/a/X/2 leaves a line with one match unchanged (bash output, locale en_US.UTF-8)", wso5.stdout === "a\n" && wso5.exitCode === 0 && wso5.stderr === "", JSON.stringify([wso5.stdout, wso5.stderr, wso5.exitCode]));
 });
+group("sed y: sed y/from/to/ maps each character of the first string to the one at the same place in the second, with any delimiter, as bash sed does", async () => {
+  const sh = await shell({});
+  const wsy1 = await run(sh, "printf 'abc\\n' | sed 'y/abc/xyz/'");
+  check("sed y/abc/xyz/ maps each letter in turn (bash output, locale en_US.UTF-8)", wsy1.stdout === "xyz\n" && wsy1.exitCode === 0 && wsy1.stderr === "", JSON.stringify([wsy1.stdout, wsy1.stderr, wsy1.exitCode]));
+  const wsy2 = await run(sh, "printf 'hello\\n' | sed 'y/lo/LO/'");
+  check("sed y/lo/LO/ maps only the letters it names (bash output, locale en_US.UTF-8)", wsy2.stdout === "heLLO\n" && wsy2.exitCode === 0 && wsy2.stderr === "", JSON.stringify([wsy2.stdout, wsy2.stderr, wsy2.exitCode]));
+  const wsy3 = await run(sh, "printf 'a/b\\n' | sed 'y,/,|,'");
+  check("sed y with a comma delimiter maps the slash (bash output, locale en_US.UTF-8)", wsy3.stdout === "a|b\n" && wsy3.exitCode === 0 && wsy3.stderr === "", JSON.stringify([wsy3.stdout, wsy3.stderr, wsy3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

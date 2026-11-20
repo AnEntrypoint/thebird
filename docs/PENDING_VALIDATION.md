@@ -5855,3 +5855,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-sed.js`. A number among the `s` flags names the match to replace. Matches before it are passed over without a change, and with `g` that match and every later one are replaced. The match counter runs after the empty-match check, so the empty-match rules are unchanged.
 - Witness: `scripts/witness-shell.mjs`, group "sed s occurrence: sed s/re/x/N replaces only the Nth match, and with g the N-th and every later one, as bash sed does", five rows with the expected output taken from bash sed. Before the change all five failed against bash.
 - Red check: the occurrence test disabled by mutation (every match is replaced); green PASS=1649 FAIL=0; red PASS=1645 FAIL=4, restored, cmp matches.
+
+### Defect fix S1-22: sed y transliterates
+
+- Row: S1-22 of the full-feature run (commit 8d52612). Command: `printf 'abc\n' \| sed 'y/abc/xyz/'`. Before: `sed: ... unknown command: 'y'`, rc 1. Expected: `xyz` (bash sed, locale en_US.UTF-8).
+- File: `web/shell-sed.js`. The `y` command reads two strings with any delimiter, refuses strings of different lengths, and maps each character of the first to the one at the same place in the second. The mapping applies to the pattern space when the command is selected.
+- Witness: `scripts/witness-shell.mjs`, group "sed y: sed y/from/to/ maps each character of the first string to the one at the same place in the second, with any delimiter, as bash sed does", three rows with the expected output taken from bash sed. Before the change all three failed against bash.
+- Red check: the mapping replaced by the identity by mutation (the output is the input); green PASS=1652 FAIL=0; red PASS=1649 FAIL=3, restored, cmp matches.
