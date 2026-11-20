@@ -4176,3 +4176,25 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the gate wait, readings 1 to 7 (about three minutes). The runs took under two seconds each. Nothing was stopped.
 
+### Change set 30br: `>&word` with a word that is not a number or `-` sends stdout and stderr to a file, as `&>word` does, and `N>&word` for N above 1 is an ambiguous redirect that does not run the command; `>&-` closes stdout with the rest of the text as an argument
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape, stdout, status and stderr compared. Probed shapes and bash output:
+- `echo e >&2x; cat 2x; echo st=$?` and `echo e >& 2x; ...` and `echo e 1>&2x; ...`: the file `2x` holds `e`, stdout `e` then `st=0` from the cat. A word with a space after `>&` is the same. A quoted word `"2x"` is the same.
+- `echo keep > 2x; echo e >&2x; cat 2x`: `e`, the old text is gone (truncated once). `echo e >&2x >&2y`: the last `>&` wins, `2y` holds `e` and `2x` is created empty.
+- `echo e >&2x | cat`: the pipe gets nothing and `2x` holds `e`. `{ echo a >&2x; echo b; }`: `b` on stdout, `a` in the file. `echo e >&2x 2>&1` and `echo e 2>&1 >&2x`: `e` in the file. `echo e >&2x >/dev/null`: `2x` is created empty, status 0.
+- `echo e >&2x; echo err >&2`: `err` on stderr, `e` in the file. `echo e >&2x; echo e2 >&2`: `e2` on stderr. `echo a > f; echo b >&f; cat f`: `b` (truncated).
+- `exec 3>f; echo e >&3x; cat 3x; cat f`: `e` in `3x`, `f` empty. `exec 3>f; { echo e >&2x; }`: `e` in `2x`. `echo e >&2x2`: the word is `2x2`.
+- `echo e >&"2"`: the quoted digit is a number, so it duplicates stderr (status 0, `e` on stderr). `echo e >&a-b; cat a-b`: `e` (a word with an inner dash is a file).
+- `v=q; echo e >&$v; cat q`: `e`. `v="a b"; echo e >&$v`: status 1, the command does not run, stderr `bash: line 1: $v: ambiguous redirect`.
+- `echo e 2>&1x` and `echo e 3>&4x`: status 1, the command does not run, stderr `1x: ambiguous redirect` and `4x: ambiguous redirect`. This is the tokenizer change: `2>&1x` was the op `2>&1` followed by the word `x`, now it is `2>&` with the word `1x`.
+- `echo x >&-5; echo st=$?` and `echo x >&-foo`: a leading dash closes stdout and the rest of the text is an argument, so the echo fails with a write error and status 1. `echo e >&2x 2>&-; cat 2x`: `st=0`, `e`.
+- `cat nofile >&2x; echo st=$?; cat 2x`: status 1, the cat error went into the file, so the cat prints it on stdout.
+
+What changed in the shell: the tokenizer matches `2>&1` only when the next character is not a word character (otherwise `2>&` with the word); a `>&` or `N>&` followed by `-` is the close operator and the rest is a separate word. The parser no longer rejects a non-numeric dup word (the word is only known after expansion), and keeps the raw text of the target. A new `dupOf` classifies the expanded word: `-` closes, a number duplicates, `>&` and `1>&` with a word are the file form (truncated once through `openFile` in the open pass, then the routing sends stdout and stderr to the file), an empty word is a bad descriptor, and anything else (N above 1, or a multi-word expansion) is ambiguous. The open pass, the output routing and the missing-directory check all use `dupOf`.
+
+Not taken in this change set (see the ranked list in the REPORT): a bad-descriptor message raised after a file-form redirect (`echo e >&2x 1>&3`) is printed on stderr, but bash writes it into the file `2x`, because the open pass returns before the routing; the message for an empty word is `thebird: : Bad file descriptor`, where bash quotes it (`"": Bad file descriptor`), so no row pins it; `>&nodir/w` gives status 2, bash gives 1, the missing-directory gap of item 6; `>>&word` is a syntax error in both, with different text.
+
+Witness: group `redirects: >&word sends stdout and stderr to a file as bash does, N>&word above 1 is an ambiguous redirect, and >&- closes stdout with the rest of the word as an argument`, 28 rows, expected stdout and status from bash, stderr from bash with its `bash: line 1:` prefix replaced by this shell's `thebird:` prefix. Final: `RESULT PASS=1230 FAIL=0` (green, wall 1.6 s).
+
+Red check: the file form sends only stdout to the file (the `fds[2] = target` line removed), restored from a copy of the good core and confirmed with `cmp`. Red run: `RESULT PASS=1229 FAIL=1`, the row `cat nofile >&2x; echo st=$?; cat 2x` (stderr of cat is not in the file). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+

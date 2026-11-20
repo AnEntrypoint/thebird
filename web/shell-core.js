@@ -321,12 +321,17 @@ export function tokenize(src, firstLine = 1, substitution = false) {
         i = arith.end;
         continue;
       }
-      const raw = OPERATORS.find((candidate) => src.startsWith(candidate, i));
+      const found = OPERATORS.find((candidate) => src.startsWith(candidate, i));
+      const raw = found === '2>&1' && /[^\s;&|()<>]/.test(src[i + found.length] ?? '') ? '2>&' : found;
       if (raw) {
         const op = FD0_OPS[raw] ?? raw;
         const opToken = { op, line: lineAt(i) };
         tokens.push(opToken);
         i += raw.length;
+        if (op.endsWith('>&') && src[i] === '-') {
+          tokens.push({ parts: [{ k: 'lit', s: '-' }], text: '-', line: lineAt(i), endLine: lineAt(i) });
+          i++;
+        }
         if (op === '<<' || op === '<<-' || FD_HEREDOC_BODIES.includes(op)) {
           while (src[i] === ' ' || src[i] === '\t') i++;
           const word = readParts(src, i, BREAKS);
@@ -364,8 +369,7 @@ function parse(tokens) {
     const target = tokens[pos];
     if (!target?.parts) throw syntaxError(`expected a file after '${op}'`);
     pos++;
-    if (DUP_OPS.has(op) && !/^([0-9]+|-)$/.test(target.parts.map(textOf).join(''))) throw syntaxError("expected a file descriptor after '" + op + "'");
-    return { op, target: target.parts, body: opToken.body };
+    return { op, target: target.parts, text: target.text, body: opToken.body };
   };
 
   const parseSimple = () => {
@@ -2753,7 +2757,8 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   async function refuseMissingOutputDir(redirects, sink) {
     for (const redirect of redirects) {
-      if (!OUTPUT_REDIRECTS.has(redirect.op)) continue;
+      const fileDup = (redirect.op === '>&' || redirect.op === '1>&') && (await dupOf(redirect, sink)).file === true;
+      if (!OUTPUT_REDIRECTS.has(redirect.op) && !fileDup) continue;
       const path = await wordPath(redirect.target, sink);
       if (path !== NULL_DEVICE && host.stat(parentOf(resolvePath(path)))?.dir !== true) return { code: 2, out: '', err: 'thebird: cannot create ' + path + ': Directory nonexistent\n' };
     }
@@ -2777,6 +2782,20 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   }
 
   const badFdResult = (target) => ({ code: 1, out: '', err: 'thebird: ' + target + ': Bad file descriptor\n' });
+  const ambiguousResult = (text) => ({ code: 1, out: '', err: 'thebird: ' + text + ': ambiguous redirect\n' });
+
+  async function dupOf(redirect, sink) {
+    const words = await expandWord(redirect.target, sink);
+    const word = words.length === 1 ? words[0] : null;
+    if (word === '-') return { close: true };
+    if (word !== null && /^[0-9]+$/.test(word)) return { fd: Number(word) };
+    if (redirect.op === '>&' || redirect.op === '1>&') {
+      if (word === null) return { error: ambiguousResult(redirect.text) };
+      if (word === '') return { error: badFdResult('') };
+      return { file: true };
+    }
+    return { error: ambiguousResult(word ?? redirect.text) };
+  }
 
   async function openRedirects(redirects, sink) {
     const open = new Set([1, 2, ...fdTable.keys()]);
@@ -2784,13 +2803,15 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       const { op } = redirect;
       if (DUP_OPS.has(op) || op === '2>&1') {
         const fd = Number(op.startsWith('>') ? '1' : op[0]);
-        const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
-        if (target === '-') {
-          open.delete(fd);
-          continue;
+        const dup = op === '2>&1' ? { fd: 1 } : await dupOf(redirect, sink);
+        if (dup.error) return dup.error;
+        if (dup.close) open.delete(fd);
+        else if (dup.file) {
+          await openFile(redirect, sink);
+          open.add(1).add(2);
         }
-        if (!open.has(Number(target))) return badFdResult(target);
-        open.add(fd);
+        else if (!open.has(dup.fd)) return badFdResult(String(dup.fd));
+        else open.add(fd);
       } else if (FD1_HEREDOCS.includes(op) || FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
         open.add(Number(op[0]));
       } else if (FD_OUTPUTS.includes(op) || FILE_FDS[op]) {
@@ -2885,10 +2906,15 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       const { op } = redirect;
       if (DUP_OPS.has(op) || op === '2>&1') {
         const fd = op.startsWith('>') ? '1' : op[0];
-        const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
-        if (target === '-') delete fds[fd];
-        else if (!(target in fds)) return badFdResult(target);
-        else fds[fd] = fds[target];
+        const dup = op === '2>&1' ? { fd: 1 } : await dupOf(redirect, sink);
+        if (dup.error) return dup.error;
+        if (dup.close) delete fds[fd];
+        else if (dup.file) {
+          const target = { path: await wordPath(redirect.target, sink) };
+          fds[1] = target;
+          fds[2] = target;
+        } else if (!(dup.fd in fds)) return badFdResult(String(dup.fd));
+        else fds[fd] = fds[dup.fd];
       } else if (FD1_HEREDOCS.includes(op)) {
         fds[1] = 'readonly';
       } else if (FD_INPUTS.includes(op) || FD_HEREDOCS.includes(op)) {
