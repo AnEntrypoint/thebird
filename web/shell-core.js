@@ -2637,13 +2637,18 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const from = expandSet(operands[0] ?? '');
       const to = expandSet(operands[1] ?? '');
       let out = '';
+      const squeezeSet = to.length ? to : from;
+      let prev = null;
       for (const c of stdin) {
         const index = from.indexOf(c);
         if (flags.has('-d')) {
           if (index < 0) out += c;
           continue;
         }
-        out += index < 0 ? c : to[Math.min(index, to.length - 1)];
+        const mapped = index < 0 || !to.length ? c : to[Math.min(index, to.length - 1)];
+        if (flags.has('-s') && mapped === prev && squeezeSet.includes(mapped)) continue;
+        out += mapped;
+        prev = mapped;
       }
       return ok(out);
     },

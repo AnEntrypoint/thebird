@@ -3315,6 +3315,17 @@ group("tr -d: tr -d deletes each character of a set, and a range in the set coun
   const wtd3 = await run(sh, "echo abc | tr -d 'a-c'; echo rc=$?");
   check("tr -d with a quoted range deletes the letters a to c (bash output, locale en_US.UTF-8)", wtd3.stdout === "\nrc=0\n" && wtd3.exitCode === 0 && wtd3.stderr === "", JSON.stringify([wtd3.stdout, wtd3.stderr, wtd3.exitCode]));
 });
+group("tr -s: tr -s squeezes each run of a character in the set to one, and with two sets it translates before squeezing, as bash does", async () => {
+  const sh = await shell({});
+  const wts1 = await run(sh, "echo aabbcc | tr -s a-z");
+  check("tr -s a-z squeezes a run of letters to one (bash output, locale en_US.UTF-8)", wts1.stdout === "abc\n" && wts1.exitCode === 0 && wts1.stderr === "", JSON.stringify([wts1.stdout, wts1.stderr, wts1.exitCode]));
+  const wts2 = await run(sh, "echo 'a   b' | tr -s ' '");
+  check("tr -s squeezes a run of spaces to one (bash output, locale en_US.UTF-8)", wts2.stdout === "a b\n" && wts2.exitCode === 0 && wts2.stderr === "", JSON.stringify([wts2.stdout, wts2.stderr, wts2.exitCode]));
+  const wts3 = await run(sh, "echo aabbcc | tr -s ab");
+  check("tr -s ab squeezes only the characters in the set (bash output, locale en_US.UTF-8)", wts3.stdout === "abcc\n" && wts3.exitCode === 0 && wts3.stderr === "", JSON.stringify([wts3.stdout, wts3.stderr, wts3.exitCode]));
+  const wts4 = await run(sh, "echo hello | tr -s 'a-z' 'A-Z'");
+  check("tr -s with two sets translates, then squeezes the second set (bash output, locale en_US.UTF-8)", wts4.stdout === "HELO\n" && wts4.exitCode === 0 && wts4.stderr === "", JSON.stringify([wts4.stdout, wts4.stderr, wts4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

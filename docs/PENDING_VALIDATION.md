@@ -5750,3 +5750,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `tr` command. Its options are read with `argsOf`; with `-d` each character of the source set is removed and the rest pass through.
 - Witness: `scripts/witness-shell.mjs`, group "tr -d: tr -d deletes each character of a set, and a range in the set counts each character in it, as bash does", three rows with the expected output taken from bash.
 - Red check: the `-d` branch disabled by mutation; green RESULT PASS=1581 FAIL=0 (1.68 s); red, with the -d branch disabled (pid 36399), RESULT PASS=1578 FAIL=3, the three -d rows failing; restored, cmp matches.
+
+### Defect fix S1-05: tr -s squeezes repeated characters
+
+- Row: S1-05 of the full-feature run (commit 8d52612). Command: `echo aabbcc \| tr -s a-z`. Before: `aabbcc` (`-s` was read as the source set). Expected: `abc` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `tr` command. With `-s` a character of the squeeze set (the second set when translating, else the first) is written once for each run of it. The `-d` rows from S1-04 still pass.
+- Witness: `scripts/witness-shell.mjs`, group "tr -s: tr -s squeezes each run of a character in the set to one, and with two sets it translates before squeezing, as bash does", four rows with the expected output taken from bash.
+- Red check: the `-s` branch disabled by mutation; green RESULT PASS=1585 FAIL=0 (1.64 s); red, with the -s branch disabled (pid 36659), RESULT PASS=1581 FAIL=4, the four -s rows failing; restored, cmp matches.
