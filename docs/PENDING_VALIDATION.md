@@ -5019,7 +5019,7 @@ G1b red check (pid 2262049): mutation of the chmod quoting helper to the C form,
 `npm run check` (pid 2262080): exit 0, wall 0.28 s.
 `npm run witness:shell` (pid 2262135): exit 0, wall 1.70 s, `RESULT PASS=1504 FAIL=0`. The window log counts three rows that print exit 124 by design; they are PASS rows.
 
-Push, once, after every check passed; it carried f6de5c0 and the previous ledger commit was already on origin:
+Push, once, after every check passed; it carried f6de5c0 and the window-record commit 693da34 that sits between d6bfae4 and f6de5c0:
 
 ```
 To https://github.com/AnEntrypoint/thebird
