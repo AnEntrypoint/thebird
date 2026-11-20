@@ -202,7 +202,7 @@ function awkParse(tokens) {
     while (at('newline') || at(';')) advance();
   };
   const atSimpleEnd = () => at('newline') || at(';') || at('}') || at('eof') || atKeyword('else');
-  const isLvalue = (node) => node.type === 'var' || node.type === 'field';
+  const isLvalue = (node) => node.type === 'var' || node.type === 'field' || node.type === 'element';
   const startsConcatenation = () => {
     const type = peek().type;
     return type === 'number' || type === 'string' || type === 'ere' || type === 'name' || type === 'builtin'
@@ -264,6 +264,7 @@ function awkParse(tokens) {
     if (atKeyword('if')) return parseIf();
     if (atKeyword('while')) return parseWhile();
     if (atKeyword('for')) return parseFor();
+    if (atKeyword('delete')) return parseDelete();
     const statement = parseSimpleStatement();
     if (!atSimpleEnd()) fail();
     return statement;
@@ -365,9 +366,27 @@ function awkParse(tokens) {
     return { type: 'while', test, body: parseLoopBody() };
   }
 
+  function parseDelete() {
+    advance();
+    const name = expect('name').value;
+    if (!at('[')) return { type: 'delete', name, subscripts: null };
+    advance();
+    const subscripts = withGreater(parseExpressionList);
+    expect(']');
+    return { type: 'delete', name, subscripts };
+  }
+
   function parseFor() {
     advance();
     expect('(');
+    if (at('name') && tokens[position + 1].type === 'keyword' && tokens[position + 1].value === 'in') {
+      const name = advance().value;
+      advance();
+      const array = expect('name').value;
+      expect(')');
+      skipNewlines();
+      return { type: 'forin', name, array, body: parseLoopBody() };
+    }
     const init = at(';') ? null : withGreater(parseExpression);
     expect(';');
     skipNewlines();
@@ -540,6 +559,12 @@ function awkParse(tokens) {
         }
       case 'name':
         advance();
+        if (at('[')) {
+          advance();
+          const subscripts = withGreater(parseExpressionList);
+          expect(']');
+          return { type: 'element', name: token.value, subscripts };
+        }
         return { type: 'var', name: token.value };
       case '$':
         advance();
@@ -757,7 +782,19 @@ export function runAwk(argv, ctx) {
     if (!(fieldNumber >= 0)) throw awkError(`awk: trying to access out of range field ${fieldNumber}`);
     return fieldNumber;
   };
+  const arrays = new Map();
+  const awkSubsep = '\x1c';
+  const arrayOf = (name) => {
+    if (!arrays.has(name)) arrays.set(name, new Map());
+    return arrays.get(name);
+  };
+  const subscriptKey = (subscripts) => subscripts.map((node) => awkToString(evaluate(node))).join(awkSubsep);
   const reference = (target) => {
+    if (target.type === 'element') {
+      const map = arrayOf(target.name);
+      const key = subscriptKey(target.subscripts);
+      return { get: () => (map.has(key) ? map.get(key) : awkUninitialized), set: (value) => map.set(key, value) };
+    }
     if (target.type === 'var') return { get: () => getVar(target.name), set: (value) => setVar(target.name, value) };
     const fieldNumber = fieldNumberOf(target);
     return { get: () => getField(fieldNumber), set: (value) => setField(fieldNumber, value) };
@@ -794,6 +831,12 @@ export function runAwk(argv, ctx) {
         return node.value;
       case 'regex':
         return node.regex.test(record) ? 1 : 0;
+      case 'element': {
+        const map = arrayOf(node.name);
+        const key = subscriptKey(node.subscripts);
+        if (!map.has(key)) map.set(key, awkUninitialized);
+        return map.get(key);
+      }
       case 'var':
         return getVar(node.name);
       case 'field':
@@ -892,6 +935,16 @@ export function runAwk(argv, ctx) {
           if (runLoopBody(statement.body)) break;
           if (statement.step) evaluate(statement.step);
         }
+        return;
+      case 'forin':
+        for (const key of [...arrayOf(statement.array).keys()]) {
+          setVar(statement.name, key);
+          if (runLoopBody(statement.body)) break;
+        }
+        return;
+      case 'delete':
+        if (statement.subscripts) arrayOf(statement.name).delete(subscriptKey(statement.subscripts));
+        else arrayOf(statement.name).clear();
         return;
       case 'next':
         throw awkNextSignal;

@@ -3424,6 +3424,19 @@ group("cut -c: cut -c picks characters by position, with open and closed ranges,
   const wcc5 = await run(sh, "printf 'a:b:c\\n' | cut -d: -f2");
   check("cut -d with -f still picks fields (bash output, locale en_US.UTF-8)", wcc5.stdout === "b\n" && wcc5.exitCode === 0 && wcc5.stderr === "", JSON.stringify([wcc5.stdout, wcc5.stderr, wcc5.exitCode]));
 });
+group("awk arrays: an awk array takes subscripts, for (k in arr) visits each key, and delete removes an element or the whole array, as bash awk does", async () => {
+  const sh = await shell({});
+  const wak1 = await run(sh, "printf 'a\\nb\\n' | awk 'BEGIN { s[\"k\"]=1 } END { for (k in s) print k }'; echo rc=$?");
+  check("awk for (k in arr) visits the key of an array element (bash output, locale en_US.UTF-8)", wak1.stdout === "k\nrc=0\n" && wak1.exitCode === 0 && wak1.stderr === "", JSON.stringify([wak1.stdout, wak1.stderr, wak1.exitCode]));
+  const wak2 = await run(sh, "printf 'k1\\n' | awk '{ c[$1]++ } END { for (k in c) print k, c[k] }'");
+  check("awk counts each field into an array and prints the keys (bash output, locale en_US.UTF-8)", wak2.stdout === "k1 1\n" && wak2.exitCode === 0 && wak2.stderr === "", JSON.stringify([wak2.stdout, wak2.stderr, wak2.exitCode]));
+  const wak3 = await run(sh, "printf 'a\\nb\\na\\n' | awk '{ c[$1]++ } END { for (k in c) print k, c[k] }' | sort");
+  check("awk array counts of repeated keys, sorted (bash output, locale en_US.UTF-8)", wak3.stdout === "a 2\nb 1\n" && wak3.exitCode === 0 && wak3.stderr === "", JSON.stringify([wak3.stdout, wak3.stderr, wak3.exitCode]));
+  const wak4 = await run(sh, "awk 'BEGIN { a[1]; delete a[1]; for (k in a) print \"left\", k; print \"done\" }'");
+  check("awk delete removes one element so the loop sees none (bash output, locale en_US.UTF-8)", wak4.stdout === "done\n" && wak4.exitCode === 0 && wak4.stderr === "", JSON.stringify([wak4.stdout, wak4.stderr, wak4.exitCode]));
+  const wak5 = await run(sh, "awk 'BEGIN { a[1]=1; a[2]=2; delete a; n=0; for (k in a) n++; print n }'");
+  check("awk delete with no subscript removes every element (bash output, locale en_US.UTF-8)", wak5.stdout === "0\n" && wak5.exitCode === 0 && wak5.stderr === "", JSON.stringify([wak5.stdout, wak5.stderr, wak5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

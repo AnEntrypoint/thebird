@@ -5813,3 +5813,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `cut` command. `-c LIST` picks characters by position, with the same list syntax as `-f` (single, ranges, open ends); the field path is unchanged.
 - Witness: `scripts/witness-shell.mjs`, group "cut -c: cut -c picks characters by position, with open and closed ranges, as bash does", five rows with the expected output taken from bash (the last is the existing `-f` path, kept as a regression). Before the change the four `-c` rows failed against bash.
 - Red check: the character branch disabled by mutation; the counts are in the amended line that follows.
+
+### Defect fix S1-16: awk arrays, for (k in arr), and delete
+
+- Row: S1-16 of the full-feature run (commit 8d52612). Command: `printf 'a\nb\n' \| awk 'BEGIN { s["k"]=1 } END { for (k in s) print k }'`. Before: `awk: syntax error at source line 1`, rc 2. Expected: `k` (bash awk, locale en_US.UTF-8). The shell's awk had no arrays at all.
+- File: `web/shell-awk.js`. Arrays are added: `name[subscripts]` is an element (several subscripts join with SUBSEP, `\x1c`), an element is an lvalue, a read of a missing element creates it as uninitialized, `for (k in arr)` visits a snapshot of the keys, and `delete arr[k]` and `delete arr` remove an element or the whole array. The `in` operator outside the for header is not part of this row and is open.
+- Witness: `scripts/witness-shell.mjs`, group "awk arrays: an awk array takes subscripts, for (k in arr) visits each key, and delete removes an element or the whole array, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
+- Red check: the loop variable set to 0 instead of the key by mutation; green PASS=1627 FAIL=0; red PASS=1624 FAIL=3, restored, cmp matches.
