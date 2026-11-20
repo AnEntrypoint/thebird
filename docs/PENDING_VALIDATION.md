@@ -6060,3 +6060,11 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Limit, not fixed: `jq -n '$ENV | type'` prints `"object"` in jq; shell core still reports `$ENV is not defined` at runtime with rc 5.
 - Commit: 6af774c (lanmower, no trailers).
 
+### Defect fix D-quote: date quotes an invalid date with the locale's quote marks
+
+- Gap found by probe against GNU date (`/bin/gnudate`): an invalid date prints `date: invalid date ‘foo’` in a UTF-8 locale (en_US.UTF-8, C.UTF-8) and `date: invalid date 'foo'` in the C locale or with `LANG=C`. Shell core always printed straight quotes.
+- Files: `web/shell-core.js` (the invalid-date message in date chooses curly quotes when `LOCALE_MODES` gives the current locale the `characters` mode, from `childLocale()`, the same lookup sort uses), `scripts/witness-shell.mjs` (group "date: an invalid date is quoted with the locale quote marks, as GNU date prints it", four rows, expected text from GNU date).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1688 FAIL=0` (1684 before, plus four rows).
+- Red check: the curly-quote branch disabled by `false ? ‘` in place of the locale test; witness `RESULT PASS=1686 FAIL=2` (the two UTF-8 rows); restored from a copy, `cmp` matched; green again `RESULT PASS=1688 FAIL=0`.
+- Commit: 6eb3d8a (lanmower, no trailers).
+
