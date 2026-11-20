@@ -433,11 +433,22 @@ function awkParse(tokens) {
   }
 
   function parseAnd() {
-    let left = parseMatch();
+    let left = parseIn();
     while (at('&&')) {
       advance();
       skipNewlines();
-      left = { type: 'and', left, right: parseMatch() };
+      left = { type: 'and', left, right: parseIn() };
+    }
+    return left;
+  }
+
+  function parseIn() {
+    let left = parseMatch();
+    if (left.type === 'subscripts' && !atKeyword('in')) fail();
+    while (atKeyword('in')) {
+      advance();
+      const array = expect('name').value;
+      left = { type: 'in', subscripts: left.type === 'subscripts' ? left.items : [left], array };
     }
     return left;
   }
@@ -575,6 +586,16 @@ function awkParse(tokens) {
       case '(': {
         advance();
         const expression = withGreater(parseExpression);
+        if (at(',')) {
+          const items = [expression];
+          while (at(',')) {
+            advance();
+            skipNewlines();
+            items.push(withGreater(parseExpression));
+          }
+          expect(')');
+          return { type: 'subscripts', items };
+        }
         expect(')');
         return { type: 'group', expression };
       }
@@ -882,6 +903,8 @@ export function runAwk(argv, ctx) {
         return getField(fieldNumberOf(node));
       case 'group':
         return evaluate(node.expression);
+      case 'in':
+        return arrayOf(node.array).has(subscriptKey(node.subscripts)) ? 1 : 0;
       case 'assign': {
         const target = reference(node.target);
         if (node.op === '=') {

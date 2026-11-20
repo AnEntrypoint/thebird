@@ -3434,6 +3434,25 @@ group("cut -c: cut -c picks characters by position, with open and closed ranges,
   const wcc5 = await run(sh, "printf 'a:b:c\\n' | cut -d: -f2");
   check("cut -d with -f still picks fields (bash output, locale en_US.UTF-8)", wcc5.stdout === "b\n" && wcc5.exitCode === 0 && wcc5.stderr === "", JSON.stringify([wcc5.stdout, wcc5.stderr, wcc5.exitCode]));
 });
+group('awk: the in operator tests whether a subscript is an element, outside a for header, as mawk does', async () => {
+  const sh = await shell({ '/workspace/in.txt': 'x\n' });
+  const cases = [
+    ["awk 'BEGIN{a[\"x\"]=1; print (\"x\" in a)}'", '1\n', 'a present key is 1'],
+    ["awk 'BEGIN{a[\"x\"]=1; print (\"y\" in a)}'", '0\n', 'an absent key is 0'],
+    ["awk 'BEGIN{a[1,2]=3; print ((1,2) in a), ((2,1) in a)}'", '1 0\n', 'a multi-subscript key is tested with SUBSEP'],
+    ["awk '{ print ($1 in arr) }' in.txt", '0\n', 'an empty array tests as 0 on each record'],
+    ["awk 'BEGIN{a[\"k\"]; if (\"k\" in a) print \"yes\"}'", 'yes\n', 'the in test works as an if condition'],
+    ["awk 'BEGIN{a[\"x\"]=1; n=(\"x\" in a) + (\"z\" in a); print n}'", '1\n', 'the in tests add as numbers'],
+    ["awk 'BEGIN{a[\"x\"]=1; print (\"x\" in a) \"-\" (\"q\" in a)}'", '1-0\n', 'the in tests concatenate as numbers'],
+  ];
+  for (const [command, expected, what] of cases) {
+    const r = await run(sh, command);
+    check(`awk in: ${what} (mawk output)`, r.stdout === expected && r.exitCode === 0, JSON.stringify(r));
+  }
+  const bare = await run(sh, "awk 'BEGIN{x=(1,2)}'; echo rc=$?");
+  check('awk in: a subscript list that is not followed by in is a syntax error, as mawk reports it (mawk output)', bare.stdout === 'rc=2\n' && bare.exitCode === 0, JSON.stringify(bare));
+});
+
 group("awk arrays: an awk array takes subscripts, for (k in arr) visits each key, and delete removes an element or the whole array, as bash awk does", async () => {
   const sh = await shell({});
   const wak1 = await run(sh, "printf 'a\\nb\\n' | awk 'BEGIN { s[\"k\"]=1 } END { for (k in s) print k }'; echo rc=$?");
