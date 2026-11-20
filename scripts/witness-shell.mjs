@@ -368,6 +368,18 @@ group('tar: create, list, extract and errors', async () => {
   check('tar: an archive written to stdout lists from stdin', piped.stdout === 'a.txt\n', JSON.stringify(piped.stdout));
 });
 
+group('date: an invalid date is quoted with the locale quote marks, as GNU date prints it', async () => {
+  const sh = await shell({});
+  const utf8 = await run(sh, "date -d foo; echo rc=$?");
+  check('date: an invalid date in the default en_US.UTF-8 locale uses curly quotes (GNU date output)', utf8.stdout === 'rc=1\n' && utf8.stderr === 'date: invalid date ‘foo’\n', JSON.stringify(utf8));
+  const utf8c = await run(sh, "LC_ALL=C.UTF-8 date -d foo; echo rc=$?");
+  check('date: C.UTF-8 also uses curly quotes (GNU date output)', utf8c.stdout === 'rc=1\n' && utf8c.stderr === 'date: invalid date ‘foo’\n', JSON.stringify(utf8c));
+  const plain = await run(sh, "LC_ALL=C date -d foo; echo rc=$?");
+  check('date: the C locale uses straight quotes (GNU date output)', plain.stdout === 'rc=1\n' && plain.stderr === "date: invalid date 'foo'\n", JSON.stringify(plain));
+  const langC = await run(sh, "LANG=C date -d foo; echo rc=$?");
+  check('date: LANG=C alone also uses straight quotes (GNU date output)', langC.stdout === 'rc=1\n' && langC.stderr === "date: invalid date 'foo'\n", JSON.stringify(langC));
+});
+
 group('jq: an unbound variable is a compile error with status 3, reported as jq 1.8.2 reports it', async () => {
   const sh = await shell({});
   const bare = await run(sh, "jq -n '$x'; echo rc=$?");

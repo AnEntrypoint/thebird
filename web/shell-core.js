@@ -2255,7 +2255,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const at = argv.indexOf('-d');
       const source = at < 0 ? null : argv[at + 1] ?? '';
       const now = source === null ? new Date() : /^@-?\d+$/.test(source) ? new Date(Number(source.slice(1)) * 1000) : new Date(NaN);
-      if (Number.isNaN(now.getTime())) return { code: 1, out: '', err: "date: invalid date '" + source + "'\n" };
+      if (Number.isNaN(now.getTime())) return { code: 1, out: '', err: 'date: invalid date ' + (LOCALE_MODES.get(childLocale().value) === 'characters' ? '‘' + source + '’' : "'" + source + "'") + '\n' };
       const format = argv.find((arg) => arg.startsWith('+'));
       if (format === undefined) return ok(now.toUTCString() + '\n');
       const pad = (value, width = 2) => String(value).padStart(width, '0');
