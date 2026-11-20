@@ -1143,6 +1143,7 @@ function matchString(text, pattern) {
 const LOCALE_NAMES = ['LC_ALL', 'LC_CTYPE', 'LANG'];
 const LOCALE_MODES = new Map([['C', 'bytes'], ['POSIX', 'bytes'], ['C.UTF-8', 'characters'], ['C.utf8', 'characters'], ['en_US.UTF-8', 'characters'], ['en_US.utf8', 'characters']]);
 const DEFAULT_LANG = 'en_US.UTF-8';
+const NON_READERS = new Set(['true', 'false', 'echo', 'printf', 'exit', 'cd', 'export', 'unset', 'return', 'test', '[', ':', 'pwd', 'set', 'shift', 'local']);
 const BASH_BUILTINS = new Set(['.', ':', '[', 'alias', 'bg', 'break', 'builtin', 'caller', 'cd', 'command', 'continue', 'declare', 'dirs', 'disown', 'echo', 'enable', 'eval', 'exec', 'exit', 'export', 'false', 'fc', 'fg', 'getopts', 'hash', 'help', 'history', 'jobs', 'kill', 'let', 'local', 'logout', 'mapfile', 'popd', 'printf', 'pushd', 'pwd', 'read', 'readarray', 'readonly', 'return', 'set', 'shift', 'shopt', 'source', 'suspend', 'test', 'times', 'trap', 'true', 'type', 'typeset', 'ulimit', 'umask', 'unalias', 'unset', 'wait']);
 
 function localeChoice(get) {
@@ -2906,9 +2907,10 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       } else if (FD_OUTPUTS.includes(op)) {
         fdTable.set(fd, { path: await wordPath(redirect.target, sink) });
       } else if (FD_INPUTS.includes(op)) {
-        fdTable.set(fd, { read: await wordPath(redirect.target, sink) });
+        fdTable.set(fd, { read: await wordPath(redirect.target, sink), pos: 0 });
       } else if (FD_HEREDOCS.includes(op)) {
-        fdTable.set(fd, 'readonly');
+        const text = op.endsWith('<<<') ? (await expandWord(redirect.target, sink)).join(' ') + '\n' : await bodyText(redirect.body, sink);
+        fdTable.set(fd, { heredoc: text, pos: 0 });
       }
     }
   }
@@ -2921,9 +2923,14 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
 
   async function inputDup(redirect, input, sink) {
     const dup = await dupOf(redirect, sink);
-    if (dup.close) return '';
-    if (dup.fd === 0) return input;
+    if (dup.close) return { text: '', entry: null };
+    if (dup.fd === 0) return { text: input, entry: null };
     const entry = fdTable.get(dup.fd);
+    return { text: inputText(entry).slice(entry?.pos ?? 0), entry: entry?.pos === undefined ? null : entry };
+  }
+
+  function inputText(entry) {
+    if (entry?.heredoc !== undefined) return entry.heredoc;
     if (entry?.read === undefined || entry.read === NULL_DEVICE) return '';
     return host.read(entry.read);
   }
@@ -2935,7 +2942,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       else if (redirect.op === '<') {
         const path = await wordPath(redirect.target, sink);
         input = path === NULL_DEVICE ? '' : host.read(path);
-      } else if (INPUT_DUP_OPS.has(redirect.op)) input = await inputDup(redirect, input, sink);
+      } else if (INPUT_DUP_OPS.has(redirect.op)) input = (await inputDup(redirect, input, sink)).text;
     }
     return input;
   }
@@ -2976,6 +2983,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     let result;
     try {
       let input = stdin;
+      let fdEntry = null;
       for (const redirect of node.redirects) {
         if (/^[3-9]/.test(redirect.op)) await applyTableRedirects([redirect], sink);
         else if (redirect.op === '<<' || redirect.op === '<<-') input = await bodyText(redirect.body, sink);
@@ -2987,9 +2995,15 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           } catch {
             return { code: 1, out: '', err: argv[0] + ': no such file\n' };
           }
-        } else if (INPUT_DUP_OPS.has(redirect.op)) input = await inputDup(redirect, input, sink);
+        } else if (INPUT_DUP_OPS.has(redirect.op)) {
+          const dup = await inputDup(redirect, input, sink);
+          input = dup.text;
+          fdEntry = dup.entry;
+        }
       }
-      result = execute && !commandKnown(argv[0]) ? { code: 127, out: '', err: 'thebird: exec: ' + argv[0] + ': not found\n' } : await dispatch(argv, input, sink.signal, input === stdin ? stream : { text: input, pos: 0 });
+      const inputStream = input === stdin ? stream : { text: input, pos: 0 };
+      result = execute && !commandKnown(argv[0]) ? { code: 127, out: '', err: 'thebird: exec: ' + argv[0] + ': not found\n' } : await dispatch(argv, input, sink.signal, inputStream);
+      if (fdEntry && !NON_READERS.has(argv[0])) fdEntry.pos += argv[0] === 'read' ? inputStream.pos : input.length;
     } finally {
       for (const [fd, value] of saved) {
         if (value === undefined) fdTable.delete(fd);
@@ -3041,7 +3055,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       const target = fds[fd];
       if (target === 'out') outText += text;
       else if (target === 'err') errText += text;
-      else if (target === undefined || target === 'readonly' || target.read !== undefined) writeFailed = writeFailed || text !== '';
+      else if (target === undefined || target === 'readonly' || target.read !== undefined || target.heredoc !== undefined) writeFailed = writeFailed || text !== '';
       else {
         const entry = files.get(target.path) ?? { text: '', rw: false };
         entry.text += text;

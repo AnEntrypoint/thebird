@@ -4296,7 +4296,7 @@ Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape, w
 - `echo hi > f; exec 3<f; cat <&3 3>&-` and `echo hi > f; cat 3<f <&3 3<&-`: `hi`, status 0. The input dup happens before the close in the same command, because the redirects apply left to right.
 - `echo hi > f; cat 0<f <&0`: `hi`, status 0 (`<&0` keeps the input that `0<f` set).
 
-Not probed or not pinned: `exec 3<<EOF` followed by `<&3` (a heredoc on fd 3 is still read as empty here, as before this change set); `cat <&3 >&0`, where bash prints cat's own message `cat: -: Bad file descriptor` and this shell prints the write-error text, so no row pins it.
+Not probed or not pinned: `exec 3<<EOF` followed by `<&3` (a heredoc on fd 3 was read as empty here; change set 30ca reads it as its body, and the note is corrected there); `cat <&3 >&0`, where bash prints cat's own message `cat: -: Bad file descriptor` and this shell prints the write-error text, so no row pins it.
 
 What changed in the shell: `<&`, `0<&`, `1<&`, `2<&` and `N<&` for N in 3 to 9 are operators (before the `1<` and `N<` operators, so `N<&` is not read as `N<` then `&`), and join `DUP_OPS`, so the dup classifier `dupOf` and the open pass and the output routing handle them with the same rules as `>&`. The output table starts with fd 0 read-only (stdin is a write error, as in bash), and fd 0 is open at the start of the open pass, so `>&0` is valid. `<&-` closes fd 0 and a later `>&0` in the same command is a bad descriptor. `N<f` and `exec N<f` store a read target `{ read: path }` instead of a plain read-only flag, so `<&N` can read the file; a write to it is still a write error. Input dups are applied in `resolveInput` (compound commands) and in the `runCommand` loop, and per-command descriptors 3 to 9 are applied in the same left-to-right loop, so a dup can read a descriptor opened earlier in the same command and a close later in the command does not affect it. An empty word on any dup operator is a bad descriptor: named by its fd number when the operator has one (`2>&`, `3<&`), and by its quoted word when it does not (`>&`, `<&`).
 
@@ -4690,3 +4690,30 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `cfd4d05f0360a3d5801718a563d618fe4fda0dc2 refs/heads/main`.
 
 Longest step: reading 1, busy with another run's Chromium GPU process and dump script, followed by the 30 s wait for reading 2. The window job ran 43.6 s in all. The push took about 4 s. Nothing was stopped.
+
+### Change set 30ca: an input fd keeps one offset across the commands that read it, a heredoc on an fd is that fd's input, and a `>>&word` is a syntax error at the ampersand, as bash does
+
+Reference: `bash -c` in the sandbox locale (`LANG=en_US.UTF-8`, `LC_ALL` unset), each case in a fresh directory. Nineteen cases. The rows take stdout and status from bash. The stderr of a write error and of a closed fd is bash's text with its `bash: line N: ` prefix and its command name (`echo: `) dropped, which is the `thebird:` convention used by the write-error rows. The stderr of the syntax errors is this shell's own text, `syntax error: expected a file after '>>'` (or `'2>>'`), as the shell words its syntax errors; bash's two-line message is not matched.
+
+Probed first, against HEAD:
+- `>>&word` (`echo e >>&2x`, with or without a space, with a digit before `>>`, or a bare `>>&`): bash gives `syntax error near unexpected token '&'` and status 2, and nothing on that line runs. The shell already refused each one with nothing run, so the change is pinned by five rows and needs no code change.
+- The shared offset: bash's `cat <&3; cat <&3` prints the file once, because both commands share one offset. A subshell and a group share it too, and a reopen with `exec 3<f` starts again at the top. `read a <&3; read b <&3` takes one line each. `true <&3` does not move the offset. The shell gave every reader the whole file.
+- A heredoc on an fd: bash makes the body the fd's input, so `exec 3<<EOF` followed by `cat <&3` prints the body once, and `read` takes a line at a time. The shell read such an fd as empty, which the note at line 4299 recorded.
+
+What changed in the shell:
+- The fd table stores a position with each input entry. A file entry is `{ read, pos }`, and a heredoc entry is `{ heredoc, pos }`, whose body is the expanded text, or for a here-string the expanded word and a newline.
+- `inputText` gives an entry's text; `inputDup` returns the text from the entry's position, and the entry itself.
+- `runCommand` runs a command that reads its input from such an entry with that remaining text, and then moves the entry's position: by the characters `read` used, or by all of them for any other command. Commands in `NON_READERS` (`true`, `echo`, `printf` and similar) move nothing.
+- A heredoc entry rejects writes, as the `readonly` entry did, so `echo x >&3` keeps its write error.
+
+Witness: nineteen rows (five `>>&word`, fourteen fd input, with the heredoc rows among them). Before the change, twelve failed: the five shared-offset rows and the seven heredoc rows, of which two (the write error and the closed fd) were wrong rows about the message text, fixed by the normaliser above. After the change: `RESULT PASS=1421 FAIL=0` (was 1402).
+
+Red check: the mutation removes the line that moves an input entry's position after a reading command, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1414 FAIL=7`: five shared-offset rows and two heredoc rows. Restored from the copy, `cmp` matched, and the witness is back at `PASS=1421 FAIL=0`.
+
+Gaps, recorded, not implemented in this change set:
+- G5, found by the `>>&word` probe: the shell parses a whole script before it runs any line. A syntax error anywhere therefore stops every line, where bash runs the lines before the error (`echo a` newline `echo e >>&2x` prints `a` in bash and nothing here). The five rows are one-line scripts, where the two agree.
+- A group with an input redirect (`{ cat; } <&3`) does not move the offset (`resolveInput` is not changed), and a function that reads its input (`f <&3`) moves it by all of it, because the function name is not in `NON_READERS`. Neither was probed.
+- A command other than `read` that reads part of its input (for example `head -n 1`) moves the offset to the end here. Not probed against bash.
+- Positions count characters, not bytes.
+
+Correction to the note at line 4299 (change set 30bt's neighbour, the heredoc on fd 3): the heredoc is read as its body now, as described above. The `cat <&3 >&0` message note there is unchanged.
