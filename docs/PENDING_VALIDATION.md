@@ -4968,3 +4968,23 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `d6bfae4d6387e355b7f4112969d04b2b1789d52c refs/heads/main`.
 
 Longest step: the window wait, from the window start at 07:01:33 to the cleared reading at 07:03:04, about 91 s. Nothing was stopped; the busy process belonged to another session.
+
+### Change set 30ce: chmod -R permission messages are pinned to GNU's output in both locales; the probe found no code difference, so the change set adds witness rows only
+
+Reference: GNU coreutils 9.7 from `/bin/gnuchmod`, reached through the PATH shim `/tmp/gnubin` (the PATH here resolves `chmod` to uutils 0.10.0, whose output is not GNU's). Locale: `LANG=en_US.UTF-8`, `LC_ALL` and `LC_CTYPE` unset in the environment; the C cases set `LC_ALL=C` on the command that runs. The sandbox runs as a non-root user, which is what makes the directories below unreadable to chmod. Each case in a fresh directory; a permissions reset (`chmod -R u+rwx` from GNU) runs before each directory is removed.
+
+Probed first, against HEAD d6bfae4, with the same cases run through GNU and through the shell:
+- A directory with mode 000 under `chmod -R 600` whose child is unreadable: `chmod: cannot access 'd/x': Permission denied` (both locales, with the non-ASCII form `'d '$'\\303\\251''/x'` under `LC_ALL=C`).
+- `chmod -R 000` on the same directory: `chmod: cannot read directory 'd': Permission denied` (matched).
+- A parent with mode 000 or a directory with mode 300 or 100 blocks the walk: `cannot access 'p/d'` and `cannot access 'p/d/x'` (matched). A non-ASCII path under a blocked parent: `cannot access 'p/é/q'` in UTF-8 and `'p/'$'\\303\\251''/q'` in C (matched).
+- Verbose and changes lines: `mode of 'd' changed from 0000 (---------) to 0600 (rw-------)` followed by `'d/x' could not be accessed` (matched); under the C locale the non-ASCII names are escaped in both lines (matched).
+- A name with an apostrophe: `chmod: cannot access "d'x/y": Permission denied` (matched).
+- Mixed operands, one of them missing and one of them unreadable: the messages come in operand order (matched).
+
+What the probe shows: every case above matched the shell's output exactly, stdout, stderr and status, so there is no code change in this change set. The quoting that makes these lines correct is the one added in change set 30cd.
+
+Witness: 15 new rows, from GNU output, added with the existing `chmod and stat quoting` rows. Result after the rows were added, before any change: `RESULT PASS=1504 FAIL=0` (was 1489). The rows pass on arrival, because the behaviour already matches.
+
+Red check: the mutation makes the `chmod` helper quote every name in the C locale (`quoteName(text, 'bytes')`), on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1497 FAIL=7`: the UTF-8 `chmod` rows from change set 30cd and three of the new `chmod -R` rows (the non-ASCII directory, the operand list with a non-ASCII name, and the non-ASCII subdirectory). Restored from the copy, `cmp` matched; `git status` shows `web/shell-core.js` unchanged, and the witness is back at `PASS=1504 FAIL=0`.
+
+G1b is closed by this change set for the cases listed. Not covered: symlinks under a `chmod -R` walk, and the `-H` and `-L` options, which were not probed.
