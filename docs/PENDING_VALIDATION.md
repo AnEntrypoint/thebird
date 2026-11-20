@@ -4876,3 +4876,34 @@ Red check: the mutation disables the fall-through in `settleLocale`, on the work
 Found, open:
 - G7, reachable, open: substring expansion `${x:off:len}` is not supported; the shell reports a bad substitution, bash returns the slice. This blocks item 17's substring check.
 - Item 17 stays blocked for the byte-level part (stdout is a character string), and its substring probe now also needs G7.
+
+### Phase B window for 19dd8fa (change set 30cc, a cleared locale falls through an invalid value, and only the LC_ names warn), with its readings, red check and push
+
+Gate readings (the gate is the second `vmstat 1 2` sample, both directions under 1000 KB/s; heavy-jobs must read clear in the same reading):
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 06:51:01 | 4308 | 504 | not clear | not run | `vmstat 1 2`, second sample; the first line is the average since boot |
+| wait 1 | 06:51:10 | 6144 | 0 | not clear | not run | waiter, which takes gate readings only |
+| wait 2 | 06:51:41 | 496 | 8 | clear | not run | the waiter started the window on this reading |
+| window 1 | 06:51:45 | 168 | 0 | clear | clear, n=0 | `heavy-jobs.cjs` from bevy commit 495fff6; the window cleared at this reading |
+
+The waiter (pid 2241302) started the window script only on a clear gate sample, as the instruction says. The window script (its checks run only when the gate and heavy-jobs are both clear in the same reading) cleared at its first reading, so the window ran 11 s after it started.
+
+Heavy-job rule, as applied: no process above 20% CPU in `top` and no Chromium renderer above 1 GB at the window reading; the checker printed `HEAVY_JOBS clear`.
+
+Green witness (pid 2241634): exit 0, wall 1.93 s, `RESULT PASS=1463 FAIL=0`.
+Red check for item 18 (pid 2241669): the mutation disables the fall-through in `settleLocale` on the HEAD copy of `web/shell-core.js`. Exit 1, wall 1.61 s, `RESULT PASS=1460 FAIL=3`. Restored from the HEAD copy, `cmp` matched; the witness after restore read `PASS=1463 FAIL=0`.
+`npm run check` (pid 2241700): exit 0, wall 1.23 s.
+`npm run witness:shell` (pid 2241809): exit 0, wall 1.70 s, `RESULT PASS=1463 FAIL=0`; three rows print exit 124 and are PASS rows.
+
+Push, once, after every check passed. It carried 83ee321 and 19dd8fa:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   5528810..19dd8fa  main -> main
+```
+
+`git ls-remote origin main` after the push: `19dd8fa343d035f524b5b3ef3d7106ad199fd192 refs/heads/main`.
+
+Longest step: the gate wait, about 31 s (wait 1 at 06:51:10, wait 2 at 06:51:41). Nothing was stopped.
