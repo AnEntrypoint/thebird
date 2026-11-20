@@ -1463,11 +1463,13 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return LOCALE_MODES.get(choice.value) ?? 'bytes';
   };
   let shellLocale = LOCALE_MODES.get(localeChoice((name) => vars.get(name)).value) ?? 'bytes';
-  const settleLocale = (warnAbout = null) => {
-    const choice = localeChoice((name) => variableValue(name));
-    const mode = LOCALE_MODES.get(choice.value);
+  const settleLocale = (warnAbout = null, clearing = false) => {
+    const named = LOCALE_NAMES.map((name) => ({ name, value: variableValue(name) })).filter((entry) => entry.value);
+    const choice = named[0] ?? { name: null, value: 'C' };
+    let mode = LOCALE_MODES.get(choice.value);
+    if (mode === undefined && clearing) mode = named.slice(1).map((entry) => LOCALE_MODES.get(entry.value)).find((found) => found !== undefined);
     if (mode !== undefined) shellLocale = mode;
-    else if (warnAbout !== null) localeWarnings.push('thebird: warning: setlocale: ' + choice.name + ': cannot change locale (' + choice.value + '): No such file or directory\n');
+    else if (warnAbout !== null && warnAbout !== 'LANG' && warnAbout === choice.name) localeWarnings.push('thebird: warning: setlocale: ' + choice.name + ': cannot change locale (' + choice.value + '): No such file or directory\n');
   };
   const takeLocaleWarnings = () => localeWarnings.splice(0).join('');
   let errexit = saved?.errexit ?? false;
@@ -2387,7 +2389,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const eq = arg.indexOf('=');
         const name = eq < 0 ? arg : arg.slice(0, eq);
         frame?.set(name, eq < 0 ? '' : arg.slice(eq + 1));
-        if (LOCALE_NAMES.includes(name)) settleLocale(name);
+        if (LOCALE_NAMES.includes(name)) settleLocale(name, eq < 0 || arg.slice(eq + 1) === '');
       }
       return ok('');
     },
@@ -2586,7 +2588,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     vars.delete(name);
     exported.delete(name);
     inherited.delete(name);
-    settleLocale();
+    settleLocale(null, LOCALE_NAMES.includes(name));
   };
 
   const readBuiltin = (argv, cursor) => {
@@ -2621,7 +2623,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
     if (frame?.has(name)) frame.set(name, value);
     else vars.set(name, value);
     if (!quiet && !prefixNames.has(name)) inherited.delete(name);
-    if (LOCALE_NAMES.includes(name)) settleLocale(quiet ? null : name);
+    if (LOCALE_NAMES.includes(name)) settleLocale(quiet ? null : name, value === '');
   };
 
   async function expandChars(parts, inDouble, sink) {

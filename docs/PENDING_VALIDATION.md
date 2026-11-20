@@ -4852,3 +4852,27 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `55288102042a827421f0cdeb89061335858a5c29 refs/heads/main`.
 
 Longest step: the gate wait, from the job start at 06:41:07 to reading 8 at 06:44:36. Nothing was stopped; the busy reading 1 and 2 process belonged to another session. The push took 3 s.
+
+### Change set 30cc: a locale variable that is cleared falls through an invalid value to the next one, an invalid assignment keeps the previous locale, and only the LC_ names warn, as bash does
+
+Reference: `bash -c` in the sandbox locale (`LANG=en_US.UTF-8`, `LC_ALL` and `LC_CTYPE` unset in the environment, each case in a fresh directory). Rows take stdout and status from bash, and stderr from bash with its warnings written as `thebird: warning:`. Item 18 of the ranked list.
+
+Probed first, against HEAD 5528810, with `x=é; echo ${#x}` (1 character in UTF-8, 2 bytes in C):
+- The shell's rule had one fault. A locale value that is not a known locale was ignored, and the previous mode stayed in force. Bash instead falls through to the next variable of LC_ALL, LC_CTYPE, LANG when a variable is cleared.
+- `LC_CTYPE=xx; LC_ALL=C; unset LC_ALL` prints 1 in bash, because the cleared LC_ALL leaves an invalid LC_CTYPE, which falls through to LANG. The shell printed 2, keeping C. Same for `LC_ALL=C; LC_CTYPE=xx; unset LC_ALL` and `LC_CTYPE=xx; LC_ALL=C; LC_ALL=` (an empty value clears).
+- A valid LC_CTYPE is used when LC_ALL is cleared: `LC_ALL=C; LC_CTYPE=C; unset LC_ALL` prints 2, and `LC_ALL=C; LC_CTYPE=en_US.UTF-8; unset LC_ALL` prints 1.
+- An invalid assignment keeps the previous locale. `LC_ALL=C; LC_ALL=xx` and `LC_CTYPE=C; LC_ALL=xx` print 2; `LC_ALL=xx; LC_CTYPE=C` prints 1, because the LC_ALL in effect is still invalid. `LANG=xx` keeps the previous locale and prints no warning.
+- Warnings: bash warns only for the name in effect. `LC_ALL=xx; LC_CTYPE=C` warns once (for LC_ALL); the shell warned twice. `LC_ALL=C; LC_CTYPE=xx` warns nothing, because LC_ALL is in effect.
+- Found beside it, not fixed here: substring expansion is not supported. `x=abc; echo ${x:1:1}` prints `b` in bash; the shell reports `syntax error: bad substitution x:1:1` (G7 below).
+
+What changed in web/shell-core.js:
+- `settleLocale(warnAbout, clearing)` takes the first non-empty name among LC_ALL, LC_CTYPE, LANG. If its value is a known locale, that mode is used. If not, a clearing event (`unset`, `local` with no value, or an empty assignment) falls through to the next non-empty valid name; an assignment keeps the previous mode. A warning is recorded only when the assigned name is the one in effect, and never for LANG.
+- The three call sites pass the clearing flag: the `setVariable` path (empty value), the `local` builtin (no value or empty), and the `unset` path (locale names only).
+
+Witness: 18 new rows, from bash output, added before the change. Before the change: `RESULT PASS=1458 FAIL=5` (the fall-through rows, the double-warning row and the LANG row). After the change: `RESULT PASS=1463 FAIL=0` (was 1445).
+
+Red check: the mutation disables the fall-through in `settleLocale`, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1460 FAIL=3` (the three rows where a cleared LC_ALL or an empty LC_ALL leaves an invalid LC_CTYPE). Restored from the copy, `cmp` matched, and the witness is back at `PASS=1463 FAIL=0`.
+
+Found, open:
+- G7, reachable, open: substring expansion `${x:off:len}` is not supported; the shell reports a bad substitution, bash returns the slice. This blocks item 17's substring check.
+- Item 17 stays blocked for the byte-level part (stdout is a character string), and its substring probe now also needs G7.
