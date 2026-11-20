@@ -162,6 +162,15 @@ group('playwriter-hello', async () => {
   check('playwriter names an unknown command and the shell goes on', hello.out.includes("playwriter: unknown command 'frobnicate'") && helloLines.includes('after-frobnicate'), helloLines.slice(-3).join(' / ').slice(0, 140));
 });
 
+group('touch -m sets the modification time that stat reports in the page, after the file was written two seconds earlier', async () => {
+  const touched = await terminal([
+    ['run', "printf x > /workspace/touchrow-f && sleep 2 && touch -m /workspace/touchrow-f && echo touched"],
+    ['run', "tjs -e \"tjs.stat('/workspace/touchrow-f').then((s) => console.log('touchrow-age', Date.now() - s.mtimeMs < 1000))\""]
+  ]);
+  const touchLines = touched.out.split('\n');
+  check('touch -m moves the mtime that tjs.stat reports to now, after the file was written two seconds earlier', touchLines.includes('touchrow-age true'), JSON.stringify(touchLines.filter((line) => line.startsWith('touchrow-')).slice(0, 4)));
+});
+
 group('uv-fs', async () => {
   const uvSeed = "printf 'abcdefghijklmnop' > /workspace/uvfs-c0";
   const uvDoubling = Array.from({ length: 13 }, (_, i) => `cat /workspace/uvfs-c${i} /workspace/uvfs-c${i} > /workspace/uvfs-c${i + 1}`).join(' && ');

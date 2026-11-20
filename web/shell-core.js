@@ -2410,7 +2410,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       for (const name of names) {
         const path = resolvePath(name);
         if (host.exists(path)) {
-          host.touch?.(path);
+          host.touch?.(path, access, modify);
           touchTicks(path, access, modify);
           continue;
         }

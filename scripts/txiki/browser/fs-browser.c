@@ -20,6 +20,7 @@ HOST_IMPORT("tjs_fs_rmdir") int32_t host_fs_rmdir(const char *path, int32_t len)
 HOST_IMPORT("tjs_fs_symlink") int32_t host_fs_symlink(const char *target, int32_t target_len, const char *path, int32_t len);
 HOST_IMPORT("tjs_fs_readlink") int32_t host_fs_readlink(const char *path, int32_t len, char *out, int32_t cap);
 HOST_IMPORT("tjs_fs_lstat") int32_t host_fs_lstat(const char *path, int32_t len, double *out);
+HOST_IMPORT("tjs_fs_setattr") int32_t host_fs_setattr(const char *path, int32_t len, int32_t follow, int32_t attr, double value);
 
 static JSValue stat_object(JSContext *ctx, int32_t status, const double *slots) {
     if (status != 0) {
@@ -57,6 +58,27 @@ static JSValue fs_lstat(JSContext *ctx, JSValue this_val, int argc, JSValue *arg
     int32_t status = host_fs_lstat(path, (int32_t) len, slots);
     JS_FreeCString(ctx, path);
     return stat_object(ctx, status, slots);
+}
+
+static JSValue fs_utime(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+    size_t len = 0;
+    const char *path = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (!path) {
+        return JS_EXCEPTION;
+    }
+    int32_t status = 0;
+    if (argc > 1 && !JS_IsUndefined(argv[1])) {
+        double atime = 0;
+        JS_ToFloat64(ctx, &atime, argv[1]);
+        status = host_fs_setattr(path, (int32_t) len, 1, 3, atime);
+    }
+    if (status == 0 && argc > 2 && !JS_IsUndefined(argv[2])) {
+        double mtime = 0;
+        JS_ToFloat64(ctx, &mtime, argv[2]);
+        status = host_fs_setattr(path, (int32_t) len, 1, 4, mtime);
+    }
+    JS_FreeCString(ctx, path);
+    return JS_NewBool(ctx, status == 0);
 }
 
 static JSValue fs_symlink(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
@@ -251,6 +273,7 @@ void tjs_browser_fs_install(JSContext *ctx) {
     define_function(ctx, native, "lstat", fs_lstat, 1);
     define_function(ctx, native, "symlink", fs_symlink, 2);
     define_function(ctx, native, "readlink", fs_readlink, 1);
+    define_function(ctx, native, "utime", fs_utime, 3);
     JSValue global = JS_GetGlobalObject(ctx);
     JS_DefinePropertyValueStr(ctx, global, "__thebirdFs", native, JS_PROP_C_W_E);
     JS_FreeValue(ctx, global);
