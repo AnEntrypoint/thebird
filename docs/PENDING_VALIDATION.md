@@ -6420,3 +6420,13 @@ Taken this round: item 1 (stray `]]`). Items 2 to 17 are listed, not taken.
 - F4 `47c3d35`: a quoted empty array slice gives no word (`onlyAtArray` recognises the slice part). Witness: `a=(1 2 3); echo "${a[@]:5}" end`. Red check (mutation `sliceEmpty`): the slice part removed from `onlyAtArray`; expected: that row fails.
 - Status: F1–F4 are committed and not run. They are the fixes for the 8 failing rows, and they need the next clear-gate window to be witnessed.
 - Next window, in order: run W1 and the rows above; then the 20 red checks, which are `phaseb6.sh` plus the four new keys `fnArray`, `arrayPrefix`, `prefixKeep`, `sliceEmpty`, in `/tmp/k13/mutations.json`.
+
+### Phase B window 2 (opened 18:35:04 local, on `ce70f59`, pushed as `ce70f59`)
+
+- Gate: `vmstat 1 2` first sample at 18:32:04 read `si` 1388, busy. At 18:32:21 `heavy-jobs` read busy (zig builds from `/workspace/fx/fx`, PIDs 325928 and 326005, not stopped). The window opened at 18:35:04, when the second sample read `si` 184 and `so` 0, and `heavy-jobs` read `HEAVY_JOBS clear`. Logs: `/tmp/k13/phaseb7/readings.txt`.
+- Browser step: not run. `scripts/vendor-txiki.mjs:182` requires zig 0.17.1 and this host has 0.17.0. A build would also produce a digest that does not match the pin `tjsWasmSha256` in `scripts/txiki/pin.json`, so the pin needs an owner decision before a rebuilt WASM can be used. Until then the browser witness for `aa20a40` does not run.
+- W1 `npm run -s witness:shell`, PID 332004: `RESULT PASS=1956 FAIL=0`.
+- W2 to W9 exited 0: prompt-path, tar-gzip, git-root, git-init-message, craft-cli, readme-claims, lint:comments, lint:architecture (the last with a 1500 s timeout).
+- Red checks (20 mutations and `lstatGuard`): every run exited 1. The FAIL count is the count of failing rows under each mutation, out of 1956: arrayAssign 34, atParam 17, fieldStart 13, leftover 11, rematch 10, perm 7, slice 6, menuPitch 9, fnArray 5, menuTab 5, modeOf 5, keys 4, stray 4, negative 2, owner 3, arrayPrefix 3, noteRead 1, prefixKeep 1, sliceEmpty 1; `lstatGuard` (prompt-path) fails 3 tests with `host.lstat is not a function`. Every restore compared equal to HEAD (21 of 21).
+- Push: `11d50ea..ce70f59  main -> main`. `git ls-remote origin main` gives `ce70f59469d90a2372eef25d8d2ef8cc012a55c3 refs/heads/main`.
+- Open: the browser witness for `aa20a40` (needs zig 0.17.1 and a pin decision), and `touch` times (native setattr, same rebuild).
