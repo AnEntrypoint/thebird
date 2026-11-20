@@ -1,5 +1,5 @@
 export function lookupPrologue(inPageNames) {
-  const names = inPageNames.join('|');
+  const names = inPageNames.map((name) => `'${name}'`).join('|');
   return `
 which() {
   local n rc=0
