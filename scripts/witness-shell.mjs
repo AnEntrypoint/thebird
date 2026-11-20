@@ -19,7 +19,7 @@ const MISSING = 'web/shell-core.js is not present: the txiki shell has not been 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function memoryHost(files = {}, modes = {}) {
+function memoryHost(files = {}, modes = {}, owners = {}) {
   const store = new Map(Object.entries(files));
   const dirs = new Set(['/', '/workspace']);
   const links = new Map();
@@ -36,10 +36,11 @@ function memoryHost(files = {}, modes = {}) {
     if (depth > 8) return null;
     return follow(resolve(dirname(path), links.get(path)), depth + 1);
   };
+  const idsOf = (real) => ({ uid: owners[real]?.uid ?? 1000, gid: owners[real]?.gid ?? 1000 });
   const statOf = (real) => {
     if (real === null) return null;
-    if (dirs.has(real) || children(real).length > 0) return { dir: true, size: 0, mode: modes[real] };
-    if (store.has(real)) return { dir: false, size: store.get(real).length, mode: modes[real] };
+    if (dirs.has(real) || children(real).length > 0) return { dir: true, size: 0, mode: modes[real], ...idsOf(real) };
+    if (store.has(real)) return { dir: false, size: store.get(real).length, mode: modes[real], ...idsOf(real) };
     return null;
   };
   return {
@@ -97,8 +98,8 @@ function memoryHost(files = {}, modes = {}) {
 
 const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'curl', 'wget'];
 
-async function shell(files, modes = {}) {
-  const host = memoryHost(files, modes);
+async function shell(files, modes = {}, owners = {}) {
+  const host = memoryHost(files, modes, owners);
   return core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
 }
 
@@ -4062,6 +4063,20 @@ group('indexed arrays: "${NAME[@]:OFFSET:LENGTH}" slices the elements, with bash
     const sh = await shell({});
     const r = await run(sh, script);
     check('array slice: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
+group('permission tests: -O and -G compare the file owner and group with the shell user, with bash output (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["[ -O /etc/passwd ]; echo rc=$?; [ -G /etc/passwd ]; echo rc=$?", "rc=1\nrc=1\n", "", 0, {"/etc/passwd":"root:x:0:0\n"}, {"/etc/passwd":{"uid":0,"gid":0},"/":{"uid":0,"gid":0}}],
+  ["[ -O /etc/passwd ] && echo owner; [ -G /etc/passwd ] || echo nogroup", "nogroup\n", "", 0, {"/etc/passwd":"root:x:0:0\n"}, {"/etc/passwd":{"uid":0,"gid":0},"/":{"uid":0,"gid":0}}],
+  ["[[ -O / ]] || echo notroot; [[ -G / ]] || echo notgroup", "notroot\nnotgroup\n", "", 0, {}, {"/etc/passwd":{"uid":0,"gid":0},"/":{"uid":0,"gid":0}}],
+  ["printf x > f; [ -O f ] && echo owner; [ -G f ] && echo group", "owner\ngroup\n", "", 0, {}, {}],
+  ];
+  for (const [script, stdout, stderr, status, files, owners] of cases) {
+    const sh = await shell(files, {}, owners);
+    const r = await run(sh, script);
+    check('permission owner: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
   }
 });
 

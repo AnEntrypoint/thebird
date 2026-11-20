@@ -3201,7 +3201,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
       if (op === '-L' || op === '-h') return Boolean(host.lstat(resolvePath(value))?.link);
       if (op === '-r' || op === '-w' || op === '-x') return permissionBit(value, { '-r': 4, '-w': 2, '-x': 1 }[op]);
-      if (op === '-O' || op === '-G') return Boolean(statInfo(searchedDirectories(resolvePath(value)).real));
+      if (op === '-O' || op === '-G') {
+        const real = searchedDirectories(resolvePath(value)).real;
+        const [key, id] = op === '-O' ? ['uid', SHELL_UID] : ['gid', SHELL_GID];
+        return Boolean(statInfo(real)) && (host.stat(real)?.[key] ?? id) === id;
+      }
       if (op === '-N') {
         const real = searchedDirectories(resolvePath(value)).real;
         const record = fileTicks.get(real);
