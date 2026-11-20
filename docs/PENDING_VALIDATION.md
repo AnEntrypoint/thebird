@@ -4717,3 +4717,36 @@ Gaps, recorded, not implemented in this change set:
 - Positions count characters, not bytes.
 
 Correction to the note at line 4299 (change set 30bt's neighbour, the heredoc on fd 3): the heredoc is read as its body now, as described above. The `cat <&3 >&0` message note there is unchanged.
+
+### Phase B window for 9aca69d (change set 30ca, an input fd keeps one offset, a heredoc on an fd is its input)
+
+Readings: the second sample of `vmstat 1 2` (the gate, both directions under 1000 KB/s), and the heavy-jobs check (`scripts/heavy-jobs.cjs` from bevy commit 495fff6) with the hot-process count, one reading every 30 s.
+
+| Reading | Clock | si KB/s | so KB/s | heavy-jobs | hot count | Note |
+|---|---|---|---|---|---|---|
+| before | 06:14:27 | 376 | 6764 | not run | not run | a manual `vmstat 1 2` before the window; so over 1000 (its first line is the average since boot, not the gate) |
+| 1 | 06:14:34 | 4588 | 16284 | busy, n=1 | 1 | a zig test process (pid 2194789) at 100% CPU, from another run's `.zig-cache`; si and so over 1000 |
+| 2 | 06:15:03 | 208 | 652 | busy, n=1 | 1 | gate clear; the same zig test at 100% CPU |
+| 3 | 06:15:34 | 360 | 0 | busy, n=1 | 1 | gate clear; the same zig test at 99% CPU |
+| 4 | 06:16:03 | 3356 | 0 | busy, n=1 | 1 | si over 1000; the same zig test at 99% CPU |
+| 5 | 06:16:34 | 752 | 0 | clear | 0 | gate and heavy-jobs clear in the same reading |
+
+The hot check reads each process's arguments cut to 200 characters before it looks for `--handshake`, so a flag beyond that point is not seen. That can only count an extra process, never hide one. The zig process belongs to another run and was left running; nothing was stopped.
+
+Runs, each under `timeout` with the PID of the timeout process captured:
+
+- Green witness (pid 2210623): exit 0, wall 1.63 s, `RESULT PASS=1421 FAIL=0`.
+- Red check (pid 2210726): the mutation removes the move of an input fd's position after a reading command, on the HEAD copy of web/shell-core.js. Exit 1, wall 1.60 s, `RESULT PASS=1414 FAIL=7`: five shared-offset rows and two heredoc rows. Restored with cp from the HEAD copy, and cmp matched.
+- `npm run check` (pid 2210812): exit 0, wall 0.30 s.
+- `npm run witness:shell` (pid 2210869): exit 0, wall 1.70 s, `RESULT PASS=1421 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout and loop tests.
+
+Push, once, after every check passed. It carried 3e447c3 and 9aca69d:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   cfd4d05..9aca69d  main -> main
+```
+
+`git ls-remote origin main` after the push: `9aca69d20b27fd72493af7210f48ef22f6389b51 refs/heads/main`.
+
+Longest step: the wait for the zig test process to finish, readings 1 to 4 (the window job ran 134.4 s in all). The push took about 4 s. Nothing was stopped.
