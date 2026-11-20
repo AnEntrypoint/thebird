@@ -2129,7 +2129,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     },
     sort: ({ argv, stdin = '' }) => {
       const { flags, operands } = argsOf(argv, ['-t', '-k']);
-      const input = textInputs('sort', operands, stdin);
+      const input = textInputs('sort', operands, stdin, (name) => 'sort: cannot read: ' + name + ': No such file or directory\n', 2);
       const byText = COLLATING_LOCALES.has(childLocale().value) ? collate : (a, b) => (a < b ? -1 : a > b ? 1 : 0);
       const separator = flags.get('-t');
       const [, keyFrom, keyTo, keyMod = ''] = /^(\d+)(?:,(\d+))?([a-z]*)$/.exec(flags.get('-k') ?? '') ?? [];
@@ -3452,7 +3452,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out: inner.out, err: inner.err };
   }
 
-  function textInputs(verb, names, stdin) {
+  function textInputs(verb, names, stdin, missing = (name) => verb + ': ' + name + ': No such file or directory\n', failure = 1) {
     if (!names.length) return { text: stdin, err: '', code: 0 };
     let text = '';
     let err = '';
@@ -3465,8 +3465,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       try {
         text += host.read(resolvePath(name));
       } catch {
-        err += verb + ': ' + name + ': No such file or directory\n';
-        code = 1;
+        err += missing(name);
+        code = failure;
       }
     }
     return { text, err, code };
@@ -3792,6 +3792,14 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       runSink = null;
       state.status = code;
       return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
+    },
+    async command(argv, stdin = '') {
+      try {
+        const { code, out, err } = await dispatch(argv, stdin, undefined, null);
+        return { code, out, err };
+      } catch (err) {
+        return { code: 2, out: '', err: `${err.message}\n` };
+      }
     },
     cwd: () => state.cwd,
     snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid, errexit, xtrace }),
