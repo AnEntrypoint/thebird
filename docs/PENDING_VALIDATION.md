@@ -5827,3 +5827,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-awk.js`. `split` is a builtin, not a keyword, so the parser reads it as a call; `split(s, arr, sep)` fills `arr` with the pieces keyed 1, 2, ... and returns the count. The separator is a string, a regex literal, or the field separator when absent; an empty string gives 0.
 - Witness: `scripts/witness-shell.mjs`, group "awk split: split fills an array from a string, with a separator string, a regex, or the field separator, and returns the count, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
 - Red check: the separator forced to the field separator by mutation (the comma row gives 1, not 2); green PASS=1632 FAIL=0; red PASS=1629 FAIL=3, restored, cmp matches.
+
+### Defect fix S1-18: awk gsub and sub
+
+- Row: S1-18 of the full-feature run (commit 8d52612). Command: `echo aa \| awk '{ gsub(/a/, "b"); print }'`. Before: `awk: syntax error at source line 1`, rc 2. Expected: `bb` (bash awk, locale en_US.UTF-8).
+- File: `web/shell-awk.js`. `sub` and `gsub` leave the keyword set and become builtins with two or three arguments. The regex is a literal or a string; the replacement treats `&` as the match and `\&` as a literal ampersand; the target is the record by default, or a named variable or field, and it is written back only when a replacement was made. The return value is the count.
+- Witness: `scripts/witness-shell.mjs`, group "awk gsub and sub: gsub replaces every match and sub the first, & stands for the match, and each returns the count, as bash awk does", five rows with the expected output taken from bash awk. Before the change all five failed against bash.
+- Red check: the write-back disabled by mutation (the record and the named variable are not changed); green PASS=1637 FAIL=0; red PASS=1632 FAIL=5, restored, cmp matches.

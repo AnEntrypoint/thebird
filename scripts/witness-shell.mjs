@@ -3450,6 +3450,19 @@ group("awk split: split fills an array from a string, with a separator string, a
   const wsp5 = await run(sh, "echo a:b | awk '{ split($0, p, \":\"); print p[1] p[2] }'");
   check("awk split with a colon separator (bash output, locale en_US.UTF-8)", wsp5.stdout === "ab\n" && wsp5.exitCode === 0 && wsp5.stderr === "", JSON.stringify([wsp5.stdout, wsp5.stderr, wsp5.exitCode]));
 });
+group("awk gsub and sub: gsub replaces every match and sub the first, & stands for the match, and each returns the count, as bash awk does", async () => {
+  const sh = await shell({});
+  const wgs1 = await run(sh, "echo aa | awk '{ gsub(/a/, \"b\"); print }'");
+  check("awk gsub replaces every match in the record (bash output, locale en_US.UTF-8)", wgs1.stdout === "bb\n" && wgs1.exitCode === 0 && wgs1.stderr === "", JSON.stringify([wgs1.stdout, wgs1.stderr, wgs1.exitCode]));
+  const wgs2 = await run(sh, "echo aa | awk '{ x = gsub(/a/, \"b\"); print x, $0 }'");
+  check("awk gsub returns the number of replacements (bash output, locale en_US.UTF-8)", wgs2.stdout === "2 bb\n" && wgs2.exitCode === 0 && wgs2.stderr === "", JSON.stringify([wgs2.stdout, wgs2.stderr, wgs2.exitCode]));
+  const wgs3 = await run(sh, "echo aaa | awk '{ sub(/a/, \"b\"); print }'");
+  check("awk sub replaces only the first match (bash output, locale en_US.UTF-8)", wgs3.stdout === "baa\n" && wgs3.exitCode === 0 && wgs3.stderr === "", JSON.stringify([wgs3.stdout, wgs3.stderr, wgs3.exitCode]));
+  const wgs4 = await run(sh, "echo a | awk '{ sub(/a/, \"[&]\"); print }'");
+  check("awk sub with an ampersand puts the match in the replacement (bash output, locale en_US.UTF-8)", wgs4.stdout === "[a]\n" && wgs4.exitCode === 0 && wgs4.stderr === "", JSON.stringify([wgs4.stdout, wgs4.stderr, wgs4.exitCode]));
+  const wgs5 = await run(sh, "echo abab | awk '{ s = $0; n = gsub(/b/, \"X\", s); print n, s, $0 }'");
+  check("awk gsub on a named variable leaves the record unchanged (bash output, locale en_US.UTF-8)", wgs5.stdout === "2 aXaX abab\n" && wgs5.exitCode === 0 && wgs5.stderr === "", JSON.stringify([wgs5.stdout, wgs5.stderr, wgs5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

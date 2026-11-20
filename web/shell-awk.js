@@ -1,7 +1,7 @@
 const awkKeywords = new Set([
   'BEGIN', 'END', 'print', 'printf', 'if', 'else', 'while', 'for', 'break', 'continue', 'next', 'exit',
   'do', 'nextfile', 'getline', 'function', 'func', 'delete', 'in', 'return',
-  'sub', 'gsub', 'match', 'close', 'system', 'fflush', 'rand', 'srand',
+  'match', 'close', 'system', 'fflush', 'rand', 'srand',
   'sin', 'cos', 'atan2', 'exp', 'log', 'sqrt',
 ]);
 const awkBuiltins = new Map([
@@ -13,6 +13,8 @@ const awkBuiltins = new Map([
   ['int', [1, 1]],
   ['sprintf', [1, Infinity]],
   ['split', [2, 3]],
+  ['sub', [2, 3]],
+  ['gsub', [2, 3]],
 ]);
 const awkOperators = [
   '**=', '+=', '-=', '*=', '/=', '%=', '^=', '==', '<=', '>=', '!=', '++', '--', '&&', '||', '>>', '!~', '**',
@@ -802,6 +804,18 @@ export function runAwk(argv, ctx) {
   };
   const regexFor = (node) => (node.type === 'regex' ? node.regex : compileRegex(awkToString(evaluate(node))));
 
+  const expandReplacement = (replacement, matched) => {
+    let out = '';
+    for (let i = 0; i < replacement.length; i++) {
+      if (replacement[i] === '\\' && replacement[i + 1] === '&') {
+        out += '&';
+        i++;
+      } else if (replacement[i] === '&') out += matched;
+      else out += replacement[i];
+    }
+    return out;
+  };
+
   const splitIntoArray = (node) => {
     const text = awkToString(evaluate(node.args[0]));
     const separator = node.args.length > 2 ? (node.args[2].type === 'regex' ? node.args[2].regex.source : awkToString(evaluate(node.args[2]))) : awkToString(getVar('FS'));
@@ -810,8 +824,23 @@ export function runAwk(argv, ctx) {
     return pieces.length;
   };
 
+  const substitute = (node) => {
+    const source = regexFor(node.args[0]);
+    const pattern = new RegExp(source.source, source.flags.replace('g', '') + (node.name === 'gsub' ? 'g' : ''));
+    const replacement = awkToString(evaluate(node.args[1]));
+    const target = reference(node.args.length > 2 ? node.args[2] : { type: 'field', index: { type: 'number', value: 0 } });
+    let count = 0;
+    const result = awkToString(target.get()).replace(pattern, (matched) => {
+      count++;
+      return expandReplacement(replacement, matched);
+    });
+    if (count) target.set(result);
+    return count;
+  };
+
   const callBuiltin = (node) => {
     if (node.name === 'split') return splitIntoArray(node);
+    if (node.name === 'sub' || node.name === 'gsub') return substitute(node);
     const values = node.args.map(evaluate);
     switch (node.name) {
       case 'length':
