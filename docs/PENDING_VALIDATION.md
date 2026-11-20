@@ -4988,3 +4988,44 @@ Witness: 15 new rows, from GNU output, added with the existing `chmod and stat q
 Red check: the mutation makes the `chmod` helper quote every name in the C locale (`quoteName(text, 'bytes')`), on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1497 FAIL=7`: the UTF-8 `chmod` rows from change set 30cd and three of the new `chmod -R` rows (the non-ASCII directory, the operand list with a non-ASCII name, and the non-ASCII subdirectory). Restored from the copy, `cmp` matched; `git status` shows `web/shell-core.js` unchanged, and the witness is back at `PASS=1504 FAIL=0`.
 
 G1b is closed by this change set for the cases listed. Not covered: symlinks under a `chmod -R` walk, and the `-H` and `-L` options, which were not probed.
+
+### Phase B window for f6de5c0 (change set 30ce, chmod -R witness rows), with its readings, red check and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-jobs.cjs (bevy 495fff6) must read clear in the same reading. Readings below are the window's log, every one recorded.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 07:10:56 | 1728 | 2248 | not clear | not run | `vmstat 1 2`, second sample |
+| wait 1 | 07:11:01 | 4724 | 2656 | not clear | not run | waiter, gate readings only |
+| wait 2 | 07:11:32 | 4412 | 212 | not clear | not run | |
+| wait 3 | 07:12:03 | 5264 | 0 | not clear | not run | |
+| wait 4 | 07:12:34 | 52 | 32 | clear | not run | the waiter started the window on this reading |
+| window 1 | 07:12:37 | 132 | 0 | clear | busy, n=1 | a `grep -o` over the witness log, pid 2256712, one of the window's own processes |
+| window 2 | 07:13:08 | 112 | 0 | clear | busy, n=1 | |
+| window 3 | 07:13:38 | 13804 | 0 | not clear | clear | heavy-jobs clear, gate not |
+| window 4 | 07:14:07 | 68 | 584 | clear | busy, n=1 | `zig test` on `txiki-build`, pid 2259064 |
+| window 5 | 07:14:38 | 1564 | 0 | not clear | busy, n=2 | `zig test` and `zig build-exe`, pids 2259572 and 2259618 |
+| window 6 | 07:15:08 | 7752 | 54084 | not clear | busy, n=7 | chromium renderer pid 2260251 (over 1 GB), gpu process, network service, playwriter-ws-server pid 3627 |
+| window 7 | 07:15:38 | 11272 | 35832 | not clear | busy, n=2 | |
+| window 8 | 07:16:07 | 27600 | 0 | not clear | busy, n=1 | `zig build-exe`, pid 2261022 |
+| window 9 | 07:16:38 | 1436 | 0 | not clear | busy, n=2 | `zig test` and `zig build-exe` |
+| window 10 | 07:17:08 | 2440 | 0 | not clear | clear | the hot list shows `claude --resume` pid 2109 above 20% CPU; heavy-jobs read it clear |
+| window 11 | 07:17:37 | 640 | 0 | clear | clear | both clear in the same reading: the window cleared here |
+
+The window cleared at reading 11, about five minutes after the waiter's start at 07:12:34. The waiter (pid 2254625) ran the window script only after its own gate reading was clear.
+
+Green witness (pid 2262010): exit 0, wall 1.62 s, `RESULT PASS=1504 FAIL=0`.
+G1b red check (pid 2262049): mutation of the chmod quoting helper to the C form, exit 1, wall 1.61 s, `RESULT PASS=1497 FAIL=7`. Restored from the copy, `cmp` matched, the witness after restore read `PASS=1504 FAIL=0`.
+`npm run check` (pid 2262080): exit 0, wall 0.28 s.
+`npm run witness:shell` (pid 2262135): exit 0, wall 1.70 s, `RESULT PASS=1504 FAIL=0`. The window log counts three rows that print exit 124 by design; they are PASS rows.
+
+Push, once, after every check passed; it carried f6de5c0 and the previous ledger commit was already on origin:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   d6bfae4..f6de5c0  main -> main
+```
+
+`git ls-remote origin main` after the push: `f6de5c0b36b2eb61a0f09343ca141805ab037038 refs/heads/main`.
+
+Longest step: the window itself, about 5 min 3 s from 07:12:34 to 07:17:37, which was mostly waiting for heavy jobs (zig and chromium) to finish. Nothing was stopped; those processes belong to other sessions.
