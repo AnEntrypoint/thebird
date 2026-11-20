@@ -6141,3 +6141,16 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
   - The txiki host (the shell program) takes bytes in its write, but no witness here runs it.
 - Commit: bcc0a88 (lanmower, no trailers).
 
+
+### Defect fix P-parse: bash parity for empty bodies, leading and doubled `;`, backquote substitution and `!` negation
+
+- Decision: the parser follows bash's error text and exit status for these inputs, and the witness checks error inputs by parsing them with `core.syntaxText`, which runs nothing. Before this change an empty `while` condition looped forever, and a leading `;` was accepted.
+- Probe: 50 inputs (`/tmp/k10-d2-cases.json`) run through bash and through shell core, compared on stdout, stderr and status. Bash gives 39 syntax errors with status 2; `syntaxText` matches bash's stderr on all 39. The other 11 run, and each matches on stdout, stderr and status. `[[ a` is left out because `[[` is not implemented.
+- Files: `web/shell-core.js` (`parseBody` rejects an empty body; `parseSequence` and the top-level loop reject an explicit `;` with no command before it and skip the newline `;`; `parseFor` checks the name; `parseCommandBody` rejects `function` and `select` alone and closes on `}`; the tokenizer rejects an empty heredoc delimiter; backquotes become `cmd` parts in `readParts` and `readDouble`; `parsePipeline` keeps `!` and `runPipeline` inverts the status), `scripts/witness-shell.mjs` (the 50-row group `parse: shell core gives bash output`).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1763 FAIL=0`.
+- Red checks (each mutation applied to a copy, the witness run, the file restored, `cmp` matched):
+  - Empty body: `if (!list.items.length && start < tokens.length) throw nearToken(tokens[start]);` changed to `if (false) throw ...`. Witness `RESULT PASS=1758 FAIL=5`: the rows `if true; then fi`, `while true; do done`, `{ }`, `( )` and `for i in 1; do done` fail. It returned in seconds, and no row hung.
+  - Backquote: the `cmd` part removed from `readParts`; witness `FAIL=1`, one row red.
+  - Negation: the `pipe.negate` inversion removed from `runPipeline`; witness `FAIL=1`, one row red.
+- Still not covered: `[[` conditionals (`[[ a` gives 127, not bash's syntax error); `function f` definitions and `select` loops (only the alone-case error is implemented); a nested backquote error lacks bash's `command substitution:` prefix; `$HOME` is empty in the shell because there is no HOME in its environment.
+- Commit: b8ed7eb (lanmower, no trailers).
