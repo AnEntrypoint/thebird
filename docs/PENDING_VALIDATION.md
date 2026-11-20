@@ -6109,3 +6109,9 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Limit, not fixed: the txiki host (the shell program in `web/shell-program.js`) has no `touch` method, so `host.touch?.(path)` does nothing there. A fix needs a utime call in `scripts/txiki/browser/fs-browser.c` and a rebuild of the vendored txiki WASM, which this run does not do. The prompt path is fixed; the txiki path is recorded.
 - Commit: 6ce74ad (lanmower, no trailers).
 
+### Items not changed in this stretch, with their causes
+
+- tar -czf - (gzip to standard output): not changed. The shell's stream model is text throughout (`out` and `stdin` are strings, and the file writer encodes them as UTF-8), so gzip bytes cannot pass through a pipe or to a file without a byte-level stdout channel. Changing that is a design change to the stream model in `web/shell-core.js` and the hosts, not a patch to tar.
+- scripts/witness.mjs (the browser witness that P-02's wording edit touched): not run. It starts its own Chromium through `scripts/browser-driver.mjs`, and the rule for this run is that browser work goes through playwriter only, so it was not started here. Its run needs a playwriter-based route and is a separate step.
+- The txiki path for touch (the mtime limit): see the P-01 entry above; the cause is the missing utime call in `scripts/txiki/browser/fs-browser.c`.
+
