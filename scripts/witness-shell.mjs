@@ -748,13 +748,13 @@ group('set -x: tracing matches bash for simple commands, and the gaps are rows w
   check("set -x: a command substitution is traced at ++, as bash does", xt16.stdout === "sub\n" && xt16.stderr === "++ echo sub\n+ echo sub\n+ set +x\n", JSON.stringify([xt16.stdout, xt16.stderr]));
 });
 
-group('redirects: an output into a missing directory is refused before the command runs, as dash does', async () => {
+group('redirects: an output into a missing directory is refused before the command runs with status 1, as bash does', async () => {
   const rd0 = await run(await shell({}), "echo a > /nonexist-q/z; echo rc=$?");
-  check("redirects: an output into a missing directory fails with status 2 and the command does not run, as dash does", rd0.stdout === "rc=2\n" && rd0.stderr === "thebird: cannot create /nonexist-q/z: Directory nonexistent\n", JSON.stringify([rd0.stdout, rd0.stderr]));
+  check("redirects: an output into a missing directory fails with status 1 and the command does not run, as bash does", rd0.stdout === "rc=1\n" && rd0.stderr === "thebird: /nonexist-q/z: No such file or directory\n", JSON.stringify([rd0.stdout, rd0.stderr]));
   const rd1 = await run(await shell({}), "echo a >> /nonexist-q/z; echo rc=$?");
-  check("redirects: an append into a missing directory fails with status 2, as dash does", rd1.stdout === "rc=2\n" && rd1.stderr === "thebird: cannot create /nonexist-q/z: Directory nonexistent\n", JSON.stringify([rd1.stdout, rd1.stderr]));
+  check("redirects: an append into a missing directory fails with status 1, as bash does", rd1.stdout === "rc=1\n" && rd1.stderr === "thebird: /nonexist-q/z: No such file or directory\n", JSON.stringify([rd1.stdout, rd1.stderr]));
   const rd2 = await run(await shell({}), "echo e 2> /nonexist-q/deep/z; echo rc=$?");
-  check("redirects: a 2> into a missing directory fails before the command runs, as dash does", rd2.stdout === "rc=2\n" && rd2.stderr === "thebird: cannot create /nonexist-q/deep/z: Directory nonexistent\n", JSON.stringify([rd2.stdout, rd2.stderr]));
+  check("redirects: a 2> into a missing directory fails before the command runs, as bash does", rd2.stdout === "rc=1\n" && rd2.stderr === "thebird: /nonexist-q/deep/z: No such file or directory\n", JSON.stringify([rd2.stdout, rd2.stderr]));
   const rd3 = await run(await shell({}), "echo a > /dev/null; echo rc=$?");
   check("redirects: an output into /dev/null still works next to a missing directory check, as dash does", rd3.stdout === "rc=0\n" && rd3.stderr === "", JSON.stringify([rd3.stdout, rd3.stderr]));
 });
@@ -854,9 +854,9 @@ group('redirects: a compound command sends its output and takes its input throug
   const cp6 = await run(await shell({}), "mkdir -p /cr; { echo x; cat /nope-cr/y; } &> /cr/both; cat /cr/both");
   check("redirects: a group &> sends both streams to the file, as bash does", cp6.stdout === "x\ncat: /nope-cr/y: No such file or directory\n" && cp6.stderr === "", JSON.stringify([cp6.stdout, cp6.stderr]));
   const cp7 = await run(await shell({}), "for i in 1; do echo x; done > /nodir-cr/f; echo rc=$?");
-  check("redirects: a compound command into a missing directory is refused before it runs, as dash does", cp7.stdout === "rc=2\n" && cp7.stderr === "thebird: cannot create /nodir-cr/f: Directory nonexistent\n", JSON.stringify([cp7.stdout, cp7.stderr]));
+  check("redirects: a compound command into a missing directory is refused before it runs, as bash does", cp7.stdout === "rc=1\n" && cp7.stderr === "thebird: /nodir-cr/f: No such file or directory\n", JSON.stringify([cp7.stdout, cp7.stderr]));
   const cp8 = await run(await shell({}), "{ cat; } < /nofile-cr; echo rc=$?");
-  check("redirects: a group from a missing input file is refused, as dash does", cp8.stdout === "rc=2\n" && cp8.stderr === "thebird: cannot open /nofile-cr: No such file\n", JSON.stringify([cp8.stdout, cp8.stderr]));
+  check("redirects: a group from a missing input file is refused, as bash does", cp8.stdout === "rc=1\n" && cp8.stderr === "thebird: cannot open /nofile-cr: No such file\n", JSON.stringify([cp8.stdout, cp8.stderr]));
 });
 
 group('expansion: ${name?word} and ${name:?word} stop a command with the message bash gives, and a set name passes through', async () => {
@@ -2188,6 +2188,52 @@ group('redirects: <&N and 0<&N dup an input descriptor as bash does, <&- closes 
   check("redirects <&: echo hi > f; exec 3<f; cat <&3 3>&-; echo st=$? matches bash", indup25.stdout === "hi\nst=0\n" && indup25.stderr === "", JSON.stringify([indup25.stdout, indup25.stderr]));
   const indup26 = await run(await shell({}), "echo hi > f; cat 3<f <&3 3<&-; echo st=$?");
   check("redirects <&: echo hi > f; cat 3<f <&3 3<&-; echo st=$? matches bash", indup26.stdout === "hi\nst=0\n" && indup26.stderr === "", JSON.stringify([indup26.stdout, indup26.stderr]));
+});
+group('redirects: an output to a missing directory or to a path under a file fails with status 1 before the command runs, as bash does, for >, >>, >&word, 1<>, &> and N>, with the message on fd 2 where fd 2 points', async () => {
+  const ndir0 = await run(await shell({}), "echo e > nodir/w; echo st=$?");
+  check("redirects missing dir: echo e > nodir/w; echo st=$? matches bash", ndir0.stdout === "st=1\n" && ndir0.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir0.stdout, ndir0.stderr]));
+  const ndir1 = await run(await shell({}), "echo e >> nodir/w; echo st=$?");
+  check("redirects missing dir: echo e >> nodir/w; echo st=$? matches bash", ndir1.stdout === "st=1\n" && ndir1.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir1.stdout, ndir1.stderr]));
+  const ndir2 = await run(await shell({}), "echo e >&nodir/w; echo st=$?");
+  check("redirects missing dir: echo e >&nodir/w; echo st=$? matches bash", ndir2.stdout === "st=1\n" && ndir2.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir2.stdout, ndir2.stderr]));
+  const ndir3 = await run(await shell({}), "echo e 1<>nodir/w; echo st=$?");
+  check("redirects missing dir: echo e 1<>nodir/w; echo st=$? matches bash", ndir3.stdout === "st=1\n" && ndir3.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir3.stdout, ndir3.stderr]));
+  const ndir4 = await run(await shell({}), "echo e 2>nodir/w; echo st=$?");
+  check("redirects missing dir: echo e 2>nodir/w; echo st=$? matches bash", ndir4.stdout === "st=1\n" && ndir4.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir4.stdout, ndir4.stderr]));
+  const ndir5 = await run(await shell({}), "echo e 2>/dev/null > nodir/w; echo st=$?");
+  check("redirects missing dir: echo e 2>/dev/null > nodir/w; echo st=$? matches bash", ndir5.stdout === "st=1\n" && ndir5.stderr === "", JSON.stringify([ndir5.stdout, ndir5.stderr]));
+  const ndir6 = await run(await shell({}), "echo e 2>&1 >nodir/w; echo st=$?");
+  check("redirects missing dir: echo e 2>&1 >nodir/w; echo st=$? matches bash", ndir6.stdout === "thebird: nodir/w: No such file or directory\nst=1\n" && ndir6.stderr === "", JSON.stringify([ndir6.stdout, ndir6.stderr]));
+  const ndir7 = await run(await shell({}), "f() { echo made > made.txt; }; f > nodir/w; echo st=$?; test -e made.txt && echo ran");
+  check("redirects missing dir: f() { echo made > made.txt; }; f > nodir/w; echo st=$?; test -e made.txt && echo ran matches bash", ndir7.stdout === "st=1\n" && ndir7.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir7.stdout, ndir7.stderr]));
+  const ndir8 = await run(await shell({}), "echo x > a; echo e > a/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e > a/w; echo st=$? matches bash", ndir8.stdout === "st=1\n" && ndir8.stderr === "thebird: a/w: Not a directory\n", JSON.stringify([ndir8.stdout, ndir8.stderr]));
+  const ndir9 = await run(await shell({}), "echo x > a; echo e >> a/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e >> a/w; echo st=$? matches bash", ndir9.stdout === "st=1\n" && ndir9.stderr === "thebird: a/w: Not a directory\n", JSON.stringify([ndir9.stdout, ndir9.stderr]));
+  const ndir10 = await run(await shell({}), "echo x > a; echo e >&a/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e >&a/w; echo st=$? matches bash", ndir10.stdout === "st=1\n" && ndir10.stderr === "thebird: a/w: Not a directory\n", JSON.stringify([ndir10.stdout, ndir10.stderr]));
+  const ndir11 = await run(await shell({}), "echo x > a; echo e 1<>a/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e 1<>a/w; echo st=$? matches bash", ndir11.stdout === "st=1\n" && ndir11.stderr === "thebird: a/w: Not a directory\n", JSON.stringify([ndir11.stdout, ndir11.stderr]));
+  const ndir12 = await run(await shell({}), "echo e &> nodir/w; echo st=$?");
+  check("redirects missing dir: echo e &> nodir/w; echo st=$? matches bash", ndir12.stdout === "st=1\n" && ndir12.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir12.stdout, ndir12.stderr]));
+  const ndir13 = await run(await shell({}), "echo e 3>nodir/w; echo st=$?");
+  check("redirects missing dir: echo e 3>nodir/w; echo st=$? matches bash", ndir13.stdout === "st=1\n" && ndir13.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir13.stdout, ndir13.stderr]));
+  const ndir14 = await run(await shell({}), "echo x > a; echo e 2>a/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e 2>a/w; echo st=$? matches bash", ndir14.stdout === "st=1\n" && ndir14.stderr === "thebird: a/w: Not a directory\n", JSON.stringify([ndir14.stdout, ndir14.stderr]));
+  const ndir15 = await run(await shell({}), "echo e > nodir/w > f; echo st=$?; test -e f && echo fexists");
+  check("redirects missing dir: echo e > nodir/w > f; echo st=$?; test -e f && echo fexists matches bash", ndir15.stdout === "st=1\n" && ndir15.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir15.stdout, ndir15.stderr]));
+  const ndir16 = await run(await shell({}), "echo e > f > nodir/w; echo st=$?; cat f");
+  check("redirects missing dir: echo e > f > nodir/w; echo st=$?; cat f matches bash", ndir16.stdout === "st=1\n" && ndir16.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir16.stdout, ndir16.stderr]));
+  const ndir17 = await run(await shell({}), "echo e > nodir/w 2>&1; echo st=$?");
+  check("redirects missing dir: echo e > nodir/w 2>&1; echo st=$? matches bash", ndir17.stdout === "st=1\n" && ndir17.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir17.stdout, ndir17.stderr]));
+  const ndir18 = await run(await shell({}), "echo e >&nodir/w 2>/dev/null; echo st=$?");
+  check("redirects missing dir: echo e >&nodir/w 2>/dev/null; echo st=$? matches bash", ndir18.stdout === "st=1\n" && ndir18.stderr === "thebird: nodir/w: No such file or directory\n", JSON.stringify([ndir18.stdout, ndir18.stderr]));
+  const ndir19 = await run(await shell({}), "echo e > /dev/null; echo st=$?");
+  check("redirects missing dir: echo e > /dev/null; echo st=$? matches bash", ndir19.stdout === "st=0\n" && ndir19.stderr === "", JSON.stringify([ndir19.stdout, ndir19.stderr]));
+  const ndir20 = await run(await shell({}), "echo x > a; echo e > a/b/w; echo st=$?");
+  check("redirects missing dir: echo x > a; echo e > a/b/w; echo st=$? matches bash", ndir20.stdout === "st=1\n" && ndir20.stderr === "thebird: a/b/w: Not a directory\n", JSON.stringify([ndir20.stdout, ndir20.stderr]));
+  const ndir21 = await run(await shell({}), "echo e > f; echo st=$?; cat f");
+  check("redirects missing dir: echo e > f; echo st=$?; cat f matches bash", ndir21.stdout === "st=0\ne\n" && ndir21.stderr === "", JSON.stringify([ndir21.stdout, ndir21.stderr]));
 });
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");

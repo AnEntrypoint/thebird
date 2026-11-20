@@ -4340,3 +4340,26 @@ To https://github.com/AnEntrypoint/thebird
 
 Longest step: the gate wait, readings 1 to 5 (about two minutes). The push took about three seconds. Nothing was stopped.
 
+### Change set 30bu: an output to a missing directory, or to a path under a file, fails with status 1 before the command runs, as bash does, for `>`, `>>`, `>&word`, `1<>`, `&>`, `N>` and `2>`, and the message goes to fd 2 where fd 2 points at that point in the redirect list
+
+Reference: bash (this sandbox), `bash -c` in a fresh directory for each shape. Probed shapes, bash status, whether the command ran, and stderr (a shape whose message goes to stdout is noted):
+- `echo e > nodir/w; echo st=$?`, `>>`, `>&nodir/w`, `1<>nodir/w`, `&> nodir/w`, `3>nodir/w`, `2>nodir/w`: status 1, stderr `bash: line 1: nodir/w: No such file or directory`. The command does not run: a function `f > nodir/w` that writes `made.txt` leaves no file behind (`test -e made.txt` prints nothing).
+- `echo x > a; echo e > a/w`, `>>`, `>&a/w`, `1<>a/w`, `2>a/w`: status 1, stderr `bash: line 1: a/w: Not a directory`, where `a` is a file. `echo x > a; echo e > a/b/w`: `a/b/w: Not a directory` (the nearest existing ancestor is a file).
+- `echo e 2>/dev/null > nodir/w`: status 1, nothing on stderr (the message goes to the fd 2 target at that point, /dev/null). `echo e 2>&1 >nodir/w`: status 1, the message on stdout (`2>&1` comes before the failing redirect), with stdout `bash: line 1: nodir/w: No such file or directory` then `st=1`.
+- `echo e > nodir/w 2>&1`: status 1, the message on stderr (the failing redirect comes first). `echo e >&nodir/w 2>/dev/null`: status 1, the message on stderr (the dup fails before `2>/dev/null` applies).
+- `echo e > nodir/w > f; test -e f`: status 1 and `f` is not created (redirects after the failing one are not processed). `echo e > f > nodir/w; cat f`: status 1, and `f` is created and empty (redirects before the failing one are processed).
+- `echo e > /dev/null`: status 0 (the null device is never checked). `echo e > f; cat f`: status 0, `e` (control).
+- The three output forms share one check: `>`, `>>` and the `>&word`, `1<>` and `N>` forms all reach the same parent check in the open pass.
+
+Where this shell\'s text differs from bash: none for these shapes, once the `bash: line 1:` prefix is replaced by `thebird:` (the rows apply the same replacement to stdout and stderr). The message uses the word as written (`nodir/w`), not the resolved path, as bash does.
+
+What changed in the shell: `refuseMissingOutputDir` and its call sites are gone, and the `OUTPUT_REDIRECTS` set with them. The missing-directory check is now `outputFailure` in the ordered open pass of `openRedirects`, used by `>`, `>>`, `&>`, `N>`, `2>`, `1<>` and the `>&word` file form. It names the nearest existing ancestor: a file gives `Not a directory`, a missing one `No such file or directory`. The open pass is in redirect order, so a failing redirect stops the list and the redirects before it have already taken effect. A failure in the open pass (this one, and the `N>&M` bad-descriptor and ambiguous-redirect failures) is routed by `failAt`, which runs the redirects before the failing one through the output routing with the message as stderr, so the message goes where fd 2 points at that point. The status for a missing input in a compound command (`{ cat; } < /nofile`) changes from 2 to 1 as well, to match bash (its message keeps this shell\'s `cannot open` form, as the other input rows do).
+
+Dash-based rows: five existing rows pinned status 2 with the old `cannot create ... Directory nonexistent` text, written against dash. They are rewritten from bash output (status 1, `PATH: No such file or directory`), and the compound missing-input row (`cp8`) from status 2 to 1; its stderr stays in this shell\'s form. The group title says `as bash does` now.
+
+Not taken in this change set: a missing input file after a failing output redirect in the same command (the input check runs before the open pass, so an input path is still reported first; bash checks in order: `echo x >nodir/w <nofile` gives the output message, this shell gives `cannot open`). This is ranked item 13.
+
+Witness: group `redirects: an output to a missing directory or to a path under a file fails with status 1 before the command runs, as bash does, for >, >>, >&word, 1<>, &> and N>, with the message on fd 2 where fd 2 points`, 21 rows from bash output (stdout and stderr, with the prefix replacement), plus the five rewritten rows above. Final: `RESULT PASS=1298 FAIL=0` (green, wall 1.6 s).
+
+Red check: the status of the missing-directory refusal set to 2 (the old status), restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1274 FAIL=24`, the new rows and the five rewritten rows. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
+
