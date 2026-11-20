@@ -3913,3 +3913,20 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `ecab189b3fa1408715d2b41295c943d31cca3a52 refs/heads/main`.
 
 Longest step: the wait for the gate and heavy-jobs to clear (readings 1 to 5, about two minutes). Nothing was stopped: the zig compile and the freddie worker belong to other runs.
+
+### Change set 30bm: >&1, >&2 and 1>&2 send a command's output to the other stream, and 1> and 1>> write a file, with the redirects applied left to right as bash does
+
+Reference: bash (this sandbox), with `bash -c` and the same fixture names in a fresh directory. Probed shapes and bash's stdout and stderr: `echo e >&2` (stderr `e`); `echo e 1>&2` (stderr `e`); `echo o >&1` and `echo o 1>&1` (stdout `o`); `echo e >&2 | cat` (stderr `e`, stdout empty); `{ echo e >&2; } 2>&1 | cat` (stdout `e`); `echo e >&2 2>/dev/null` (the `e` still goes to stderr, because `>&2` is applied first); `echo e 2>/dev/null >&2` (nothing); `{ echo o; echo e >&2; } 2>&1 >/dev/null | cat` (stdout `e`: the stderr text goes to the pipe, the stdout text to null); `echo a 2>&1 >&2` (stdout `a`, the stream `2>&1` before `>&2` does nothing visible); `echo x 3>&1 1>&2` (stderr `x`); `echo x 1>f 2>&1 >&2` (both into f); `echo a 2>f 1>&2` (into f); `echo x 1>f` and `echo x 1>>f` (files).
+
+Rule: each descriptor 1 and 2 points at a target: the stdout buffer, the stderr buffer, or a file. `>&N`, `1>&N` and `2>&N` (N 1 or 2) copy the target of the other descriptor at that point; `>file`, `1>file`, `2>file`, `&>file` and their append forms set the target to a file. At the end the stdout text goes to the target of descriptor 1 and the stderr text to the target of descriptor 2. This replaces the old two-buffer merge, which was wrong for `2>&1 >/dev/null` (it sent the stdout text to null together with the stderr text). `N>&M` for N from 3 to 9 is still a no-op (30bi rows still pass).
+
+What changed in the shell: the tokenizer reads `>&`, `1>&`, `2>&`, `1>` and `1>>` as operators, with `2>&1` before `2>&` in the list; the parser requires a digit target after a dup operator (a non-digit target is a syntax error, `expected a file descriptor after ...`); `applyOutputRedirects` is a descriptor table (the N from 3 to 9 branch is unchanged).
+
+Witness: group `redirects: >&1, >&2 and 1>&2 send a command output to the other stream, and 1> and 1>> write a file, applied left to right as bash does`, 25 rows from bash. Final: `RESULT PASS=1136 FAIL=0`.
+
+Red check: the `>&N` branch made to apply only to `2>&1` (the `DUP_OPS` check removed), restored from a backup and confirmed with `cmp` against the good copy: `RESULT PASS=1125 FAIL=11`, the eleven rows that need the `>&N` forms. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Gaps, not taken in this change set:
+- `>&word` with a non-digit word (bash: `echo e >&2x` writes stdout to a file named `2x`; ours is the syntax error `expected a file descriptor after '>&'`). Reopen: the file form of `>&`, which is `&>`.
+- `>&-` and `>&0` (close and input descriptors). Reopen: a descriptor table entry for 0 and a closed state.
+- Writes to a descriptor above 2 (`echo x >&3`). Reopen: a descriptor table entry for N from 3 to 9.

@@ -8,9 +8,11 @@ export const COMMAND_TIMEOUT_MS = 900000;
 const BREAKS = new Set([' ', '\t', '\r', '\n', ';', '&', '|', '<', '>', '(', ')']);
 const FD_OPS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>>', fd + '>&', fd + '>']);
 const FD_OUTPUTS = ['3', '4', '5', '6', '7', '8', '9'].flatMap((fd) => [fd + '>', fd + '>>']);
-const OPERATORS = [...FD_OPS, '2>>', '2>&1', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
-const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', ...FD_OPS]);
-const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
+const OPERATORS = [...FD_OPS, '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', '2>', '&>>', '&>', '&&', '||', '|&', ';;', '>>', '>', '<<<', '<<', '<', '|', '(', ')', ';', '&'];
+const REDIRECTS = new Set(['>', '>>', '<', '<<', '<<<', '&>', '&>>', '2>', '2>>', '2>&1', '2>&', '1>>', '1>&', '1>', '>&', ...FD_OPS]);
+const OUTPUT_REDIRECTS = new Set(['>', '>>', '1>', '1>>', '&>', '&>>', '2>', '2>>', ...FD_OUTPUTS]);
+const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWith('>&'))]);
+const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
@@ -355,6 +357,7 @@ function parse(tokens) {
     const target = tokens[pos];
     if (!target?.parts) throw syntaxError(`expected a file after '${op}'`);
     pos++;
+    if (DUP_OPS.has(op) && !/^[0-9]+$/.test(target.parts.map(textOf).join(''))) throw syntaxError("expected a file descriptor after '" + op + "'");
     return { op, target: target.parts, body: opToken.body };
   };
 
@@ -2792,33 +2795,38 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   }
 
   async function applyOutputRedirects(redirects, out, err, sink) {
+    const fds = { 1: 'out', 2: 'err' };
     for (const redirect of redirects) {
-      if (redirect.op === '2>&1') {
-        out += err;
-        err = '';
-      } else if (redirect.op === '&>' || redirect.op === '&>>') {
+      const { op } = redirect;
+      if (DUP_OPS.has(op) || op === '2>&1') {
+        const fd = op.startsWith('>') ? '1' : op[0];
+        const target = op === '2>&1' ? '1' : (await expandWord(redirect.target, sink)).join('');
+        if ((fd === '1' || fd === '2') && (target === '1' || target === '2')) fds[fd] = fds[target];
+      } else if (FD_OUTPUTS.includes(op)) {
         const path = await wordPath(redirect.target, sink);
-        const prior = redirect.op === '&>>' && host.exists(path) ? host.read(path) : '';
-        writeRedirect(path, prior + out + err);
-        out = '';
-        err = '';
-      } else if (redirect.op === '>' || redirect.op === '>>') {
-        const path = await wordPath(redirect.target, sink);
-        const prior = redirect.op === '>>' && host.exists(path) ? host.read(path) : '';
-        writeRedirect(path, prior + out);
-        out = '';
-      } else if (FD_OUTPUTS.includes(redirect.op)) {
-        const path = await wordPath(redirect.target, sink);
-        const prior = redirect.op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
+        const prior = op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
         writeRedirect(path, prior);
-      } else if (redirect.op === '2>' || redirect.op === '2>>') {
+      } else if (FILE_FDS[op]) {
         const path = await wordPath(redirect.target, sink);
-        const prior = redirect.op === '2>>' && host.exists(path) ? host.read(path) : '';
-        writeRedirect(path, prior + err);
-        err = '';
+        const prior = op.endsWith('>>') && host.exists(path) ? host.read(path) : '';
+        for (const fd of FILE_FDS[op]) fds[fd] = { path, prior };
       }
     }
-    return { out, err };
+    const files = new Map();
+    for (const fd of [1, 2]) {
+      const target = fds[fd];
+      if (typeof target === 'object' && !files.has(target.path)) files.set(target.path, { prior: target.prior, text: '' });
+    }
+    let outText = '';
+    let errText = '';
+    for (const [fd, text] of [[1, out], [2, err]]) {
+      const target = fds[fd];
+      if (target === 'out') outText += text;
+      else if (target === 'err') errText += text;
+      else files.get(target.path).text += text;
+    }
+    for (const [path, entry] of files) writeRedirect(path, entry.prior + entry.text);
+    return { out: outText, err: errText };
   }
 
   async function runSubshell(node, stdin, sink) {
