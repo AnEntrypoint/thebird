@@ -3930,3 +3930,31 @@ Gaps, not taken in this change set:
 - `>&word` with a non-digit word (bash: `echo e >&2x` writes stdout to a file named `2x`; ours is the syntax error `expected a file descriptor after '>&'`). Reopen: the file form of `>&`, which is `&>`.
 - `>&-` and `>&0` (close and input descriptors). Reopen: a descriptor table entry for 0 and a closed state.
 - Writes to a descriptor above 2 (`echo x >&3`). Reopen: a descriptor table entry for N from 3 to 9.
+
+### Phase B record: change set 30bm, pushed as ecab189..eab13de
+
+Window: started 03:23:52 and cleared at reading 1 (03:23:52), so it ran for about two seconds of the ten allowed.
+
+Readings, each from `vmstat 1 2` (the second sample is the gate) and `scripts/heavy-jobs.cjs` from bevy 495fff6, with the top CPU list read in the same sample:
+
+| reading | time | gate swap-in KB/s | gate swap-out KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 03:23:52 | 284 | 0 | clear | none: gate and heavy-jobs clear, window started |
+
+Runs, in the window, each with its PID captured and its wall time read from the clock:
+
+- Green witness (pid 1950374): exit 0, wall 1.53 s, `RESULT PASS=1136 FAIL=0`.
+- Red check, the `>&N` branch (eab13de; pid 1950445): exit 1, wall 1.52 s, `RESULT PASS=1125 FAIL=11`, restored and confirmed with `cmp` against HEAD; `git status` showed only `bin/thebird-relay.js`.
+- `npm run check` (pid 1950534): exit 0, wall 0.28 s.
+- `npm run witness:shell` (pid 1950608): exit 0, wall 1.64 s, `RESULT PASS=1136 FAIL=0`, with three `exit 124` rows.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   ecab189..eab13de  main -> main
+``
+
+`git ls-remote origin main` after the push: `eab13de7ada6486279b500047108f5b3a289e382 refs/heads/main`. The push carried 20a1ba8 (the record of the earlier window) and eab13de.
+
+Longest step: the green witness, 1.53 s. Nothing was stopped; the gate and heavy-jobs were clear.
