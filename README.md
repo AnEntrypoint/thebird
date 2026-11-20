@@ -67,7 +67,7 @@ fx and page scripts can program visible cards through `window.THEBIRD_FEATURES` 
 
 - `run_shell` bodies, git remotes, MCP client processes, auto-update, browser automation and the wiki, review and row verbs are not ported to the in-page wasm core; `run_shell` is refused.
 - No background jobs. A bare `&` is refused.
-- No `node` and no host binaries; they exit 127.
+- No host binaries; they exit 127. `node` is the in-page builtin, run by txiki.js, so it is not Node.js itself.
 - No git remotes. `push`, `fetch` and `pull` are refused.
 - pip takes plain names only. Version specifiers, URLs and packages in the Pyodide set are refused. Installed packages last for the page session.
 - Each command line has a 900 s limit. See `ARCHITECTURE.md`.

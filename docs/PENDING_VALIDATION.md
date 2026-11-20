@@ -5890,3 +5890,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `bin/thebird-craft.js`, the `open` and `call` branch. The result is printed as before, and `process.exitCode` is 1 when `result.ok === false`.
 - Witness: `test/craft-cli.test.mjs`, a node test that runs the CLI on a missing file and asserts a non-zero status and `ok: false` in the JSON. Before the change the status was 0.
 - Red check: the exit status line removed by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
+
+### Defect fix P-03: the README says node exits 127, and node is a builtin
+
+- Row: P-03 of the full-feature run (commit 8d52612). The README Limits list said `No node and no host binaries; they exit 127`. Before: `node -v` prints `v26.11.0` and `node -e "console.log(2+2)"` prints `4`, rc 0, on the page. Expected: the README states what node is (the in-page builtin, run by txiki.js).
+- File: `README.md`, the Limits list. The line now names host binaries as the ones that exit 127, and says node is the in-page builtin.
+- Witness: `test/readme-claims.test.mjs`, a node test that asserts the Limits section does not say node exits 127, and that `web/builtins.js` registers the node builtin. The page run of `node` itself needs playwriter, which did not answer in this run, so the witness checks the README against the source.
+- Red check: the stale sentence put back by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).
