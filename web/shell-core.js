@@ -571,6 +571,30 @@ function parse(tokens, partial = false) {
     return { type: 'for', name, words, wordText, body, line, redirects: parseTrailingRedirects() };
   };
 
+  const parseSelect = () => {
+    const line = tokens[pos]?.line;
+    const token = tokens[pos++];
+    if (!token?.parts || token.parts.length !== 1 || token.parts[0].k !== 'lit') throw syntaxError("expected a name after 'select'");
+    const name = token.parts[0].s;
+    let words = null;
+    let wordText = null;
+    if (tokens[pos] && !isWord(tokens[pos], 'in') && !isWord(tokens[pos], 'do') && tokens[pos].op !== ';' && !tokens[pos].newline) throw nearToken(tokens[pos]);
+    if (isWord(tokens[pos], 'in')) {
+      pos++;
+      words = [];
+      wordText = [];
+      while (tokens[pos]?.parts) {
+        words.push(tokens[pos].parts);
+        wordText.push(tokens[pos++].text);
+      }
+    }
+    while (tokens[pos]?.op === ';') pos++;
+    expectWord('do');
+    const body = parseBody(['done']);
+    expectWord('done');
+    return { type: 'select', name, words, wordText, body, line, redirects: parseTrailingRedirects() };
+  };
+
   const parseWhile = (negate) => {
     const cond = parseBody(['do']);
     expectWord('do');
@@ -610,7 +634,7 @@ function parse(tokens, partial = false) {
     return { type: 'case', word: word.parts, arms, redirects: parseTrailingRedirects() };
   };
 
-  const isCompoundOpen = (token) => ['if', 'for', 'while', 'until', 'case', '{'].some((word) => isWord(token, word)) || token.op === '(';
+  const isCompoundOpen = (token) => ['if', 'for', 'select', 'while', 'until', 'case', '{'].some((word) => isWord(token, word)) || token.op === '(';
 
   const parseCommand = () => {
     const open = tokens[pos];
@@ -660,6 +684,19 @@ function parse(tokens, partial = false) {
       return { type: 'group', list, redirects: parseTrailingRedirects() };
     }
     if (token.op !== undefined) throw nearToken(token);
+    if (isWord(token, 'function') && tokens[pos + 1]?.parts?.length === 1 && tokens[pos + 1].parts[0].k === 'lit') {
+      const name = tokens[pos + 1].parts[0].s;
+      pos += 2;
+      if (tokens[pos]?.op === '(' && tokens[pos + 1]?.op === ')') pos += 2;
+      while (tokens[pos]?.op === ';') pos++;
+      const body = parseCommand();
+      if (body.type !== 'group' && body.type !== 'subshell') throw syntaxError('a function body must be a group or a subshell');
+      return { type: 'funcdef', name, body };
+    }
+    if (isWord(token, 'select') && tokens[pos + 1]?.parts) {
+      pos++;
+      return parseSelect();
+    }
     if ((isWord(token, 'function') || isWord(token, 'select')) && !tokens[pos + 1]?.parts) throw nearToken(tokens[pos + 1] ?? { newline: true });
     const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac', '}'].find((word) => isWord(token, word));
     if (closer) throw nearToken(token);
@@ -3803,6 +3840,49 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return evaluateTest([leftText, expr.op, rightText]) ? 0 : 1;
   }
 
+  async function runSelect(node, stdin, sink) {
+    const inner = sink;
+    const items = node.words ? await expandWords(node.words, inner) : positional;
+    let input = stdin ?? '';
+    let code = 0;
+    let showMenu = true;
+    loopDepth++;
+    try {
+      for (;;) {
+        await yieldTurn();
+        if (showMenu) inner.err += items.map((item, i) => `${i + 1}) ${item}\n`).join('');
+        inner.err += variableValue('PS3') ?? '#? ';
+        if (input === '') {
+          inner.out += '\n';
+          return { code: 1, out: inner.out, err: inner.err };
+        }
+        const end = input.indexOf('\n');
+        const line = end < 0 ? input : input.slice(0, end);
+        input = end < 0 ? '' : input.slice(end + 1);
+        setVariable('REPLY', line);
+        if (line === '') {
+          showMenu = true;
+          continue;
+        }
+        showMenu = false;
+        const index = /^[0-9]+$/.test(line) ? Number(line) : 0;
+        setVariable(node.name, index >= 1 && index <= items.length ? items[index - 1] : '');
+        vars.set('LINENO', String(node.line));
+        try {
+          code = await runSequence(node.body, input, inner);
+        } catch (err) {
+          if (!(err instanceof LoopSignal)) throw err;
+          if (err.levels > 1) throw new LoopSignal(err.kind, err.levels - 1);
+          code = 0;
+          if (err.kind === 'break') break;
+        }
+      }
+    } finally {
+      loopDepth--;
+    }
+    return { code, out: inner.out, err: inner.err };
+  }
+
   async function runWhile(node, stdin, sink) {
     const inner = sink;
     let code = 0;
@@ -3869,6 +3949,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (cmd.type === 'group') return withRedirects(cmd, stdin, sink, runGroup, stream);
     if (cmd.type === 'if') return withRedirects(cmd, stdin, sink, runIf, stream);
     if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor, stream);
+    if (cmd.type === 'select') return withRedirects(cmd, stdin, sink, runSelect, stream);
     if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile, stream);
     if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase, stream);
     if (cmd.type === 'cond') return withRedirects(cmd, stdin, sink, runConditional, stream);

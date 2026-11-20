@@ -3804,6 +3804,38 @@ group('conditional: [[ ]] gives bash output for each of these inputs, stdout, st
   }
 });
 
+group('function keyword and select: shell core gives bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["printf '2\\n' | { select x in a b c; do echo \"got $x $REPLY\"; break; done; }; echo rc=$?", "got b 2\nrc=0\n", "1) a\n2) b\n3) c\n#? ", 0],
+  ["printf '' | { select x in a b; do echo never; done; }; echo rc=$?", "\nrc=1\n", "1) a\n2) b\n#? ", 0],
+  ["printf '1\\nx\\n2\\n' | { select x in a b; do echo \"loop [$x] [$REPLY]\"; done; }; echo rc=$?", "loop [a] [1]\nloop [] [x]\nloop [b] [2]\n\nrc=1\n", "1) a\n2) b\n#? #? #? #? ", 0],
+  ["printf '\\n1\\n' | { select x in a b; do echo \"[$x] [$REPLY]\"; break; done; }; echo rc=$?", "[a] [1]\nrc=0\n", "1) a\n2) b\n#? 1) a\n2) b\n#? ", 0],
+  ["printf '3\\n' | { select x in a b; do echo \"[$x]\"; done; }; echo rc=$?", "[]\n\nrc=1\n", "1) a\n2) b\n#? #? ", 0],
+  ["set -- p q; printf '2\\n' | { select x; do echo \"[$x]\"; break; done; }; echo rc=$?", "[q]\nrc=0\n", "1) p\n2) q\n#? ", 0],
+  ["PS3='pick> '; printf '1\\n' | { select x in a; do echo \"[$x]\"; break; done; }; echo rc=$?", "[a]\nrc=0\n", "1) a\npick> ", 0],
+  ["printf '1\\n' | { select x in a b; do echo \"x=$x\"; case $x in a) break;; esac; done; }; echo rc=$?", "x=a\nrc=0\n", "1) a\n2) b\n#? ", 0],
+  ["printf '1\\n2\\n' | { select x in a b; do echo \"[$x] [$REPLY]\"; done; }; echo rc=$?", "[a] [1]\n[b] [2]\n\nrc=1\n", "1) a\n2) b\n#? #? #? ", 0],
+  ["f() { select x in a b; do return 0; done; }; printf '1\\n' | { f; }; echo rc=$?", "rc=0\n", "1) a\n2) b\n#? ", 0],
+  ["printf '1\\n' | { select x in a b; do continue; done; }; echo rc=$?", "\nrc=1\n", "1) a\n2) b\n#? #? ", 0],
+  ["printf '2\\n' | { select x in a b; do echo \"v=$x\"; break; done; } | tr a-z A-Z; echo rc=$?", "V=B\nrc=0\n", "1) a\n2) b\n#? ", 0],
+  ["function g { echo hi; }; g", "hi\n", "", 0],
+  ["function g() { echo hi; }; g", "hi\n", "", 0],
+  ["function g() { echo hi; }\ng", "hi\n", "", 0],
+  ["function g\n{ echo hi; }\ng", "hi\n", "", 0],
+  ["function g () { echo hi; }; g", "hi\n", "", 0],
+  ["function g { echo \"a $1\"; }; g x", "a x\n", "", 0],
+  ["function g ( echo sub; ); g", "sub\n", "", 0],
+  ["function g { echo hi; }; function h() { g; echo h; }; h", "hi\nh\n", "", 0],
+  ["function g { echo hi; }; g; g | tr a-z A-Z", "hi\nHI\n", "", 0],
+  ["function g { return 3; }; g; echo rc=$?", "rc=3\n", "", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('function and select: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
