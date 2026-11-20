@@ -6124,3 +6124,20 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Still not covered: `$ENV` holds every exported variable that has a value, including the inherited `LANG` and the exported `PWD`, which the listing from `env` leaves out. Real jq's `$ENV` is the whole process environment, and this shell models only its exports. The witness does not compare the full object, since its contents depend on the host.
 - Commit: 35afbac (lanmower, no trailers).
 
+### Defect fix S-bytes (item 7): a byte channel beside the text stdout, for tar -czf -
+
+- Decision: the stdout of a command may carry `bytes` (a Uint8Array) beside the text `out`. A pipe passes the bytes to the next stage, a `>` or `>>` file receives them without a text round trip, and the run result exposes them as `bytes`. Text consumers still get the text: where bytes reach a text stage or the terminal, they are decoded as before, so existing output does not change. This is the smallest change that carries binary through a pipe and a file. The text stream model is otherwise unchanged.
+- Reason: tar -czf - could only produce text, so gzip output was refused, and any archive on stdout went through TextDecoder, which replaces bytes that are not valid UTF-8. GNU tar writes the bytes.
+- Files: `web/shell-core.js` (`runPipeline` keeps the previous stage's bytes and gives them to the next stage's stream; `applyOutputRedirects` writes bytes to a file target, appending for `>>`, and keeps them otherwise; `run` returns `bytes`; the `tar` command reads `stream.bytes` as its stdin bytes), `web/shell-tar.js` (`tarConcat` is exported; `tar -c -f -` and `tar -cz -f -` return the archive as bytes, gzip included; `tar -t -f -` and `-x` read stdin bytes when they have them), `scripts/witness-shell.mjs` (group "tar: an archive written to stdout is bytes, so gzip output passes through a pipe and a file as GNU tar writes it", five rows: a file, a pipe into `tar -tzf -`, a pipe into `tar -xzf - -C d`, the gzip magic on stdout, and GNU tar listing the stdout bytes).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1713 FAIL=0` (1708 before, plus five rows). The existing parity row against bashkit, `tar -cf - a.txt | tar -tf -`, still passes.
+- Red check, two mutations, each restored from a copy with `cmp`:
+  - bytes not given to the next stage (the stream without `bytes: inputBytes`): `RESULT PASS=1711 FAIL=2` (the pipe rows).
+  - bytes not written to the file (`writeRedirect` of the bytes removed): `RESULT PASS=1712 FAIL=1` (the file row).
+  - Green again: `RESULT PASS=1713 FAIL=0`.
+- Limits, recorded, not fixed here:
+  - The prompt path does not use this change. `tar` is not in the core names that bash-shell routes to shell core (only `sort` and `touch`), so the typed prompt still uses bashkit's own tar.
+  - Compound commands do not carry bytes: a tar inside a group, a subshell or a loop, redirected as a whole, loses its bytes, because those constructs collect text only.
+  - Bytes and text on the same stream are kept in two separate pieces, so their order between each other is not kept. Each is exact within its own channel.
+  - The txiki host (the shell program) takes bytes in its write, but no witness here runs it.
+- Commit: bcc0a88 (lanmower, no trailers).
+
