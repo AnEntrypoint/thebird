@@ -1,5 +1,5 @@
 import { runSed } from './shell-sed.js';
-import { runTar } from './shell-tar.js';
+import { runTar, tarConcat } from './shell-tar.js';
 import { runJq } from './shell-jq.js';
 import { runAwk } from './shell-awk.js';
 
@@ -2784,7 +2784,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out, err };
     },
     sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
-    tar: ({ argv, stdin }) => runTar(argv, toolContext(stdin)),
+    tar: ({ argv, stdin, stream }) => runTar(argv, { ...toolContext(stdin), stdinBytes: stream?.bytes ?? null }),
     jq: ({ argv, stdin }) => runJq(argv, { ...toolContext(stdin), environment: Object.fromEntries([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)])) }),
     awk: ({ argv, stdin }) => runAwk(argv, toolContext(stdin)),
   };
@@ -3394,13 +3394,13 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         else fdTable.set(fd, value);
       }
     }
-    const applied = await applyOutputRedirects(node.redirects, result.out, result.err, sink);
+    const applied = await applyOutputRedirects(node.redirects, result.out, result.err, sink, result.bytes ?? null);
     const finished = { code: result.code, ...applied };
     if (execute) throw Object.assign(new ShellExit(finished.code), { output: { out: finished.out, err: finished.err } });
     return finished;
   }
 
-  async function applyOutputRedirects(redirects, out, err, sink) {
+  async function applyOutputRedirects(redirects, out, err, sink, bytes = null) {
     const fds = { 0: 'readonly', 1: 'out', 2: 'err' };
     for (const [fd, target] of fdTable) fds[fd] = target;
     for (const redirect of redirects) {
@@ -3447,6 +3447,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         files.set(target.path, entry);
       }
     };
+    let outBytes = bytes;
+    if (outBytes && fds[1] !== 'out') {
+      const target = fds[1];
+      if (typeof target === 'object' && target.path !== undefined && target.rw !== true && target.read === undefined && target.heredoc === undefined) {
+        const append = redirects.some((redirect) => redirect.op === '>>' || redirect.op === '1>>' || redirect.op === '&>>');
+        const prior = append && host.exists(target.path) ? host.readBytes(target.path) : new Uint8Array(0);
+        writeRedirect(target.path, tarConcat([prior, outBytes]));
+      }
+      outBytes = null;
+    }
     route(1, out);
     route(2, err);
     if (writeFailed) route(2, 'thebird: write error: Bad file descriptor\n');
@@ -3455,8 +3465,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const prior = host.exists(path) ? host.read(path) : '';
       writeRedirect(path, rw ? text + prior.slice(text.length) : prior + text);
     }
-    if (writeFailed) return { out: outText, err: errText, code: 1 };
-    return { out: outText, err: errText };
+    if (writeFailed) return { out: outText, err: errText, code: 1, bytes: outBytes };
+    return { out: outText, err: errText, bytes: outBytes };
   }
 
   async function runSubshell(node, stdin, sink) {
@@ -3708,13 +3718,14 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   async function runPipeline(pipe, stdin, sink) {
     let input = stdin;
+    let inputBytes = null;
     let code = 0;
     const saved = pipe.cmds.length > 1 ? { cwd: state.cwd, vars: new Map(vars) } : null;
     try {
       for (let i = 0; i < pipe.cmds.length; i++) {
         const cmd = pipe.cmds[i];
         const last = i === pipe.cmds.length - 1;
-        const stream = i === 0 ? (sink.stream ??= { text: input, pos: 0 }) : { text: input, pos: 0 };
+        const stream = i === 0 ? (sink.stream ??= { text: input, pos: 0 }) : { text: input, pos: 0, bytes: inputBytes };
         let result;
         try {
           result = await runStage(cmd, input, sink, stream);
@@ -3737,8 +3748,14 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           result.err = '';
         }
         sink.err += result.err;
-        if (last) sink.out += result.out;
-        else input = result.out;
+        const text = result.out || (result.bytes ? new TextDecoder().decode(result.bytes) : '');
+        if (last) {
+          sink.out += text;
+          if (result.bytes) sink.bytes = sink.bytes ? tarConcat([sink.bytes, result.bytes]) : result.bytes;
+        } else {
+          input = text;
+          inputBytes = result.bytes ?? null;
+        }
       }
     } finally {
       if (saved) {
@@ -3826,7 +3843,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       await stopJobs();
       runSink = null;
       state.status = code;
-      return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err };
+      return { ok: code === 0, exitCode: code, signal: null, stdout: sink.out, stderr: sink.err, output: sink.out + sink.err, bytes: sink.bytes ?? null };
     },
     async command(argv, stdin = '') {
       try {

@@ -114,7 +114,7 @@ function tarHeader(nameBytes, size, typeflag, mode) {
   return block;
 }
 
-function tarConcat(chunks) {
+export function tarConcat(chunks) {
   const total = chunks.reduce((length, chunk) => length + chunk.length, 0);
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -420,10 +420,7 @@ function tarCreate(options, ctx) {
   chunks.push(new Uint8Array(tarBlockSize * 2));
   const archive = tarConcat(chunks);
   const listing = options.verbose ? names : '';
-  if (toStdout) {
-    if (options.gzip) return tarFailure('tar: compressed archive to standard output is not supported');
-    return { code, out: new TextDecoder().decode(archive), err: err + listing };
-  }
+  if (toStdout) return { code, out: '', err: err + listing, bytes: options.gzip ? tarGzipStored(archive) : archive };
   host.write(archivePath, options.gzip ? tarGzipStored(archive) : archive);
   return { code, out: listing, err };
 }
@@ -447,7 +444,7 @@ function tarJoinPath(base, parts) {
 }
 
 function tarReadArchive(options, ctx) {
-  if (options.archive === '-') return { bytes: new TextEncoder().encode(ctx.stdin ?? '') };
+  if (options.archive === '-') return { bytes: ctx.stdinBytes ?? new TextEncoder().encode(ctx.stdin ?? '') };
   const missing = options.gzip
     ? `tar (child): ${options.archive}: Cannot open: No such file or directory\ntar (child): Error is not recoverable: exiting now\ntar: Child returned status 2\ntar: Error is not recoverable: exiting now`
     : `tar: ${options.archive}: Cannot open: No such file or directory`;

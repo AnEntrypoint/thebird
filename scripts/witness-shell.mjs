@@ -3661,6 +3661,26 @@ group('parse errors: a list that ends in && or || at the end of the input is a s
   check('parse error: a list with || between two commands still runs (bash output)', chained.stdout === 'a\nc\n' && chained.exitCode === 0 && chained.stderr === '', JSON.stringify(chained));
 });
 
+group('tar: an archive written to stdout is bytes, so gzip output passes through a pipe and a file as GNU tar writes it', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const sh = await shell({ '/workspace/x.txt': 'hit\n' });
+  const toFile = await run(sh, 'cd /workspace && tar -czf - x.txt > a.tgz; echo rc=$?; tar -tzf a.tgz');
+  check('tar: tar -czf - writes the gzip bytes into a file, and tar -tzf reads them back', toFile.stdout === 'rc=0\nx.txt\n' && toFile.stderr === '', JSON.stringify(toFile));
+  const piped = await run(sh, 'cd /workspace && tar -czf - x.txt | tar -tzf -; echo rc=$?');
+  check('tar: gzip output passes through a pipe into tar -tzf -', piped.stdout === 'x.txt\nrc=0\n' && piped.stderr === '', JSON.stringify(piped));
+  const extracted = await run(sh, 'cd /workspace && mkdir -p d && tar -czf - x.txt | tar -xzf - -C d; echo rc=$?; cat d/x.txt');
+  check('tar: gzip output passes through a pipe into tar -xzf - and extracts the member', extracted.stdout === 'rc=0\nhit\n' && extracted.stderr === '', JSON.stringify(extracted));
+  const written = await run(sh, 'cd /workspace && tar -czf - x.txt');
+  check('tar: the stdout of tar -czf - is the gzip bytes, with the gzip magic', written.bytes !== null && written.bytes[0] === 0x1f && written.bytes[1] === 0x8b, JSON.stringify([written.stdout.length, written.bytes && written.bytes.length]));
+  const dir = mkdtempSync(join(tmpdir(), 'tar-stdout-'));
+  writeFileSync(join(dir, 'out.tgz'), written.bytes);
+  const listed = execFileSync('tar', ['-tzf', join(dir, 'out.tgz')]).toString();
+  rmSync(dir, { recursive: true, force: true });
+  check('tar: GNU tar lists the stdout bytes of tar -czf - (GNU tar output)', listed === 'x.txt\n', JSON.stringify(listed));
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');
