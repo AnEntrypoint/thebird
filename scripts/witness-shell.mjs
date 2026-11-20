@@ -380,6 +380,20 @@ group('date: an invalid date is quoted with the locale quote marks, as GNU date 
   check('date: LANG=C alone also uses straight quotes (GNU date output)', langC.stdout === 'rc=1\n' && langC.stderr === "date: invalid date 'foo'\n", JSON.stringify(langC));
 });
 
+group('jq: $ENV is the environment of the shell as an object, and --arg ENV does not replace it, as jq 1.8.2 does', async () => {
+  const sh = await shell({});
+  const exported = await run(sh, "export FOO=bar; jq -n -r '$ENV.FOO'; echo rc=$?");
+  check('jq: $ENV.FOO reads an exported variable (jq 1.8.2 output)', exported.stdout === 'bar\nrc=0\n' && exported.stderr === '', JSON.stringify(exported));
+  const typed = await run(sh, "jq -n '$ENV | type'; echo rc=$?");
+  check('jq: $ENV is an object (jq 1.8.2 output)', typed.stdout === '"object"\nrc=0\n' && typed.stderr === '', JSON.stringify(typed));
+  const missing = await run(sh, "jq -n '$ENV.NOPE'; echo rc=$?");
+  check('jq: a variable missing from $ENV reads as null (jq 1.8.2 output)', missing.stdout === 'null\nrc=0\n' && missing.stderr === '', JSON.stringify(missing));
+  const has = await run(sh, "jq -n '$ENV | has(\"NOPE\")'; echo rc=$?");
+  check('jq: has on $ENV is false for a missing name (jq 1.8.2 output)', has.stdout === 'false\nrc=0\n' && has.stderr === '', JSON.stringify(has));
+  const shadow = await run(sh, "export FOO=bar; jq -n --arg ENV x -r '$ENV.FOO'; echo rc=$?");
+  check('jq: --arg ENV does not replace $ENV (jq 1.8.2 output)', shadow.stdout === 'bar\nrc=0\n' && shadow.stderr === '', JSON.stringify(shadow));
+});
+
 group('jq: an unbound variable is a compile error with status 3, reported as jq 1.8.2 reports it', async () => {
   const sh = await shell({});
   const bare = await run(sh, "jq -n '$x'; echo rc=$?");

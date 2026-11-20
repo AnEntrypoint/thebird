@@ -1008,7 +1008,7 @@ export function runJq(argv, ctx) {
   }
   if (filter === null) return { code: 2, out: '', err: 'jq: error: no filter given\n' };
 
-  jqVariables = namedArgs;
+  jqVariables = new Map([...namedArgs, ['ENV', ctx.environment ?? {}]]);
   let program;
   try {
     program = jqParse(filter);

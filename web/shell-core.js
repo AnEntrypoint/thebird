@@ -2785,7 +2785,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     },
     sed: ({ argv, stdin }) => runSed(argv, toolContext(stdin)),
     tar: ({ argv, stdin }) => runTar(argv, toolContext(stdin)),
-    jq: ({ argv, stdin }) => runJq(argv, toolContext(stdin)),
+    jq: ({ argv, stdin }) => runJq(argv, { ...toolContext(stdin), environment: Object.fromEntries([...exported].filter((name) => vars.has(name)).map((name) => [name, vars.get(name)])) }),
     awk: ({ argv, stdin }) => runAwk(argv, toolContext(stdin)),
   };
 
