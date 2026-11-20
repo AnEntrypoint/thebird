@@ -4198,3 +4198,29 @@ Witness: group `redirects: >&word sends stdout and stderr to a file as bash does
 
 Red check: the file form sends only stdout to the file (the `fds[2] = target` line removed), restored from a copy of the good core and confirmed with `cmp`. Red run: `RESULT PASS=1229 FAIL=1`, the row `cat nofile >&2x; echo st=$?; cat 2x` (stderr of cat is not in the file). `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B record: change set 30br, pushed as 5dca8e0..27fc844
+
+Window: started 04:15:28 and cleared at reading 1 (04:15:28), with no wait. The gate read swap-in 836 KB/s and swap-out 4 KB/s, and heavy-jobs read clear, so every step ran. The window started with the host in swap-out at about 74 MB/s by the user's account; the gate's own second `vmstat 1 2` sample did not show it at the time it was read.
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 04:15:28 | 836 | 4 | clear | none; gate and heavy-jobs clear, window started |
+
+Runs, each with its PID and wall time from the clock:
+
+- Green witness (pid 2069884): exit 0, wall 1.58 s, `RESULT PASS=1230 FAIL=0`.
+- Red check (27fc844, the only commit with code; pid 2069915): exit 1, wall 1.57 s, `RESULT PASS=1229 FAIL=1`, the row `cat nofile >&2x; echo st=$?; cat 2x`. Restored from a copy of HEAD and confirmed with `cmp`. 108dee3 is a ledger-only commit with no code, so it has no red check of its own.
+- `npm run check` (pid 2069947): exit 0, wall 0.31 s.
+- `npm run witness:shell` (pid 2070002): exit 0, wall 1.67 s, `RESULT PASS=1230 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   5dca8e0..27fc844  main -> main
+``
+
+`git ls-remote origin main` after the push: `27fc8447c65fe51a5569769ca1cc2e6016af237a refs/heads/main`. The push carried 108dee3 (the window record for 5dca8e0) and 27fc844 (change set 30br).
+
+Longest step: the push, about three seconds (04:15:33 to 04:15:36). Nothing was stopped.
+
