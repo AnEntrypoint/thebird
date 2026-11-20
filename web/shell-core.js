@@ -2095,7 +2095,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         if (last && last.line === line) last.count++;
         else groups.push({ line, count: 1 });
       }
-      const out = groups.map(({ line, count }) => (flags.has('-c') ? String(count).padStart(7) + ' ' : '') + line + '\n').join('');
+      const kept = flags.has('-d') ? groups.filter(({ count }) => count > 1) : flags.has('-u') ? groups.filter(({ count }) => count === 1) : groups;
+      const out = kept.map(({ line, count }) => (flags.has('-c') ? String(count).padStart(7) + ' ' : '') + line + '\n').join('');
       return { code: input.code, out, err: input.err };
     },
     cut: ({ argv, stdin = '' }) => {

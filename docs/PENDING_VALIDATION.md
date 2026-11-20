@@ -5721,3 +5721,11 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - Witness: `scripts/witness-shell.mjs`, group "sort keys: sort -t and -k pick the key field, -n and -r apply per key, and equal keys fall back to the whole line, as bash does", five rows with the expected output taken from bash.
 - Green: `RESULT PASS=1567 FAIL=0`, wall 1.70 s.
 - Red check: mutation `keyOf` returns the whole line (pid 34616); witness `RESULT PASS=1564 FAIL=3`, exit 1. Restored from the saved copy; `cmp` matches; `git status` shows only the intended files and the relay.
+
+### Defect fix: uniq -d and -u print only the repeated, or only the unrepeated, lines
+
+- Row: the uniq -d row of the full-feature run (commit 8d52612). Command: `printf 'a\na\nb\n' \| uniq -d`. Before: `a\nb\n` (the flag was ignored). Expected: `a` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `uniq` command. `-d` keeps the groups with more than one line, `-u` keeps the groups with exactly one.
+- Witness: `scripts/witness-shell.mjs`, group "uniq -d and -u: uniq -d prints only the repeated lines and uniq -u prints only the lines that are not repeated, as bash does", three rows with the expected output taken from bash. Before the change all three failed against bash.
+- Green: `RESULT PASS=1570 FAIL=0`, wall 1.65 s.
+- Red check: mutation `count > 1` to `count > 0` in the `-d` branch (pid 34918); witness `RESULT PASS=1568 FAIL=2`, exit 1, with both `-d` rows failing. Restored from the saved copy; `cmp` matches; `git status` shows only the intended files and the relay.

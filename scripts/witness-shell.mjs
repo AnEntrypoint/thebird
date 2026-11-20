@@ -3275,6 +3275,15 @@ group("sort keys: sort -t and -k pick the key field, -n and -r apply per key, an
   const wsk5 = await run(sh, "printf 'b 2\\na 1\\n' | sort -k2 -r");
   check("sort -k2 -r reverses by the second field (bash output, locale en_US.UTF-8)", wsk5.stdout === "b 2\na 1\n" && wsk5.exitCode === 0 && wsk5.stderr === "", JSON.stringify([wsk5.stdout, wsk5.stderr, wsk5.exitCode]));
 });
+group("uniq -d and -u: uniq -d prints only the repeated lines and uniq -u prints only the lines that are not repeated, as bash does", async () => {
+  const sh = await shell({});
+  const wuq1 = await run(sh, "printf 'a\\na\\nb\\n' | uniq -d");
+  check("uniq -d prints one copy of each repeated line (bash output, locale en_US.UTF-8)", wuq1.stdout === "a\n" && wuq1.exitCode === 0 && wuq1.stderr === "", JSON.stringify([wuq1.stdout, wuq1.stderr, wuq1.exitCode]));
+  const wuq2 = await run(sh, "printf 'a\\na\\nb\\nc\\nc\\nc\\n' | uniq -d");
+  check("uniq -d keeps every repeated run in order (bash output, locale en_US.UTF-8)", wuq2.stdout === "a\nc\n" && wuq2.exitCode === 0 && wuq2.stderr === "", JSON.stringify([wuq2.stdout, wuq2.stderr, wuq2.exitCode]));
+  const wuq3 = await run(sh, "printf 'a\\na\\nb\\n' | uniq -u");
+  check("uniq -u prints only the lines that are not repeated (bash output, locale en_US.UTF-8)", wuq3.stdout === "b\n" && wuq3.exitCode === 0 && wuq3.stderr === "", JSON.stringify([wuq3.stdout, wuq3.stderr, wuq3.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
