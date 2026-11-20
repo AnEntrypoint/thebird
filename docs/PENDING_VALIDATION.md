@@ -3788,3 +3788,18 @@ Witness: group `realpath: -s keeps the path lexical, -P resolves links again (th
 Red check: `-s` made a no-op (it behaves as physical), restored from a backup and confirmed with `cmp`: `RESULT PASS=1051 FAIL=9`, the nine `-s` rows red. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
 
 Gaps still open, not probed here: `-m` (missing components are allowed without checks) and `-L` (logical `..`) are the next change set; `--relative-to`, `-z` and `-q` are not implemented.
+
+### Change set 30bf: realpath -m allows missing components with no check, and the last of -e and -m wins, as GNU realpath does
+
+Reference: `/bin/gnurealpath` (GNU coreutils 9.7), with the same fixture as 30be (`/tmp/rpw` mapped to `/workspace`, the parent `/tmp` to `/`). GNU's rules from the probes:
+- `-m` does no existence check: a missing component may be followed by anything, including `..` (`nosuch/..` resolves to the working directory), and a file may be followed by a component (`tgt.txt/x` resolves, `tgt.txt/..` resolves to the working directory). A link is still expanded (`lk` resolves to `tgt.txt`, `dl` to `nosuch`).
+- The last of `-e` and `-m` wins: `-m -e nosuch` is an error, `-e -m nosuch` resolves.
+- `-m -s` is lexical (no link expanded) and does not check either: `-m -s tgt.txt/..` resolves to the working directory.
+
+What changed in the shell: the walk takes a mode (default, `existing` for `-e`, `missing` for `-m`), and the existence checks are skipped for `missing`. The `-e` and `-m` options set the mode, so the last one wins.
+
+Witness: group `realpath: -m allows missing components with no check, and the last of -e and -m wins, as GNU realpath does`, 20 rows from GNU. Final: `RESULT PASS=1080 FAIL=0`.
+
+Red check: the check skipped for `-m` removed (every mode checks), restored from a backup and confirmed with `cmp`: `RESULT PASS=1070 FAIL=10`, the ten `-m` rows red that GNU resolves without an error. Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+Gap still open, with its GNU evidence: `-L` (logical). It is not a lexical pre-pass: GNU checks the components as written, then resolves. `realpath -L dl2/x/..` is ENOENT (`x` is missing), `realpath -L -m dl2/x/../y` resolves to `sub/deep/y`, and `realpath -L dl2/..` resolves to the working directory. Reopen: a second change set that does the check on the written components and pops `..` on the logical path. `-z`, `-q` and `--relative-to` are not implemented.

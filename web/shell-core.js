@@ -1500,7 +1500,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       ' Birth: -',
     ].join('\n');
   };
-  const realpathOf = (name, existing, strip) => {
+  const realpathOf = (name, mode, strip) => {
     const todo = (name.startsWith('/') ? name : state.cwd + '/' + name).split('/').filter((part) => part !== '' && part !== '.');
     const stack = [];
     let expansions = 0;
@@ -1521,9 +1521,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
       }
       const info = host.stat(path);
       const last = todo.length === 0;
-      if (!info) {
-        if (existing || (!last && (!strip || todo[0] === '..'))) return { error: 'No such file or directory' };
-      } else if (info.dir !== true && !last) return { error: 'Not a directory' };
+      if (mode !== 'missing') {
+        if (!info) {
+          if (mode === 'existing' || (!last && (!strip || todo[0] === '..'))) return { error: 'No such file or directory' };
+        } else if (info.dir !== true && !last) return { error: 'Not a directory' };
+      }
       stack.push(part);
     }
     return { path: '/' + stack.join('/') };
@@ -2112,20 +2114,21 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       return { code, out, err };
     },
     realpath: ({ argv }) => {
-      let existing = false;
+      let mode = 'default';
       let strip = false;
       let out = '';
       let err = '';
       let code = 0;
       const names = [];
       for (const arg of argv) {
-        if (arg === '-e') existing = true;
+        if (arg === '-e') mode = 'existing';
+        else if (arg === '-m') mode = 'missing';
         else if (arg === '-s') strip = true;
         else if (arg === '-P') strip = false;
         else if (!arg.startsWith('-')) names.push(arg);
       }
       for (const name of names) {
-        const result = realpathOf(name, existing, strip);
+        const result = realpathOf(name, mode, strip);
         if (result.error) {
           err += 'realpath: ' + name + ': ' + result.error + '\n';
           code = 1;
