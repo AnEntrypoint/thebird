@@ -4246,3 +4246,38 @@ Witness: group `redirects: 1<f makes fd 1 a read-only input file, so a write to 
 
 Red check: the `1<` case removed from the read-only branch (so `echo x 1<f` writes to stdout), restored from a copy of the good core and confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1244 FAIL=5`, the five rows with `echo x 1<f` in them. `git status` then shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B record: change set 30bs, pushed as 27fc844..9ae1fce
+
+Window: started 04:23:36 and cleared at reading 8 (04:27:07), about three and a half minutes of the ten allowed. Readings 1 to 7 did not clear: the gate was above 1000 KB/s at readings 1 to 3 and 6 to 7, and heavy-jobs was busy at readings 1 to 5. The gate used the second sample of `vmstat 1 2` as before. Readings:
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 04:23:36 | 924 | 1988 | busy (1) | zig `test` build pid 2071659 at 30.7% (another run's `.zig-cache` test) |
+| 2 | 04:24:07 | 3316 | 0 | busy (1) | zig `test` pid 2071659 at 72.3% |
+| 3 | 04:24:37 | 13792 | 32544 | busy (1) | zig `test` pid 2071659 at 100% |
+| 4 | 04:25:06 | 92 | 0 | busy (2) | zig `test` pid 2071659 at 100%; Claude session pid 1998 at 34.7% |
+| 5 | 04:25:37 | 228 | 0 | busy (1) | zig `test` pid 2071659 at 100% |
+| 6 | 04:26:06 | 2676 | 0 | clear | none (heavy-jobs clear, gate above 1000) |
+| 7 | 04:26:36 | 2492 | 0 | clear | none (gate above 1000) |
+| 8 | 04:27:07 | 316 | 0 | clear | none; gate and heavy-jobs clear, window started |
+
+The processes that counted belong to other runs and were left running; nothing was stopped. The zig test was not running at reading 6.
+
+Runs, each with its PID and wall time from the clock:
+
+- Green witness (pid 2081853): exit 0, wall 1.68 s, `RESULT PASS=1249 FAIL=0`.
+- Red check (9ae1fce, the only commit with code; pid 2081942): exit 1, wall 1.55 s, `RESULT PASS=1244 FAIL=5`, the five `echo x 1<f` rows. Restored from a copy of HEAD and confirmed with `cmp`. 3f3783c is ledger-only, so it has no red check of its own.
+- `npm run check` (pid 2081974): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2082029): exit 0, wall 1.63 s, `RESULT PASS=1249 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   27fc844..9ae1fce  main -> main
+``
+
+`git ls-remote origin main` after the push: `9ae1fcee0e18093b99a71d58655d40bc72e09c06 refs/heads/main`. The push carried 3f3783c (the window record for 27fc844) and 9ae1fce (change set 30bs).
+
+Longest step: the gate wait, readings 1 to 8 (about three and a half minutes). The push took about three seconds. Nothing was stopped.
+
