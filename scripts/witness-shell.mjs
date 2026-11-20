@@ -3881,6 +3881,26 @@ group('numeric operands: [[ ]] evaluates them as arithmetic, test and [ take int
   }
 });
 
+group('select menu: ten or more items are laid out in columns as bash lays them out, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["printf '10\\n' | { select x in i1 i2 i3 i4 i5 i6 i7 i8 i9 i10; do echo \"[$x]\"; break; done; }; echo rc=$?", "[i10]\nrc=0\n", "1) i1\t  3) i3\t   5) i5    7) i7    9) i9\n2) i2\t  4) i4\t   6) i6    8) i8   10) i10\n#? ", 0],
+  ["COLUMNS=27; printf '12\\n' | { select x in a b c d e f g h i j k l; do echo \"[$x]\"; break; done; }; echo rc=$?", "[l]\nrc=0\n", "1) a    5) e   9) i\n2) b    6) f  10) j\n3) c    7) g  11) k\n4) d    8) h  12) l\n#? ", 0],
+  ["COLUMNS=40; printf '1\\n' | { select x in a b c d e f g h i j k l; do echo \"[$x]\"; break; done; }; echo rc=$?", "[a]\nrc=0\n", "1) a    4) d   7) g  10) j\n2) b    5) e   8) h  11) k\n3) c    6) f   9) i  12) l\n#? ", 0],
+  ["printf '12\\n' | { select x in apple banana cherry date elder fig grape honeydew kiwi lemon mango nectarine; do echo \"[$x]\"; break; done; }; echo rc=$?", "[nectarine]\nrc=0\n", "1) apple        4) date\t       7) grape\t     10) lemon\n2) banana       5) elder       8) honeydew   11) mango\n3) cherry       6) fig\t       9) kiwi\t     12) nectarine\n#? ", 0],
+  ["printf '20\\n' | { select x in i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11 i12 i13 i14 i15 i16 i17 i18 i19 i20; do echo \"[$x]\"; break; done; }; echo rc=$?", "[i20]\nrc=0\n", "1) i1\t  4) i4\t   7) i7   10) i10  13) i13  16) i16  19) i19\n2) i2\t  5) i5\t   8) i8   11) i11  14) i14  17) i17  20) i20\n3) i3\t  6) i6\t   9) i9   12) i12  15) i15  18) i18\n#? ", 0],
+  ["printf '13\\n' | { select x in a b c d e f g h i j k l m; do echo \"[$x]\"; break; done; }; echo rc=$?", "[m]\nrc=0\n", "1) a    3) c   5) e   7) g   9) i  11) k  13) m\n2) b    4) d   6) f   8) h  10) j  12) l\n#? ", 0],
+  ["printf '10\\n' | { select x in abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh x; do echo \"[$x]\"; break; done; }; echo rc=$?", "[x]\nrc=0\n", "1) abcdefgh    3) abcdefgh   5) abcdefgh   7) abcdefgh\t 9) abcdefgh\n2) abcdefgh    4) abcdefgh   6) abcdefgh   8) abcdefgh\t10) x\n#? ", 0],
+  ["printf '9\\n' | { select x in a b c d e f g h i; do echo \"[$x]\"; break; done; }; echo rc=$?", "[i]\nrc=0\n", "1) a\n2) b\n3) c\n4) d\n5) e\n6) f\n7) g\n8) h\n9) i\n#? ", 0],
+  ["printf '\\n2\\n' | { select x in i1 i2 i3 i4 i5 i6 i7 i8 i9 i10; do echo \"[$x] [$REPLY]\"; break; done; }; echo rc=$?", "[i2] [2]\nrc=0\n", "1) i1\t  3) i3\t   5) i5    7) i7    9) i9\n2) i2\t  4) i4\t   6) i6    8) i8   10) i10\n#? 1) i1\t  3) i3\t   5) i5    7) i7    9) i9\n2) i2\t  4) i4\t   6) i6    8) i8   10) i10\n#? ", 0],
+  ["COLUMNS=60; printf '11\\n' | { select x in a b c d e f g h i j k; do echo \"[$x]\"; break; done; }; echo rc=$?", "[k]\nrc=0\n", "1) a    3) c   5) e   7) g   9) i  11) k\n2) b    4) d   6) f   8) h  10) j\n#? ", 0],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('select menu: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');

@@ -29,6 +29,45 @@ const testInteger = (text) => {
 };
 
 const INTEGER_COMPARE = { '-eq': (x, y) => x === y, '-ne': (x, y) => x !== y, '-lt': (x, y) => x < y, '-le': (x, y) => x <= y, '-gt': (x, y) => x > y, '-ge': (x, y) => x >= y };
+const menuTabStop = (at) => (Math.floor(at / 8) + 1) * 8;
+const menuPad = (from, to) => {
+  let at = from;
+  let out = '';
+  while (menuTabStop(at) <= to) {
+    out += '\t';
+    at = menuTabStop(at);
+  }
+  return out + ' '.repeat(Math.max(0, to - at));
+};
+const selectMenu = (items, columnsValue) => {
+  if (items.length < 10) return items.map((item, i) => (i + 1) + ') ' + item + '\n').join('');
+  const width = Number.isInteger(columnsValue) && columnsValue > 0 ? columnsValue : 80;
+  const digits = String(items.length).length;
+  const column = Math.max(...items.map((item) => [...item].length)) + digits + 4;
+  const columns = Math.max(1, Math.floor(width / column));
+  const rows = Math.ceil(items.length / columns);
+  const cols = Math.ceil(items.length / rows);
+  let out = '';
+  for (let row = 0; row < rows; row++) {
+    let line = '';
+    let at = 0;
+    for (let col = 0; col < cols; col++) {
+      const index = col * rows + row;
+      if (index >= items.length) break;
+      const number = String(index + 1);
+      if (col === 0) {
+        line = number + ') ' + items[index];
+        at = [...line].length;
+        continue;
+      }
+      const label = number.padStart(digits) + ') ' + items[index];
+      line += menuPad(at, col * column) + label;
+      at = col * column + [...label].length;
+    }
+    out += line + '\n';
+  }
+  return out;
+};
 const CONDITIONAL_BINARY = new Set(['==', '=', '!=', '=~', '<', '>', '-eq', '-ne', '-lt', '-le', '-gt', '-ge']);
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
 const SHELL_PID = 100;
@@ -3879,7 +3918,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     try {
       for (;;) {
         await yieldTurn();
-        if (showMenu) inner.err += items.map((item, i) => `${i + 1}) ${item}\n`).join('');
+        if (showMenu) inner.err += selectMenu(items, Number(variableValue('COLUMNS')));
         inner.err += variableValue('PS3') ?? '#? ';
         if (input === '') {
           inner.out += '\n';
