@@ -1571,6 +1571,39 @@ group('arithmetic command: (( ... )) sets status 0 for a non-zero value and 1 fo
   check('arithmetic command: a (( that does not close with )) is a nested subshell, as bash does', ac7.stdout === 'a\nb\n' && ac7.stderr === '', JSON.stringify([ac7.stdout, ac7.stderr]));
 });
 
+group('arithmetic command: += -= *= /= %= assign to a name, and ++ and -- change it before or after the value, as bash does', async () => {
+  const cp0 = await run(await shell({}), 'x=5; (( x += 3 )); echo $? $x');
+  check('arithmetic command: += adds the right side to the variable, as bash does', cp0.stdout === '0 8\n' && cp0.stderr === '', JSON.stringify([cp0.stdout, cp0.stderr]));
+  const cp1 = await run(await shell({}), 'x=5; (( x -= 3 )); echo $? $x');
+  check('arithmetic command: -= subtracts the right side from the variable, as bash does', cp1.stdout === '0 2\n' && cp1.stderr === '', JSON.stringify([cp1.stdout, cp1.stderr]));
+  const cp2 = await run(await shell({}), 'x=5; (( x *= 3 )); echo $? $x');
+  check('arithmetic command: *= multiplies the variable, as bash does', cp2.stdout === '0 15\n' && cp2.stderr === '', JSON.stringify([cp2.stdout, cp2.stderr]));
+  const cp3 = await run(await shell({}), 'x=7; (( x /= 2 )); echo $? $x');
+  check('arithmetic command: /= divides the variable and truncates, as bash does', cp3.stdout === '0 3\n' && cp3.stderr === '', JSON.stringify([cp3.stdout, cp3.stderr]));
+  const cp4 = await run(await shell({}), 'x=7; (( x %= 4 )); echo $? $x');
+  check('arithmetic command: %= keeps the remainder in the variable, as bash does', cp4.stdout === '0 3\n' && cp4.stderr === '', JSON.stringify([cp4.stdout, cp4.stderr]));
+  const cp5 = await run(await shell({}), 'x=5; (( x++ )); echo $? $x');
+  check('arithmetic command: a postfix ++ tests the old value and increments, as bash does', cp5.stdout === '0 6\n' && cp5.stderr === '', JSON.stringify([cp5.stdout, cp5.stderr]));
+  const cp6 = await run(await shell({}), 'x=5; (( ++x )); echo $? $x');
+  check('arithmetic command: a prefix ++ gives the new value, as bash does', cp6.stdout === '0 6\n' && cp6.stderr === '', JSON.stringify([cp6.stdout, cp6.stderr]));
+  const cp7 = await run(await shell({}), 'x=0; (( x++ )); echo $? $x');
+  check('arithmetic command: a postfix ++ whose old value is zero gives status 1, as bash does', cp7.stdout === '1 1\n' && cp7.stderr === '', JSON.stringify([cp7.stdout, cp7.stderr]));
+  const cp8 = await run(await shell({}), 'x=5; (( x-- )); echo $? $x');
+  check('arithmetic command: a postfix -- decrements the variable, as bash does', cp8.stdout === '0 4\n' && cp8.stderr === '', JSON.stringify([cp8.stdout, cp8.stderr]));
+  const cp9 = await run(await shell({}), 'x=0; (( --x )); echo $? $x');
+  check('arithmetic command: a prefix -- to zero gives -1 and status 0, as bash does', cp9.stdout === '0 -1\n' && cp9.stderr === '', JSON.stringify([cp9.stdout, cp9.stderr]));
+  const cp10 = await run(await shell({}), 'x=5; (( y = x++ )); echo $? $x $y');
+  check('arithmetic command: a postfix ++ on the right of = gives the old value, as bash does', cp10.stdout === '0 6 5\n' && cp10.stderr === '', JSON.stringify([cp10.stdout, cp10.stderr]));
+  const cp11 = await run(await shell({}), 'x=5; (( x += 1 + 2 )); echo $? $x');
+  check('arithmetic command: the right side of += is a whole expression, as bash does', cp11.stdout === '0 8\n' && cp11.stderr === '', JSON.stringify([cp11.stdout, cp11.stderr]));
+  const cp12 = await run(await shell({}), 'x=0; (( x /= 0 )); echo $? $x');
+  check('arithmetic command: a division by zero in a compound assignment gives status 1 and leaves the variable, as bash does', cp12.stdout === '1 0\n' && cp12.stderr !== '', JSON.stringify([cp12.stdout, cp12.stderr]));
+  const cp13 = await run(await shell({}), '(( 1 += 2 )); echo $?');
+  check('arithmetic command: an assignment to a number is an error with status 1, as bash does', cp13.stdout === '1\n' && cp13.stderr !== '', JSON.stringify([cp13.stdout, cp13.stderr]));
+  const cp14 = await run(await shell({}), '(( y += 1 )); echo $? $y');
+  check('arithmetic command: += on an unset name starts from zero, as bash does', cp14.stdout === '0 1\n' && cp14.stderr === '', JSON.stringify([cp14.stdout, cp14.stderr]));
+});
+
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
   const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
   check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));

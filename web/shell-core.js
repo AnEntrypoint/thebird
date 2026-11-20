@@ -1303,9 +1303,9 @@ function applyOperator(op, left, right) {
   return Number(Boolean(left) || Boolean(right));
 }
 
-export function evaluateArithmetic(src, lookup) {
+export function evaluateArithmetic(src, lookup, assign) {
   const compact = src.replace(/\\\n/g, '').replace(/\s+/g, '');
-  const tokens = compact.match(/\d+|[A-Za-z_]\w*|<=|>=|==|!=|&&|\|\||[-+*/%<>()!]/g) ?? [];
+  const tokens = compact.match(/\d+|[A-Za-z_]\w*|\+\+|--|[-+*/%]=|<=|>=|==|!=|&&|\|\||=|[-+*/%<>()!]/g) ?? [];
   if (tokens.join('') !== compact) throw new Error(`arithmetic: bad expression '${src.trim()}'`);
   let pos = 0;
   const peek = () => tokens[pos];
@@ -1319,11 +1319,26 @@ export function evaluateArithmetic(src, lookup) {
       return value;
     }
     if (/^\d+$/.test(token)) return Number(token);
-    if (/^[A-Za-z_]/.test(token)) return Number(lookup(token)) || 0;
+    if (/^[A-Za-z_]/.test(token)) {
+      if (peek() === '++' || peek() === '--') {
+        const old = Number(lookup(token)) || 0;
+        assign(token, String(old + (tokens[pos++] === '++' ? 1 : -1)));
+        return old;
+      }
+      return Number(lookup(token)) || 0;
+    }
     throw new Error(`arithmetic: unexpected '${token}'`);
   };
 
   const unary = () => {
+    if (peek() === '++' || peek() === '--') {
+      const op = tokens[pos++];
+      const name = tokens[pos++];
+      if (!/^[A-Za-z_]/.test(name ?? '')) throw new Error('arithmetic: attempted assignment to non-variable');
+      const value = (Number(lookup(name)) || 0) + (op === '++' ? 1 : -1);
+      assign(name, String(value));
+      return value;
+    }
     if (peek() === '!') {
       pos++;
       return Number(!unary());
@@ -1349,7 +1364,19 @@ export function evaluateArithmetic(src, lookup) {
     return left;
   }
 
-  const value = binary(0);
+  const ASSIGNMENTS = ['=', '+=', '-=', '*=', '/=', '%='];
+  const expression = () => {
+    if (!ASSIGNMENTS.includes(tokens[1])) return binary(0);
+    if (!/^[A-Za-z_]/.test(tokens[0])) throw new Error('arithmetic: attempted assignment to non-variable');
+    const name = tokens[0];
+    const op = tokens[1];
+    pos = 2;
+    const right = binary(0);
+    const value = op === '=' ? right : applyOperator(op.slice(0, -1), Number(lookup(name)) || 0, right);
+    assign(name, String(value));
+    return value;
+  };
+  const value = expression();
   if (pos < tokens.length) throw new Error(`arithmetic: unexpected '${tokens[pos]}'`);
   return value;
 }
@@ -2451,7 +2478,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
       else if (part.k === 'len') add(String((variableValue(part.name) ?? '').length), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
-      else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '')), inDouble);
+      else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
     }
     return chars;
@@ -2919,15 +2946,9 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
   }
 
   const runArithmeticCommand = (node) => {
-    const evaluate = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '');
     try {
-      const assignment = /^\s*([A-Za-z_]\w*)\s*=(?!=)([\s\S]*)$/.exec(node.src);
-      if (assignment) {
-        const value = evaluate(assignment[2]);
-        setVariable(assignment[1], String(value));
-        return { code: value === 0 ? 1 : 0, out: '', err: '' };
-      }
-      return { code: evaluate(node.src) === 0 ? 1 : 0, out: '', err: '' };
+      const value = evaluateArithmetic(node.src, (name) => variableValue(name) ?? '', setVariable);
+      return { code: value === 0 ? 1 : 0, out: '', err: '' };
     } catch (error) {
       return { code: 1, out: '', err: error.message + '\n' };
     }

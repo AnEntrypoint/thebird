@@ -3646,3 +3646,30 @@ Witness: group `arithmetic command: (( ... )) sets status 0 for a non-zero value
 Red check, restored with `cmp`: the tokenizer branch that reads `((` removed from `web/shell-core.js` gives `RESULT PASS=975 FAIL=7`. All seven arithmetic-command rows go red, and the nested-subshell row stays green.
 
 Gap still open, not probed: compound assignment operators and redirections on an arithmetic command. Reopen: a bash probe where our output differs.
+
+### Change set 30ay: += -= *= /= %= assign to a name, and prefix and postfix ++ and -- change it, inside (( )), as bash does
+
+Reference: bash (the version in this sandbox), run on files of the script text. Probed shapes (bash stdout, with the status from echo and the stderr shown where bash prints one):
+- `x=5; (( x += 3 )); echo $? $x` prints `0 8`. The same pattern gives `0 2` for `-= 3`, `0 15` for `*= 3`, `0 3` for `/= 2` on 7, and `0 3` for `%= 4` on 7.
+- `x=5; (( x++ )); echo $? $x` prints `0 6`: the status tests the old value, and the variable is incremented.
+- `x=5; (( ++x )); echo $? $x` prints `0 6`: the new value is tested.
+- `x=0; (( x++ )); echo $? $x` prints `1 1`.
+- `x=5; (( x-- )); echo $? $x` prints `0 4`.
+- `x=0; (( --x )); echo $? $x` prints `0 -1`.
+- `x=5; (( y = x++ )); echo $? $x $y` prints `0 6 5`.
+- `x=5; (( x += 1 + 2 )); echo $? $x` prints `0 8`: the right side is a whole expression.
+- `x=0; (( x /= 0 )); echo $? $x` prints `1 0` with a division-by-zero message on stderr, and the variable is left unchanged.
+- `(( 1 += 2 )); echo $?` prints `1` with an error on stderr: an assignment to a number is not allowed.
+- `(( y += 1 )); echo $? $y` prints `0 1`: an unset name starts from zero.
+
+Before this change set, the shell rejected every one of these shapes with an arithmetic error, so the status and the variable were wrong.
+
+Rule: a name followed by one of = += -= *= /= %= is an assignment, and its value is the new value of the variable. A prefix ++ or -- on a name changes the variable and yields the new value. A postfix ++ or -- on a name yields the old value and changes the variable. The status is 0 for a non-zero value and 1 for zero, as before. The value of an expression that starts with a number and then an assignment operator is an error. The evaluation runs on `evaluateArithmetic`, which now takes an assignment callback; the `$(( ))` path passes the same shell setter, so `$(( x++ ))` also assigns. That path is not witnessed in this change set.
+
+Witness: group `arithmetic command: += -= *= /= %= assign to a name, and ++ and -- change it before or after the value, as bash does`, 15 rows, expected values from the bash output above. Final: `RESULT PASS=997 FAIL=0`.
+
+Red checks, each restored from a backup with `cmp`, and `git status` showing only the intended files afterward:
+- (1) the assignment branch removed (a name followed by an assignment operator is no longer read as an assignment): `RESULT PASS=988 FAIL=9`, with nine rows red: the five compound rows, the postfix-on-the-right-of-= row, the right-side-is-an-expression row, the unset-name row, and the 30ax row for x = a backslash-newline 5. The assignment-to-number row stays green because it is an error either way.
+- (2) the ++ and -- tokens removed from the tokenizer: `RESULT PASS=991 FAIL=6`, with the six increment and decrement rows red.
+
+Gap still open, not probed here: the `$(( ))` path with assignments has no witness row.
