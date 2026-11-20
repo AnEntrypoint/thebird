@@ -709,6 +709,7 @@ function parse(tokens, partial = false) {
   const parseCommandBody = () => {
     const token = tokens[pos];
     if (!token) throw bashSyntaxError('syntax error: unexpected end of file', { eof: true });
+    if (isWord(token, ']]')) throw nearToken(token);
     if (isWord(token, 'if')) {
       pos++;
       return parseIf();
