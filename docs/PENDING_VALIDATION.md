@@ -4605,3 +4605,36 @@ What changed in the shell: nothing in this change set. The behaviour already mat
 Witness: twelve rows, `RESULT PASS=1386 FAIL=0` (was 1374).
 
 Red check: the mutation makes `failAt` skip the redirects before the failing one (`applyOutputRedirects([], ...)` in place of `applyOutputRedirects(redirects.slice(0, index), ...)`), on the HEAD copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1374 FAIL=12`. Eight of the failures are the new rows whose message would go into a file (the item, `2>f`, `&>f`, `2>>f`, `>&2x 2>f`, `>&2x 1>&3 >f`, `2>&1 >f`, `>&2x 1>&3 2>&1`). Four are existing rows (two missing-directory, two redirect-order), which the same routing change breaks. Restored with `cp` from the HEAD copy, `cmp` matched, and the witness is back at `PASS=1386 FAIL=0`.
+
+### Phase B window for e2d5612 (change set 30by, a bad-descriptor message after a file-form redirect)
+
+Readings: the second sample of `vmstat 1 2` (the gate, both directions under 1000 KB/s), and the heavy-jobs check (`scripts/heavy-jobs.cjs` from bevy commit 495fff6) with the hot-process count, one reading every 30 s.
+
+| Reading | Clock | si KB/s | so KB/s | heavy-jobs | hot count | Note |
+|---|---|---|---|---|---|---|
+| before | 05:53:57 | 192 | 1016 | not run | not run | a manual `vmstat 1 2` before the window; so over 1000 |
+| 1 | 05:54:11 | 64 | 1216 | clear | 0 | so over 1000 |
+| 2 | 05:54:42 | 6108 | 0 | busy, n=1 | 0 | a zig test compile for the other run's txiki build; si over 1000 |
+| 3 | 05:55:11 | 200 | 0 | busy, n=1 | 1 | the same zig test, pid 2178418, above 20% CPU |
+| 4 | 05:55:42 | 176 | 16 | busy, n=2 | 1 | zig test pid 2178806 above 20% CPU, and a zig build-exe pid 2178854 |
+| 5 | 05:56:12 | 192 | 0 | clear | 0 | gate and heavy-jobs clear in the same reading |
+
+The zig processes belong to another run and were left running; nothing was stopped. The hot check reads each process's arguments cut to 200 characters before it looks for `--handshake`, so a flag beyond that point is not seen. That can only count an extra process, never hide one.
+
+Runs, each under `timeout` with the PID of the timeout process captured:
+
+- Green witness (pid 2179328): exit 0, wall 1.59 s, `RESULT PASS=1386 FAIL=0`.
+- Red check (pid 2179361): the mutation makes `failAt` skip the redirects before the failing one, on the HEAD copy of web/shell-core.js. Exit 1, wall 1.58 s, `RESULT PASS=1374 FAIL=12`: eight of the new rows and four existing rows (two missing-directory, two redirect-order). Restored with cp from the HEAD copy, and cmp matched.
+- `npm run check` (pid 2179451): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2179506): exit 0, wall 1.68 s, `RESULT PASS=1386 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout and loop tests.
+
+Push, once, after every check passed. It carried d466d96, 4698dec and e2d5612:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   37791f0..e2d5612  main -> main
+```
+
+`git ls-remote origin main` after the push: `e2d5612f949ebad5fe2f6fabd5e85405658726af refs/heads/main`.
+
+Longest step: the wait for a clear gate, readings 1 to 4, held by another run's zig compile and test jobs (the window job ran 133.9 s in all). Nothing was stopped, and the window script waited for the gate rather than pushing early.
