@@ -5050,3 +5050,48 @@ Red check: the mutation changes the default `sort` comparison to a case-insensit
 Still open, recorded:
 - G2, reachable but not implemented: `sort` under `LANG=en_US.UTF-8` prints byte order where bash and GNU print the glibc en_US order (`a A b B`). Reopen: port the glibc iso14651_t1 weights into a collation key for `sort` (the locale name is `en_US.UTF-8`, as `childLocaleMode()` reports it), then add rows under the default locale.
 - The same byte-order gap applies to `sort -n` with ties and to other sorts in the shell (for example `uniq` and `join`, which were not probed here).
+
+### Phase B window for 2127e42 (change set 30cf, sort row qualifier), with its readings, red check and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s; heavy-jobs.cjs (bevy 495fff6) must read clear in the same reading. Every reading from the window log is below.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| manual | 07:21:56 | 1568 | 12 | not clear | not run | `vmstat 1 2`, second sample |
+| wait 1 | 07:22:00 | 8748 | 6132 | not clear | not run | waiter, gate readings only |
+| wait 2 | 07:22:31 | 436 | 0 | clear | not run | the waiter started the window on this reading |
+| window 1 | 07:22:35 | 1304 | 0 | not clear | busy, n=2 | `zig build-exe` pid 2264934 and `zig test` pid 2264886 |
+| window 2 | 07:23:05 | 700 | 364 | not clear | busy, n=2 | `zig build-exe` pid 2265301 |
+| window 3 | 07:23:34 | 9664 | 0 | not clear | clear | heavy-jobs clear, gate not |
+| window 4 | 07:24:05 | 56 | 808 | not clear | clear | heavy-jobs clear; hot list shows `claude --resume` pid 2707 |
+| window 5 | 07:24:35 | 128 | 0 | clear | busy, n=1 | `gm-core worker --workspace /workspace/freddie` pid 2267851; the command as printed does not show `--handshake`, so it counts |
+| window 6 | 07:25:04 | 112 | 4 | clear | busy, n=1 | a `grep -o` pattern scan, pid 2269865, not started by this stretch |
+| window 7 | 07:25:35 | 72 | 0 | clear | busy, n=1 | the same grep |
+| window 8 | 07:26:05 | 24 | 0 | clear | busy, n=2 | the same grep and `node scripts/check-etc1-individual-top.cjs` pid 2270406 |
+| window 9 | 07:26:34 | 236 | 0 | clear | busy, n=2 | the same two |
+| window 10 | 07:27:05 | 192 | 0 | clear | busy, n=1 | the grep |
+| window 11 | 07:27:35 | 412 | 0 | clear | busy, n=1 | the grep |
+| window 12 | 07:28:04 | 264 | 92 | clear | busy, n=1 | the grep |
+| window 13 | 07:28:35 | 44 | 0 | clear | busy, n=1 | the grep |
+| window 14 | 07:29:04 | 60 | 0 | clear | busy, n=1 | the grep |
+| window 15 | 07:29:35 | 24 | 6412 | clear | busy, n=1 | the grep |
+| window 16 | 07:30:05 | 60 | 0 | clear | busy, n=1 | the grep, pid 2273112 |
+| window 17 | 07:30:34 | 52 | 0 | clear | clear | both clear in the same reading: the window cleared here |
+
+The window cleared at reading 17, about 8 min after the waiter's start at 07:22:31, within the ten-minute budget. The waiter (pid 2264599) ran the window script only after its own clear gate reading. Most of the wait was a long scan process that was not part of this stretch.
+
+Green witness (pid 2274528): exit 0, wall 1.83 s, `RESULT PASS=1512 FAIL=0`.
+G2 red check (pid 2274566): the mutation makes the default `sort` comparison case-insensitive, on the HEAD copy of `web/shell-core.js`. Exit 1, wall 1.61 s, `RESULT PASS=1507 FAIL=5`: the five `LC_ALL=C` sort rows. Restored from the copy, `cmp` matched; the witness after restore read `PASS=1512 FAIL=0`.
+`npm run check` (pid 2274598): exit 0, wall 1.40 s.
+`npm run witness:shell` (pid 2274661): exit 0, wall 1.68 s, `RESULT PASS=1512 FAIL=0`. Three rows print exit 124 by design; they are PASS rows.
+
+Push, once, after every check passed; it carried 2127e42, 1aca19e and 08ade23:
+
+```
+To https://github.com/AnEntrypoint/thebird
+   f6de5c0..08ade23  main -> main
+```
+
+`git ls-remote origin main` after the push: `08ade2385b104f2e5872c81ad22ba14990d5dcf3 refs/heads/main`.
+
+Longest step: the window, about 8 min 3 s from 07:22:31 to 07:30:34, waiting for the zig and grep jobs to clear. Nothing was stopped.
