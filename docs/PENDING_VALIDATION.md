@@ -5778,3 +5778,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `env` builtin with no command. It prints the active command-prefix assignments as well as the exported variables; a prefix assignment is not exported, so before the change it was missing from the list.
 - Witness: `scripts/witness-shell.mjs`, group "env prefix: a command-prefix assignment reaches the environment that env prints, as bash does for an external command", four rows with the expected output taken from bash. Before the change three failed against bash.
 - Red check: the prefix list disabled by mutation; green RESULT PASS=1598 FAIL=0 (1.73 s); red, with the prefix list disabled (pid 37993), RESULT PASS=1595 FAIL=3, the three prefix rows failing; restored, cmp matches. The first attempt at this row inserted the group with a replace that treated a dollar-quote in the group as a pattern; the witness file was restored from HEAD before the row was committed, and the insert now splits and joins.
+
+### Defect fix S1-09: sha256sum exists in the shell core
+
+- Row: S1-09 of the full-feature run (commit 8d52612). Command: `printf 'hi\n' \| sha256sum`. Before: `sha256sum: command not found`, rc 127. Expected: the hash line `98ea6e4f216f2fb4b69fff9b3a44842c38686ca685f3f55dc48c5d3fb1107be4  -` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`. A pure-JS SHA-256 (`sha256Hex`) sits beside `md5Hex`, so it runs in the browser and in txiki without an import. `md5sum` and `sha256sum` now share one `digestCommand` helper; the `md5sum` output is unchanged, and its existing witness rows still pass.
+- Witness: `scripts/witness-shell.mjs`, group "sha256sum: sha256sum prints the SHA-256 of stdin or of each file, with the name, and a missing file is an error, as bash does", six rows with the expected output taken from bash. Before the change all six failed against bash. The 56-byte row checks the second padding block.
+- Red check: the `sha256sum` entry pointed at the MD5 digest by mutation; the counts are in the amended line that follows.

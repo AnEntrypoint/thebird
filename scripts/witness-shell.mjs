@@ -3361,6 +3361,21 @@ group("env prefix: a command-prefix assignment reaches the environment that env 
   const wep4 = await run(sh, "export Y=2; env | grep '^Y='; echo rc=$?");
   check("export Y=2 is printed by env (bash output, locale en_US.UTF-8)", wep4.stdout === "Y=2\nrc=0\n" && wep4.exitCode === 0 && wep4.stderr === "", JSON.stringify([wep4.stdout, wep4.stderr, wep4.exitCode]));
 });
+group("sha256sum: sha256sum prints the SHA-256 of stdin or of each file, with the name, and a missing file is an error, as bash does", async () => {
+  const sh = await shell({});
+  const wsh1 = await run(sh, "printf 'hi\\n' | sha256sum");
+  check("sha256sum of a short line from stdin (bash output, locale en_US.UTF-8)", wsh1.stdout === "98ea6e4f216f2fb4b69fff9b3a44842c38686ca685f3f55dc48c5d3fb1107be4  -\n" && wsh1.exitCode === 0 && wsh1.stderr === "", JSON.stringify([wsh1.stdout, wsh1.stderr, wsh1.exitCode]));
+  const wsh2 = await run(sh, "printf '' | sha256sum");
+  check("sha256sum of empty stdin (bash output, locale en_US.UTF-8)", wsh2.stdout === "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  -\n" && wsh2.exitCode === 0 && wsh2.stderr === "", JSON.stringify([wsh2.stdout, wsh2.stderr, wsh2.exitCode]));
+  const wsh3 = await run(sh, "printf 'abc' | sha256sum");
+  check("sha256sum of the three letters abc (bash output, locale en_US.UTF-8)", wsh3.stdout === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -\n" && wsh3.exitCode === 0 && wsh3.stderr === "", JSON.stringify([wsh3.stdout, wsh3.stderr, wsh3.exitCode]));
+  const wsh4 = await run(sh, "printf 'abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq' | sha256sum");
+  check("sha256sum of a 56 byte input, which needs a second block for the length (bash output, locale en_US.UTF-8)", wsh4.stdout === "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1  -\n" && wsh4.exitCode === 0 && wsh4.stderr === "", JSON.stringify([wsh4.stdout, wsh4.stderr, wsh4.exitCode]));
+  const wsh5 = await run(sh, "echo hi > d.txt; sha256sum d.txt; echo rc=$?");
+  check("sha256sum of a file prints the name after the hash (bash output, locale en_US.UTF-8)", wsh5.stdout === "98ea6e4f216f2fb4b69fff9b3a44842c38686ca685f3f55dc48c5d3fb1107be4  d.txt\nrc=0\n" && wsh5.exitCode === 0 && wsh5.stderr === "", JSON.stringify([wsh5.stdout, wsh5.stderr, wsh5.exitCode]));
+  const wsh6 = await run(sh, "sha256sum missing.txt; echo rc=$?");
+  check("sha256sum of a missing file reports it and exits 1 (bash output, locale en_US.UTF-8)", wsh6.stdout === "rc=1\n" && wsh6.exitCode === 0 && wsh6.stderr === "sha256sum: missing.txt: No such file or directory\n", JSON.stringify([wsh6.stdout, wsh6.stderr, wsh6.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
