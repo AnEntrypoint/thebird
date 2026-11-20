@@ -13,7 +13,7 @@ which() {
   return $rc
 }
 command() {
-  if [ "$1" = -v ]; then shift; which "$@"; else builtin command "$@"; fi
+  case \"$1\" in -v) shift; which \"$@\" ;; *) builtin command \"$@\" ;; esac
 }
 type() {
   local mode= n rc=0
