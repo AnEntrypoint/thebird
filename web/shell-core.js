@@ -836,7 +836,7 @@ function parse(tokens, partial = false) {
         continue;
       }
       const command = parseSequence([], true);
-      if (pos < tokens.length && !tokens[pos - 1]?.newline) throw tokens[pos].op !== undefined ? nearToken(tokens[pos]) : syntaxError("unexpected '" + (tokens[pos].text ?? 'word') + "'");
+      if (pos < tokens.length && !tokens[pos - 1]?.newline) throw nearToken(tokens[pos]);
       if (!command.items.length) throw nearToken(tokens[pos]);
       if (list.items.length) command.items[0].op = ';';
       list.items.push(...command.items);
