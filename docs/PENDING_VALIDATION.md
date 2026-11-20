@@ -6293,3 +6293,13 @@ Phase A was code and docs only. No build, test, witness or red check was run in 
 - Files: `scripts/witness-shell.mjs` (group `permission tests: -r -w -x -O -G -N give bash output`: two rows replaced, row count unchanged).
 - Expected witness after this commit: `RESULT PASS=1888 FAIL=0` (1854 before the Phase A groups, plus 34 rows).
 - Witness commit: e746bae (lanmower, no trailers).
+
+### Defect fix L-lstat: the -N clock and the symlink walk do not require host.lstat
+
+- Before: the clock key (`clockKey`, through `searchedDirectories`) called `host.lstat` on every read and write. The `prompt-path` test host has no `lstat`, so every read and write threw `host.lstat is not a function`: `sort` reported `cannot read`, `touch -c` created nothing, and two other rows printed `rc=2`. This was caught by Phase B window 2 (W2 `prompt-path`, rc 1, 3 failures). W1 (witness-shell) passed, because its memory host has `lstat`.
+- Decision: `host.lstat?.(…)` in the symlink walk of `searchedDirectories` and in `statInfo`. A host without `lstat` has no symbolic links to follow, which is the behaviour of a path with no link.
+- Files: `web/shell-core.js` (`searchedDirectories`, `statInfo`).
+- Witness: `test/prompt-path.test.mjs` (the 18 tests, including the three that failed), and `scripts/witness-shell.mjs` (the permission group, unchanged).
+- Red check (mutation, to run in Phase B): change `host.lstat?.(candidate)` back to `host.lstat(candidate)`. Expect the prompt-path tests to fail again with `host.lstat is not a function`. Restore from a copy, `cmp`, `git status`.
+- Note: the witness-shell host has `lstat` and the prompt-path host does not, so witness-shell alone cannot show a host without it. Phase B runs both.
+- Commit: 6d29cc4 (lanmower, no trailers).
