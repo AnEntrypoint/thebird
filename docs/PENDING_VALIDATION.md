@@ -5883,3 +5883,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `wc` command. With two or more files a total line is added, with each count summed.
 - Witness: `scripts/witness-shell.mjs`, group "wc total: wc prints a total line when it reads several files, and the total is summed per count, as GNU wc does", three rows with the expected output taken from GNU wc. Before the change two of the three failed.
 - Red check: the total line removed by mutation; green PASS=1664 FAIL=0; red PASS=1662 FAIL=2, restored, cmp matches.
+
+### Defect fix C-01: craft open on a missing file exits non-zero
+
+- Row: C-01 of the full-feature run (commit 8d52612). Command: `node bin/thebird-craft.js open /tmp/k8-does-not-exist.pdf; echo rc=$?`. Before: a JSON body with `"ok": false` and `rc=0`. Expected: a non-zero status when the result is not ok.
+- File: `bin/thebird-craft.js`, the `open` and `call` branch. The result is printed as before, and `process.exitCode` is 1 when `result.ok === false`.
+- Witness: `test/craft-cli.test.mjs`, a node test that runs the CLI on a missing file and asserts a non-zero status and `ok: false` in the JSON. Before the change the status was 0.
+- Red check: the exit status line removed by mutation, the test run red, the file restored and matched with `cmp` (the counts are in the amended line that follows).

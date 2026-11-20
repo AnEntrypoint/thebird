@@ -25,7 +25,9 @@ if (action === 'ensure') {
   if (!app) { console.error('unknown craft app or file type: ' + value); process.exit(2); }
   const method = rest[0] ?? (action === 'open' ? 'open' : 'info');
   const params = { file: action === 'open' ? basename(value) : rest[1] };
-  console.log(JSON.stringify(await callCraft(root, app.id, method, params), null, 2));
+  const result = await callCraft(root, app.id, method, params);
+  console.log(JSON.stringify(result, null, 2));
+  if (result.ok === false) process.exitCode = 1;
 } else if (action === 'descriptor') {
   const apps = await readCraftConfig(root);
   const app = apps[value];
