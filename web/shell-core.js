@@ -2068,12 +2068,21 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code: input.code, out: joinLines(picked), err: input.err };
     },
     sort: ({ argv, stdin = '' }) => {
-      const { flags, operands } = argsOf(argv, []);
+      const { flags, operands } = argsOf(argv, ['-t', '-k']);
       const input = textInputs('sort', operands, stdin);
       const byText = COLLATING_LOCALES.has(childLocale().value) ? collate : (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-      const compare = flags.has('-n') ? (a, b) => (Number.parseFloat(a) || 0) - (Number.parseFloat(b) || 0) : byText;
+      const separator = flags.get('-t');
+      const [, keyFrom, keyTo, keyMod = ''] = /^(\d+)(?:,(\d+))?([a-z]*)$/.exec(flags.get('-k') ?? '') ?? [];
+      const numeric = flags.has('-n') || keyMod.includes('n');
+      const keyOf = (line) => {
+        if (keyFrom === undefined) return line;
+        const fields = separator === undefined ? line.replace(/^\s+/, '').split(/\s+/) : line.split(separator);
+        return fields.slice(Number(keyFrom) - 1, keyTo === undefined ? undefined : Number(keyTo)).join(separator ?? ' ');
+      };
+      const compareKeys = numeric ? (a, b) => (Number.parseFloat(a) || 0) - (Number.parseFloat(b) || 0) : byText;
+      const compare = (a, b) => compareKeys(keyOf(a), keyOf(b)) || byText(a, b);
       let lines = linesOf(input.text).sort(compare);
-      if (flags.has('-r')) lines.reverse();
+      if (flags.has('-r') || keyMod.includes('r')) lines.reverse();
       if (flags.has('-u')) lines = lines.filter((line, i) => i === 0 || line !== lines[i - 1]);
       return { code: input.code, out: joinLines(lines), err: input.err };
     },

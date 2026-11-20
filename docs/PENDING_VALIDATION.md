@@ -5713,3 +5713,11 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - CLIs and servers: pass for relay, npm start, web host start, status and stop, the webserver and its routes, and Craft except the missing-file exit; open for web host check.
 - Browser: 27 pass, 4 fail (P-01 to P-04), 4 itemised open plus one not named.
 - LLM: pass for the node path and the live OpenRouter call on a free model; in-page fx ask open.
+
+### Defect fix S1-01: sort reads the -t separator and the -k key
+
+- Row: S1-01 of the full-feature run (commit 8d52612). Command before: `printf '1,b\n2,a\n' \| sort -t, -k2`, which printed `sort: -t,: No such file or directory` with status 1. Expected: `2,a` then `1,b` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `sort` command. The `-t` and `-k` options now take a value. A key is `N` or `N,M` with an optional `n` or `r` suffix; equal keys fall back to the whole line.
+- Witness: `scripts/witness-shell.mjs`, group "sort keys: sort -t and -k pick the key field, -n and -r apply per key, and equal keys fall back to the whole line, as bash does", five rows with the expected output taken from bash.
+- Green: `RESULT PASS=1567 FAIL=0`, wall 1.70 s.
+- Red check: mutation `keyOf` returns the whole line (pid 34616); witness `RESULT PASS=1564 FAIL=3`, exit 1. Restored from the saved copy; `cmp` matches; `git status` shows only the intended files and the relay.

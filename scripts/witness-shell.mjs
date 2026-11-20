@@ -3262,6 +3262,19 @@ group('loops: a for loop yields per item, so timeoutMs stops a long for loop', a
   check('loops: a short for loop still runs every item', short.stdout === '1\n2\n3\n', JSON.stringify(short.stdout));
 });
 
+group("sort keys: sort -t and -k pick the key field, -n and -r apply per key, and equal keys fall back to the whole line, as bash does", async () => {
+  const sh = await shell({});
+  const wsk1 = await run(sh, "printf '1,b\\n2,a\\n' | sort -t, -k2");
+  check("sort -t, -k2 orders by the second comma field (bash output, locale en_US.UTF-8)", wsk1.stdout === "2,a\n1,b\n" && wsk1.exitCode === 0 && wsk1.stderr === "", JSON.stringify([wsk1.stdout, wsk1.stderr, wsk1.exitCode]));
+  const wsk2 = await run(sh, "printf 'x 3\\ny 1\\nz 2\\n' | sort -k2 -n");
+  check("sort -k2 -n orders numerically by the second field (bash output, locale en_US.UTF-8)", wsk2.stdout === "y 1\nz 2\nx 3\n" && wsk2.exitCode === 0 && wsk2.stderr === "", JSON.stringify([wsk2.stdout, wsk2.stderr, wsk2.exitCode]));
+  const wsk3 = await run(sh, "printf 'b:2\\na:2\\nc:1\\n' | sort -t: -k2,2");
+  check("sort -t: -k2,2 breaks equal keys on the whole line (bash output, locale en_US.UTF-8)", wsk3.stdout === "c:1\na:2\nb:2\n" && wsk3.exitCode === 0 && wsk3.stderr === "", JSON.stringify([wsk3.stdout, wsk3.stderr, wsk3.exitCode]));
+  const wsk4 = await run(sh, "printf 'b 1\\na 2\\n' | sort -k1,1");
+  check("sort -k1,1 orders by the first field (bash output, locale en_US.UTF-8)", wsk4.stdout === "a 2\nb 1\n" && wsk4.exitCode === 0 && wsk4.stderr === "", JSON.stringify([wsk4.stdout, wsk4.stderr, wsk4.exitCode]));
+  const wsk5 = await run(sh, "printf 'b 2\\na 1\\n' | sort -k2 -r");
+  check("sort -k2 -r reverses by the second field (bash output, locale en_US.UTF-8)", wsk5.stdout === "b 2\na 1\n" && wsk5.exitCode === 0 && wsk5.stderr === "", JSON.stringify([wsk5.stdout, wsk5.stderr, wsk5.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
