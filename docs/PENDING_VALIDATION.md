@@ -6121,6 +6121,6 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Files: `web/shell-core.js` (the `jq` command passes `environment`, an object of the exported variables that have values, built the same way `env` builds its set), `web/shell-jq.js` (`runJq` binds `ENV` after the `--arg` names, so `--arg ENV` cannot replace it), `scripts/witness-shell.mjs` (group "jq: $ENV is the environment of the shell as an object, and --arg ENV does not replace it, as jq 1.8.2 does", five rows, expected text from jq 1.8.2).
 - Witness: `npm run witness:shell` gave `RESULT PASS=1708 FAIL=0` (1703 before, plus five rows).
 - Red check: the `ENV` binding removed from `runJq` (`jqVariables = new Map([...namedArgs])`); witness `RESULT PASS=1703 FAIL=5` (all five rows); restored from a copy, `cmp` matched; green again `RESULT PASS=1708 FAIL=0`.
-- Still not covered: the environment values come from the shell's exported variables only, so a variable the host sets but the shell did not export (`LANG` is the one the shell treats as inherited) follows the shell's own rules, as `env` does. The witness does not compare the full object, since its contents depend on the host.
+- Still not covered: `$ENV` holds every exported variable that has a value, including the inherited `LANG` and the exported `PWD`, which the listing from `env` leaves out. Real jq's `$ENV` is the whole process environment, and this shell models only its exports. The witness does not compare the full object, since its contents depend on the host.
 - Commit: 35afbac (lanmower, no trailers).
 
