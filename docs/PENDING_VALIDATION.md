@@ -5579,3 +5579,55 @@ Defects recorded:
 - Scope, not a code defect: the G5 whole-script parse, the error text and line numbers, the printf reuse, the Cyrillic and ligature collation do not reach the typed prompt. They are reached only through `runShellInTxiki`. Reopen: decide whether the prompt should run `shell-core.js` (the txiki path) or the bashkit behaviour should be made to match.
 
 Setup notes (not check results): the first attempts failed because the host had exited with the shell call that started it (ERR_CONNECTION_REFUSED), and because the page served from `web/` loads `web/web/terminal.js`; the site was then built to a directory outside the repo and served from its root.
+
+### Full-feature test: defects found by the test of every feature (no code change)
+
+Scope and method: every feature in the README, ARCHITECTURE and DESIGN docs, the ledger, the npm scripts, the test files and the CLIs was tested through its narrowest witness or probe, with bash as the reference (LC_ALL=en_US.UTF-8, fresh directory) and the shell core run through a memory host. The witness suite passed in full: `npm run witness:shell` gave `RESULT PASS=1562 FAIL=0`, wall 1.89 s. Each row says whether it was re-run by the author of this section (verified) or taken from the slice's report (reported). The OpenRouter key was loaded at run time from `.env` and is not in this section.
+
+Columns: ID, feature and runtime, command, observed output, expected result, status of the evidence.
+
+| ID | Feature and runtime | Command | Observed | Expected | Evidence |
+|---|---|---|---|---|---|
+| S1-01 | sort, shell core | `printf '1,b\n2,a\n' \| sort -t, -k2` | `sort: -t,: No such file or directory`, rc 1 | `2,a` then `1,b` | verified |
+| S1-02 | uniq -d, shell core | `printf 'a\na\nb\n' \| uniq -d` | `a` and `b` | `a` | verified |
+| S1-03 | printf %q, shell core | `printf '%q\n' 'a b'` | `%q` | `a\ b` | verified |
+| S1-04 | tr -d with a range, shell core | `echo a1b2 \| tr -d 0-9` | `a1b2` | `ab` | verified |
+| S1-05 | tr -s with a range, shell core | `echo aabbcc \| tr -s a-z` | `aabbcc` | `abc` | verified |
+| S1-06 | jq -e, shell core | `echo false \| jq -e .; echo rc=$?` | `jq: Unknown option: -e`, then `rc=2` | `false`, then `rc=1` | verified |
+| S1-07 | jq -S and --arg, shell core | `jq -S .` and `jq --arg x hi .` | `Unknown option` | the sorted and the argument-bound output | reported |
+| S1-08 | prefix assignment exported to a command, shell core | `X=1 env \| grep '^X='; echo rc=$?` | nothing, `rc=1` | `X=1`, then `rc=0` | verified |
+| S1-09 | sha256sum, shell core (the page path has it) | `printf 'hi\n' \| sha256sum` | `sha256sum: command not found`, rc 127 | the hash line, `98ea6e4f216f2fb4b69fff9b3a44842c38686ca685f3f55dc48c5d3fb1107be4  -` | verified |
+| S1-10 | xargs, shell core | `printf 'a\n' \| xargs -n1 echo` | `xargs: command not found`, rc 127 | `a` | verified |
+| S1-11 | grep -w, shell core | `printf 'two\n' \| grep -w tw; echo rc=$?` | `two`, `rc=0` | nothing, `rc=1` | verified |
+| S1-12 | grep -r on a directory, shell core | `mkdir -p d; echo hit > d/x.txt; grep -r hit d; echo rc=$?` | `grep: d: No such file or directory`, `rc=2` (after `ls d` lists `x.txt`) | `d/x.txt:hit`, `rc=0` | verified |
+| S1-13 | grep -l, shell core | `grep -l hit d/*` with `d/x.txt` | `hit` | `d/x.txt` | verified |
+| S1-14 | find predicates, shell core | `find d -maxdepth 1` | `find: unknown predicate '-maxdepth'`, rc 2 | the listing `d` and `d/x.txt` | verified |
+| S1-15 | cut -c, shell core | `printf 'hello\n' \| cut -c2-4` | `cut: you must specify the list of fields`, rc 1 | `ell` | verified |
+| S1-16 | awk for-in, shell core | `printf 'a\nb\n' \| awk 'BEGIN { s["k"]=1 } END { for (k in s) print k }'` | `awk: syntax error at source line 1`, rc 2 | `k` | verified |
+| S1-17 | awk split, shell core | `echo a,b \| awk '{ n = split($0, p, ","); print n, p[2] }'` | the same syntax error | `2 b` | verified |
+| S1-18 | awk gsub, shell core | `echo aa \| awk '{ gsub(/a/, "b"); print }'` | the same syntax error | `bb` | verified |
+| S1-19 | sed address range with +N, shell core | `printf 'a\nb\n' \| sed -n '/a/,+1p'` | `sed: -e expression #1, char 5: unexpected ','`, rc 1 | `a` then `b` | verified |
+| S1-20 | sed a command, shell core | `printf 'a\n' \| sed '1a x'` | `sed: ... unknown command: 'a'`, rc 1 | `a` then `x` | verified |
+| S1-21 | sed s with an occurrence number, shell core | `printf 'aXa\n' \| sed 's/a/X/2'` | `sed: ... unknown option to 's'`, rc 1 | `aXX` | verified |
+| S1-22 | sed y command, shell core | `printf 'abc\n' \| sed 'y/abc/xyz/'` | `sed: ... unknown command: 'y'`, rc 1 | `xyz` | verified |
+| S1-23 | date -d with a timestamp, shell core | `date -u -d @0 +%F` | the current date, not the format | `1970-01-01` | verified |
+| S1-24 | wc -lwc column padding, shell core (format only, low severity) | `printf 'hello\n' \| wc -lwc` | `1 1 6` | GNU padding, `      1       1       6` | verified |
+| S1-25 | tar -z (gzip), shell core | `echo hit > x.txt; tar -czf a.tgz x.txt; echo rc=$?` | `tar: compression is not supported`, `rc=2` | a `a.tgz` is written, `rc=0` | verified |
+| P-01 | touch, the page path (bashkit) | `touch k8t.txt; echo rc=$?` (new file), then `touch k8r.txt` (existing) | the new file is created with `rc=1`; the existing file prints `touch: cannot touch 'k8r.txt': set_modified_time not supported`, `rc=1` | silent, `rc=0` | reported (the host has stopped; not re-run) |
+| P-02 | git init in a subdirectory, the page path | `mkdir -p k8n && cd k8n && git init` | `initialized empty repository in /workspace/.git/`; no `k8n/.git` | `Initialized empty Git repository in /workspace/k8n/.git/` | reported (not re-run) |
+| P-03 | node, the page path against README | `node -v; node -e "console.log(2+2)"` | `v26.11.0` and `4`, rc 0 | README "Limits" says `node` exits 127; the docs and behaviour disagree, so one of them is stale | reported (not re-run) |
+| P-04 | paste with newlines, the page path against README | pasting text with newlines into the prompt | each newline becomes a space (`pty-adapter.js`, asserted by the `paste` witness group) | README "Keys": each pasted newline submits a line | reported (not re-run) |
+| C-01 | craft open on a missing file, CLI | `node bin/thebird-craft.js open /tmp/k8-does-not-exist.pdf; echo rc=$?` | JSON with `"ok": false` and `"code": 1`, then `rc=0` | a non-zero exit when `ok` is false | verified |
+
+Notes on the rows:
+- The shell core and the page path are separate runtimes (see the browser check above). S1 rows are about web/shell-core.js; P rows are about the page's bashkit path. The README's "What works" list covers both, so the README does not say which runtime lacks which command.
+- The witness suite passes while these rows fail, so the witness rows in the tree do not exercise these commands.
+
+Not defects, recorded as open or as observations:
+- `web-host check` and `npm run host:check` need headless Chromium, which this test does not start. Open.
+- The 64 browser groups in `scripts/witness.mjs` need headless Chromium through `scripts/browser-driver.mjs`. Open.
+- The in-page `fx ask` needs the page. Open for this test; the node-level provider path and a live OpenRouter call pass.
+- `playwriter status` failed in the page because the Birdman extension did not answer on the tab. Open.
+- Import of a CJS module from ESM in the page: `esm error module is not defined`. Open; the expected behaviour is not decided in the docs.
+- `craft-registry.js` and `web-host-manager.js` have no direct test. Coverage gap, open.
+- Two of the three witness-shell probe harness results were harness artifacts, not defects: the `cd-pwd` probe prints a temp path, and the terminal adds the line break before the prompt.
