@@ -3630,6 +3630,23 @@ group('tar -z: a tar stream split across two gzip members is read as one archive
   check('tar -z: tar -xzf extracts the members of both gzip members (GNU tar output)', extracted.stdout === 'rc=0\nalpha\nbeta\n' && extracted.stderr === '', JSON.stringify([extracted.stdout, extracted.stderr]));
 });
 
+group('parse errors: a list that ends in && or || at the end of the input is a syntax error, as bash reports it', async () => {
+  const sh = await shell({});
+  const eofAt2 = 'bash: -c: line 2: syntax error: unexpected end of file\n';
+  const andEnd = await run(sh, 'echo a &&');
+  check('parse error: echo a && at the end of input is a syntax error at line 2, and runs nothing (bash output)', andEnd.stdout === '' && andEnd.exitCode === 2 && andEnd.stderr === eofAt2, JSON.stringify(andEnd));
+  const orEnd = await run(sh, 'echo a ||');
+  check('parse error: echo a || at the end of input is a syntax error at line 2, and runs nothing (bash output)', orEnd.stdout === '' && orEnd.exitCode === 2 && orEnd.stderr === eofAt2, JSON.stringify(orEnd));
+  const spaced = await run(sh, 'true &&   ');
+  check('parse error: a trailing && with spaces after it is still a syntax error (bash output)', spaced.stdout === '' && spaced.exitCode === 2 && spaced.stderr === eofAt2, JSON.stringify(spaced));
+  const blank = await run(sh, 'echo a ||\n\n');
+  check('parse error: a trailing || followed by blank lines reports the last line (bash output)', blank.stdout === '' && blank.exitCode === 2 && blank.stderr === 'bash: -c: line 3: syntax error: unexpected end of file\n', JSON.stringify(blank));
+  const continued = await run(sh, 'echo a &&\necho b');
+  check('parse error: && at the end of a line continues onto the next line (bash output)', continued.stdout === 'a\nb\n' && continued.exitCode === 0 && continued.stderr === '', JSON.stringify(continued));
+  const chained = await run(sh, 'echo a || echo b; echo c');
+  check('parse error: a list with || between two commands still runs (bash output)', chained.stdout === 'a\nc\n' && chained.exitCode === 0 && chained.stderr === '', JSON.stringify(chained));
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');

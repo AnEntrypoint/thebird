@@ -610,6 +610,8 @@ function parse(tokens, partial = false) {
       } else if (next?.op === '&&' || next?.op === '||') {
         pos++;
         op = next.op;
+        while (tokens[pos]?.newline) pos++;
+        if (pos >= tokens.length) throw bashSyntaxError('syntax error: unexpected end of file', { eof: true });
       } else break;
     }
     return { items };
