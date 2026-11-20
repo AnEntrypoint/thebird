@@ -5495,3 +5495,32 @@ Mutation 3, not counted as a red check: dropping U+030F from the accent list giv
 Other checks at this commit: `npm run check` exit 0, 494 ms. `npm run witness:shell` `RESULT PASS=1553 FAIL=0`, 1.93 s. `npm run lint:comments` exit 0, 0 comments in 140 repo-owned files. `npm test` exit 0, 66 pass, 0 fail, 30.4 s (the longest step).
 
 Still open after this change set: the remaining Cyrillic letters beyond those listed (the table has more forms with accents, which the accent rule covers, but a probe per set is still needed), and the G5 error text and line number.
+
+### Phase B window that cleared for bfae2bc and 0c45bd1, with its readings, red checks and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s. `scripts/heavy-jobs.cjs` (bevy 495fff6) read in the same reading, and the window counted a reading as clear only when heavy-jobs was clear and no hot process was listed. The waiter (pid 2372449) sampled the gate at 10:00:53 (si 560, so 0) and started the window then.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| waiter 1 | 10:00:53 | 560 | 0 | clear | not run | the waiter started the window here |
+| window 1 | 10:00:56 | 240 | 0 | clear | clear, hot count 2 | pid 1629 (a claude session, `-r`) and pid 2510 (a claude session, haiku) above 20% CPU in top; not started here, not stopped |
+| window 2 | 10:01:27 | 212 | 28 | clear | clear, hot count 0 | the witnesses started here |
+
+The window ran from 10:00:53 to 10:01:37, under a minute, inside the ten-minute allowance. Reading 1 did not count, because two hot processes were listed.
+
+Green witness at bfae2bc (pid 2372936): exit 0, wall 1.63 s, `RESULT PASS=1553 FAIL=0`.
+
+Red checks, each under timeout with its PID, each restored and checked with `cmp`:
+- RED9 (pid 2372980), the letter ѡ left out of the primary order: exit 1, wall 1.66 s, `PASS=1551 FAIL=2`. Restored.
+- RED10 (pid 2373019), the letter ѣ left out of the primary order: exit 1, wall 1.63 s, `PASS=1551 FAIL=2`. Restored.
+
+`npm run check` (pid 2373057): exit 0, wall 227 ms. `npm run witness:shell` (pid 2373115): exit 0, wall 1.74 s, `RESULT PASS=1553 FAIL=0`. The three `exit 124` lines in the output are passing rows whose titles contain that text.
+
+Push (`git push origin main`, exit 0):
+
+```
+To https://github.com/AnEntrypoint/thebird
+   a44df46..bfae2bc  main -> main
+```
+
+`git ls-remote origin main` after the push: `bfae2bc4b188c29c8e516b1400a82b0603073eb9 refs/heads/main`. The push carried bfae2bc (change set 30d7) and 0c45bd1, the window record for the previous window.
