@@ -4021,7 +4021,7 @@ Reference: bash (this sandbox), `bash -c`, fresh directory with `f` holding `fro
 - `cat 0<<EOF 0<<EOF2` with two bodies: `b` (the last one wins, as for `<<`).
 - `cat 0<f` and `cat 0<f | cat` with `f` holding `fromfile`: `fromfile`, status 0.
 
-The rows check stdout and stderr, with stderr empty, except nothing else; the missing-file refusal of `0<` is the existing `<` path and is not a row here.
+The rows check stdout against bash and require an empty stderr. The missing-file refusal of `0<` is the existing `<` path, and no row covers it.
 
 Bash differences this change set does not take: `cat 1<<EOF` (fd 1 with a heredoc, which bash runs with status 0 and no output; ours is `cat: 1: No such file`); the bash prefix of a missing-file message (the shell keeps its own text).
 
@@ -4033,3 +4033,39 @@ Red checks, each restored from a copy of the good core and confirmed with `cmp`:
 - The fd 0 alias removed (the `0`-prefixed ops are read as they are, so no body or input is taken): `RESULT PASS=1154 FAIL=12`.
 - The tab stripping removed from the heredoc reader: `RESULT PASS=1162 FAIL=4`, the four rows with `<<-`.
 Then `git status` showed the three files of this change set and `bin/thebird-relay.js`.
+
+### Phase B record: change set 30bo, pushed as b56fb89..4f8257a
+
+Window: started 03:42:20 and cleared at reading 8 (03:45:50), about three and a half minutes of the ten allowed. The gate was above 1000 KB/s at readings 1 to 7, and heavy-jobs was busy on those samples (Chromium GPU and renderer processes from other runs, and a holder-memdump node process), and was clear with the gate open only at reading 8.
+
+Readings, each from `vmstat 1 2` (the second sample is the gate) and `scripts/heavy-jobs.cjs` from bevy 495fff6, with the top CPU list read in the same sample:
+
+| reading | time | gate swap-in KB/s | gate swap-out KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 03:42:20 | 12 | 1940 | busy (2) | Chromium GPU and Vulkan processes (pids 2044615, 2044660), not handshake |
+| 2 | 03:42:50 | 1436 | 4 | clear | none; gate above 1000, not started |
+| 3 | 03:43:20 | 584 | 128 | busy (3) | Chromium renderer, GPU and tracing processes (pids 2046921, 2046783, 2046975) |
+| 4 | 03:43:49 | 17572 | 51916 | busy (5) | Chromium GPU and renderer processes (pids 2047451, 2047588) |
+| 5 | 03:44:20 | 15464 | 123884 | busy (2) | Chromium renderer and GPU processes (pids 2047588, 2047451) |
+| 6 | 03:44:50 | 32112 | 89168 | busy (5) | Chromium GPU, renderer and tracing, and `holder-memdump.mjs` (pid 2047930) |
+| 7 | 03:45:19 | 7024 | 0 | busy (1) | one Chromium process above 20% |
+| 8 | 03:45:50 | 140 | 0 | clear | none: gate and heavy-jobs clear, window started |
+
+Runs, in the window, each with its PID captured and its wall time read from the clock:
+
+- Green witness (pid 2048578): exit 0, wall 1.55 s, `RESULT PASS=1166 FAIL=0`.
+- Red check 1, the fd 0 alias removed (4f8257a; pid 2048610): exit 1, wall 1.54 s, `RESULT PASS=1154 FAIL=12`, restored and confirmed with `cmp`.
+- Red check 2, the tab stripping removed (4f8257a; pid 2048652): exit 1, wall 1.54 s, `RESULT PASS=1162 FAIL=4`, restored and confirmed with `cmp`.
+- `npm run check` (pid 2048683): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2048738): exit 0, wall 1.62 s, `RESULT PASS=1166 FAIL=0`, with three `exit 124` rows.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   b56fb89..4f8257a  main -> main
+``
+
+`git ls-remote origin main` after the push: `4f8257a421036d70884f9744a49e9454fe89acbd refs/heads/main`. The push carried 667d8a1 (the record of the window that cleared at reading 1 for b56fb89) and 4f8257a.
+
+Longest step: the wait for the gate and heavy-jobs to clear, readings 1 to 8 (about three and a half minutes), while other runs' Chromium processes were busy. Nothing was stopped; those processes belong to other runs.
