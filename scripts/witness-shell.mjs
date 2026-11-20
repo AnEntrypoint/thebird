@@ -3505,6 +3505,17 @@ group("sed y: sed y/from/to/ maps each character of the first string to the one 
   const wsy3 = await run(sh, "printf 'a/b\\n' | sed 'y,/,|,'");
   check("sed y with a comma delimiter maps the slash (bash output, locale en_US.UTF-8)", wsy3.stdout === "a|b\n" && wsy3.exitCode === 0 && wsy3.stderr === "", JSON.stringify([wsy3.stdout, wsy3.stderr, wsy3.exitCode]));
 });
+group("date -d: date -d @SECONDS formats that moment in UTC, and %F and %T give the date and the time, as GNU date does", async () => {
+  const sh = await shell({});
+  const wdt1 = await run(sh, "date -u -d @0 +%F");
+  check("date -u -d @0 +%F prints the epoch date (bash output, locale en_US.UTF-8)", wdt1.stdout === "1970-01-01\n" && wdt1.exitCode === 0 && wdt1.stderr === "", JSON.stringify([wdt1.stdout, wdt1.stderr, wdt1.exitCode]));
+  const wdt2 = await run(sh, "date -u -d @86400 +%F");
+  check("date -u -d @86400 +%F prints the next day (bash output, locale en_US.UTF-8)", wdt2.stdout === "1970-01-02\n" && wdt2.exitCode === 0 && wdt2.stderr === "", JSON.stringify([wdt2.stdout, wdt2.stderr, wdt2.exitCode]));
+  const wdt3 = await run(sh, "date -u -d @0 +%T");
+  check("date -u -d @0 +%T prints the time of day (bash output, locale en_US.UTF-8)", wdt3.stdout === "00:00:00\n" && wdt3.exitCode === 0 && wdt3.stderr === "", JSON.stringify([wdt3.stdout, wdt3.stderr, wdt3.exitCode]));
+  const wdt4 = await run(sh, "date -u -d @1700000000 '+%Y-%m-%d %H:%M:%S'");
+  check("date -u -d @1700000000 with a format prints the date and the time (bash output, locale en_US.UTF-8)", wdt4.stdout === "2023-11-14 22:13:20\n" && wdt4.exitCode === 0 && wdt4.stderr === "", JSON.stringify([wdt4.stdout, wdt4.stderr, wdt4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;

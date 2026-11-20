@@ -2244,10 +2244,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out, err };
     },
     date: ({ argv }) => {
-      const now = new Date();
-      if (!argv[0]?.startsWith('+')) return ok(now.toUTCString() + '\n');
+      const at = argv.indexOf('-d');
+      const source = at < 0 ? null : argv[at + 1] ?? '';
+      const now = source === null ? new Date() : /^@-?\d+$/.test(source) ? new Date(Number(source.slice(1)) * 1000) : new Date(NaN);
+      if (Number.isNaN(now.getTime())) return { code: 1, out: '', err: "date: invalid date '" + source + "'\n" };
+      const format = argv.find((arg) => arg.startsWith('+'));
+      if (format === undefined) return ok(now.toUTCString() + '\n');
       const pad = (value, width = 2) => String(value).padStart(width, '0');
-      const text = argv[0].slice(1).replace(/%([sNYmdHMS%])/g, (match, spec) => {
+      const text = format.slice(1).replace(/%([sNYmdHMSFT%])/g, (match, spec) => {
+        if (spec === 'F') return String(now.getUTCFullYear()) + '-' + pad(now.getUTCMonth() + 1) + '-' + pad(now.getUTCDate());
+        if (spec === 'T') return pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds());
         if (spec === 's') return String(Math.floor(now.getTime() / 1000));
         if (spec === 'N') return pad(now.getTime() % 1000, 3) + '000000';
         if (spec === 'Y') return String(now.getUTCFullYear());

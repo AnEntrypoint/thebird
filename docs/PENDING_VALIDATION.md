@@ -5862,3 +5862,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-sed.js`. The `y` command reads two strings with any delimiter, refuses strings of different lengths, and maps each character of the first to the one at the same place in the second. The mapping applies to the pattern space when the command is selected.
 - Witness: `scripts/witness-shell.mjs`, group "sed y: sed y/from/to/ maps each character of the first string to the one at the same place in the second, with any delimiter, as bash sed does", three rows with the expected output taken from bash sed. Before the change all three failed against bash.
 - Red check: the mapping replaced by the identity by mutation (the output is the input); green PASS=1652 FAIL=0; red PASS=1649 FAIL=3, restored, cmp matches.
+
+### Defect fix S1-23: date -d with a timestamp, and the %F and %T formats
+
+- Row: S1-23 of the full-feature run (commit 8d52612). Command: `date -u -d @0 +%F`. Before: the current date in the wrong format, because `-d` and `-u` were ignored. Expected: `1970-01-01` (GNU date 9.7, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `date` command. `-d @SECONDS` sets the moment (an invalid value is `date: invalid date '...'` with status 1); the format is the first argument that starts with `+`, found wherever it stands; `%F` and `%T` are added to the specifiers already read.
+- Witness: `scripts/witness-shell.mjs`, group "date -d: date -d @SECONDS formats that moment in UTC, and %F and %T give the date and the time, as GNU date does", four rows with the expected output taken from GNU date. Before the change all four failed. The invalid-date text is not a row: GNU quotes it with curly quotes in a UTF-8 locale, which is recorded as open.
+- Red check: the `-d` moment ignored by mutation (the current time is used); green PASS=1656 FAIL=0; red PASS=1652 FAIL=4, restored, cmp matches.
