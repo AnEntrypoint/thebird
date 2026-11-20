@@ -1626,8 +1626,8 @@ const ansiEscape = (ch) => {
   if (ch.codePointAt(0) >= 0x80) return octalBytes(ch);
   return { 7: '\\a', 8: '\\b', 9: '\\t', 10: '\\n', 11: '\\v', 12: '\\f', 13: '\\r' }[ch.charCodeAt(0)] ?? '\\' + ch.charCodeAt(0).toString(8).padStart(3, '0');
 };
-const quoteName = (text) => {
-  const escape = /[\x00-\x1f\x7f]|[^\x20-\x7e]/u;
+const quoteName = (text, locale = 'bytes') => {
+  const escape = locale === 'characters' ? /[\x00-\x1f\x7f-\x9f]/u : /[\x00-\x1f\x7f]|[^\x20-\x7e]/u;
   if (!escape.test(text)) {
     if (text.includes("'") && text.includes('"')) return "'" + text.replace(/'/g, "'\\''") + "'";
     if (text.includes("'")) return '"' + text + '"';
@@ -1654,8 +1654,8 @@ const quoteName = (text) => {
   }
   return out + "'";
 };
-const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (whole, code) => {
-    if (code === 'N') return info.type === 'symbolic link' ? quoteName(name) + ' -> ' + quoteName(linkTarget) : quoteName(name);
+const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%(.)/g, (whole, code) => {
+    if (code === 'N') return info.type === 'symbolic link' ? quoteName(name, locale) + ' -> ' + quoteName(linkTarget, locale) : quoteName(name, locale);
     if (code === 'n') return name;
     if (code === 's') return String(info.size);
     if (code === 'F') return info.type;
@@ -2209,6 +2209,7 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       return { code, out, err };
     },
     chmod: ({ argv }) => {
+      const quoted = (text) => quoteName(text, childLocaleMode());
       const flagLetters = argv.map((arg) => (arg === '--recursive' ? 'R' : arg === '--verbose' ? 'v' : arg === '--changes' ? 'c' : arg === '--dereference' ? 'D' : arg === '--no-dereference' ? 'h' : /^-[Rvch]+$/.test(arg) ? arg.slice(1) : '')).join('');
       const recursive = flagLetters.includes('R');
       const verbose = flagLetters.includes('v');
@@ -2224,16 +2225,16 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
           referenceFile = argv[++i];
         } else operands.push(argv[i]);
       }
-      if (referenceFile !== null && !statInfo(resolvePath(referenceFile))) return { code: 1, out: '', err: "chmod: failed to get attributes of '" + referenceFile + "': No such file or directory\n" };
+      if (referenceFile !== null && !statInfo(resolvePath(referenceFile))) return { code: 1, out: '', err: "chmod: failed to get attributes of " + quoted(referenceFile) + ": No such file or directory\n" };
       const positional = operands.filter((arg) => !/^(-[Rvch]+|--recursive|--verbose|--changes|--dereference|--no-dereference)$/.test(arg));
       const mode = referenceFile === null ? positional[0] : undefined;
       const names = referenceFile === null ? positional.slice(1) : positional;
       const referenceBits = referenceFile === null ? null : parseInt(modes.get(resolvePath(referenceFile)) ?? (host.stat(resolvePath(referenceFile))?.dir === true ? '755' : '644'), 8);
       const usage = "Try 'chmod --help' for more information.\n";
       if (referenceFile !== null ? !names.length : mode === undefined) return { code: 1, out: '', err: 'chmod: missing operand\n' + usage };
-      if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after '" + mode + "'\n" + usage };
+      if (!names.length) return { code: 1, out: '', err: "chmod: missing operand after " + quoted(mode) + "\n" + usage };
       const octal = mode !== undefined && /^[0-7]{1,4}$/.test(mode);
-      if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: '" + mode + "'\n" + usage };
+      if (mode !== undefined && !octal && applySymbolicMode(0, mode, false).error) return { code: 1, out: '', err: "chmod: invalid mode: " + quoted(mode) + "\n" + usage };
       const changeOne = (path) => {
         const dir = host.stat(path)?.dir === true;
         const before = parseInt(modes.get(path) ?? (dir ? '755' : '644'), 8);
@@ -2242,8 +2243,8 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         return { before, after };
       };
       const report = (shown, before, after) => {
-        if (before !== after) return verbose || changes ? "mode of '" + shown + "' changed from " + octalModeText(before) + ' to ' + octalModeText(after) + '\n' : '';
-        return verbose ? "mode of '" + shown + "' retained as " + octalModeText(after) + '\n' : '';
+        if (before !== after) return verbose || changes ? "mode of " + quoted(shown) + " changed from " + octalModeText(before) + ' to ' + octalModeText(after) + '\n' : '';
+        return verbose ? "mode of " + quoted(shown) + " retained as " + octalModeText(after) + '\n' : '';
       };
       let out = '';
       let err = '';
@@ -2264,28 +2265,28 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         out += report(shown, before, after);
         if (seen || !recursive || host.stat(path)?.dir !== true) return;
         if (!(ownerBits(path) & 4) || (access !== null && searchedDirectories(access).searched.some((dir) => !(ownerBits(dir) & 1)))) {
-          err += "chmod: cannot read directory '" + shown + "': Permission denied\n";
+          err += "chmod: cannot read directory " + quoted(shown) + ": Permission denied\n";
           code = 1;
-          if (verbose) out += "'" + shown + "' could not be accessed\n";
+          if (verbose) out += quoted(shown) + " could not be accessed\n";
           return;
         }
         const searchable = ownerBits(path) & 1;
         for (const entry of host.list(path).sort()) {
           const child = (path === '/' ? '' : path) + '/' + entry;
           if (!searchable) {
-            err += "chmod: cannot access '" + shown + '/' + entry + "': Permission denied\n";
+            err += "chmod: cannot access " + quoted(shown + '/' + entry) + ": Permission denied\n";
             code = 1;
-            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+            if (verbose) out += quoted(shown + '/' + entry) + " could not be accessed\n";
           } else if (host.lstat(child)?.link && dereference && blockedAncestor(child)) {
-            err += "chmod: cannot dereference '" + shown + '/' + entry + "': Permission denied\n";
+            err += "chmod: cannot dereference " + quoted(shown + '/' + entry) + ": Permission denied\n";
             code = 1;
-            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+            if (verbose) out += quoted(shown + '/' + entry) + " could not be accessed\n";
           } else if (host.lstat(child)?.link && dereference && !statInfo(referentOf(child))) {
-            err += "chmod: cannot dereference '" + shown + '/' + entry + "': No such file or directory\n";
+            err += "chmod: cannot dereference " + quoted(shown + '/' + entry) + ": No such file or directory\n";
             code = 1;
-            if (verbose) out += "'" + shown + '/' + entry + "' could not be accessed\n";
+            if (verbose) out += quoted(shown + '/' + entry) + " could not be accessed\n";
           } else if (host.lstat(child)?.link && !dereference) {
-            if (verbose) out += "neither symbolic link '" + shown + '/' + entry + "' nor referent has been changed\n";
+            if (verbose) out += "neither symbolic link " + quoted(shown + '/' + entry) + " nor referent has been changed\n";
           } else visit(referentOf(child), shown + '/' + entry);
         }
       };
@@ -2294,14 +2295,14 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
         const walk = searchedDirectories(rawPath, true);
         const named = searchedDirectories(rawPath, false).real;
         if (walk.searched.some((dir) => !(ownerBits(dir) & 1))) {
-          if (verbose) out += "'" + name + "' could not be accessed\n";
-          err += "chmod: cannot access '" + name + "': Permission denied\n";
+          if (verbose) out += quoted(name) + " could not be accessed\n";
+          err += "chmod: cannot access " + quoted(name) + ": Permission denied\n";
           code = 1;
         } else if (noDereference && host.lstat(named)?.link) {
-          if (verbose) out += "neither symbolic link '" + name + "' nor referent has been changed\n";
+          if (verbose) out += "neither symbolic link " + quoted(name) + " nor referent has been changed\n";
         } else if (!statInfo(walk.real)) {
-          if (verbose) out += "'" + name + "' could not be accessed\n";
-          err += host.lstat(named)?.link ? "chmod: cannot operate on dangling symlink '" + name + "'\n" : "chmod: cannot access '" + name + "': No such file or directory\n";
+          if (verbose) out += quoted(name) + " could not be accessed\n";
+          err += host.lstat(named)?.link ? "chmod: cannot operate on dangling symlink " + quoted(name) + "\n" : "chmod: cannot access " + quoted(name) + ": No such file or directory\n";
           code = 1;
         } else {
           walked = new Set();
@@ -2322,16 +2323,16 @@ const expandStat = (format, name, info, linkTarget) => format.replace(/%(.)/g, (
       for (const name of names) {
         const walk = searchedDirectories(name.startsWith('/') ? name : state.cwd + '/' + name, follow);
         if (walk.searched.some((dir) => !(ownerBits(dir) & 1))) {
-          err += "stat: cannot statx '" + name + "': Permission denied\n";
+          err += "stat: cannot statx " + quoteName(name, childLocaleMode()) + ": Permission denied\n";
           code = 1;
           continue;
         }
         const info = statInfo(walk.real);
         if (!info) {
-          err += "stat: cannot statx '" + name + "': No such file or directory\n";
+          err += "stat: cannot statx " + quoteName(name, childLocaleMode()) + ": No such file or directory\n";
           code = 1;
         } else if (format === null) out += statLayout(name, walk.real, info) + '\n';
-        else out += expandStat(format, name, info, info.type === 'symbolic link' ? host.readlink(walk.real) : null) + '\n';
+        else out += expandStat(format, name, info, info.type === 'symbolic link' ? host.readlink(walk.real) : null, childLocaleMode()) + '\n';
       }
       return { code, out, err };
     },

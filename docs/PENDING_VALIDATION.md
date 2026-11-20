@@ -4907,3 +4907,30 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `19dd8fa343d035f524b5b3ef3d7106ad199fd192 refs/heads/main`.
 
 Longest step: the gate wait, about 31 s (wait 1 at 06:51:10, wait 2 at 06:51:41). Nothing was stopped.
+
+### Change set 30cd: stat -c %N and chmod's messages quote a non-ASCII name as GNU does in the locale in effect: printable characters stay as they are in a UTF-8 locale, and escape to $-quoting in the C locale
+
+Reference: GNU coreutils 9.7 from `/bin/gnustat`, `/bin/gnuchmod` (the PATH on this host resolves `stat` and `chmod` to uutils 0.10.0, which prints different quoting, so every expected output here was produced by a shim directory `/tmp/gnubin` that links `stat` and `chmod` to the GNU binaries). Locale: `LANG=en_US.UTF-8` in the environment, `LC_ALL` and `LC_CTYPE` unset; the C cases set `LC_ALL=C`, `LANG=C` or `LC_CTYPE=C` on the command that runs. Each case in a fresh directory. Rows take stdout, stderr and status from GNU output.
+
+Probed first, against HEAD 19dd8fa:
+- `stat -c %N 'é'` under the UTF-8 locale prints `'é'`. Under `LC_ALL=C` (or `LANG=C`, `LC_CTYPE=C`) it prints `''$'\\303\\251'``. The shell printed the octal form in every locale, so the UTF-8 case was wrong.
+- Dangling symlinks are the same: `'é' -> 'nowhere'` in UTF-8, the octal form in C.
+- Mixed names, from GNU under C: `'aé'` is `'a'$'\\303\\251'`, `'éa'` is `''$'\\303\\251''a'`, `'a é b'` is `'a '$'\\303\\251'' b'`, `'éé'` is `''$'\\303\\251\\303\\251'`. The existing C-locale escape path already produced these; only the mode was missing.
+- `chmod` messages quote the name the same way. A missing non-ASCII name: `chmod: cannot access 'é'` in UTF-8, `cannot access ''$'\\303\\251''` in C. The same for `cannot operate on dangling symlink`, `mode of 'é' retained as 0644` with `-v`, and the `chmod -R` lines. ASCII names with an apostrophe are quoted in double quotes, as GNU does: `chmod: cannot access "a'b"`, `mode of "a'b" retained`. The shell printed `'a'b'`, which is wrong in every locale.
+- The locale that counts is the one the child command sees: `LC_ALL=C; stat` (not exported) still uses UTF-8, `LANG=C; stat` (LANG is exported) uses C, and `LC_ALL=C.UTF-8 stat` uses UTF-8.
+- Found in the witness, not in the probe: fifteen older `stat -c %N` rows (from change set 92ee97c, titles "in C locale" and "under LC_ALL=C") ran without the locale set, so they got the UTF-8 form. Each of the 15 scripts was run under GNU with `LC_ALL=C` on the stat command, and each output matched the row's expected value byte for byte. The scripts now carry `LC_ALL=C stat`; the expected values are unchanged.
+
+What changed in web/shell-core.js:
+- `quoteName(text, locale)`: in the UTF-8 locale only control characters are escaped; in the C locale every non-ASCII byte is escaped, as before. The quoting shape (the single-quote runs, the `$'...'` runs and the `\\'` forms) is the one already in place.
+- `expandStat` takes the locale and `stat -c` passes `childLocaleMode()`, the mode of the environment the command sees (the same source `expr` uses).
+- `chmod` defines `quoted(text)` with the same mode, and every message that names a file or a mode goes through it: the missing-operand and invalid-mode messages, the --reference message, `mode of ... changed` and `retained`, the `cannot read directory`, `cannot access`, `cannot dereference`, `dangling symlink` messages, and the `-v` lines.
+- `stat`'s two `cannot statx` messages go through the same mode.
+
+Witness: 26 new rows from GNU output (UTF-8 and C cases for `stat -c %N` and `chmod`, the ASCII apostrophe case, mixed names, and the regression rows for ASCII and mixed-locale names). Before the change: `RESULT PASS=1478 FAIL=11` (11 of the new rows failed, and the 15 older rows already passed with their scripts as they were). After the change and the 15 locale fixes: `RESULT PASS=1489 FAIL=0` (was 1463).
+
+Red check: the mutation makes `quoteName` escape non-ASCII in every locale, on the working-tree copy of `web/shell-core.js`. Witness: exit 1, `RESULT PASS=1480 FAIL=9`: the UTF-8 stat rows, the C.UTF-8 row, the `chmod` UTF-8 rows and the `LC_ALL=C; ... LC_ALL=; ...` row. Restored from the copy, `cmp` matched, and the witness is back at `PASS=1489 FAIL=0`.
+
+Not done here, recorded:
+- G1b, reachable, open: `chmod -R` over a directory tree that cannot be read (its messages carry `Permission denied` with a joined path) is not witnessed, because the sandbox's leftover permissions make the output depend on earlier runs. The messages do go through `quoted`, so they follow the same rule.
+- Other GNU tools (`ls`, `find`, `du` and so on) that quote names by locale are out of scope for this change set.
+- Names with control characters in the C locale use the escape path already present; GNU's output for them matched the rows that existed before, and was not probed further.
