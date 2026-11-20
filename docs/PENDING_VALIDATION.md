@@ -6068,3 +6068,12 @@ P-02 is fixed in full: the location (commit 1236a78) and the message wording (co
 - Red check: the curly-quote branch disabled by `false ? ‘` in place of the locale test; witness `RESULT PASS=1686 FAIL=2` (the two UTF-8 rows); restored from a copy, `cmp` matched; green again `RESULT PASS=1688 FAIL=0`.
 - Commit: 6eb3d8a (lanmower, no trailers).
 
+### Defect fix T-members: tar -z reads every gzip member of an archive
+
+- Gap found by probe against GNU tar 1.35 (`/usr/bin/tar`): a tar stream split across two gzip members lists and extracts as one archive (`a.txt b.txt`, `alpha beta`). Shell core's `tarGunzip` read only the first member and ignored the rest, so `tar -tzf` listed `a.txt` only.
+- Files: `web/shell-tar.js` (`tarGunzip` now loops over members while the next bytes carry the gzip magic and joins their data; the single-member reader is `tarGunzipMember(bytes, start)`, which returns its data and end offset), `scripts/witness-shell.mjs` (group "tar -z: a tar stream split across two gzip members is read as one archive, as GNU tar reads it", two rows; the witness builds the split bytes with GNU tar and Node's zlib, and its expected text is GNU tar's output).
+- Witness: `npm run witness:shell` gave `RESULT PASS=1690 FAIL=0` (1688 before, plus two rows).
+- Red check: the member loop stopped after one member by replacing its condition with `while (false)`; witness `RESULT PASS=1688 FAIL=2` (the two split rows); restored from a copy, `cmp` matched; green again `RESULT PASS=1690 FAIL=0`.
+- Limit, not fixed: bytes after the last gzip member that are not gzip are still ignored without GNU gzip's `trailing garbage ignored` warning. The shell has no gzip command, so this cannot be checked against one here.
+- Commit: 08ba108 (lanmower, no trailers).
+
