@@ -5173,3 +5173,28 @@ To https://github.com/AnEntrypoint/thebird
 `git ls-remote origin main` after the push: `ce2208ef9848ef9117f5898c265fef3732e9aab9 refs/heads/main`.
 
 Longest step: the window, about 9 min 9 s from 07:41:04 to 07:50:39, waiting for zig, chromium and playwriter jobs of other sessions to finish. Nothing was stopped.
+
+### Change set 30d1: findings on the G2 remainder (punctuation position rule), no code change
+
+Locale: `LANG=en_US.UTF-8` with `LC_ALL` unset for the reference; reference `sort` is GNU 9.7 through the PATH shim `/tmp/gnubin` (the PATH `sort` is uutils 0.10.0).
+
+Why no code change: this stretch's Phase A asked for a rule that the bash output shows. The probes below did not establish one, so nothing was implemented, and the witness is unchanged at `RESULT PASS=1519 FAIL=0`.
+
+What the bash output shows (single base strings with one punctuation mark inserted at each position, bash/GNU `sort`, en_US):
+- `ab`: `(ab -ab .ab a(b a-b a.b ab ab( ab- ab.`. Punctuation at the front sorts first, then punctuation between the letters, then the plain word, then punctuation at the end. Among the same slot the punctuation order is `(` then `-` then `.`, which is the order of the `SPECIAL` section of the glibc table.
+- `4g`: `4(g 4-g 4_g (4g -4g _4g 4g 4g( 4g- 4g_`. Here punctuation between the digit and the letter sorts before punctuation at the front. The same slot order as `ab` does not hold.
+- `4a1` (with the currency sign `$`, which the level-1 rule already covers): `4-a1 -4a1 4a-1 4a1 4a1- 4a1$` (the digit-letter boundary again).
+- `ab1`: `-ab1 a-b1 ab-1 ab1 ab1-`.
+- `a`: `(a -a a a( a-`.
+
+Ruled out (each checked against the rows above, or against the random sets):
+- a per-position weight order (ignored characters as smallest or largest at each position): contradicts `ab` (`a-b` before `ab`, but `ab` before `ab-` is only consistent with trailing punctuation being larger).
+- a gap model (for each gap, nonempty before empty, with the trailing gap reversed): fits `ab` and `a` but not `4g`, where the infix gap sorts before the leading gap.
+- counts of ignored characters before each letter, compared ascending or descending: each direction fails one of `ab` or `4g`.
+- moving the currency sign to the front of the level-4 order: reduces the random-set violations but leaves others; not a rule.
+
+Source checked: the glibc locale data is installed, `/usr/share/i18n/locales/iso14651_t1_common` (its `LC_COLLATE` levels are `forward;backward;forward;forward,position` for `LATIN`, and punctuation is IGNORE at levels 1 to 3 with its own weight at level 4). The C code that applies the `position` flag (glibc `string/strcoll_l.c`) is not on this host: the only `strcoll.c` files are musl's, which are byte compares.
+
+Reopen (blocked on the glibc algorithm source): fetch the glibc source for the installed version (for example `apt-get source libc6`, which needs network access and a decision from the user), read how `position` counts ignored characters in `do_compare`, implement that rule over the table, then add rows from bash output. Until then the rows stay as they are: ASCII up to four characters, and accented letters without punctuation, are exact; longer strings mixing punctuation with letters tie at levels 1 to 3 and are not.
+
+Also reachable, not started: the non-Latin and ligature weights (`ß`, `æ`, `œ`, `ø`, Greek, Cyrillic) can be read from the same table, because the accent-only class is already exact; those need rows from bash before any change.
