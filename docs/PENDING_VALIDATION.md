@@ -5736,3 +5736,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-core.js`, the `grep` command. With `-w` the pattern is wrapped so a letter, digit or underscore on either side means no match.
 - Witness: `scripts/witness-shell.mjs`, group "grep -w: grep -w matches only whole words, so a letter or digit next to the match means no match, as bash does", four rows with the expected output taken from bash. Before the change three failed against bash.
 - Red check: mutation disables the `-w` branch green RESULT PASS=1574 FAIL=0 (1.74 s); red, with the branch disabled (pid 35597), RESULT PASS=1571 FAIL=3, the three -w rows failing; restored, cmp matches.
+
+### Defect fix S1-03: printf %q quotes its argument
+
+- Row: S1-03 of the full-feature run (commit 8d52612). Command: `printf '%q\n' 'a b'`. Before: `%q` (the conversion was not known). Expected: `a\ b` (bash, locale en_US.UTF-8).
+- File: `web/shell-core.js`, the `formatPrintf` function. `%q` joins the conversions it handles; an empty argument prints two single quotes, and a character outside the safe set is backslash-escaped.
+- Witness: `scripts/witness-shell.mjs`, group "printf %q: printf %q quotes an argument so the shell reads it back as one word, as bash does", four rows with the expected output taken from bash.
+- Red check: the `%q` conversion disabled by mutation; green RESULT PASS=1578 FAIL=0 (1.71 s); red, with the %q branch disabled (pid 36032), RESULT PASS=1575 FAIL=3, the three rows with a space, an empty argument, or a dollar sign failing; restored, cmp matches.

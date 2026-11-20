@@ -3295,6 +3295,17 @@ group("grep -w: grep -w matches only whole words, so a letter or digit next to t
   const wgw4 = await run(sh, "printf 'x_two y\\n' | grep -w two; echo rc=$?");
   check("grep -w treats an underscore as part of the word (bash output, locale en_US.UTF-8)", wgw4.stdout === "rc=1\n" && wgw4.exitCode === 0 && wgw4.stderr === "", JSON.stringify([wgw4.stdout, wgw4.stderr, wgw4.exitCode]));
 });
+group("printf %q: printf %q quotes an argument so the shell reads it back as one word, as bash does", async () => {
+  const sh = await shell({});
+  const wpq1 = await run(sh, "printf '%q\\n' 'a b'");
+  check("printf %q escapes the space in an argument (bash output, locale en_US.UTF-8)", wpq1.stdout === "a\\ b\n" && wpq1.exitCode === 0 && wpq1.stderr === "", JSON.stringify([wpq1.stdout, wpq1.stderr, wpq1.exitCode]));
+  const wpq2 = await run(sh, "printf '%q\\n' ''");
+  check("printf %q quotes an empty argument as two single quotes (bash output, locale en_US.UTF-8)", wpq2.stdout === "''\n" && wpq2.exitCode === 0 && wpq2.stderr === "", JSON.stringify([wpq2.stdout, wpq2.stderr, wpq2.exitCode]));
+  const wpq3 = await run(sh, "printf '%q\\n' 'a$b'");
+  check("printf %q escapes a dollar sign (bash output, locale en_US.UTF-8)", wpq3.stdout === "a\\$b\n" && wpq3.exitCode === 0 && wpq3.stderr === "", JSON.stringify([wpq3.stdout, wpq3.stderr, wpq3.exitCode]));
+  const wpq4 = await run(sh, "printf '%q\\n' 'plain-word_1.2'");
+  check("printf %q leaves a plain word unchanged (bash output, locale en_US.UTF-8)", wpq4.stdout === "plain-word_1.2\n" && wpq4.exitCode === 0 && wpq4.stderr === "", JSON.stringify([wpq4.stdout, wpq4.stderr, wpq4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
