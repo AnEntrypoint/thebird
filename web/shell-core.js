@@ -61,8 +61,8 @@ function syntaxError(message) {
 
 const BASH_CLOSERS = { 'double quote': '"', 'single quote': "'", 'command substitution': ')', 'parameter expansion': '}' };
 
-function bashSyntaxError(message, { line, at, echo = false } = {}) {
-  return Object.assign(new Error(message), { bash: true, line, at, echo });
+function bashSyntaxError(message, { line, at, echo = false, eof = false } = {}) {
+  return Object.assign(new Error(message), { bash: true, line, at, echo, eof });
 }
 
 function nearToken(token) {
@@ -71,7 +71,7 @@ function nearToken(token) {
 }
 
 function eofError(open) {
-  return bashSyntaxError('syntax error: unexpected end of file from `' + (open.text ?? open.op) + "' command on line " + open.line);
+  return bashSyntaxError('syntax error: unexpected end of file from `' + (open.text ?? open.op) + "' command on line " + open.line, { eof: true });
 }
 
 function unterminated(what, at) {
@@ -517,7 +517,7 @@ function parse(tokens, partial = false) {
 
   const parseCommandBody = () => {
     const token = tokens[pos];
-    if (!token) throw syntaxError('unexpected end of input');
+    if (!token) throw bashSyntaxError('syntax error: unexpected end of file', { eof: true });
     if (isWord(token, 'if')) {
       pos++;
       return parseIf();
@@ -562,6 +562,7 @@ function parse(tokens, partial = false) {
       if (body.type !== 'group' && body.type !== 'subshell') throw syntaxError('a function body must be a group or a subshell');
       return { type: 'funcdef', name: token.parts[0].s, body };
     }
+    if (token.parts.length === 1 && token.parts[0].k === 'lit' && !token.parts[0].s.includes('=') && tokens[pos + 1]?.op === '(') throw nearToken(tokens[pos + 2] ?? { newline: true });
     return parseSimple();
   };
 
@@ -641,10 +642,15 @@ export function parseScript(src, firstLine, substitution = false) {
 
 function syntaxReport(err, src) {
   if (!err.bash) return err.message + '\n';
-  const line = err.line ?? 1 + (src.slice(0, err.at ?? src.length).match(/\n/g) ?? []).length;
+  const line = err.line ?? (err.eof ? src.replace(/\n$/, '').split('\n').length + 1 : 1 + (src.slice(0, err.at ?? src.length).match(/\n/g) ?? []).length);
   const prefix = 'bash: -c: line ' + line + ': ';
   const echoed = err.echo ? prefix + '`' + src.split('\n')[line - 1] + "'\n" : '';
   return prefix + err.message + '\n' + echoed;
+}
+
+export function syntaxText(src) {
+  const { error } = parseScriptPartial(src);
+  return error ? syntaxReport(error, src) : null;
 }
 
 export function parseScriptPartial(src) {

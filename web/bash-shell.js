@@ -2,7 +2,7 @@ import { Bash, initBashkit } from './vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
 import { BUILTIN_NAMES, runBuiltin } from './builtins.js';
 import { lookupPrologue } from './shell-lookup.js';
-import { createShell as createCoreShell } from './shell-core.js';
+import { createShell as createCoreShell, syntaxText } from './shell-core.js';
 
 const withNewline = (text) => (text ? text + '\n' : '');
 const EMULATED = /\b(uname|whoami|hostname|id|ps|kill|tar)\b/;
@@ -99,6 +99,13 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
       try {
         result = await bash.execute(size + restore + command, onOutput ? { onOutput } : {});
       } catch (err) {
+        if (!cancelled && /^parse error at line /.test(err.message)) {
+          const text = syntaxText(command);
+          if (text !== null) {
+            status = 2;
+            return { ok: false, exitCode: 2, signal: null, output: text };
+          }
+        }
         if (!cancelled) throw err;
       } finally {
         running = false;

@@ -54,3 +54,29 @@ test('touch -c with no file reports the missing operand as GNU touch does, with 
   const r = await run('touch -c; echo rc=$?');
   assert.equal(r.output, "rc=1\ntouch: missing file operand\nTry 'touch --help' for more information.\n");
 });
+
+const bashText = [
+  ["echo (", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `echo ('\n", "near-newline-after-paren"],
+  ["echo ( x", "bash: -c: line 1: syntax error near unexpected token `x'\nbash: -c: line 1: `echo ( x'\n", "near-word-after-paren"],
+  ["ls (", "bash: -c: line 1: syntax error near unexpected token `newline'\nbash: -c: line 1: `ls ('\n", "near-newline-after-command-paren"],
+  ["echo a (", "bash: -c: line 1: syntax error near unexpected token `('\nbash: -c: line 1: `echo a ('\n", "near-paren-after-two-words"],
+  ["echo )", "bash: -c: line 1: syntax error near unexpected token `)'\nbash: -c: line 1: `echo )'\n", "near-close-paren"],
+  ["if true; then", "bash: -c: line 2: syntax error: unexpected end of file from `if' command on line 1\n", "if-eof-line-2"],
+  ["echo \"unterminated", "bash: -c: line 1: unexpected EOF while looking for matching `\"'\n", "unterminated-double-quote"],
+  ["echo ()", "bash: -c: line 2: syntax error: unexpected end of file\n", "empty-function-eof"],
+  ["(", "bash: -c: line 2: syntax error: unexpected end of file from `(' command on line 1\n", "subshell-eof"],
+];
+
+for (const [command, text, name] of bashText) {
+  test('a syntax error at the typed prompt prints the bash text for ' + name + ', with status 2', async () => {
+    const r = await run(command);
+    assert.equal(r.output, text);
+    assert.equal(r.exitCode, 2);
+  });
+}
+
+test('an array assignment is not a syntax error at the typed prompt', async () => {
+  const r = await run('x=(a b); echo ok');
+  assert.equal(r.output, 'ok\n');
+  assert.equal(r.exitCode, 0);
+});
