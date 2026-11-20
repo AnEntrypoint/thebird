@@ -4308,3 +4308,35 @@ Witness: group `redirects: <&N and 0<&N dup an input descriptor as bash does, <&
 
 Red check: the table lookup for `<&N` replaced by `null`, so every shape that reads a descriptor gets empty input. Restored from a copy of the good core, confirmed with `cmp` (RESTORED_OK). Red run: `RESULT PASS=1271 FAIL=5`, the five rows that read fd 3 by `<&3` or `0<&3`. `git status` shows the three files of this change set and `bin/thebird-relay.js`, which is not committed.
 
+### Phase B record: change set 30bt, pushed as 9ae1fce..f38b7c7
+
+Window: started 04:35:41 and cleared at reading 5 (04:37:42), about two minutes of the ten allowed. The second sample of `vmstat 1 2` was below 1000 KB/s at every reading, so the wait was for heavy-jobs and the hot-process check, which were busy or caught a hot process at readings 1 to 4. Readings:
+
+| reading | time | si KB/s | so KB/s | heavy-jobs | what counted |
+|---|---|---|---|---|---|
+| 1 | 04:35:41 | 472 | 0 | clear | Chromium renderer pid 2088866 over 20% CPU in top (hot count 1) |
+| 2 | 04:36:12 | 352 | 0 | busy (2) | Chromium renderer pid 2092391 at 398%; renderer pid 2088866 at 21.8% |
+| 3 | 04:36:42 | 244 | 0 | busy (1) | `node scripts/check-etc2-second.cjs` pid 2092862 at 92.1% (a check run) |
+| 4 | 04:37:11 | 212 | 0 | clear | renderer pid 2088866 and Chromium pid 2088782 over 20% CPU (hot count 2) |
+| 5 | 04:37:42 | 48 | 0 | clear | none; gate and heavy-jobs clear, window started |
+
+The processes that counted belong to other runs (the renderers and the ETC2 check); nothing was stopped.
+
+Runs, each with its PID and wall time from the clock:
+
+- Green witness (pid 2093846): exit 0, wall 1.59 s, `RESULT PASS=1276 FAIL=0`.
+- Red check (f38b7c7, the only commit with code; pid 2094027): exit 1, wall 1.56 s, `RESULT PASS=1271 FAIL=5`, the five rows that read fd 3 by `<&3` or `0<&3`. Restored from a copy of HEAD and confirmed with `cmp`. a7c4da6 is ledger-only, so it has no red check of its own.
+- `npm run check` (pid 2094130): exit 0, wall 0.29 s.
+- `npm run witness:shell` (pid 2094185): exit 0, wall 1.66 s, `RESULT PASS=1276 FAIL=0`. Three rows print `exit 124`; they are PASS rows of the timeout tests.
+
+Push, once, after every check passed:
+
+``
+To https://github.com/AnEntrypoint/thebird
+   9ae1fce..f38b7c7  main -> main
+``
+
+`git ls-remote origin main` after the push: `f38b7c762d554310f8e1c07b1106c711c12c052d refs/heads/main`. The push carried a7c4da6 (the window record for 9ae1fce) and f38b7c7 (change set 30bt).
+
+Longest step: the gate wait, readings 1 to 5 (about two minutes). The push took about three seconds. Nothing was stopped.
+
