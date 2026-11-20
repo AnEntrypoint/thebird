@@ -2361,7 +2361,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           code = 1;
           continue;
         }
-        const prior = append && host.exists(path) ? readFileText(path) : '';
+        const prior = append && host.exists(path) ? host.read(path) : '';
         writeFileText(path, prior + (stdin ?? ''));
       }
       return { code, out: stdin ?? '', err };
@@ -3734,7 +3734,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (writeFailed) route(2, 'thebird: write error: Bad file descriptor\n');
     for (const [path, { text, rw }] of files) {
       if (text === '') continue;
-      const prior = host.exists(path) ? readFileText(path) : '';
+      const prior = host.exists(path) ? host.read(path) : '';
       writeRedirect(path, rw ? text + prior.slice(text.length) : prior + text);
     }
     if (writeFailed) return { out: outText, err: errText, code: 1, bytes: outBytes };
