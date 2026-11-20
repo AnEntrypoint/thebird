@@ -3745,6 +3745,65 @@ group('parse: shell core gives bash output for each of these inputs (bash output
   }
 });
 
+group('conditional: [[ ]] gives bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
+  const cases = [
+  ["[[ a == a ]] && echo y", "y\n", "", 0],
+  ["[[ a != a ]] && echo y || echo n", "n\n", "", 0],
+  ["[[ abc == a* ]] && echo pat", "pat\n", "", 0],
+  ["[[ abc == \"a*\" ]] || echo nopat", "nopat\n", "", 0],
+  ["[[ abc == a\\* ]] || echo esc", "esc\n", "", 0],
+  ["[[ -n x ]] && echo y", "y\n", "", 0],
+  ["x=\"\"; [[ -n $x ]] && echo y || echo n", "n\n", "", 0],
+  ["x=\"\"; [[ -z $x ]] && echo empty", "empty\n", "", 0],
+  ["x=\"a b\"; [[ $x == \"a b\" ]] && echo sp", "sp\n", "", 0],
+  ["x=\"a b\"; [[ $x == a* ]] && echo glob", "glob\n", "", 0],
+  ["[[ 2 -lt 10 ]] && echo num", "num\n", "", 0],
+  ["[[ 10 -gt 9 ]] && echo gt", "gt\n", "", 0],
+  ["[[ 3 -eq 3 && 4 -ne 5 ]] && echo both", "both\n", "", 0],
+  ["[[ 1 -eq 2 || 3 -le 3 ]] && echo either", "either\n", "", 0],
+  ["[[ ! -z x ]] && echo notz", "notz\n", "", 0],
+  ["[[ ! ( a == b ) ]] && echo neg", "neg\n", "", 0],
+  ["[[ ( a == a ) ]] && echo grp", "grp\n", "", 0],
+  ["[[ a < b ]] && echo lt", "lt\n", "", 0],
+  ["[[ b < a ]] || echo notlt", "notlt\n", "", 0],
+  ["[[ a > B ]] || echo gtcase", "gtcase\n", "", 0],
+  ["[[ x =~ ^x$ ]] && echo re", "re\n", "", 0],
+  ["[[ abc =~ ^a.c$ ]] && echo re2", "re2\n", "", 0],
+  ["[[ abc =~ \"a.c\" ]] && echo lit", "", "", 1],
+  ["[[ a.c =~ \"a.c\" ]] && echo lit2", "lit2\n", "", 0],
+  ["[[ x == x ]]; echo $?", "0\n", "", 0],
+  ["[[ a == b ]]; echo $?", "1\n", "", 0],
+  ["if [[ a == a ]]; then echo yes; else echo no; fi", "yes\n", "", 0],
+  ["n=1; while [[ $n != 3 ]]; do n=3; done; echo done", "done\n", "", 0],
+  ["[[ -n $UNSET_VAR_X ]] || echo unset", "unset\n", "", 0],
+  ["[[ $(echo a) == a ]] && echo cmdsub", "cmdsub\n", "", 0],
+  ["[[ \"\" == \"\" ]] && echo emptyeq", "emptyeq\n", "", 0],
+  ["[[ x == x ]] && [[ y == y ]] && echo chain", "chain\n", "", 0],
+  ["[[ a == a ]] && echo y | tr y Y", "Y\n", "", 0],
+  ["[[ a == b ]] || [[ c == c ]] && echo mix", "mix\n", "", 0],
+  ["[[ -n \"\" ]] || echo blank", "blank\n", "", 0],
+  ["[[ a", "", "bash: -c: line 1: unexpected token `newline', conditional binary operator expected\nbash: -c: line 1: syntax error near `a'\nbash: -c: line 1: `[[ a'\n", 2],
+  ["[[ a b c ]]", "", "bash: -c: line 1: unexpected token `b', conditional binary operator expected\nbash: -c: line 1: syntax error near `b'\nbash: -c: line 1: `[[ a b c ]]'\n", 2],
+  ["[[ -f ]]", "", "bash: -c: line 1: unexpected argument `]]' to conditional unary operator\nbash: -c: line 1: syntax error near `]]'\nbash: -c: line 1: `[[ -f ]]'\n", 2],
+  ["[[ a == ]]", "", "bash: -c: line 1: unexpected argument `]]' to conditional binary operator\nbash: -c: line 1: syntax error near `]]'\nbash: -c: line 1: `[[ a == ]]'\n", 2],
+  ["[[ a && ]]", "", "bash: -c: line 1: syntax error near `]]'\nbash: -c: line 1: `[[ a && ]]'\n", 2],
+  ["[[ ( a ]]", "", "bash: -c: line 1: unexpected token `]]', expected `)'\nbash: -c: line 1: syntax error near `]]'\nbash: -c: line 1: `[[ ( a ]]'\n", 2],
+  ["[[ a -eq ]]", "", "bash: -c: line 1: unexpected argument `]]' to conditional binary operator\nbash: -c: line 1: syntax error near `]]'\nbash: -c: line 1: `[[ a -eq ]]'\n", 2],
+  ["[[ \"a b\" == \"a\" b ]]", "", "bash: -c: line 1: syntax error in conditional expression: unexpected token `b'\nbash: -c: line 1: syntax error near `b'\nbash: -c: line 1: `[[ \"a b\" == \"a\" b ]]'\n", 2],
+  ["[[ a b", "", "bash: -c: line 1: unexpected token `b', conditional binary operator expected\nbash: -c: line 1: syntax error near `b'\nbash: -c: line 1: `[[ a b'\n", 2],
+  ["[[ a ) ]]", "", "bash: -c: line 1: syntax error in conditional expression: unexpected token `)'\nbash: -c: line 1: syntax error near `)'\nbash: -c: line 1: `[[ a ) ]]'\n", 2],
+  ];
+  for (const [script, stdout, stderr, status] of cases) {
+    if (status === 2) {
+      check('conditional: ' + JSON.stringify(script) + ' is a syntax error with the bash text, and is not run', core.syntaxText(script) === stderr && stdout === '', JSON.stringify([script, stderr]));
+      continue;
+    }
+    const sh = await shell({});
+    const r = await run(sh, script);
+    check('conditional: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+});
+
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
   const sh = await shell({ '/workspace/fe/empty.txt': '', '/workspace/fe/full.txt': 'x\n' });
   const empty = await run(sh, 'cd /workspace/fe && mkdir -p sub && find . -empty; echo rc=$?');

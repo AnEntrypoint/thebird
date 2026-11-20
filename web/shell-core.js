@@ -21,6 +21,7 @@ const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWit
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+const CONDITIONAL_BINARY = new Set(['==', '=', '!=', '=~', '<', '>', '-eq', '-ne', '-lt', '-le', '-gt', '-ge']);
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
 const SHELL_PID = 100;
 const SIGNALS = { HUP: 1, INT: 2, KILL: 9, TERM: 15 };
@@ -61,8 +62,8 @@ function syntaxError(message) {
 
 const BASH_CLOSERS = { 'double quote': '"', 'single quote': "'", 'command substitution': ')', 'parameter expansion': '}', backquote: '`' };
 
-function bashSyntaxError(message, { line, at, echo = false, eof = false } = {}) {
-  return Object.assign(new Error(message), { bash: true, line, at, echo, eof });
+function bashSyntaxError(message, { line, at, echo = false, eof = false, near } = {}) {
+  return Object.assign(new Error(message), { bash: true, line, at, echo, eof, near });
 }
 
 function nearToken(token) {
@@ -186,7 +187,7 @@ function readDollar(src, i) {
   if (next !== undefined && /[?#@*$!0-9]/.test(next)) return { part: { k: 'param', name: next, op: null, word: [] }, end: i + 2 };
   const name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i + 1));
   if (name) return { part: { k: 'param', name: name[0], op: null, word: [] }, end: i + 1 + name[0].length };
-  return { part: { k: 'sq', s: '$' }, end: i + 1 };
+  return { part: { k: 'lit', s: '$' }, end: i + 1 };
 }
 
 function readDouble(src, i) {
@@ -411,7 +412,83 @@ function parse(tokens, partial = false) {
     return { op, target: target.parts, text: target.text, body: opToken.body };
   };
 
+  const litText = (token) => (token?.parts?.length === 1 && token.parts[0].k === 'lit' ? token.parts[0].s : null);
+  const condNear = (token) => (token?.parts ? token.text : token?.newline ? 'newline' : (token?.op ?? 'newline'));
+  const condError = (message, token, near) => bashSyntaxError(message, { line: token?.line, echo: true, near });
+
+  const parseCondLeaf = () => {
+    const token = tokens[pos];
+    if (isWord(token, ']]')) throw condError('', token, ']]');
+    if (!token?.parts) throw nearToken(token ?? { newline: true });
+    const op = litText(token);
+    if (op !== null && /^-[a-zA-Z]$/.test(op)) {
+      const operand = tokens[pos + 1];
+      if (!operand?.parts || isWord(operand, ']]')) throw condError(`unexpected argument \`${condNear(operand)}' to conditional unary operator`, operand, condNear(operand));
+      pos += 2;
+      return { type: 'unary', op, parts: operand.parts };
+    }
+    const next = tokens[pos + 1];
+    const binary = litText(next) ?? next?.op;
+    if (CONDITIONAL_BINARY.has(binary)) {
+      const right = tokens[pos + 2];
+      if (!right?.parts || isWord(right, ']]')) throw condError(`unexpected argument \`${condNear(right)}' to conditional binary operator`, right, condNear(right));
+      pos += 3;
+      return { type: 'binary', op: binary, left: token.parts, right: right.parts };
+    }
+    if (next?.parts ? !isWord(next, ']]') : !['&&', '||', ')'].includes(next?.op)) {
+      throw condError(`unexpected token \`${condNear(next)}', conditional binary operator expected`, next, next?.parts ? next.text : condNear(token));
+    }
+    pos++;
+    return { type: 'word', parts: token.parts };
+  };
+
+  const parseCondNot = () => {
+    if (isWord(tokens[pos], '!')) {
+      pos++;
+      return { type: 'not', expr: parseCondNot() };
+    }
+    if (tokens[pos]?.op === '(') {
+      pos++;
+      const expr = parseCondOr();
+      if (tokens[pos]?.op !== ')') throw condError(`unexpected token \`${condNear(tokens[pos])}', expected \`)'`, tokens[pos], condNear(tokens[pos]));
+      pos++;
+      return expr;
+    }
+    return parseCondLeaf();
+  };
+
+  const parseCondAnd = () => {
+    let expr = parseCondNot();
+    while (tokens[pos]?.op === '&&') {
+      pos++;
+      expr = { type: 'and', left: expr, right: parseCondNot() };
+    }
+    return expr;
+  };
+
+  const parseCondOr = () => {
+    let expr = parseCondAnd();
+    while (tokens[pos]?.op === '||') {
+      pos++;
+      expr = { type: 'or', left: expr, right: parseCondAnd() };
+    }
+    return expr;
+  };
+
+  const parseConditional = () => {
+    const open = tokens[pos++];
+    const expr = parseCondOr();
+    const token = tokens[pos];
+    if (!isWord(token, ']]')) {
+      if (token) throw condError(`syntax error in conditional expression: unexpected token \`${condNear(token)}'`, token, condNear(token));
+      throw nearToken({ newline: true });
+    }
+    pos++;
+    return { type: 'cond', expr, line: open.line, redirects: parseTrailingRedirects() };
+  };
+
   const parseSimple = () => {
+    if (isWord(tokens[pos], '[[')) return parseConditional();
     const first = tokens[pos];
     const line = first?.endLine ?? first?.line;
     const assigns = [];
@@ -593,7 +670,7 @@ function parse(tokens, partial = false) {
       if (body.type !== 'group' && body.type !== 'subshell') throw syntaxError('a function body must be a group or a subshell');
       return { type: 'funcdef', name: token.parts[0].s, body };
     }
-    if (token.parts.length === 1 && token.parts[0].k === 'lit' && !token.parts[0].s.includes('=') && tokens[pos + 1]?.op === '(') throw nearToken(tokens[pos + 2] ?? { newline: true });
+    if (token.parts.length === 1 && token.parts[0].k === 'lit' && !token.parts[0].s.includes('=') && tokens[pos + 1]?.op === '(' && token.parts[0].s !== '[[') throw nearToken(tokens[pos + 2] ?? { newline: true });
     return parseSimple();
   };
 
@@ -682,7 +759,9 @@ function syntaxReport(err, src) {
   const line = err.line ?? (err.eof ? src.replace(/\n$/, '').split('\n').length + 1 : 1 + (src.slice(0, err.at ?? src.length).match(/\n/g) ?? []).length);
   const prefix = 'bash: -c: line ' + line + ': ';
   const echoed = err.echo ? prefix + '`' + src.split('\n')[line - 1] + "'\n" : '';
-  return prefix + err.message + '\n' + echoed;
+  const head = err.message ? prefix + err.message + '\n' : '';
+  const near = err.near === undefined ? '' : prefix + 'syntax error near `' + err.near + "'\n";
+  return head + near + echoed;
 }
 
 export function syntaxText(src) {
@@ -3680,6 +3759,50 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code: 0, out: inner.out, err: inner.err };
   }
 
+  async function runConditional(node, stdin, sink) {
+    const inner = sink;
+    const code = await evalCond(node.expr, inner);
+    return { code, out: inner.out, err: inner.err };
+  }
+
+  async function evalCond(expr, sink) {
+    if (expr.type === 'and' || expr.type === 'or') {
+      const left = await evalCond(expr.left, sink);
+      return left === (expr.type === 'and' ? 0 : 1) ? evalCond(expr.right, sink) : left;
+    }
+    if (expr.type === 'not') {
+      const code = await evalCond(expr.expr, sink);
+      return code === 2 ? 2 : Number(code === 0);
+    }
+    if (expr.type === 'word') return (await bodyText(expr.parts, sink)) === '' ? 1 : 0;
+    if (expr.type === 'unary') {
+      const value = await bodyText(expr.parts, sink);
+      try {
+        return evaluateTest([expr.op, value]) ? 0 : 1;
+      } catch (err) {
+        sink.err += err.message + '\n';
+        return 2;
+      }
+    }
+    const leftText = await bodyText(expr.left, sink);
+    const rightChars = await expandChars(expr.right, false, sink);
+    const rightText = rightChars.map((ch) => ch.c).join('');
+    if (expr.op === '==' || expr.op === '=') return caseRegExp(rightChars).test(leftText) ? 0 : 1;
+    if (expr.op === '!=') return caseRegExp(rightChars).test(leftText) ? 1 : 0;
+    if (expr.op === '=~') {
+      try {
+        const pattern = rightChars.map((ch) => (ch.q ? ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m) : ch.c)).join('');
+        return new RegExp(pattern).test(leftText) ? 0 : 1;
+      } catch {
+        sink.err += `[[: ${rightText}: invalid regular expression\n`;
+        return 2;
+      }
+    }
+    if (expr.op === '<') return collate(leftText, rightText) < 0 ? 0 : 1;
+    if (expr.op === '>') return collate(leftText, rightText) > 0 ? 0 : 1;
+    return evaluateTest([leftText, expr.op, rightText]) ? 0 : 1;
+  }
+
   async function runWhile(node, stdin, sink) {
     const inner = sink;
     let code = 0;
@@ -3748,6 +3871,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor, stream);
     if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile, stream);
     if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase, stream);
+    if (cmd.type === 'cond') return withRedirects(cmd, stdin, sink, runConditional, stream);
     return runSimple(cmd, stdin, sink, stream);
   }
 
