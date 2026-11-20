@@ -5841,3 +5841,10 @@ Commits since af51e7b: `aa2c507` (the browser check of the work since bfae2bc, l
 - File: `web/shell-sed.js`. A range end may be `+N`: the range starts at the line that matches the start address and ends N lines later; `+0` selects the one line.
 - Witness: `scripts/witness-shell.mjs`, group "sed ranges with +N: sed addr,+N selects the matching line and the N lines after it, as bash sed does", three rows with the expected output taken from bash sed. Before the change all three failed against bash.
 - Red check: the `+N` end read as a line end by mutation (the range then never closes at N); green PASS=1640 FAIL=0; red PASS=1638 FAIL=2, restored, cmp matches.
+
+### Defect fix S1-20: sed a appends a line of text
+
+- Row: S1-20 of the full-feature run (commit 8d52612). Command: `printf 'a\n' \| sed '1a x'`. Before: `sed: ... unknown command: 'a'`, rc 1. Expected: `a` then `x` (bash sed, locale en_US.UTF-8).
+- File: `web/shell-sed.js`. The `a TEXT` command reads the rest of its line (after the blanks) as the text. The text is queued while the line's commands run and printed after the line's output, even with `-n` and even when `d` deletes the line, as GNU sed does.
+- Witness: `scripts/witness-shell.mjs`, group "sed a: sed a text appends the text after the line, also with -n, and after a d, as bash sed does", four rows with the expected output taken from bash sed. Before the change all four failed against bash.
+- Red check: the queued text replaced by an empty line by mutation; green PASS=1644 FAIL=0; red PASS=1640 FAIL=4, restored, cmp matches.

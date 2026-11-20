@@ -149,6 +149,12 @@ function sedParse(script) {
     } else if (letter === 's') {
       state.pos++;
       command = sedParseSubstitute(state);
+    } else if (letter === 'a') {
+      state.pos++;
+      sedSkipBlanks(state);
+      let text = '';
+      while (state.pos < script.length && script[state.pos] !== '\n') text += script[state.pos++];
+      command = { name: 'a', text };
     } else sedFail(state, `unknown command: '${letter}'`);
     command.start = start;
     command.end = end;
@@ -235,10 +241,12 @@ function sedRunStream(commands, lines, quiet) {
     const isLast = index === lines.length - 1;
     let pattern = lines[index];
     let deleted = false;
+    const queued = [];
     for (let c = 0; c < commands.length; c++) {
       const command = commands[c];
       if (!sedSelects(command, ranges[c], pattern, lineNumber, isLast)) continue;
       if (command.name === 'p') printed.push(pattern);
+      else if (command.name === 'a') queued.push(command.text);
       else if (command.name === 'd') {
         deleted = true;
         break;
@@ -251,6 +259,7 @@ function sedRunStream(commands, lines, quiet) {
       }
     }
     if (!deleted && !quiet) printed.push(pattern);
+    printed.push(...queued);
   }
   return printed;
 }

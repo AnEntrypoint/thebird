@@ -3472,6 +3472,17 @@ group("sed ranges with +N: sed addr,+N selects the matching line and the N lines
   const wsd3 = await run(sh, "printf 'a\\nb\\nc\\n' | sed -n '/b/,+0p'");
   check("sed -n /b/,+0p prints only the match when N is zero (bash output, locale en_US.UTF-8)", wsd3.stdout === "b\n" && wsd3.exitCode === 0 && wsd3.stderr === "", JSON.stringify([wsd3.stdout, wsd3.stderr, wsd3.exitCode]));
 });
+group("sed a: sed a text appends the text after the line, also with -n, and after a d, as bash sed does", async () => {
+  const sh = await shell({});
+  const wsa1 = await run(sh, "printf 'a\\n' | sed '1a x'");
+  check("sed 1a x appends x after the first line (bash output, locale en_US.UTF-8)", wsa1.stdout === "a\nx\n" && wsa1.exitCode === 0 && wsa1.stderr === "", JSON.stringify([wsa1.stdout, wsa1.stderr, wsa1.exitCode]));
+  const wsa2 = await run(sh, "printf 'a\\nb\\n' | sed '1a hello world'");
+  check("sed appends a multi-word text after the line it follows (bash output, locale en_US.UTF-8)", wsa2.stdout === "a\nhello world\nb\n" && wsa2.exitCode === 0 && wsa2.stderr === "", JSON.stringify([wsa2.stdout, wsa2.stderr, wsa2.exitCode]));
+  const wsa3 = await run(sh, "printf 'a\\nb\\n' | sed -n '2a tail'");
+  check("sed -n still appends the text (bash output, locale en_US.UTF-8)", wsa3.stdout === "tail\n" && wsa3.exitCode === 0 && wsa3.stderr === "", JSON.stringify([wsa3.stdout, wsa3.stderr, wsa3.exitCode]));
+  const wsa4 = await run(sh, "printf 'a\\nb\\n' | sed '1a x;1d'");
+  check("sed prints the appended text even when d deletes the line (bash output, locale en_US.UTF-8)", wsa4.stdout === "a\nx;1d\nb\n" && wsa4.exitCode === 0 && wsa4.stderr === "", JSON.stringify([wsa4.stdout, wsa4.stderr, wsa4.exitCode]));
+});
 group('parity: the txiki shell and bashkit give the same stdout, stderr and status for the same commands', async () => {
   const kitDir = join(root, 'web', 'vendor', 'bashkit');
   let kit;
