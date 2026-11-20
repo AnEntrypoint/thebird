@@ -3351,8 +3351,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     let started = false;
     for (const ch of chars) {
       if (ch.start) {
-        if (started) fields.push(current);
-        current = [];
+        if (started) {
+          fields.push(current);
+          current = [];
+        }
         started = true;
       } else if (ch.split && /[ \t\n]/.test(ch.c)) {
         if (current.length) fields.push(current);
