@@ -799,7 +799,7 @@ function parse(tokens, partial = false) {
     if ((isWord(token, 'function') || isWord(token, 'select')) && !tokens[pos + 1]?.parts) throw nearToken(tokens[pos + 1] ?? { newline: true });
     const closer = ['then', 'elif', 'else', 'fi', 'do', 'done', 'esac', '}'].find((word) => isWord(token, word));
     if (closer) throw nearToken(token);
-    if (token.parts.length === 1 && token.parts[0].k === 'lit' && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
+    if (token.parts.length === 1 && token.parts[0].k === 'lit' && !isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(' && tokens[pos + 2]?.op === ')') {
       pos += 3;
       while (tokens[pos]?.op === ';') pos++;
       const body = parseCommand();
