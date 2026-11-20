@@ -5311,3 +5311,38 @@ Checks: a seeded model test against bash over five sets of 6000 lines (Latin ext
 Witness: green at this commit, `RESULT PASS=1527 FAIL=0` in 1.72 s wall (1524 rows before, 3 added). Before the code change the same witness gave `PASS=1524 FAIL=3`, all on the three new rows. Red check, mutation: the form line for `й` removed from `web/shell-core.js` gave `RESULT PASS=1526 FAIL=1`, the failing row being the Cyrillic row. The file was restored, `cmp` matched the saved copy, and the witness was green again at `PASS=1527 FAIL=0`.
 
 Still open after this change set: extended letters with no table entry in this set, and the G2 remainder (punctuation position rule), which stays blocked as in 30d1.
+
+### Phase B window that cleared for the six unpushed commits (67c54f1, c73b1d9, 92d9214, ed91c30, 515d02b and 5c823a2), with its readings, red checks and push
+
+Gate: the second sample of `vmstat 1 2`, both directions under 1000 KB/s. `scripts/heavy-jobs.cjs` (bevy 495fff6) read in the same reading. The waiter (pid 2327922) sampled the gate from 08:41:47; it started the window's readings at 08:42:18, when the gate was clear (si 544, so 0). The witnesses started only at reading 6, when the gate and heavy-jobs were both clear in the same reading.
+
+| Reading | Clock | si KB/s | so KB/s | Gate | heavy-jobs | Note |
+|---|---|---|---|---|---|---|
+| waiter 1 | 08:41:47 | 1648 | 0 | not clear | not run | waiter pid 2327922 |
+| waiter 2 | 08:42:18 | 544 | 0 | clear | not run | the waiter started the window here |
+| window 1 | 08:42:22 | 3596 | 0 | not clear | busy, n=1 | pid 2328242 at 99% CPU (a grep over a large file, origin not identified) |
+| window 2 | 08:42:52 | 33944 | 44 | not clear | busy, n=1 | pid 2328242 |
+| window 3 | 08:43:21 | 588 | 4 | clear | busy, n=1 | pid 2328242 at 100% CPU |
+| window 4 | 08:43:52 | 2572 | 0 | not clear | busy, n=1 | pid 2328242 at 100% CPU |
+| window 5 | 08:44:21 | 176 | 0 | clear | busy, n=1 | pid 2328242 at 99%; pid 2356 (a claude session) above 20% CPU |
+| window 6 | 08:44:52 | 128 | 0 | clear | clear | hot count 0; the window cleared here |
+
+Window 6 was the only reading with the gate and heavy-jobs clear together. The window ran from 08:42:18 to 08:45:09, which is 2 min 51 s, shorter than the ten-minute allowance. The longest step was the wait for heavy jobs (readings 1 to 5). I did not stop pid 2328242 or pid 2356, which I did not start.
+
+Green witness at 5c823a2 (pid 2329709): exit 0, wall 1.77 s, `RESULT PASS=1527 FAIL=0`.
+
+Red checks, each under timeout with its PID:
+- RED1 (pid 2329800): the ligature, oblique o and final sigma forms removed. Exit 1, wall 1.74 s, `PASS=1522 FAIL=5`. Restored; `cmp` matched.
+- RED2 (pid 2329844): en_US collation disabled (`COLLATING_LOCALES` emptied). Exit 1, wall 1.70 s, `PASS=1514 FAIL=13`. Restored; `cmp` matched.
+- RED3 (pid 2329902): the own-symbol form for `й` removed. Exit 1, wall 1.84 s, `PASS=1526 FAIL=1`. Restored; `cmp` matched.
+
+`npm run check` (pid 2329939): exit 0, wall 344 ms. `npm run witness:shell` (pid 2329994): exit 0, wall 1.80 s, `RESULT PASS=1527 FAIL=0`. The three `exit 124` lines in the witness output are passing rows whose titles contain that text.
+
+Push (pid none; `git push origin main`, exit 0):
+
+```
+To https://github.com/AnEntrypoint/thebird
+   ce2208e..5c823a2  main -> main
+```
+
+`git ls-remote origin main` after the push: `5c823a273ed28fa6d1b7857c06ba393dcb8529f8 refs/heads/main`.
