@@ -1975,7 +1975,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     const items = arrays.get(name);
     return items ? [...items.keys()].sort((a, b) => a - b).map((key) => items.get(key)) : [];
   };
-  const arrayKeys = (name) => [...(arrays.get(name)?.keys() ?? [])].sort((a, b) => a - b).map(String);
   const elementChars = (values, index, inDouble) => {
     if (index === '@' && inDouble) return values.flatMap((value) => [{ start: true }, ...[...value].map((c) => ({ c, q: true, split: false }))]);
     return [...values.join(' ')].map((c) => ({ c, q: inDouble, split: !inDouble }));
@@ -1990,7 +1989,6 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     if (part.index === '@' || part.index === '*') return arrayItems(part.name).length;
     return characterCount(arrayElement(part.name, arrayIndex(part)) ?? '', shellLocale);
   };
-  const setArray = (name, items) => arrays.set(name, new Map(items.map((value, i) => [i, value])));
   const setElement = (name, index, value) => {
     if (!arrays.has(name)) {
       arrays.set(name, new Map(vars.has(name) ? [[0, vars.get(name)]] : []));
@@ -3286,7 +3284,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param' && part.index === '@') chars.push(...elementChars(arrayItems(part.name), '@', inDouble));
-      else if (part.k === 'keys') chars.push(...elementChars(arrayKeys(part.name), part.index, inDouble));
+      else if (part.k === 'keys') chars.push(...elementChars([...(arrays.get(part.name)?.keys() ?? [])].sort((a, b) => a - b).map(String), part.index, inDouble));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
       else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name).get(0) ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
@@ -3458,7 +3456,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     const argv = await expandWords(node.words, sink);
     const assigned = [];
     for (const assign of node.assigns) {
-      if (assign.array) setArray(assign.name, await expandWords(assign.array, sink));
+      if (assign.array) arrays.set(assign.name, new Map((await expandWords(assign.array, sink)).map((value, i) => [i, value])));
       else if (assign.index) setElement(assign.name, arrayIndex({ index: await expandText(assign.index, sink) }), await expandText(assign.value, sink));
       else assigned.push([assign.name, await expandText(assign.value, sink)]);
     }
