@@ -67,6 +67,10 @@ try {
   process.stderr.write(`${error.message}\n${stderr}`);
   process.exitCode = 1;
 } finally {
-  child.kill('SIGTERM');
+  await new Promise((done) => {
+    if (child.exitCode !== null || child.signalCode !== null) return done();
+    child.once('exit', done);
+    child.kill('SIGTERM');
+  });
   await rm(profile, { recursive: true, force: true }).catch(() => {});
 }

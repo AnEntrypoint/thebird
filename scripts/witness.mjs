@@ -7,7 +7,7 @@ import { startNpmMirror } from './npm-mirror.mjs';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startRelay } from '../src/relay.js';
 import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from './browser-driver.mjs';
 import { vendorBashkit } from './vendor-bashkit.mjs';
@@ -719,6 +719,22 @@ group('terminal.html loads, draws its terminal and panes, and runs a line typed 
   check('terminal.html is titled thebird and mounts the terminal and its panes', seen.title === 'thebird' && seen.panes === true, JSON.stringify({ title: seen.title, panes: seen.panes }));
   check('terminal.html draws the terminal into its mount', seen.drawn === true, String(seen.drawn));
   check('terminal.html runs a line typed into it and prints its output', seen.echoed === true, JSON.stringify(seen));
+});
+
+group('closeBrowserTrees kills the trees it recorded and removes its run directory', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thebird-run-'));
+  const runDir = join(dir, 'run');
+  const sleeper = spawn('sleep', ['30'], { stdio: 'ignore' });
+  trackPid(sleeper.pid);
+  const gone = new Promise((resolve) => sleeper.once('exit', resolve));
+  const driver = pathToFileURL(join(root, 'scripts', 'browser-driver.mjs')).href;
+  const script = `import { recordBrowserTree, closeBrowserTrees } from '${driver}'; recordBrowserTree(${sleeper.pid}); console.log(JSON.stringify(closeBrowserTrees()));`;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, THEBIRD_BROWSER_RUN_DIR: runDir }, encoding: 'utf8' });
+  await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 5000))]);
+  check('closeBrowserTrees reports and kills the recorded pid', run.status === 0 && JSON.parse(run.stdout || '[]').includes(sleeper.pid) && !alive(sleeper.pid), run.stdout + run.stderr);
+  check('closeBrowserTrees removes the run directory it recorded into', !existsSync(runDir), runDir);
+  await stopPid(sleeper.pid);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {

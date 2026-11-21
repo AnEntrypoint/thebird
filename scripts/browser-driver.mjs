@@ -99,6 +99,7 @@ export function closeBrowserTrees() {
       continue;
     }
   }
+  rmSync(runDir, { recursive: true, force: true });
   return closed;
 }
 
