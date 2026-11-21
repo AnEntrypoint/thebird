@@ -548,6 +548,30 @@ group('thebird-webserver register scaffolds a server that list names, and unregi
   check('thebird-webserver unregister --remove-folder drops the id from list and removes its scaffold', removed.status === 0 && !listedAfter.includes(id) && scaffoldAfter.ok === false, JSON.stringify({ listedAfter, scaffoldAfter }));
 });
 
+group('thebird-relay starts on the port it is given, serves the terminal with its isolation headers, and exits 0 on SIGINT', async () => {
+  const port = await new Promise((resolve) => {
+    const probe = createNetServer().listen(0, '127.0.0.1', () => {
+      const chosen = probe.address().port;
+      probe.close(() => resolve(chosen));
+    });
+  });
+  const child = spawn(process.execPath, [join(root, 'bin', 'thebird-relay.js'), '--port', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (chunk) => { out += chunk; });
+  child.stderr.on('data', (chunk) => { out += chunk; });
+  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  let answer = { status: 'no answer', opener: null };
+  const deadline = Date.now() + 120000;
+  while (answer.status === 'no answer' && Date.now() < deadline) {
+    answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => ({ status: 'HTTP ' + res.status, opener: res.headers.get('cross-origin-opener-policy') }), () => ({ status: 'no answer', opener: null }));
+    if (answer.status === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  child.kill('SIGINT');
+  const ended = await exited;
+  check('thebird-relay answers the terminal on the port it is given, with the same-origin opener header', answer.status === 'HTTP 200' && answer.opener === 'same-origin' && out.includes(String(port)), JSON.stringify({ answer, out: out.slice(0, 200) }));
+  check('thebird-relay exits 0 on SIGINT', ended.code === 0 && ended.signal === null, JSON.stringify(ended));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
