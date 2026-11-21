@@ -591,6 +591,14 @@ group('thebird-web-host start, status and stop run one managed server, and stop 
   }
 });
 
+group('scripts/serve-web-host.mjs, which npm run host:serve runs, serves its --root on its --port and exits 0 on SIGTERM', async () => {
+  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-host-serve-')));
+  const port = await freePort();
+  const served = await serveThenStop({ script: 'scripts/serve-web-host.mjs', args: ['--port', String(port), '--root', pagesDir, '--no-isolation'], port });
+  check('serve-web-host answers the site on its --port and names its isolation as plain under --no-isolation', served.answer.status === 'HTTP 200' && served.out.includes('isolation: plain'), served.answer.status + ' ' + served.out.slice(0, 200));
+  check('serve-web-host exits 0 on SIGTERM', served.ended.code === 0 && served.ended.signal === null, JSON.stringify(served.ended));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
