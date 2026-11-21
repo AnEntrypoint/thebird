@@ -6638,3 +6638,7 @@ Other findings:
 ### test(craft): thebird-craft ensure, sample and status print the JSON their npm scripts promise
 - Witness: --check=apps.every. Green: totals: PASS 3 FAIL 0 SKIP 0 GROUPS 1 WALL 0.4s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs craft: totals: PASS 2 FAIL 1 SKIP 0 GROUPS 1 WALL 0.2s, rc 1. Failing checks: ["FAIL craft ensure exits 0 and names the three craft apps it registered — {\"ok\":false,\"registered\":[\"gridcraft\",\"wordcraft\",\"pdfcraft\"],\"lazy\":true}"]. Restored from git show HEAD, cmp ok.
+
+### test(files): thebird-webserver status names the server that register wrote, and statusServers without it fails
+- Witness: --check=statusIds. Green: totals: PASS 4 FAIL 0 SKIP 0 GROUPS 1 WALL 0.2s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs webstatus: totals: PASS 3 FAIL 1 SKIP 0 GROUPS 1 WALL 0.3s, rc 1. Failing checks: ["FAIL thebird-webserver status names the server that register wrote — []"]. Restored from git show HEAD, cmp ok.
