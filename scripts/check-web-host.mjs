@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const hostScript = join(root, 'bin', 'thebird-web-host.js');
 const chrome = process.env.CHROME_BIN ?? '/data/cache/bin/chromium';
 const host = '127.0.0.1';
 const port = Number(process.env.THEBIRD_HOST_CHECK_PORT ?? 4173);

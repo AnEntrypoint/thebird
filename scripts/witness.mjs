@@ -183,18 +183,23 @@ const webserverCli = binRunner('thebird-webserver');
 const webhostCli = binRunner('thebird-web-host');
 const craftCli = binRunner('thebird-craft');
 
+async function pollAnswer(url, everyMs = 500) {
+  const deadline = Date.now() + 120000;
+  let answer = { status: 'no answer', headers: null };
+  while (answer.status === 'no answer' && Date.now() < deadline) {
+    answer = await fetch(url).then((res) => ({ status: 'HTTP ' + res.status, headers: res.headers }), () => ({ status: 'no answer', headers: null }));
+    if (answer.status === 'no answer') await new Promise((resolve) => setTimeout(resolve, everyMs));
+  }
+  return answer;
+}
+
 async function serveThenStop({ script, args, port, path = '/', signal = 'SIGTERM' }) {
   const child = spawn(process.execPath, [join(root, script), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.on('data', (chunk) => { out += chunk; });
   child.stderr.on('data', (chunk) => { out += chunk; });
   const exited = new Promise((resolve) => child.once('exit', (code, sig) => resolve({ code, signal: sig })));
-  let answer = { status: 'no answer', headers: null };
-  const deadline = Date.now() + 120000;
-  while (answer.status === 'no answer' && Date.now() < deadline) {
-    answer = await fetch(`http://127.0.0.1:${port}${path}`).then((res) => ({ status: 'HTTP ' + res.status, headers: res.headers }), () => ({ status: 'no answer', headers: null }));
-    if (answer.status === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
-  }
+  const answer = await pollAnswer(`http://127.0.0.1:${port}${path}`);
   child.kill(signal);
   return { answer, out, ended: await exited };
 }
@@ -667,11 +672,7 @@ group('/__thebird/mcp lists the registered webservers, describes one, answers it
   try {
     webserver('register', id, '--title', 'MCP coverage');
     child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port), '--root', pagesDir], { cwd: root, stdio: 'ignore' });
-    let up = false;
-    for (let i = 0; i < 600 && !up; i++) {
-      up = await fetch(base + '/').then((res) => res.status === 200, () => false);
-      if (!up) await new Promise((resolve) => setTimeout(resolve, 200));
-    }
+    const up = (await pollAnswer(base + '/', 200)).status === 'HTTP 200';
     const list = await call('/__thebird/mcp');
     const descriptor = await call('/__thebird/mcp/' + id);
     const ping = await post('/__thebird/mcp/' + id, 'ping');
