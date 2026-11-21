@@ -519,6 +519,15 @@ group('thebird-web-host serve listens on the port it is given, answers the site,
   check('thebird-web-host serve exits 0 on SIGTERM', ended.code === 0 && ended.signal === null, JSON.stringify(ended));
 });
 
+group('feature: a page command registers a feature, lists it and removes it by id', async () => {
+  const feature = await terminal([
+    ['run', `feature '{"op":"register","id":"cov-feature","spec":{"title":"cov feature"}}' > /dev/null && echo "FEATURE-$(feature '{"op":"list"}' | grep -c cov-feature)"`],
+    ['run', `feature '{"op":"remove","id":"cov-feature"}' > /dev/null && echo "GONE-$(feature '{"op":"list"}' | grep -c cov-feature)"`],
+  ]);
+  check('feature registers a page feature that its list then names', /^FEATURE-[1-9]\d*$/m.test(feature.out), feature.out.slice(-300));
+  check('feature remove takes the id out of its list', /^GONE-0$/m.test(feature.out), feature.out.slice(-300));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
