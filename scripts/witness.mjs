@@ -563,7 +563,7 @@ group('thebird-relay starts on the port it is given, serves the terminal with it
 });
 
 group('thebird-web-host start, status and stop run one managed server, and stop ends its pid', async () => {
-  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-host-life-')));
+  const pagesDir = await sharedPages();
   const port = await freePort();
   const flags = ['--host', '127.0.0.1', '--port', String(port), '--root', pagesDir];
   const cli = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -593,7 +593,7 @@ group('thebird-web-host start, status and stop run one managed server, and stop 
 });
 
 group('scripts/serve-web-host.mjs, which npm run host:serve runs, serves its --root on its --port and exits 0 on SIGTERM', async () => {
-  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-host-serve-')));
+  const pagesDir = await sharedPages();
   const port = await freePort();
   const served = await serveThenStop({ script: 'scripts/serve-web-host.mjs', args: ['--port', String(port), '--root', pagesDir, '--no-isolation'], port });
   check('serve-web-host answers the site on its --port and names its isolation as plain under --no-isolation', served.answer.status === 'HTTP 200' && served.out.includes('isolation: plain'), served.answer.status + ' ' + served.out.slice(0, 200));
@@ -644,7 +644,7 @@ group('thebird-craft ensure, sample and status print the JSON their npm scripts 
 });
 
 group('/__thebird/mcp lists the registered webservers, describes one, answers its ping over POST, and refuses an unregistered id', async () => {
-  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-mcp-')));
+  const pagesDir = await sharedPages();
   const port = await freePort();
   const id = 'cov-mcp-' + process.pid;
   const base = `http://127.0.0.1:${port}`;
