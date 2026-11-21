@@ -627,6 +627,20 @@ group('npm scripts that alias one bin action run exactly that action', async () 
   for (const [name, command] of Object.entries(expected)) check('npm run ' + name + ' is ' + command, scripts[name] === command, String(scripts[name]));
 });
 
+group('thebird-craft ensure, sample and status print the JSON their npm scripts promise', async () => {
+  const craft = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-craft.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 300000 });
+  const apps = ['gridcraft', 'wordcraft', 'pdfcraft'];
+  const ensure = craft('ensure');
+  const ensured = JSON.parse(ensure.stdout || 'null');
+  check('craft ensure exits 0 and names the three craft apps it registered', ensure.status === 0 && ensured?.ok === true && apps.every((id) => ensured.registered.includes(id)), ensure.stdout.slice(0, 200));
+  const sample = craft('sample');
+  const sampled = JSON.parse(sample.stdout || 'null');
+  check('craft sample exits 0 and names a sample file for each craft app', sample.status === 0 && sampled?.ok === true && apps.every((id) => typeof sampled.samples?.[id] === 'string'), sample.stdout.slice(0, 200));
+  const status = craft('status');
+  const listed = JSON.parse(status.stdout || 'null');
+  check('craft status exits 0 and lists the three craft apps', status.status === 0 && Array.isArray(listed) && apps.every((id) => listed.some((app) => app.id === id)), status.stdout.slice(0, 200));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],

@@ -6634,3 +6634,7 @@ Other findings:
 ### test(scripts): the npm scripts that alias one bin action run exactly that action
 - Witness: --check=craft:samples. Green: totals: PASS 11 FAIL 0 SKIP 0 GROUPS 1 WALL 0.0s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs aliases: totals: PASS 10 FAIL 1 SKIP 0 GROUPS 1 WALL 0.0s, rc 1. Failing checks: ["FAIL npm run host:status is node bin/thebird-web-host.js status — node bin/thebird-web-host.js stat"]. Restored from git show HEAD, cmp ok.
+
+### test(craft): thebird-craft ensure, sample and status print the JSON their npm scripts promise
+- Witness: --check=apps.every. Green: totals: PASS 3 FAIL 0 SKIP 0 GROUPS 1 WALL 0.4s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs craft: totals: PASS 2 FAIL 1 SKIP 0 GROUPS 1 WALL 0.2s, rc 1. Failing checks: ["FAIL craft ensure exits 0 and names the three craft apps it registered — {\"ok\":false,\"registered\":[\"gridcraft\",\"wordcraft\",\"pdfcraft\"],\"lazy\":true}"]. Restored from git show HEAD, cmp ok.
