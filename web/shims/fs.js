@@ -49,10 +49,6 @@ function mark(path, op) {
   revisions.set(path, ++revision);
 }
 
-export function revisionOf(path) {
-  return revisions.get(norm(path)) ?? 0;
-}
-
 export function currentRevision() {
   return revision;
 }
@@ -603,10 +599,6 @@ export function mkdtempSync(prefix) {
 
 export function watch() {
   return { close() {}, on() { return this; }, once() { return this; } };
-}
-
-export function fileIsDirty(path) {
-  return dirty.has(norm(path));
 }
 
 async function writeOne(path, op) {

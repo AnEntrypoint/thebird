@@ -334,8 +334,6 @@ const tools = {
   playwriter_browsers: async (args) => content(args?.action === 'close' ? await closeRun() : await listBrowsers()),
 };
 
-export const playwriterVerbs = Object.fromEntries(Object.entries(tools).map(([name, fn]) => [name, (args = {}) => Promise.resolve(fn(args))]));
-
 export const playwriterHandle = async (message) => {
   const id = message?.id ?? null;
   if (!message || typeof message.method !== 'string') return failure(id, -32600, 'invalid request');
@@ -355,9 +353,6 @@ export const playwriterHandle = async (message) => {
   }
   return failure(id, -32601, `method not found: ${message.method}`);
 };
-
-export const playwriterExecute = (code, timeout) => runExpression(code, { timeout });
-export const playwriterStatus = () => status();
 
 export async function playwriterBuiltin(argv, { signal } = {}) {
   if (signal?.aborted) throw new Error('cancelled');
