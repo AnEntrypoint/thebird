@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { connect } from 'node:net';
+import { connect, createServer as createNetServer } from 'node:net';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -493,6 +493,30 @@ group('the txiki shell touch -m and -a set the times that tjs.stat reports, from
   });
   check('touch -m in the txiki shell moves the mtime to now and keeps the atime', touchTimes.m.rc === 'rc=0' && touchTimes.m.mtime >= touchTimes.nowMs - 60000 && touchTimes.m.atime === 1600000000000, JSON.stringify(touchTimes.m));
   check('touch -a in the txiki shell moves the atime to now and keeps the mtime', touchTimes.a.rc === 'rc=0' && touchTimes.a.atime >= touchTimes.nowMs - 60000 && touchTimes.a.mtime === 1600000000000, JSON.stringify(touchTimes.a));
+});
+
+group('thebird-web-host serve listens on the port it is given, answers the site, and exits on SIGTERM', async () => {
+  const port = await new Promise((resolve) => {
+    const probe = createNetServer().listen(0, '127.0.0.1', () => {
+      const chosen = probe.address().port;
+      probe.close(() => resolve(chosen));
+    });
+  });
+  const child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (chunk) => { out += chunk; });
+  child.stderr.on('data', (chunk) => { out += chunk; });
+  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  let answer = 'no answer';
+  const deadline = Date.now() + 90000;
+  while (answer === 'no answer' && Date.now() < deadline) {
+    answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => 'HTTP ' + res.status, () => 'no answer');
+    if (answer === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  child.kill('SIGTERM');
+  const ended = await exited;
+  check('thebird-web-host serve answers the site on the port it is given', answer === 'HTTP 200' && out.includes(String(port)), answer + ' ' + out.slice(0, 200));
+  check('thebird-web-host serve exits 0 on SIGTERM', ended.code === 0 && ended.signal === null, JSON.stringify(ended));
 });
 
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
