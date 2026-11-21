@@ -442,7 +442,7 @@ group('fx-tui-live', async () => {
   });
   const gatewayStatuses = tui.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const gatewayErrors = tui.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d/.test(line));
-  check('the TUI on the live provider answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
+  check('the TUI on the live provider answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true && gatewayErrors.length === 0, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
 });
 
 group('fx-approval', async () => {
