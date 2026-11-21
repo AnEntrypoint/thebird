@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { connect } from 'node:net';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -92,7 +92,36 @@ const skip = (name, reason) => {
   current().results.push({ name, ok: null, skipped: true });
   console.log('SKIP ' + name + ' — ' + reason);
 };
-const skipLive = (names) => names.map((name) => skip(name, LIVE_UNAVAILABLE));
+const skipLive = (names, reason) => names.map((name) => skip(name, reason));
+const providerVerdict = async (live) => {
+  let res;
+  try {
+    res = await fetch(live.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + live.key }, body: JSON.stringify({ model: live.model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1 }), signal: AbortSignal.timeout(30000) });
+  } catch (error) {
+    return { verdict: 'fail', detail: 'no answer from ' + live.url + ' (' + error.name + ')' };
+  }
+  const body = await res.json().catch(() => null);
+  if (res.ok && body?.choices?.length) return { verdict: 'ok', detail: '' };
+  if (res.status === 403 && body?.error?.metadata?.scope === 'key_limit') return { verdict: 'skip', detail: 'OpenRouter key has a $' + body.error.metadata.limit_usd + ' limit (HTTP 403 key_limit)' };
+  return { verdict: 'fail', detail: 'HTTP ' + res.status + ' ' + (body?.error?.metadata?.scope ?? 'body not as expected') };
+};
+const liveRun = async (names) => {
+  const live = await liveProvider();
+  if (!live) {
+    skipLive(names, LIVE_UNAVAILABLE);
+    return null;
+  }
+  const verdict = await providerVerdict(live);
+  if (verdict.verdict === 'skip') {
+    skipLive(names, verdict.detail);
+    return null;
+  }
+  if (verdict.verdict === 'fail') {
+    for (const name of names) check(name, false, verdict.detail);
+    return null;
+  }
+  return live;
+};
 const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
 const DEFAULT_CONTEXT_GROUPS = new Set(['pip']);
 let sharedBrowserStart = null;
@@ -421,9 +450,42 @@ group('fx-tui-registry', async () => {
   }
 });
 
+const startProviderStub = (status, body) => new Promise((resolve, reject) => {
+  const source = "const http = require('node:http'); const [status, body] = process.argv.slice(1); http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(Number(status), { 'content-type': 'application/json' }); res.end(body); }); }).listen(0, '127.0.0.1', function () { console.log(this.address().port); });";
+  const child = spawn(process.execPath, ['-e', source, String(status), JSON.stringify(body)], { stdio: ['ignore', 'pipe', 'inherit'] });
+  child.once('error', reject);
+  child.stdout.once('data', (chunk) => resolve({
+    pid: child.pid,
+    url: 'http://127.0.0.1:' + String(chunk).trim() + '/v1/chat/completions',
+    stop: () => new Promise((done) => {
+      if (child.exitCode !== null) return done();
+      child.once('exit', done);
+      child.kill('SIGTERM');
+    }),
+  }));
+});
+group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
+  const cases = [
+    ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
+    ['403 with another code', 403, { error: { code: 403, metadata: { scope: 'model_access' } } }, 'fail'],
+    ['500', 500, { error: { code: 500, message: 'upstream' } }, 'fail'],
+    ['200 with a wrong body', 200, { unexpected: true }, 'fail'],
+    ['200 with a chat body', 200, { choices: [{ message: { role: 'assistant', content: 'ok' } }] }, 'ok'],
+  ];
+  for (const [label, status, body, expected] of cases) {
+    const stub = await startProviderStub(status, body);
+    try {
+      const verdict = await providerVerdict({ url: stub.url, key: 'stub-key', model: 'stub-model' });
+      check(label + ' gives the ' + expected + ' verdict', verdict.verdict === expected, JSON.stringify({ pid: stub.pid, ...verdict }));
+    } finally {
+      await stub.stop();
+    }
+  }
+});
+
 group('fx-tui-live', async () => {
-  const live = await liveProvider();
-  if (!live) return skipLive(['the TUI on the live provider answers hi with a reply line below the typed hi']);
+  const live = await liveRun(['the TUI on the live provider answers hi with a reply line below the typed hi']);
+  if (!live) return;
   const { url: liveUrl, key: liveKey, model: liveModel } = live;
   const surfaces = {};
   const tui = await terminal([], {
@@ -504,8 +566,8 @@ group('fx-approval', async () => {
 });
 
 group('fx-provider', async () => {
-  const live = await liveProvider();
-  if (!live) return skipLive(['fx ask on the live provider prints ok with rc 0', 'the live chat request returns 200 and the page logs no HTTP error']);
+  const live = await liveRun(['fx ask on the live provider prints ok with rc 0', 'the live chat request returns 200 and the page logs no HTTP error']);
+  if (!live) return;
   const { url: liveUrl, key: liveKey, model: liveModel } = live;
   const ask = await terminal([['run', 'fx ask reply with only the word ok'], ['run', 'echo rc=$?']], {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: liveModel, gatewayChatUrl: liveUrl })};`,
