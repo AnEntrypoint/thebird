@@ -219,7 +219,6 @@ const GRAPHEMES = 'é \u{1F44D}\u{1F3FD} \u{1F468}‍\u{1F469}‍\u{1F467}';
 
 group('relay', async () => {
   const relay = await getRelay();
-check('relay serves the browser terminal page', (await fetch(relay.url)).status === 200);
 const isolated = await fetch(relay.url);
 check('relay sends the cross-origin isolation headers', isolated.headers.get('cross-origin-opener-policy') === 'same-origin' && isolated.headers.get('cross-origin-embedder-policy') === 'require-corp');
 check('relay serves web files', (await fetch(relay.url + 'web/terminal.js')).status === 200 && (await fetch(relay.url + 'web/shell-worker.js')).status === 200);
@@ -672,6 +671,29 @@ group('/__thebird/mcp lists the registered webservers, describes one, answers it
     if (child) child.kill('SIGTERM');
     webserver('unregister', id, '--remove-folder');
   }
+});
+
+group('terminal.html loads, draws its terminal and panes, and runs a line typed into it', async () => {
+  const relay = await getRelay();
+  const seen = {};
+  const url = relay.url + '?' + new URLSearchParams([['run', 'true']]).toString();
+  await runAt(url, {
+    label: 'terminal.html',
+    timeoutMs: 180000,
+    interact: async ({ type, press, evaluate, waitFor }) => {
+      await waitFor("document.body && document.body.dataset.engine === 'ready'", 120000);
+      seen.title = await evaluate('document.title');
+      seen.panes = await evaluate("['terminal', 'features', 'webserver-shell', 'splash'].every((id) => document.getElementById(id) !== null)");
+      seen.drawn = await evaluate("(document.querySelector('#terminal')?.childElementCount ?? 0) > 0");
+      await type('echo terminal-html-typed');
+      await press('Enter');
+      await waitFor("globalThis.thebird.text().split('\\n').includes('terminal-html-typed')", 120000);
+      seen.echoed = true;
+    },
+  });
+  check('terminal.html is titled thebird and mounts the terminal and its panes', seen.title === 'thebird' && seen.panes === true, JSON.stringify({ title: seen.title, panes: seen.panes }));
+  check('terminal.html draws the terminal into its mount', seen.drawn === true, String(seen.drawn));
+  check('terminal.html runs a line typed into it and prints its output', seen.echoed === true, JSON.stringify(seen));
 });
 
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {

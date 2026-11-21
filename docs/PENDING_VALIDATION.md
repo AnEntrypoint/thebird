@@ -6646,3 +6646,7 @@ Other findings:
 ### test(page): /__thebird/mcp lists the registered webservers, describes one, answers its ping, and refuses an unregistered id
 - Witness: --check=__thebird/mcp. Green: totals: PASS 4 FAIL 0 SKIP 0 GROUPS 1 WALL 75.5s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs mcp: totals: PASS 3 FAIL 1 SKIP 0 GROUPS 1 WALL 70.4s, rc 1. Failing checks: ["FAIL POST /__thebird/mcp/<id> with method ping answers ok with pong — {\"status\":200,\"body\":{\"ok\":true,\"result\":\"pung\"}}"]. Restored from git show HEAD, cmp ok.
+
+### test(page): terminal.html loads, draws its terminal and panes, and runs a line typed into it; the relay's 200 check now lives here
+- Witness: --check=terminal.html. Green: totals: PASS 3 FAIL 0 SKIP 0 GROUPS 1 WALL 3.9s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs terminal: totals: PASS 0 FAIL 1 SKIP 0 GROUPS 1 WALL 180.4s, rc 1. Failing checks: ["FAIL terminal.html loads, draws its terminal and panes, and runs a line typed into it raised an error: terminal did not finish: http://127.0.0.1:40909/?run=true"]. Restored from git show HEAD, cmp ok.
