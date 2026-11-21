@@ -111,6 +111,8 @@ const providerVerdict = async (live) => {
   }
   return { verdict: 'skip', detail: 'every free model is rate limited (HTTP 429 from ' + live.models.length + ' of ' + live.models.length + ')' };
 };
+const liveVerdict = (ok, detail) => (ok ? 'pass' : /\b429\b/.test(detail) ? 'skip' : 'fail');
+const liveCheck = (name, ok, detail) => (liveVerdict(ok, detail) === 'skip' ? skip(name, 'the free OpenRouter model answered HTTP 429 inside the page') : check(name, ok, detail));
 const liveRun = async (names) => {
   const live = await liveProvider();
   if (!live) {
@@ -723,6 +725,12 @@ group('provider verdict: a 403 key_limit is a skip, and any other failure is a f
   }
 });
 
+group('a live row that sees HTTP 429 inside the page is a skip, and any other failure is a failure', async () => {
+  check('a failing row whose detail names a 429 is a skip', liveVerdict(false, 'statuses ["429"]') === 'skip');
+  check('a failing row whose detail names a 500 is a failure', liveVerdict(false, 'statuses ["500"]') === 'fail');
+  check('a passing row is a pass even when its detail names a 429', liveVerdict(true, 'statuses ["429","200"]') === 'pass');
+});
+
 group('fx-tui-live', async () => {
   const live = await liveRun(['the TUI on the live provider answers hi with a reply line below the typed hi']);
   if (!live) return;
@@ -744,7 +752,7 @@ group('fx-tui-live', async () => {
   });
   const gatewayStatuses = tui.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const gatewayErrors = tui.logs.filter((line) => line.includes(liveUrl) && /HTTP [45]\d\d|status of [45]\d\d/.test(line));
-  check('the TUI on the live provider answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true && gatewayErrors.length === 0, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
+  liveCheck('the TUI on the live provider answers hi with a reply line below the typed hi', surfaces.inputReady === true && surfaces.reply === true && gatewayErrors.length === 0, `input ${surfaces.inputReady}, reply ${surfaces.reply}, gateway ${JSON.stringify(gatewayStatuses)}, gateway errors ${JSON.stringify(gatewayErrors.slice(0, 2))}, screen ${String(surfaces.screen ?? '').split('\\n').filter((line) => line.trim()).slice(-6).join(' / ').slice(0, 400)}`);
 });
 
 group('fx-approval', async () => {
@@ -814,8 +822,8 @@ group('fx-provider', async () => {
   });
   const statuses = ask.logs.filter((line) => line.startsWith('worker net-response ') && line.split(' ')[5] === liveUrl).map((line) => line.split(' ')[4]);
   const errors = ask.logs.filter((line) => /HTTP [45]\d\d|status of [45]\d\d|400 \(|500 \(/.test(line));
-  check('fx ask on the live provider prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
-  check('the live chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
+  liveCheck('fx ask on the live provider prints ok with rc 0', /^ok$/m.test(ask.out) && /^rc=0$/m.test(ask.out), JSON.stringify({ screen: ask.out.slice(-200), statuses }));
+  liveCheck('the live chat request returns 200 and the page logs no HTTP error', statuses.length > 0 && statuses.every((status) => status === '200') && errors.length === 0, JSON.stringify({ statuses, errors: errors.slice(0, 3) }));
 });
 
 group('fx-ask', async () => {
