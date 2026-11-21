@@ -163,6 +163,29 @@ async function terminal(pairs, options = {}) {
   return runAt(url, { ...rest, label: pairs[0]?.[1]?.slice(0, 40) ?? 'interact' });
 }
 
+const freePort = () => new Promise((resolve) => {
+  const probe = createNetServer().listen(0, '127.0.0.1', () => {
+    const chosen = probe.address().port;
+    probe.close(() => resolve(chosen));
+  });
+});
+
+async function serveThenStop({ script, args, port, path = '/', signal = 'SIGTERM' }) {
+  const child = spawn(process.execPath, [join(root, script), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (chunk) => { out += chunk; });
+  child.stderr.on('data', (chunk) => { out += chunk; });
+  const exited = new Promise((resolve) => child.once('exit', (code, sig) => resolve({ code, signal: sig })));
+  let answer = { status: 'no answer', headers: null };
+  const deadline = Date.now() + 120000;
+  while (answer.status === 'no answer' && Date.now() < deadline) {
+    answer = await fetch(`http://127.0.0.1:${port}${path}`).then((res) => ({ status: 'HTTP ' + res.status, headers: res.headers }), () => ({ status: 'no answer', headers: null }));
+    if (answer.status === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  child.kill(signal);
+  return { answer, out, ended: await exited };
+}
+
 const loadAverage = () => Number(readFileSync('/proc/loadavg', 'utf8').split(' ')[0]);
 const within = (promise, ms, name) => {
   let timer;
@@ -496,27 +519,10 @@ group('the txiki shell touch -m and -a set the times that tjs.stat reports, from
 });
 
 group('thebird-web-host serve listens on the port it is given, answers the site, and exits on SIGTERM', async () => {
-  const port = await new Promise((resolve) => {
-    const probe = createNetServer().listen(0, '127.0.0.1', () => {
-      const chosen = probe.address().port;
-      probe.close(() => resolve(chosen));
-    });
-  });
-  const child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-  let out = '';
-  child.stdout.on('data', (chunk) => { out += chunk; });
-  child.stderr.on('data', (chunk) => { out += chunk; });
-  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
-  let answer = 'no answer';
-  const deadline = Date.now() + 90000;
-  while (answer === 'no answer' && Date.now() < deadline) {
-    answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => 'HTTP ' + res.status, () => 'no answer');
-    if (answer === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  child.kill('SIGTERM');
-  const ended = await exited;
-  check('thebird-web-host serve answers the site on the port it is given', answer === 'HTTP 200' && out.includes(String(port)), answer + ' ' + out.slice(0, 200));
-  check('thebird-web-host serve exits 0 on SIGTERM', ended.code === 0 && ended.signal === null, JSON.stringify(ended));
+  const port = await freePort();
+  const served = await serveThenStop({ script: 'bin/thebird-web-host.js', args: ['serve', '--port', String(port)], port });
+  check('thebird-web-host serve answers the site on the port it is given', served.answer.status === 'HTTP 200' && served.out.includes(String(port)), served.answer.status + ' ' + served.out.slice(0, 200));
+  check('thebird-web-host serve exits 0 on SIGTERM', served.ended.code === 0 && served.ended.signal === null, JSON.stringify(served.ended));
 });
 
 group('feature: a page command registers a feature, lists it and removes it by id', async () => {
@@ -549,27 +555,40 @@ group('thebird-webserver register scaffolds a server that list names, and unregi
 });
 
 group('thebird-relay starts on the port it is given, serves the terminal with its isolation headers, and exits 0 on SIGINT', async () => {
-  const port = await new Promise((resolve) => {
-    const probe = createNetServer().listen(0, '127.0.0.1', () => {
-      const chosen = probe.address().port;
-      probe.close(() => resolve(chosen));
-    });
-  });
-  const child = spawn(process.execPath, [join(root, 'bin', 'thebird-relay.js'), '--port', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-  let out = '';
-  child.stdout.on('data', (chunk) => { out += chunk; });
-  child.stderr.on('data', (chunk) => { out += chunk; });
-  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
-  let answer = { status: 'no answer', opener: null };
-  const deadline = Date.now() + 120000;
-  while (answer.status === 'no answer' && Date.now() < deadline) {
-    answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => ({ status: 'HTTP ' + res.status, opener: res.headers.get('cross-origin-opener-policy') }), () => ({ status: 'no answer', opener: null }));
-    if (answer.status === 'no answer') await new Promise((resolve) => setTimeout(resolve, 500));
+  const port = await freePort();
+  const served = await serveThenStop({ script: 'bin/thebird-relay.js', args: ['--port', String(port)], port, signal: 'SIGINT' });
+  check('thebird-relay answers the terminal on the port it is given, with the same-origin opener header', served.answer.status === 'HTTP 200' && served.answer.headers?.get('cross-origin-opener-policy') === 'same-origin' && served.out.includes(String(port)), JSON.stringify({ answer: served.answer.status, out: served.out.slice(0, 200) }));
+  check('thebird-relay exits 0 on SIGINT', served.ended.code === 0 && served.ended.signal === null, JSON.stringify(served.ended));
+});
+
+group('thebird-web-host start, status and stop run one managed server, and stop ends its pid', async () => {
+  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-host-life-')));
+  const port = await freePort();
+  const flags = ['--host', '127.0.0.1', '--port', String(port), '--root', pagesDir];
+  const cli = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 120000 });
+  const alive = (id) => {
+    if (!id) return false;
+    try { process.kill(id, 0); return true; } catch { return false; }
+  };
+  let pid = null;
+  try {
+    const started = cli('start', ...flags);
+    pid = Number(started.stdout.match(/pid: (\d+)/)?.[1] ?? 0) || null;
+    const answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => res.status, () => 'no answer');
+    const status = cli('status', ...flags);
+    const again = cli('start', ...flags);
+    const stopped = cli('stop', ...flags);
+    const after = cli('status', ...flags);
+    for (let i = 0; i < 50 && alive(pid); i++) await new Promise((resolve) => setTimeout(resolve, 100));
+    check('start prints the managed URL and pid, and the host answers 200', started.status === 0 && started.stdout.includes('listening on') && pid !== null && answer === 200, JSON.stringify({ rc: started.status, answer, out: started.stdout.slice(0, 200) }));
+    check('status reports the running pid', status.status === 0 && status.stdout.includes(`pid ${pid}`), status.stdout.trim());
+    check('a second start reports the running server and keeps its pid', again.status === 0 && again.stdout.includes('already running') && again.stdout.includes(`pid: ${pid}`), again.stdout.trim());
+    check('stop reports the pid it stopped', stopped.status === 0 && stopped.stdout.trim() === `stopped web host pid ${pid}`, stopped.stdout.trim());
+    check('status after stop reports stopped with exit 1', after.status === 1 && after.stdout.trim() === 'stopped', after.stdout.trim());
+    check('stop ends the process with that pid', pid !== null && !alive(pid), `pid ${pid}`);
+  } finally {
+    if (alive(pid)) process.kill(pid, 'SIGTERM');
   }
-  child.kill('SIGINT');
-  const ended = await exited;
-  check('thebird-relay answers the terminal on the port it is given, with the same-origin opener header', answer.status === 'HTTP 200' && answer.opener === 'same-origin' && out.includes(String(port)), JSON.stringify({ answer, out: out.slice(0, 200) }));
-  check('thebird-relay exits 0 on SIGINT', ended.code === 0 && ended.signal === null, JSON.stringify(ended));
 });
 
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
