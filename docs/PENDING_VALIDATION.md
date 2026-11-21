@@ -6654,3 +6654,17 @@ Other findings:
 ### test(scripts): host:serve is node scripts/serve-web-host.mjs, checked in the same table as the aliases
 - Witness: --check=scripts[name]. Green: totals: PASS 12 FAIL 0 SKIP 0 GROUPS 1 WALL 0.0s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs hostserveAlias: totals: PASS 11 FAIL 1 SKIP 0 GROUPS 1 WALL 0.0s, rc 1. Failing checks: ["FAIL npm run host:serve is node scripts/serve-web-host.mjs — node scripts/serve-web-host.mjs --no-isolation"]. Restored from git show HEAD, cmp ok.
+
+### Stretch 9 coverage: before and after (base 45a069d, HEAD of Phase A 33b6e63)
+
+- bashkit: npm view @everruns/bashkit-wasm versions at the start of this stretch lists 0.18.2 through 0.20.3, 0.21.0 and 0.21.1, and the latest is 0.21.1. Nothing newer than 0.21.1 exists. The release notes read earlier (0.21.0, 0.21.1) add neither a host uid, nor a dispatch for a user function named [, nor a $? path for custom builtins. Still blocked; nothing vendored.
+- 8793 gateway: still absent (hy4-relay chat-shim needs a tclaude upstream on 127.0.0.1:55112 or a hyperswarm peer; neither here). The three live rows stay explicit skips with that cause. No start script written.
+- Counts, name match over scripts/witness.mjs, scripts/witness-shell.mjs and test/ (the inventory is /tmp/k13/phaseD/inv.cjs):
+  - shell commands and bash builtins of the shell-core table: 53 of 53 before, 53 of 53 after. No new shell-builtin witness was added.
+  - page commands (BUILTIN_NAMES): 13 of 14 before, 14 of 14 after (feature).
+  - bin CLIs: 0 of 3 before, 3 of 3 after (thebird-web-host, thebird-webserver, thebird-relay).
+  - npm scripts (user-facing, 13): 2 of 13 before. After, all 13 have a witness: host:check, host:serve run their file; host:stop, host:status, host, webserver, webserver:register, webserver:list, webserver:status, craft, craft:ensure, craft:samples, craft:status are one-line equality checks in the table group. The inventory's name match reports 11 of 13 because it does not match names used as table keys or inside group titles; the table group is the witness for those.
+  - routes and pages: /__thebird/mcp (before: no witness names it) now witnessed by its own group; terminal.html (before: only the relay group's 200 check and the browser groups that load it) now witnessed by its own group; /__thebird/registry and /__thebird/events were already named.
+  - witness.mjs groups: 67 before, 79 after the terminal group.
+- Dedup: the relay group's "relay serves the browser terminal page" 200 check moved into the terminal.html group (the relay group keeps its header, asset and path checks). The freePort and serveThenStop helpers replace the copies in the serve and relay groups. host:serve and thebird-web-host serve both call startWebHost, but they are different entry points with their own argument parsing, so both stay.
+- Not witnessed by name: the routes /__thebird/progress, /__thebird/craft and /sites/<id>/settings are exercised only by scripts/check-web-host.mjs, which host:check runs; no separate witness names them.
