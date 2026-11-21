@@ -6626,3 +6626,7 @@ Other findings:
 ### test(host): scripts/serve-web-host.mjs serves its --root on its --port, names plain isolation under --no-isolation, and exits 0 on SIGTERM
 - Witness: --check=serve-web-host.mjs. Green: totals: PASS 2 FAIL 0 SKIP 0 GROUPS 1 WALL 65.7s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs hostserve: totals: PASS 1 FAIL 1 SKIP 0 GROUPS 1 WALL 74.9s, rc 1. Failing checks: ["FAIL serve-web-host answers the site on its --port and names its isolation as plain under --no-isolation — HTTP 200 thebird web host listening on http://127.0.0"]. Restored from git show HEAD, cmp ok.
+
+### test(host): npm run host:check passes every check of the canonical host on its own port
+- Witness: --check=host:check. Green: totals: PASS 2 FAIL 0 SKIP 0 GROUPS 1 WALL 82.9s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs hostcheck: totals: PASS 0 FAIL 2 SKIP 0 GROUPS 1 WALL 74.9s, rc 1. Failing checks: ["FAIL npm run host:check exits 0 — exit 1 ","FAIL npm run host:check reports RESULT with no failed check — RESULT PASS=76 FAIL=1"]. Restored from git show HEAD, cmp ok.

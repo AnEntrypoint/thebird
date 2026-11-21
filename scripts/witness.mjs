@@ -599,6 +599,16 @@ group('scripts/serve-web-host.mjs, which npm run host:serve runs, serves its --r
   check('serve-web-host exits 0 on SIGTERM', served.ended.code === 0 && served.ended.signal === null, JSON.stringify(served.ended));
 });
 
+group('npm run host:check passes every check of the canonical host on its own port', async () => {
+  const port = await freePort();
+  const run = spawnSync('npm', ['run', '-s', 'host:check'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 1500000, env: { ...process.env, THEBIRD_HOST_CHECK_PORT: String(port) } });
+  const out = run.stdout ?? '';
+  const summary = out.match(/RESULT PASS=(\d+) FAIL=(\d+)/);
+  const failLines = out.split('\n').filter((line) => line.startsWith('FAIL ')).length;
+  check('npm run host:check exits 0', run.status === 0, `exit ${run.status} ${run.error?.message ?? ''}`);
+  check('npm run host:check reports RESULT with no failed check', summary !== null && Number(summary[1]) > 0 && Number(summary[2]) === 0 && failLines === 0, summary ? summary[0] : 'no RESULT line');
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
