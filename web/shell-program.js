@@ -39,6 +39,9 @@ const host = {
     const info = __thebirdFs.stat(path);
     return info == null ? null : { dir: info.kind === 2, size: info.size, mode: info.mode & 0o7777, uid: info.uid, gid: info.gid };
   },
+  touch(path, access, modify) {
+    tjs.utime(path, access ? Infinity : NaN, modify ? Infinity : NaN);
+  },
   list: (path) => __thebirdFs.readdir(path) ?? [],
   lstat(path) {
     const info = __thebirdFs.lstat(path);

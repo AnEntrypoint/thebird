@@ -464,6 +464,37 @@ const startProviderStub = (status, body) => new Promise((resolve, reject) => {
     }),
   }));
 });
+group('the txiki shell touch -m and -a set the times that tjs.stat reports, from inside the engine', async () => {
+  let touchTimes = null;
+  await terminal([], {
+    interact: async ({ evaluate, waitFor }) => {
+      await evaluate(`(async () => {
+        const shell = await import(new URL('web/shell-in-txiki.js', location.href).href);
+        const engine = await import(new URL('web/txiki-in-page.js', location.href).href);
+        const stamp = async (path) => {
+          const out = await engine.runTjs("tjs.stat('" + path + "').then((s) => console.log('times', s.atim.getTime(), s.mtim.getTime()))", '/workspace');
+          const [, atime, mtime] = out.output.trim().split(' ');
+          return { atime: Number(atime), mtime: Number(mtime) };
+        };
+        const old = 1600000000000;
+        const result = { nowMs: Date.now() };
+        for (const flag of ['m', 'a']) {
+          const path = '/workspace/txtouch-' + flag;
+          await shell.runShellInTxiki('printf x > ' + path, { cwd: '/workspace' });
+          await engine.runTjs("tjs.utime('" + path + "', " + old + ', ' + old + ')', '/workspace');
+          const ran = await shell.runShellInTxiki('touch -' + flag + ' ' + path + '; echo rc=$?', { cwd: '/workspace' });
+          result[flag] = { rc: ran.stdout.trim(), ...(await stamp(path)) };
+        }
+        globalThis.__txTouch = JSON.stringify(result);
+      })()`);
+      await waitFor('globalThis.__txTouch !== undefined', 120000);
+      touchTimes = JSON.parse(await evaluate('globalThis.__txTouch'));
+    },
+  });
+  check('touch -m in the txiki shell moves the mtime to now and keeps the atime', touchTimes.m.rc === 'rc=0' && touchTimes.m.mtime >= touchTimes.nowMs - 60000 && touchTimes.m.atime === 1600000000000, JSON.stringify(touchTimes.m));
+  check('touch -a in the txiki shell moves the atime to now and keeps the mtime', touchTimes.a.rc === 'rc=0' && touchTimes.a.atime >= touchTimes.nowMs - 60000 && touchTimes.a.mtime === 1600000000000, JSON.stringify(touchTimes.a));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
