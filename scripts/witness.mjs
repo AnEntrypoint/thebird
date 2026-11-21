@@ -528,6 +528,26 @@ group('feature: a page command registers a feature, lists it and removes it by i
   check('feature remove takes the id out of its list', /^GONE-0$/m.test(feature.out), feature.out.slice(-300));
 });
 
+group('thebird-webserver register scaffolds a server that list names, and unregister --remove-folder takes it out again', async () => {
+  const id = 'cov-web-' + process.pid;
+  const cli = join(root, 'bin', 'thebird-webserver.js');
+  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' });
+  const idsIn = (result) => JSON.parse(result.stdout).map((server) => server.id);
+  let registered, listed, scaffold, removed, listedAfter, scaffoldAfter;
+  try {
+    registered = run('register', id, '--title', 'Coverage webserver');
+    listed = idsIn(run('list'));
+    scaffold = JSON.parse(run('scaffold-check', id).stdout);
+  } finally {
+    removed = run('unregister', id, '--remove-folder');
+  }
+  listedAfter = idsIn(run('list'));
+  scaffoldAfter = JSON.parse(run('scaffold-check', id).stdout);
+  check('thebird-webserver register exits 0, and list names the id it registered', registered.status === 0 && listed.includes(id), JSON.stringify({ status: registered.status, listed, stderr: registered.stderr.slice(0, 200) }));
+  check('thebird-webserver scaffold-check finds the files that register wrote', scaffold.ok === true, JSON.stringify(scaffold));
+  check('thebird-webserver unregister --remove-folder drops the id from list and removes its scaffold', removed.status === 0 && !listedAfter.includes(id) && scaffoldAfter.ok === false, JSON.stringify({ listedAfter, scaffoldAfter }));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
