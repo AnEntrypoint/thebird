@@ -361,8 +361,7 @@ group('fx-tui', async () => {
   const tui = {};
   await terminal([], {
     timeoutMs: COLD_START_MS,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const read = async (name) => {
         tui[name] = { text: await evaluate(TUI_SCREEN), state: JSON.parse(await evaluate(TUI_STATE)), title: JSON.parse(await evaluate(TUI_TITLE)) };
       };
@@ -484,8 +483,7 @@ group('fx-tui-registry', async () => {
     await terminal([], {
       timeoutMs: COLD_START_MS,
       initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'relay-model', gatewayChatUrl: stub.url })};`,
-      interact: async ({ type, press, evaluate, waitFor }) => {
-        const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+      interact: async ({ type, press, evaluate, waitFor, settle }) => {
         await type('fx');
         await press('Enter');
         surfaces.inputReady = await settle(`globalThis.thebird.text().includes('┃')`, 120000);
@@ -771,8 +769,7 @@ group('fx-tui-live', async () => {
   const tui = await terminal([], {
     timeoutMs: COLD_START_MS,
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: liveModel, gatewayChatUrl: liveUrl })};`,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
       await type('fx');
       await press('Enter');
       surfaces.inputReady = await settle(`globalThis.thebird.text().includes('┃')`, 120000);
@@ -794,8 +791,7 @@ group('fx-approval', async () => {
   await terminal([], {
     timeoutMs: COLD_START_MS,
     initScript: stubInit,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const linesOf = `globalThis.thebird.text().split('\\n')`;
       const hasText = (text) => `${linesOf}.some((line) => line.includes(${JSON.stringify(text)}))`;
       const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
@@ -820,8 +816,7 @@ group('fx-approval', async () => {
   await terminal([], {
     timeoutMs: COLD_START_MS,
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url })};`,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
       const submit = async (text) => { await type(text); await press('Enter'); };
       await type('fx');
@@ -865,8 +860,7 @@ group('fx-ask', async () => {
   await terminal([], {
     timeoutMs: COLD_START_MS,
     initScript: stubInit,
-    interact: async ({ type, press, evaluate, waitFor }) => {
-      const settle = (expression, ms = 60000) => waitFor(expression, ms).then(() => true, () => false);
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
       const grab = async (name) => { surfaces[name] = await evaluate(TUI_SCREEN); };
       const submit = async (text) => { await type(text); await press('Enter'); };

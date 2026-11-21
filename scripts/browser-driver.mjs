@@ -294,5 +294,6 @@ function driverFor({ evaluate, press, type, note, pause, limit }) {
       await pause();
     }
   };
-  return { evaluate, waitFor, press, type, note, pause };
+  const settle = (expression, wait = 60000) => waitFor(expression, wait).then(() => true, () => false);
+  return { evaluate, waitFor, settle, press, type, note, pause };
 }
