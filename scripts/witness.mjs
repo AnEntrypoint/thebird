@@ -178,6 +178,19 @@ const freePort = () => new Promise((resolve) => {
   });
 });
 
+const spawnedPids = new Set();
+const trackPid = (pid) => { spawnedPids.add(pid); return pid; };
+const alive = (pid) => {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+};
+async function stopPid(pid) {
+  if (!alive(pid)) return;
+  process.kill(pid, 'SIGTERM');
+  for (let i = 0; i < 50 && alive(pid); i++) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (alive(pid)) process.kill(pid, 'SIGKILL');
+}
+
 const binRunner = (name) => (...args) => spawnSync(process.execPath, [join(root, 'bin', name + '.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 300000 });
 const webserverCli = binRunner('thebird-webserver');
 const webhostCli = binRunner('thebird-web-host');
@@ -195,6 +208,7 @@ async function pollAnswer(url, everyMs = 500) {
 
 async function serveThenStop({ script, args, port, path = '/', signal = 'SIGTERM' }) {
   const child = spawn(process.execPath, [join(root, script), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  trackPid(child.pid);
   let out = '';
   child.stdout.on('data', (chunk) => { out += chunk; });
   child.stderr.on('data', (chunk) => { out += chunk; });
@@ -584,14 +598,10 @@ group('thebird-web-host start, status and stop run one managed server, and stop 
   const port = await freePort();
   const flags = ['--host', '127.0.0.1', '--port', String(port), '--root', pagesDir];
   const cli = webhostCli;
-  const alive = (id) => {
-    if (!id) return false;
-    try { process.kill(id, 0); return true; } catch { return false; }
-  };
   let pid = null;
   try {
     const started = cli('start', ...flags);
-    pid = Number(started.stdout.match(/pid: (\d+)/)?.[1] ?? 0) || null;
+    pid = trackPid(Number(started.stdout.match(/pid: (\d+)/)?.[1] ?? 0) || null);
     const answer = await fetch(`http://127.0.0.1:${port}/`).then((res) => res.status, () => 'no answer');
     const status = cli('status', ...flags);
     const again = cli('start', ...flags);
@@ -605,7 +615,7 @@ group('thebird-web-host start, status and stop run one managed server, and stop 
     check('status after stop reports stopped with exit 1', after.status === 1 && after.stdout.trim() === 'stopped', after.stdout.trim());
     check('stop ends the process with that pid', pid !== null && !alive(pid), `pid ${pid}`);
   } finally {
-    if (alive(pid)) process.kill(pid, 'SIGTERM');
+    await stopPid(pid);
   }
 });
 
@@ -672,6 +682,7 @@ group('/__thebird/mcp lists the registered webservers, describes one, answers it
   try {
     webserver('register', id, '--title', 'MCP coverage');
     child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port), '--root', pagesDir], { cwd: root, stdio: 'ignore' });
+    trackPid(child.pid);
     const up = (await pollAnswer(base + '/', 200)).status === 'HTTP 200';
     const list = await call('/__thebird/mcp');
     const descriptor = await call('/__thebird/mcp/' + id);
@@ -682,7 +693,7 @@ group('/__thebird/mcp lists the registered webservers, describes one, answers it
     check('POST /__thebird/mcp/<id> with method ping answers ok with pong', ping.status === 200 && ping.body?.ok === true && ping.body?.result === 'pong', JSON.stringify(ping));
     check('POST /__thebird/mcp/<id> for an unregistered id answers 404', unknown.status === 404, String(unknown.status));
   } finally {
-    if (child) child.kill('SIGTERM');
+    if (child) await stopPid(child.pid);
     webserver('unregister', id, '--remove-folder');
   }
 });
@@ -2242,6 +2253,10 @@ await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () 
     outcomes.push(await (entry.heavy ? runHeavy(entry) : runGroup(entry)));
   }
 }));
+const leaked = [...spawnedPids].filter(alive);
+for (const pid of leaked) console.log('FAIL server pid ' + pid + ' was left running');
+outcomes.push({ name: 'servers started by the checks', seconds: 0, results: leaked.length ? leaked.map((pid) => ({ name: 'server pid ' + pid + ' was left running', ok: false })) : [{ name: 'every server the checks started has stopped', ok: true }] });
+for (const pid of leaked) process.kill(pid, 'SIGKILL');
 const failures = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok === false).length;
 const skipped = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.skipped === true).length;
 const passed = outcomes.flatMap((outcome) => outcome.results).filter((result) => result.ok === true).length;
@@ -2254,4 +2269,5 @@ console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 await (await sharedBrowserStart)?.close();
 for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
 rmSync(sharedProfile, { recursive: true, force: true });
+if (services.has('pages')) rmSync(await services.get('pages'), { recursive: true, force: true });
 process.exit(failures ? 1 : 0);
