@@ -6630,3 +6630,7 @@ Other findings:
 ### test(host): npm run host:check passes every check of the canonical host on its own port
 - Witness: --check=host:check. Green: totals: PASS 2 FAIL 0 SKIP 0 GROUPS 1 WALL 82.9s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs hostcheck: totals: PASS 0 FAIL 2 SKIP 0 GROUPS 1 WALL 74.9s, rc 1. Failing checks: ["FAIL npm run host:check exits 0 — exit 1 ","FAIL npm run host:check reports RESULT with no failed check — RESULT PASS=76 FAIL=1"]. Restored from git show HEAD, cmp ok.
+
+### test(scripts): the npm scripts that alias one bin action run exactly that action
+- Witness: --check=craft:samples. Green: totals: PASS 11 FAIL 0 SKIP 0 GROUPS 1 WALL 0.0s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs aliases: totals: PASS 10 FAIL 1 SKIP 0 GROUPS 1 WALL 0.0s, rc 1. Failing checks: ["FAIL npm run host:status is node bin/thebird-web-host.js status — node bin/thebird-web-host.js stat"]. Restored from git show HEAD, cmp ok.

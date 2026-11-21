@@ -609,6 +609,24 @@ group('npm run host:check passes every check of the canonical host on its own po
   check('npm run host:check reports RESULT with no failed check', summary !== null && Number(summary[1]) > 0 && Number(summary[2]) === 0 && failLines === 0, summary ? summary[0] : 'no RESULT line');
 });
 
+group('npm scripts that alias one bin action run exactly that action', async () => {
+  const scripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts;
+  const expected = {
+    host: 'node bin/thebird-web-host.js start',
+    'host:stop': 'node bin/thebird-web-host.js stop',
+    'host:status': 'node bin/thebird-web-host.js status',
+    webserver: 'node bin/thebird-webserver.js',
+    'webserver:register': 'node bin/thebird-webserver.js register',
+    'webserver:list': 'node bin/thebird-webserver.js list',
+    'webserver:status': 'node bin/thebird-webserver.js status',
+    craft: 'node bin/thebird-craft.js',
+    'craft:ensure': 'node bin/thebird-craft.js ensure',
+    'craft:samples': 'node bin/thebird-craft.js sample',
+    'craft:status': 'node bin/thebird-craft.js status',
+  };
+  for (const [name, command] of Object.entries(expected)) check('npm run ' + name + ' is ' + command, scripts[name] === command, String(scripts[name]));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
