@@ -178,6 +178,11 @@ const freePort = () => new Promise((resolve) => {
   });
 });
 
+const binRunner = (name) => (...args) => spawnSync(process.execPath, [join(root, 'bin', name + '.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 300000 });
+const webserverCli = binRunner('thebird-webserver');
+const webhostCli = binRunner('thebird-web-host');
+const craftCli = binRunner('thebird-craft');
+
 async function serveThenStop({ script, args, port, path = '/', signal = 'SIGTERM' }) {
   const child = spawn(process.execPath, [join(root, script), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
@@ -543,8 +548,7 @@ group('feature: a page command registers a feature, lists it and removes it by i
 
 group('thebird-webserver register scaffolds a server that list names, and unregister --remove-folder takes it out again', async () => {
   const id = 'cov-web-' + process.pid;
-  const cli = join(root, 'bin', 'thebird-webserver.js');
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' });
+  const run = webserverCli;
   const idsIn = (result) => JSON.parse(result.stdout).map((server) => server.id);
   let registered, listed, scaffold, removed, listedAfter, scaffoldAfter, statusIds;
   try {
@@ -574,7 +578,7 @@ group('thebird-web-host start, status and stop run one managed server, and stop 
   const pagesDir = await sharedPages();
   const port = await freePort();
   const flags = ['--host', '127.0.0.1', '--port', String(port), '--root', pagesDir];
-  const cli = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 120000 });
+  const cli = webhostCli;
   const alive = (id) => {
     if (!id) return false;
     try { process.kill(id, 0); return true; } catch { return false; }
@@ -638,7 +642,7 @@ group('npm scripts run exactly the command their table names', async () => {
 });
 
 group('thebird-craft ensure, sample and status print the JSON their npm scripts promise', async () => {
-  const craft = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-craft.js'), ...args], { cwd: root, encoding: 'utf8', timeout: 300000 });
+  const craft = craftCli;
   const apps = ['gridcraft', 'wordcraft', 'pdfcraft'];
   const ensure = craft('ensure');
   const ensured = JSON.parse(ensure.stdout || 'null');
@@ -656,7 +660,7 @@ group('/__thebird/mcp lists the registered webservers, describes one, answers it
   const port = await freePort();
   const id = 'cov-mcp-' + process.pid;
   const base = `http://127.0.0.1:${port}`;
-  const webserver = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-webserver.js'), ...args], { cwd: root, encoding: 'utf8' });
+  const webserver = webserverCli;
   const call = (path, init) => fetch(base + path, init).then(async (res) => ({ status: res.status, body: await res.json().catch(() => null) }), () => ({ status: 0, body: null }));
   const post = (path, method) => call(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method }) });
   let child = null;
