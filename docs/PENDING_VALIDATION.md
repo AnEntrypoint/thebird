@@ -6642,3 +6642,7 @@ Other findings:
 ### test(files): thebird-webserver status names the server that register wrote, and statusServers without it fails
 - Witness: --check=statusIds. Green: totals: PASS 4 FAIL 0 SKIP 0 GROUPS 1 WALL 0.2s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs webstatus: totals: PASS 3 FAIL 1 SKIP 0 GROUPS 1 WALL 0.3s, rc 1. Failing checks: ["FAIL thebird-webserver status names the server that register wrote — []"]. Restored from git show HEAD, cmp ok.
+
+### test(page): /__thebird/mcp lists the registered webservers, describes one, answers its ping, and refuses an unregistered id
+- Witness: --check=__thebird/mcp. Green: totals: PASS 4 FAIL 0 SKIP 0 GROUPS 1 WALL 75.5s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs mcp: totals: PASS 3 FAIL 1 SKIP 0 GROUPS 1 WALL 70.4s, rc 1. Failing checks: ["FAIL POST /__thebird/mcp/<id> with method ping answers ok with pong — {\"status\":200,\"body\":{\"ok\":true,\"result\":\"pung\"}}"]. Restored from git show HEAD, cmp ok.

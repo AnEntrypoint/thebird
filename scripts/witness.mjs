@@ -643,6 +643,37 @@ group('thebird-craft ensure, sample and status print the JSON their npm scripts 
   check('craft status exits 0 and lists the three craft apps', status.status === 0 && Array.isArray(listed) && apps.every((id) => listed.some((app) => app.id === id)), status.stdout.slice(0, 200));
 });
 
+group('/__thebird/mcp lists the registered webservers, describes one, answers its ping over POST, and refuses an unregistered id', async () => {
+  const pagesDir = await buildPages(mkdtempSync(join(tmpdir(), 'thebird-mcp-')));
+  const port = await freePort();
+  const id = 'cov-mcp-' + process.pid;
+  const base = `http://127.0.0.1:${port}`;
+  const webserver = (...args) => spawnSync(process.execPath, [join(root, 'bin', 'thebird-webserver.js'), ...args], { cwd: root, encoding: 'utf8' });
+  const call = (path, init) => fetch(base + path, init).then(async (res) => ({ status: res.status, body: await res.json().catch(() => null) }), () => ({ status: 0, body: null }));
+  const post = (path, method) => call(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method }) });
+  let child = null;
+  try {
+    webserver('register', id, '--title', 'MCP coverage');
+    child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port), '--root', pagesDir], { cwd: root, stdio: 'ignore' });
+    let up = false;
+    for (let i = 0; i < 600 && !up; i++) {
+      up = await fetch(base + '/').then((res) => res.status === 200, () => false);
+      if (!up) await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    const list = await call('/__thebird/mcp');
+    const descriptor = await call('/__thebird/mcp/' + id);
+    const ping = await post('/__thebird/mcp/' + id, 'ping');
+    const unknown = await post('/__thebird/mcp/' + id + '-missing', 'ping');
+    check('/__thebird/mcp lists the endpoint of the registered webserver', up && list.status === 200 && list.body?.endpoints?.includes('/__thebird/mcp/' + id), JSON.stringify(list));
+    check('/__thebird/mcp/<id> describes a ping tool at its own endpoint', descriptor.status === 200 && descriptor.body?.endpoint === '/__thebird/mcp/' + id && descriptor.body?.tools?.some((tool) => tool.name === 'ping') === true, JSON.stringify(descriptor.body).slice(0, 160));
+    check('POST /__thebird/mcp/<id> with method ping answers ok with pong', ping.status === 200 && ping.body?.ok === true && ping.body?.result === 'pong', JSON.stringify(ping));
+    check('POST /__thebird/mcp/<id> for an unregistered id answers 404', unknown.status === 404, String(unknown.status));
+  } finally {
+    if (child) child.kill('SIGTERM');
+    webserver('unregister', id, '--remove-folder');
+  }
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
