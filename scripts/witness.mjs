@@ -79,14 +79,15 @@ const listening = (port) => new Promise((resolve) => {
   socket.once('error', () => resolve(false));
 });
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_MODEL = 'anthropic/claude-haiku-5.5';
+const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+const freeModels = () => fetch(OPENROUTER_MODELS_URL, { signal: AbortSignal.timeout(30000) }).then((res) => res.json()).then((body) => body.data.map((model) => model.id).filter((id) => id.endsWith(':free'))).catch(() => []);
 const LIVE_UNAVAILABLE = 'needs a live provider: OPENROUTER_KEY is unset, and nothing listens on 127.0.0.1:8793 (the repo does not start that gateway)';
 const liveProvider = async () => {
   const openrouterKey = process.env.OPENROUTER_KEY ?? dotenvValue('OPENROUTER_KEY');
-  if (openrouterKey) return { url: OPENROUTER_URL, key: openrouterKey, model: OPENROUTER_MODEL };
+  if (openrouterKey) return { url: OPENROUTER_URL, key: openrouterKey, models: await freeModels() };
   if (!(await listening(8793))) return null;
   const key = process.env.THEBIRD_LIVE_FX_KEY ?? JSON.parse(readFileSync('/config/.fx/settings.json', 'utf8')).providers?.gy4?.auth?.key;
-  return { url: 'http://127.0.0.1:8793/v1/chat/completions', key, model: 'claude-hy4[1m]' };
+  return { url: 'http://127.0.0.1:8793/v1/chat/completions', key, models: ['claude-hy4[1m]'] };
 };
 const skip = (name, reason) => {
   current().results.push({ name, ok: null, skipped: true });
@@ -94,16 +95,21 @@ const skip = (name, reason) => {
 };
 const skipLive = (names, reason) => names.map((name) => skip(name, reason));
 const providerVerdict = async (live) => {
-  let res;
-  try {
-    res = await fetch(live.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + live.key }, body: JSON.stringify({ model: live.model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1 }), signal: AbortSignal.timeout(30000) });
-  } catch (error) {
-    return { verdict: 'fail', detail: 'no answer from ' + live.url + ' (' + error.name + ')' };
+  if (live.models.length === 0) return { verdict: 'skip', detail: 'no free OpenRouter model is listed' };
+  for (const model of live.models) {
+    let res;
+    try {
+      res = await fetch(live.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + live.key }, body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1 }), signal: AbortSignal.timeout(30000) });
+    } catch (error) {
+      return { verdict: 'fail', detail: 'no answer from ' + live.url + ' (' + error.name + ')' };
+    }
+    if (res.status === 429) continue;
+    const body = await res.json().catch(() => null);
+    if (res.ok && body?.choices?.length) return { verdict: 'ok', detail: '', model };
+    if (res.status === 403 && body?.error?.metadata?.scope === 'key_limit') return { verdict: 'skip', detail: 'OpenRouter key has a $' + body.error.metadata.limit_usd + ' limit (HTTP 403 key_limit)' };
+    return { verdict: 'fail', detail: 'HTTP ' + res.status + ' ' + (body?.error?.metadata?.scope ?? 'body not as expected') };
   }
-  const body = await res.json().catch(() => null);
-  if (res.ok && body?.choices?.length) return { verdict: 'ok', detail: '' };
-  if (res.status === 403 && body?.error?.metadata?.scope === 'key_limit') return { verdict: 'skip', detail: 'OpenRouter key has a $' + body.error.metadata.limit_usd + ' limit (HTTP 403 key_limit)' };
-  return { verdict: 'fail', detail: 'HTTP ' + res.status + ' ' + (body?.error?.metadata?.scope ?? 'body not as expected') };
+  return { verdict: 'skip', detail: 'every free model is rate limited (HTTP 429 from ' + live.models.length + ' of ' + live.models.length + ')' };
 };
 const liveRun = async (names) => {
   const live = await liveProvider();
@@ -120,7 +126,7 @@ const liveRun = async (names) => {
     for (const name of names) check(name, false, verdict.detail);
     return null;
   }
-  return live;
+  return { ...live, model: verdict.model };
 };
 const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
 const DEFAULT_CONTEXT_GROUPS = new Set(['pip']);
@@ -701,6 +707,7 @@ group('provider verdict: a 403 key_limit is a skip, and any other failure is a f
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
     ['403 with another code', 403, { error: { code: 403, metadata: { scope: 'model_access' } } }, 'fail'],
+    ['429 from every model', 429, { error: { code: 429 } }, 'skip'],
     ['500', 500, { error: { code: 500, message: 'upstream' } }, 'fail'],
     ['200 with a wrong body', 200, { unexpected: true }, 'fail'],
     ['200 with a chat body', 200, { choices: [{ message: { role: 'assistant', content: 'ok' } }] }, 'ok'],
@@ -708,7 +715,7 @@ group('provider verdict: a 403 key_limit is a skip, and any other failure is a f
   for (const [label, status, body, expected] of cases) {
     const stub = await startProviderStub(status, body);
     try {
-      const verdict = await providerVerdict({ url: stub.url, key: 'stub-key', model: 'stub-model' });
+      const verdict = await providerVerdict({ url: stub.url, key: 'stub-key', models: ['stub-model-a', 'stub-model-b'] });
       check(label + ' gives the ' + expected + ' verdict', verdict.verdict === expected, JSON.stringify({ pid: stub.pid, ...verdict }));
     } finally {
       await stub.stop();
