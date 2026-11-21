@@ -360,7 +360,6 @@ group('fx-builtin', async () => {
 group('fx-tui', async () => {
   const tui = {};
   await terminal([], {
-    timeoutMs: COLD_START_MS,
     interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const read = async (name) => {
         tui[name] = { text: await evaluate(TUI_SCREEN), state: JSON.parse(await evaluate(TUI_STATE)), title: JSON.parse(await evaluate(TUI_TITLE)) };
@@ -421,7 +420,6 @@ group('fx-tool-bridge', async () => {
   const bridge = {};
   try {
     await terminal([], {
-      timeoutMs: COLD_START_MS,
       initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`,
       interact: async ({ type, press, evaluate, waitFor }) => {
         await type('fx');
@@ -442,7 +440,6 @@ group('fx-tool-bridge', async () => {
 group('fx-graphemes', async () => {
   const graphemes = {};
   await terminal([], {
-    timeoutMs: COLD_START_MS,
     interact: async ({ type, press, evaluate, waitFor }) => {
       await type('fx');
       await press('Enter');
@@ -481,7 +478,6 @@ group('fx-tui-registry', async () => {
   const surfaces = {};
   try {
     await terminal([], {
-      timeoutMs: COLD_START_MS,
       initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'relay-model', gatewayChatUrl: stub.url })};`,
       interact: async ({ type, press, evaluate, waitFor, settle }) => {
         await type('fx');
@@ -767,7 +763,6 @@ group('fx-tui-live', async () => {
   const { url: liveUrl, key: liveKey, model: liveModel } = live;
   const surfaces = {};
   const tui = await terminal([], {
-    timeoutMs: COLD_START_MS,
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: liveKey, model: liveModel, gatewayChatUrl: liveUrl })};`,
     interact: async ({ type, press, evaluate, waitFor, settle }) => {
       await type('fx');
@@ -789,7 +784,6 @@ group('fx-approval', async () => {
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
   const surfaces = {};
   await terminal([], {
-    timeoutMs: COLD_START_MS,
     initScript: stubInit,
     interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const linesOf = `globalThis.thebird.text().split('\\n')`;
@@ -814,7 +808,6 @@ group('fx-approval', async () => {
     },
   });
   await terminal([], {
-    timeoutMs: COLD_START_MS,
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url })};`,
     interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
@@ -858,7 +851,6 @@ group('fx-ask', async () => {
   const stubInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: stubTui.url, permissionMode: 'ask' })};`;
   const surfaces = {};
   await terminal([], {
-    timeoutMs: COLD_START_MS,
     initScript: stubInit,
     interact: async ({ type, press, evaluate, waitFor, settle }) => {
       const hasText = (text) => `globalThis.thebird.text().split('\\n').some((line) => line.includes(${JSON.stringify(text)}))`;
@@ -912,7 +904,7 @@ const SITE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'te
   const pagesUrl = `http://127.0.0.1:${pagesServer.address().port}/thebird/`;
   const pagesResponse = await fetch(pagesUrl);
   const siteUrl = pagesUrl + '?' + new URLSearchParams([['run', 'echo pages-ok'], ['run', 'python3 -c "print(6*7)"'], ['run', 'qjs -e "console.log(1)"'], ['run', 'fx --version'], ['run', 'fx check'], ['run', 'which fx'], ['run', 'type -t fx'], ['run', 'which gm'], ['run', 'type -t gm'], ['run', `gm stdio '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_code","arguments":{"body":"return 6*7;"}}}'`], ['run', `gm stdio '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"finish","arguments":{"witness":"browser hub check"}}}'`]]).toString();
-  const site = await runAt(siteUrl, { timeoutMs: COLD_START_MS });
+  const site = await runAt(siteUrl);
   pagesServer.close();
   const quickjsArtifactGone = !existsSync(join(pagesDir, 'web', 'vendor', 'quickjs'));
   const fxArtifact = join(pagesDir, 'web', 'vendor', 'fx', 'fx-core.wasm');
@@ -1814,10 +1806,9 @@ async function servePages({ manifestFailures = 0 } = {}) {
 group('site-manifest-retry', async () => {
   const pages = await servePages({ manifestFailures: 2 });
   try {
-    await runAt(pages.url, { timeoutMs: COLD_START_MS, label: 'site-manifest-retry first' });
+    await runAt(pages.url, { label: 'site-manifest-retry first' });
     let controlled = false;
     const second = await runAt(pages.url, {
-      timeoutMs: COLD_START_MS,
       label: 'site-manifest-retry second',
       interact: async ({ evaluate }) => {
         controlled = await evaluate('Boolean(navigator.serviceWorker.controller)');
@@ -1834,10 +1825,9 @@ group('site-package', async () => {
   const pages = await servePages();
   try {
     check('the built site carries the Brotli package and the root worker stub', existsSync(join(pages.dir, 'thebird-package.tar.br')) && existsSync(join(pages.dir, 'sw.js')));
-    await runAt(pages.url, { timeoutMs: COLD_START_MS, label: 'site-package first' });
+    await runAt(pages.url, { label: 'site-package first' });
     let controlled = false;
     const second = await runAt(pages.url, {
-      timeoutMs: COLD_START_MS,
       label: 'site-package second',
       interact: async ({ evaluate }) => {
         controlled = await evaluate('Boolean(navigator.serviceWorker.controller)');
