@@ -610,10 +610,11 @@ group('npm run host:check passes every check of the canonical host on its own po
   check('npm run host:check reports RESULT with no failed check', summary !== null && Number(summary[1]) > 0 && Number(summary[2]) === 0 && failLines === 0, summary ? summary[0] : 'no RESULT line');
 });
 
-group('npm scripts that alias one bin action run exactly that action', async () => {
+group('npm scripts run exactly the command their table names', async () => {
   const scripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts;
   const expected = {
     host: 'node bin/thebird-web-host.js start',
+    'host:serve': 'node scripts/serve-web-host.mjs',
     'host:stop': 'node bin/thebird-web-host.js stop',
     'host:status': 'node bin/thebird-web-host.js status',
     webserver: 'node bin/thebird-webserver.js',

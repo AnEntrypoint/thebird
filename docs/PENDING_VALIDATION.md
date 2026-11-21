@@ -6650,3 +6650,7 @@ Other findings:
 ### test(page): terminal.html loads, draws its terminal and panes, and runs a line typed into it; the relay's 200 check now lives here
 - Witness: --check=terminal.html. Green: totals: PASS 3 FAIL 0 SKIP 0 GROUPS 1 WALL 3.9s, rc 0.
 - Red, mutation /tmp/k13/phaseE/sub.cjs terminal: totals: PASS 0 FAIL 1 SKIP 0 GROUPS 1 WALL 180.4s, rc 1. Failing checks: ["FAIL terminal.html loads, draws its terminal and panes, and runs a line typed into it raised an error: terminal did not finish: http://127.0.0.1:40909/?run=true"]. Restored from git show HEAD, cmp ok.
+
+### test(scripts): host:serve is node scripts/serve-web-host.mjs, checked in the same table as the aliases
+- Witness: --check=scripts[name]. Green: totals: PASS 12 FAIL 0 SKIP 0 GROUPS 1 WALL 0.0s, rc 0.
+- Red, mutation /tmp/k13/phaseE/sub.cjs hostserveAlias: totals: PASS 11 FAIL 1 SKIP 0 GROUPS 1 WALL 0.0s, rc 1. Failing checks: ["FAIL npm run host:serve is node scripts/serve-web-host.mjs — node scripts/serve-web-host.mjs --no-isolation"]. Restored from git show HEAD, cmp ok.
