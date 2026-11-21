@@ -6560,3 +6560,20 @@ Other findings:
 - Red R3, the live red (unchanged in purpose): OPENROUTER_URL is pointed at a dead port. Expected: the probe fails, so the live rows FAIL, RC 1 with --check=liveRun. Restore, cmp, git status.
 - Skip witness: OPENROUTER_KEY= node scripts/witness.mjs --check=liveRun, expected PASS 0 FAIL 0 SKIP 3, RC 0 (no live provider is configured, so the rows skip with the no-provider reason).
 - Open row, the live rows: with the key in .env at $0 limit, the full suite skips the three live rows with the key_limit reason. They are not counted as passing. What would settle it: a funded OpenRouter key in .env (the owner holds one; recorded as a credential, not waited on). After that, the three rows run and must pass.
+
+### Phase B (window 7, HEAD 1d99911, run through gate-ticket, logs /tmp/k13/phaseC/win/readings.txt): every run passed
+
+- Ticket: node /workspace/hyperagent/scripts/gate-ticket.cjs run thebird -- /tmp/k13/phaseC/window.sh, granted at 03:53, the gate-ticket process (PID 1415607) exited when the window ended. Each step also waited for its own GATE_CLEAR (vmstat 1 2 both samples and heavy-jobs logged in readings.txt).
+- Full browser suite (timeout 3600): totals PASS 239 FAIL 0 SKIP 3 GROUPS 67, RC 0. The three SKIPs are the live rows, each with the reason "OpenRouter key has a $0 limit (HTTP 403 key_limit)": the TUI row, fx ask on the live provider, and the live chat request returns 200. They are not counted as passing. The funded key is the settling item.
+- Provider verdict witness (the rule group, --check=providerVerdict, stub servers started and stopped by PID): PASS 5 FAIL 0 SKIP 0, RC 0. The cases: 403 key_limit gives skip; 403 model_access gives fail; 500 gives fail; 200 with a wrong body gives fail; 200 with a chat body gives ok.
+- Skip witness (OPENROUTER_KEY= node scripts/witness.mjs --check=liveRun): totals PASS 0 FAIL 0 SKIP 3, RC 0.
+- Red R1, the rule ignores the scope (red-rule.cjs code): RC 1. Its FAIL lines show the 403 model_access case reports skip, the rule breaks as expected. Restored, cmp ok.
+- Red R2, 500 becomes skip (red-rule.cjs status500): RC 1. Its FAIL lines include 500 and the 200 wrong-body case reporting skip. Restored, cmp ok.
+- Red R3, the live red (OPENROUTER_URL to a dead port, --check=liveRun): RC 1, all three rows FAIL with no answer from the port. Restored, cmp ok.
+- touch-red RC 1, utime-red RC 1, each restored with cmp ok.
+- W1 npm run witness:shell: RESULT PASS=1964 FAIL=0, RC 0. W2 to W9: RC 0 each.
+- The 21 node reds (menuPitch, menuTab, perm, noteRead, rematch, stray, leftover, lstatGuard, modeOf, arrayAssign, negative, fieldStart, keys, slice, atParam, owner, fnArray, arrayPrefix, prefixKeep, sliceEmpty, touchTicks): each RC 1, each restored with cmp ok.
+- Stub processes started by the rule witness: none left (pgrep showed no createServer child after the window).
+- The OpenRouter key does not appear in any window log (occurrence count 0). It was not printed.
+- Known small defect, not fixed in this window: if a real 403 key_limit body lacked limit_usd, the reason would read "$undefined limit". OpenRouter's body includes limit_usd (probed: 0), and the mutant in R1 exposed the defect with a body without it. Recorded as an open cosmetic item.
+- Push: see the push output recorded with this commit's report.
