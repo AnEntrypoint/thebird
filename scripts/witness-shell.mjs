@@ -107,6 +107,11 @@ async function run(sh, script, options) {
   return sh.run(script, options);
 }
 
+async function printsAsBash(title, script, stdout, stderr) {
+  const r = await run(await shell({}), script);
+  check(title, r.stdout === stdout && r.stderr === stderr, JSON.stringify([r.stdout, r.stderr]));
+}
+
 async function matchesBash(label, rows, { syntaxErrorsByParse = false } = {}) {
   for (const [script, stdout, stderr, status] of rows) {
     if (syntaxErrorsByParse && status === 2) {
@@ -1428,183 +1433,111 @@ group("stat -c: a dot-dot after a symbolic link names the physical directory, as
 });
 
 group("stat -L: a symbolic link operand is followed to its target, and a dangling or blocked target is refused, as GNU stat does on Linux", async () => {
-  const gr0 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" lk; echo rc=$?");
-  check("stat -L -c reports the target of a file symbolic link, as GNU stat does on Linux", gr0.stdout === "600 lk\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -c \"%a %n\" lk; echo rc=$?");
-  check("stat -c without -L reports a symbolic link as the link, as GNU stat does on Linux", gr1.stdout === "777 lk\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "ln -s nope dl && stat -L -c \"%a %n\" dl; echo rc=$?");
-  check("stat -L -c refuses a dangling symbolic link, as GNU stat does on Linux", gr2.stdout === "rc=1\n" && gr2.stderr === "stat: cannot statx 'dl': No such file or directory\n", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "mkdir d && echo a > d/a && ln -s d/a lk && chmod 000 d && stat -L -c \"%a %n\" lk; echo rc=$?");
-  check("stat -L -c refuses a symbolic link whose target is in a directory without owner search, as GNU stat does on Linux", gr3.stdout === "rc=1\n" && gr3.stderr === "stat: cannot statx 'lk': Permission denied\n", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "echo a > f && chmod 640 f && ln -s f lk && ln -s lk lk2 && stat -L -c \"%a %n\" lk2; echo rc=$?");
-  check("stat -L -c follows a chain of symbolic links to its end, as GNU stat does on Linux", gr4.stdout === "640 lk2\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "mkdir sub && ln -s sub dl2 && stat -L -c \"%F %n\" dl2; echo rc=$?");
-  check("stat -L -c reports the type of a symbolic link to a directory as directory, as GNU stat does on Linux", gr5.stdout === "directory dl2\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" f lk; echo rc=$?");
-  check("stat -L -c reports a plain file and a link to it together, as GNU stat does on Linux", gr6.stdout === "600 f\n600 lk\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
-  const gr7 = await run(await shell({}), "echo a > f && ln -s f lk && stat -L -c \"%F %n\" lk; echo rc=$?");
-  check("stat -L -c reports the type of a symbolic link to a regular file, as GNU stat does on Linux", gr7.stdout === "regular file lk\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+  await printsAsBash("stat -L -c reports the target of a file symbolic link, as GNU stat does on Linux", "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" lk; echo rc=$?", "600 lk\nrc=0\n", "");
+  await printsAsBash("stat -c without -L reports a symbolic link as the link, as GNU stat does on Linux", "echo a > f && chmod 600 f && ln -s f lk && stat -c \"%a %n\" lk; echo rc=$?", "777 lk\nrc=0\n", "");
+  await printsAsBash("stat -L -c refuses a dangling symbolic link, as GNU stat does on Linux", "ln -s nope dl && stat -L -c \"%a %n\" dl; echo rc=$?", "rc=1\n", "stat: cannot statx 'dl': No such file or directory\n");
+  await printsAsBash("stat -L -c refuses a symbolic link whose target is in a directory without owner search, as GNU stat does on Linux", "mkdir d && echo a > d/a && ln -s d/a lk && chmod 000 d && stat -L -c \"%a %n\" lk; echo rc=$?", "rc=1\n", "stat: cannot statx 'lk': Permission denied\n");
+  await printsAsBash("stat -L -c follows a chain of symbolic links to its end, as GNU stat does on Linux", "echo a > f && chmod 640 f && ln -s f lk && ln -s lk lk2 && stat -L -c \"%a %n\" lk2; echo rc=$?", "640 lk2\nrc=0\n", "");
+  await printsAsBash("stat -L -c reports the type of a symbolic link to a directory as directory, as GNU stat does on Linux", "mkdir sub && ln -s sub dl2 && stat -L -c \"%F %n\" dl2; echo rc=$?", "directory dl2\nrc=0\n", "");
+  await printsAsBash("stat -L -c reports a plain file and a link to it together, as GNU stat does on Linux", "echo a > f && chmod 600 f && ln -s f lk && stat -L -c \"%a %n\" f lk; echo rc=$?", "600 f\n600 lk\nrc=0\n", "");
+  await printsAsBash("stat -L -c reports the type of a symbolic link to a regular file, as GNU stat does on Linux", "echo a > f && ln -s f lk && stat -L -c \"%F %n\" lk; echo rc=$?", "regular file lk\nrc=0\n", "");
 });
 
 group("stat -c %N: a plain or linked operand prints its quoted name, and a symbolic link adds its immediate target, as GNU stat does on Linux", async () => {
-  const gr0 = await run(await shell({}), "echo a > f && stat -c \"%N\" f; echo rc=$?");
-  check("stat -c %N prints the quoted name of a plain file, as GNU stat does on Linux", gr0.stdout === "'f'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > f && ln -s f lk && stat -c \"%N\" lk; echo rc=$?");
-  check("stat -c %N prints a file symbolic link with its immediate target, as GNU stat does on Linux", gr1.stdout === "'lk' -> 'f'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "ln -s nope dl && stat -c \"%N\" dl; echo rc=$?");
-  check("stat -c %N prints a dangling symbolic link with its target, as GNU stat does on Linux", gr2.stdout === "'dl' -> 'nope'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "echo a > f && ln -s f lk && stat -L -c \"%N\" lk; echo rc=$?");
-  check("stat -L -c %N prints only the quoted name of a followed symbolic link, as GNU stat does on Linux", gr3.stdout === "'lk'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "mkdir sub && stat -c \"%N\" sub; echo rc=$?");
-  check("stat -c %N prints the quoted name of a directory, as GNU stat does on Linux", gr4.stdout === "'sub'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "echo a > f && ln -s f lk && ln -s lk lk2 && stat -c \"%N\" lk2; echo rc=$?");
-  check("stat -c %N prints only the first hop of a chain of symbolic links, as GNU stat does on Linux", gr5.stdout === "'lk2' -> 'lk'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "mkdir sub && ln -s sub dl2 && stat -c \"%N\" dl2; echo rc=$?");
-  check("stat -c %N prints a symbolic link to a directory with its target, as GNU stat does on Linux", gr6.stdout === "'dl2' -> 'sub'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
-  const gr7 = await run(await shell({}), "echo a > \"my f\" && ln -s \"my f\" \"my l\" && stat -c \"%N\" \"my l\"; echo rc=$?");
-  check("stat -c %N quotes a name with a space, as GNU stat does on Linux", gr7.stdout === "'my l' -> 'my f'\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
-  const gr8 = await run(await shell({}), "mkdir d && echo a > d/f && ln -s f d/lk && stat -c \"%N\" d/lk; echo rc=$?");
-  check("stat -c %N prints a link in a directory with its relative target, as GNU stat does on Linux", gr8.stdout === "'d/lk' -> 'f'\nrc=0\n" && gr8.stderr === "", JSON.stringify([gr8.stdout, gr8.stderr]));
-  const gr9 = await run(await shell({}), "mkdir d && echo a > f && ln -s ../f d/lk && stat -c \"%N\" d/lk; echo rc=$?");
-  check("stat -c %N prints a link whose target has a dot-dot unchanged, as GNU stat does on Linux", gr9.stdout === "'d/lk' -> '../f'\nrc=0\n" && gr9.stderr === "", JSON.stringify([gr9.stdout, gr9.stderr]));
-  const gr10 = await run(await shell({}), "echo a > \"it's\" && stat -c \"%N\" \"it's\"; echo rc=$?");
-  check("stat -c %N quotes a name with an apostrophe, as GNU stat does on Linux", gr10.stdout === "\"it's\"\nrc=0\n" && gr10.stderr === "", JSON.stringify([gr10.stdout, gr10.stderr]));
+  await printsAsBash("stat -c %N prints the quoted name of a plain file, as GNU stat does on Linux", "echo a > f && stat -c \"%N\" f; echo rc=$?", "'f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints a file symbolic link with its immediate target, as GNU stat does on Linux", "echo a > f && ln -s f lk && stat -c \"%N\" lk; echo rc=$?", "'lk' -> 'f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints a dangling symbolic link with its target, as GNU stat does on Linux", "ln -s nope dl && stat -c \"%N\" dl; echo rc=$?", "'dl' -> 'nope'\nrc=0\n", "");
+  await printsAsBash("stat -L -c %N prints only the quoted name of a followed symbolic link, as GNU stat does on Linux", "echo a > f && ln -s f lk && stat -L -c \"%N\" lk; echo rc=$?", "'lk'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints the quoted name of a directory, as GNU stat does on Linux", "mkdir sub && stat -c \"%N\" sub; echo rc=$?", "'sub'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints only the first hop of a chain of symbolic links, as GNU stat does on Linux", "echo a > f && ln -s f lk && ln -s lk lk2 && stat -c \"%N\" lk2; echo rc=$?", "'lk2' -> 'lk'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints a symbolic link to a directory with its target, as GNU stat does on Linux", "mkdir sub && ln -s sub dl2 && stat -c \"%N\" dl2; echo rc=$?", "'dl2' -> 'sub'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a space, as GNU stat does on Linux", "echo a > \"my f\" && ln -s \"my f\" \"my l\" && stat -c \"%N\" \"my l\"; echo rc=$?", "'my l' -> 'my f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints a link in a directory with its relative target, as GNU stat does on Linux", "mkdir d && echo a > d/f && ln -s f d/lk && stat -c \"%N\" d/lk; echo rc=$?", "'d/lk' -> 'f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N prints a link whose target has a dot-dot unchanged, as GNU stat does on Linux", "mkdir d && echo a > f && ln -s ../f d/lk && stat -c \"%N\" d/lk; echo rc=$?", "'d/lk' -> '../f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with an apostrophe, as GNU stat does on Linux", "echo a > \"it's\" && stat -c \"%N\" \"it's\"; echo rc=$?", "\"it's\"\nrc=0\n", "");
 });
 
 group("stat -c %N: a control character, a non-ASCII byte and a double quote are quoted as GNU stat quotes them in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"a\u0001b\" && stat -c \"%N\" \"a\u0001b\"; echo rc=$?");
-  check("stat -c %N quotes a name with a soh control character in $-quoting, as GNU stat does on Linux", gr0.stdout === "'a'$'\\001''b'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > \"a\tb\" && stat -c \"%N\" \"a\tb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a tab control character in $-quoting, as GNU stat does on Linux", gr1.stdout === "'a'$'\\t''b'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "echo a > \"a\nb\" && stat -c \"%N\" \"a\nb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a newline control character in $-quoting, as GNU stat does on Linux", gr2.stdout === "'a'$'\\n''b'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "echo a > \"a\u001fb\" && stat -c \"%N\" \"a\u001fb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a us control character in $-quoting, as GNU stat does on Linux", gr3.stdout === "'a'$'\\037''b'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "echo a > \"a\u0007b\" && stat -c \"%N\" \"a\u0007b\"; echo rc=$?");
-  check("stat -c %N quotes a name with a bel control character in $-quoting, as GNU stat does on Linux", gr4.stdout === "'a'$'\\a''b'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "echo a > \"a\bb\" && stat -c \"%N\" \"a\bb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a bs control character in $-quoting, as GNU stat does on Linux", gr5.stdout === "'a'$'\\b''b'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "echo a > \"a\fb\" && stat -c \"%N\" \"a\fb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a ff control character in $-quoting, as GNU stat does on Linux", gr6.stdout === "'a'$'\\f''b'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
-  const gr7 = await run(await shell({}), "echo a > \"a\rb\" && stat -c \"%N\" \"a\rb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a cr control character in $-quoting, as GNU stat does on Linux", gr7.stdout === "'a'$'\\r''b'\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
-  const gr8 = await run(await shell({}), "echo a > \"a\u000bb\" && stat -c \"%N\" \"a\u000bb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a vt control character in $-quoting, as GNU stat does on Linux", gr8.stdout === "'a'$'\\v''b'\nrc=0\n" && gr8.stderr === "", JSON.stringify([gr8.stdout, gr8.stderr]));
-  const gr9 = await run(await shell({}), "echo a > \"ab\" && stat -c \"%N\" \"ab\"; echo rc=$?");
-  check("stat -c %N quotes a name with a del control character in $-quoting, as GNU stat does on Linux", gr9.stdout === "'a'$'\\177''b'\nrc=0\n" && gr9.stderr === "", JSON.stringify([gr9.stdout, gr9.stderr]));
-  const gr10 = await run(await shell({}), "echo a > \"a\u001bb\" && stat -c \"%N\" \"a\u001bb\"; echo rc=$?");
-  check("stat -c %N quotes a name with a esc control character in $-quoting, as GNU stat does on Linux", gr10.stdout === "'a'$'\\033''b'\nrc=0\n" && gr10.stderr === "", JSON.stringify([gr10.stdout, gr10.stderr]));
-  const gr11 = await run(await shell({}), "echo a > \"café\" && LC_ALL=C stat -c \"%N\" \"café\"; echo rc=$?");
-  check("stat -c %N escapes the bytes of a non-ASCII name in C locale, as GNU stat does on Linux", gr11.stdout === "'caf'$'\\303\\251'\nrc=0\n" && gr11.stderr === "", JSON.stringify([gr11.stdout, gr11.stderr]));
-  const gr12 = await run(await shell({}), "echo a > \"x€\" && LC_ALL=C stat -c \"%N\" \"x€\"; echo rc=$?");
-  check("stat -c %N escapes a three-byte character in C locale, as GNU stat does on Linux", gr12.stdout === "'x'$'\\342\\202\\254'\nrc=0\n" && gr12.stderr === "", JSON.stringify([gr12.stdout, gr12.stderr]));
-  const gr13 = await run(await shell({}), "echo a > \"it's \\\"x\\\"\" && stat -c \"%N\" \"it's \\\"x\\\"\"; echo rc=$?");
-  check("stat -c %N quotes a name with both an apostrophe and a double quote, as GNU stat does on Linux", gr13.stdout === "'it'\\''s \"x\"'\nrc=0\n" && gr13.stderr === "", JSON.stringify([gr13.stdout, gr13.stderr]));
-  const gr14 = await run(await shell({}), "echo a > 'x\"y' && stat -c \"%N\" 'x\"y'; echo rc=$?");
-  check("stat -c %N quotes a name with a double quote and no apostrophe, as GNU stat does on Linux", gr14.stdout === "'x\"y'\nrc=0\n" && gr14.stderr === "", JSON.stringify([gr14.stdout, gr14.stderr]));
+  await printsAsBash("stat -c %N quotes a name with a soh control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\u0001b\" && stat -c \"%N\" \"a\u0001b\"; echo rc=$?", "'a'$'\\001''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a tab control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\tb\" && stat -c \"%N\" \"a\tb\"; echo rc=$?", "'a'$'\\t''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a newline control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\nb\" && stat -c \"%N\" \"a\nb\"; echo rc=$?", "'a'$'\\n''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a us control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\u001fb\" && stat -c \"%N\" \"a\u001fb\"; echo rc=$?", "'a'$'\\037''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a bel control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\u0007b\" && stat -c \"%N\" \"a\u0007b\"; echo rc=$?", "'a'$'\\a''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a bs control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\bb\" && stat -c \"%N\" \"a\bb\"; echo rc=$?", "'a'$'\\b''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a ff control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\fb\" && stat -c \"%N\" \"a\fb\"; echo rc=$?", "'a'$'\\f''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a cr control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\rb\" && stat -c \"%N\" \"a\rb\"; echo rc=$?", "'a'$'\\r''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a vt control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\u000bb\" && stat -c \"%N\" \"a\u000bb\"; echo rc=$?", "'a'$'\\v''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a del control character in $-quoting, as GNU stat does on Linux", "echo a > \"ab\" && stat -c \"%N\" \"ab\"; echo rc=$?", "'a'$'\\177''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a esc control character in $-quoting, as GNU stat does on Linux", "echo a > \"a\u001bb\" && stat -c \"%N\" \"a\u001bb\"; echo rc=$?", "'a'$'\\033''b'\nrc=0\n", "");
+  await printsAsBash("stat -c %N escapes the bytes of a non-ASCII name in C locale, as GNU stat does on Linux", "echo a > \"café\" && LC_ALL=C stat -c \"%N\" \"café\"; echo rc=$?", "'caf'$'\\303\\251'\nrc=0\n", "");
+  await printsAsBash("stat -c %N escapes a three-byte character in C locale, as GNU stat does on Linux", "echo a > \"x€\" && LC_ALL=C stat -c \"%N\" \"x€\"; echo rc=$?", "'x'$'\\342\\202\\254'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with both an apostrophe and a double quote, as GNU stat does on Linux", "echo a > \"it's \\\"x\\\"\" && stat -c \"%N\" \"it's \\\"x\\\"\"; echo rc=$?", "'it'\\''s \"x\"'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with a double quote and no apostrophe, as GNU stat does on Linux", "echo a > 'x\"y' && stat -c \"%N\" 'x\"y'; echo rc=$?", "'x\"y'\nrc=0\n", "");
 });
 
 group("stat -c %N: a name with a control character or a non-ASCII byte and a quote is quoted as GNU stat quotes it in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"it's\tx\" && stat -c \"%N\" \"it's\tx\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe with a tab, as GNU stat does on Linux", gr0.stdout === "'it'\\''s'$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > 'x\"\ty' && stat -c \"%N\" 'x\"\ty'; echo rc=$?");
-  check("stat -c %N quotes a double quote with a tab, as GNU stat does on Linux", gr1.stdout === "'x\"'$'\\t''y'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "echo a > \"café's\" && LC_ALL=C stat -c \"%N\" \"café's\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr2.stdout === "'caf'$'\\303\\251'\\''s'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "echo a > \"it's \\\"é\\\"\" && LC_ALL=C stat -c \"%N\" \"it's \\\"é\\\"\"; echo rc=$?");
-  check("stat -c %N quotes a name with both quote kinds and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "'it'\\''s \"'$'\\303\\251''\"'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "echo a > 'x\"é' && LC_ALL=C stat -c \"%N\" 'x\"é'; echo rc=$?");
-  check("stat -c %N quotes a double quote with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr4.stdout === "'x\"'$'\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "echo a > f && ln -s f \"l'\tk\" && stat -c \"%N\" \"l'\tk\"; echo rc=$?");
-  check("stat -c %N quotes a symbolic link whose name has an apostrophe and a tab, as GNU stat does on Linux", gr5.stdout === "'l'\\'''$'\\t''k' -> 'f'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "echo a > \"f'\tg\" && ln -s \"f'\tg\" lk && stat -c \"%N\" lk; echo rc=$?");
-  check("stat -c %N quotes a symbolic link whose target has an apostrophe and a tab, as GNU stat does on Linux", gr6.stdout === "'lk' -> 'f'\\'''$'\\t''g'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  await printsAsBash("stat -c %N quotes an apostrophe with a tab, as GNU stat does on Linux", "echo a > \"it's\tx\" && stat -c \"%N\" \"it's\tx\"; echo rc=$?", "'it'\\''s'$'\\t''x'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a double quote with a tab, as GNU stat does on Linux", "echo a > 'x\"\ty' && stat -c \"%N\" 'x\"\ty'; echo rc=$?", "'x\"'$'\\t''y'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes an apostrophe with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"café's\" && LC_ALL=C stat -c \"%N\" \"café's\"; echo rc=$?", "'caf'$'\\303\\251'\\''s'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name with both quote kinds and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"it's \\\"é\\\"\" && LC_ALL=C stat -c \"%N\" \"it's \\\"é\\\"\"; echo rc=$?", "'it'\\''s \"'$'\\303\\251''\"'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a double quote with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > 'x\"é' && LC_ALL=C stat -c \"%N\" 'x\"é'; echo rc=$?", "'x\"'$'\\303\\251'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a symbolic link whose name has an apostrophe and a tab, as GNU stat does on Linux", "echo a > f && ln -s f \"l'\tk\" && stat -c \"%N\" \"l'\tk\"; echo rc=$?", "'l'\\'''$'\\t''k' -> 'f'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a symbolic link whose target has an apostrophe and a tab, as GNU stat does on Linux", "echo a > \"f'\tg\" && ln -s \"f'\tg\" lk && stat -c \"%N\" lk; echo rc=$?", "'lk' -> 'f'\\'''$'\\t''g'\nrc=0\n", "");
 });
 
 group("stat -c %N: a name that starts with an apostrophe before a control character is quoted as GNU stat quotes it in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"'\tx\" && stat -c \"%N\" \"'\tx\"; echo rc=$?");
-  check("stat -c %N quotes a name that starts with an apostrophe before a tab, as GNU stat does on Linux", gr0.stdout === "''\\'''$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  await printsAsBash("stat -c %N quotes a name that starts with an apostrophe before a tab, as GNU stat does on Linux", "echo a > \"'\tx\" && stat -c \"%N\" \"'\tx\"; echo rc=$?", "''\\'''$'\\t''x'\nrc=0\n", "");
 });
 
 group("stat -c %N: a name that starts with a tab is quoted as GNU stat quotes it in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"\tx\" && stat -c \"%N\" \"\tx\"; echo rc=$?");
-  check("stat -c %N quotes a name that starts with a tab, as GNU stat does on Linux", gr0.stdout === "''$'\\t''x'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
+  await printsAsBash("stat -c %N quotes a name that starts with a tab, as GNU stat does on Linux", "echo a > \"\tx\" && stat -c \"%N\" \"\tx\"; echo rc=$?", "''$'\\t''x'\nrc=0\n", "");
 });
 
 group("stat -c %N: a name with a non-ASCII byte and a control character or apostrophe, or a non-ASCII name alone, is quoted as GNU stat quotes it in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"é\" && LC_ALL=C stat -c \"%N\" \"é\"; echo rc=$?");
-  check("stat -c %N quotes a name that is one non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", gr0.stdout === "''$'\\303\\251'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > \"éx\" && LC_ALL=C stat -c \"%N\" \"éx\"; echo rc=$?");
-  check("stat -c %N quotes a name that starts with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr1.stdout === "''$'\\303\\251''x'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "echo a > \"é'x\" && LC_ALL=C stat -c \"%N\" \"é'x\"; echo rc=$?");
-  check("stat -c %N quotes a non-ASCII character before an apostrophe, as GNU stat does on Linux under LC_ALL=C", gr2.stdout === "''$'\\303\\251'\\''x'\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "echo a > \"é\tx\" && LC_ALL=C stat -c \"%N\" \"é\tx\"; echo rc=$?");
-  check("stat -c %N quotes a non-ASCII character before a tab, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "''$'\\303\\251\\t''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "echo a > \"a\té\" && LC_ALL=C stat -c \"%N\" \"a\té\"; echo rc=$?");
-  check("stat -c %N quotes a tab between a letter and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr4.stdout === "'a'$'\\t\\303\\251'\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "echo a > \"it's\té\" && LC_ALL=C stat -c \"%N\" \"it's\té\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe, a tab and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr5.stdout === "'it'\\''s'$'\\t\\303\\251'\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "echo a > \"é'\té\" && LC_ALL=C stat -c \"%N\" \"é'\té\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe, a non-ASCII character and a tab in that order, as GNU stat does on Linux under LC_ALL=C", gr6.stdout === "''$'\\303\\251'\\'''$'\\t\\303\\251'\nrc=0\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
+  await printsAsBash("stat -c %N quotes a name that is one non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é\" && LC_ALL=C stat -c \"%N\" \"é\"; echo rc=$?", "''$'\\303\\251'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a name that starts with a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"éx\" && LC_ALL=C stat -c \"%N\" \"éx\"; echo rc=$?", "''$'\\303\\251''x'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a non-ASCII character before an apostrophe, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é'x\" && LC_ALL=C stat -c \"%N\" \"é'x\"; echo rc=$?", "''$'\\303\\251'\\''x'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a non-ASCII character before a tab, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é\tx\" && LC_ALL=C stat -c \"%N\" \"é\tx\"; echo rc=$?", "''$'\\303\\251\\t''x'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes a tab between a letter and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"a\té\" && LC_ALL=C stat -c \"%N\" \"a\té\"; echo rc=$?", "'a'$'\\t\\303\\251'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes an apostrophe, a tab and a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"it's\té\" && LC_ALL=C stat -c \"%N\" \"it's\té\"; echo rc=$?", "'it'\\''s'$'\\t\\303\\251'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes an apostrophe, a non-ASCII character and a tab in that order, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é'\té\" && LC_ALL=C stat -c \"%N\" \"é'\té\"; echo rc=$?", "''$'\\303\\251'\\'''$'\\t\\303\\251'\nrc=0\n", "");
 });
 
 group("stat -c %N: an apostrophe after a non-ASCII character, at the end of a name, is quoted as GNU stat quotes it in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"xé'\" && LC_ALL=C stat -c \"%N\" \"xé'\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe after a non-ASCII character at the end of a name, as GNU stat does on Linux under LC_ALL=C", gr0.stdout === "'x'$'\\303\\251'\\'''\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > \"é'\" && LC_ALL=C stat -c \"%N\" \"é'\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", gr1.stdout === "''$'\\303\\251'\\'''\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  await printsAsBash("stat -c %N quotes an apostrophe after a non-ASCII character at the end of a name, as GNU stat does on Linux under LC_ALL=C", "echo a > \"xé'\" && LC_ALL=C stat -c \"%N\" \"xé'\"; echo rc=$?", "'x'$'\\303\\251'\\'''\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes an apostrophe after a non-ASCII character alone, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é'\" && LC_ALL=C stat -c \"%N\" \"é'\"; echo rc=$?", "''$'\\303\\251'\\'''\nrc=0\n", "");
 });
 
 group("expr: an equivalence class of a non-Latin letter matches the letters of its class, and a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", async () => {
-  const gr0 = await run(await shell({}), "expr 'α' : '[[=α=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek letter matches the letter itself, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "expr 'ά' : '[[=α=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek letter matches its accented form, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "expr 'β' : '[[=α=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek letter does not match another Greek letter, as GNU expr does in a UTF-8 locale", gr2.stdout === "0\nrc=1\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "expr 'ω' : '[[=Ω=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek capital matches the small letter, as GNU expr does in a UTF-8 locale", gr3.stdout === "1\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "expr 'й' : '[[=и=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Cyrillic letter does not match its breve form, as GNU expr does in a UTF-8 locale", gr4.stdout === "0\nrc=1\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "expr 'ё' : '[[=е=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Cyrillic letter matches the diaeresis form, as GNU expr does in a UTF-8 locale", gr5.stdout === "1\nrc=0\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "expr 'ab' : '[[.ab.]]'; echo rc=$?");
-  check("expr: a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", gr6.stdout === "rc=2\n" && gr6.stderr === "expr: Invalid collation character\n", JSON.stringify([gr6.stdout, gr6.stderr]));
-  const gr7 = await run(await shell({}), "expr 'a' : '[[.a.]]'; echo rc=$?");
-  check("expr: a collating symbol of one letter inside a bracket matches that letter, as GNU expr does in a UTF-8 locale", gr7.stdout === "1\nrc=0\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+  await printsAsBash("expr: an equivalence class of a Greek letter matches the letter itself, as GNU expr does in a UTF-8 locale", "expr 'α' : '[[=α=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: an equivalence class of a Greek letter matches its accented form, as GNU expr does in a UTF-8 locale", "expr 'ά' : '[[=α=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: an equivalence class of a Greek letter does not match another Greek letter, as GNU expr does in a UTF-8 locale", "expr 'β' : '[[=α=]]'; echo rc=$?", "0\nrc=1\n", "");
+  await printsAsBash("expr: an equivalence class of a Greek capital matches the small letter, as GNU expr does in a UTF-8 locale", "expr 'ω' : '[[=Ω=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: an equivalence class of a Cyrillic letter does not match its breve form, as GNU expr does in a UTF-8 locale", "expr 'й' : '[[=и=]]'; echo rc=$?", "0\nrc=1\n", "");
+  await printsAsBash("expr: an equivalence class of a Cyrillic letter matches the diaeresis form, as GNU expr does in a UTF-8 locale", "expr 'ё' : '[[=е=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: a multi-character collating symbol is refused, as GNU expr does in a UTF-8 locale", "expr 'ab' : '[[.ab.]]'; echo rc=$?", "rc=2\n", "expr: Invalid collation character\n");
+  await printsAsBash("expr: a collating symbol of one letter inside a bracket matches that letter, as GNU expr does in a UTF-8 locale", "expr 'a' : '[[.a.]]'; echo rc=$?", "1\nrc=0\n", "");
 });
 
 group("expr: a breve above a Latin letter matches its base letter, as GNU expr does in a UTF-8 locale", async () => {
-  const gr0 = await run(await shell({}), "expr 'ă' : '[[=a=]]'; echo rc=$?");
-  check("expr: a Latin letter with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "expr 'ğ' : '[[=g=]]'; echo rc=$?");
-  check("expr: a Latin g with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
+  await printsAsBash("expr: a Latin letter with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", "expr 'ă' : '[[=a=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: a Latin g with a breve matches its base letter's class, as GNU expr does in a UTF-8 locale", "expr 'ğ' : '[[=g=]]'; echo rc=$?", "1\nrc=0\n", "");
 });
 
 group("expr: an equivalence class of a Greek letter with a psili or a dialytika matches the plain letter, and a Cyrillic letter with a breve matches its plain letter, as GNU expr does in a UTF-8 locale", async () => {
-  const gr0 = await run(await shell({}), "expr 'ἀ' : '[[=α=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek letter with a psili matches the plain letter, as GNU expr does in a UTF-8 locale", gr0.stdout === "1\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "expr 'ἄ' : '[[=α=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek letter with a psili and an oxia matches the plain letter, as GNU expr does in a UTF-8 locale", gr1.stdout === "1\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "expr 'ϊ' : '[[=ι=]]'; echo rc=$?");
-  check("expr: an equivalence class of a Greek iota with a dialytika matches the plain iota, as GNU expr does in a UTF-8 locale", gr2.stdout === "1\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "expr 'ў' : '[[=у=]]'; echo rc=$?");
-  check("expr: a Cyrillic letter with a breve matches its plain base letter, as GNU expr does in a UTF-8 locale", gr3.stdout === "1\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "expr 'Ў' : '[[=ў=]]'; echo rc=$?");
-  check("expr: a Cyrillic letter with a breve matches its own upper case, as GNU expr does in a UTF-8 locale", gr4.stdout === "1\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  await printsAsBash("expr: an equivalence class of a Greek letter with a psili matches the plain letter, as GNU expr does in a UTF-8 locale", "expr 'ἀ' : '[[=α=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: an equivalence class of a Greek letter with a psili and an oxia matches the plain letter, as GNU expr does in a UTF-8 locale", "expr 'ἄ' : '[[=α=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: an equivalence class of a Greek iota with a dialytika matches the plain iota, as GNU expr does in a UTF-8 locale", "expr 'ϊ' : '[[=ι=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: a Cyrillic letter with a breve matches its plain base letter, as GNU expr does in a UTF-8 locale", "expr 'ў' : '[[=у=]]'; echo rc=$?", "1\nrc=0\n", "");
+  await printsAsBash("expr: a Cyrillic letter with a breve matches its own upper case, as GNU expr does in a UTF-8 locale", "expr 'Ў' : '[[=ў=]]'; echo rc=$?", "1\nrc=0\n", "");
 });
 
 group("stat -c %N: runs of apostrophes next to a tab or a non-ASCII character are quoted as GNU stat quotes them in C locale", async () => {
-  const gr0 = await run(await shell({}), "echo a > \"x''\ty\" && stat -c \"%N\" \"x''\ty\"; echo rc=$?");
-  check("stat -c %N quotes two apostrophes before a tab, as GNU stat does on Linux", gr0.stdout === "'x'\\'''\\'''$'\\t''y'\nrc=0\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "echo a > \"x'''\ty\" && stat -c \"%N\" \"x'''\ty\"; echo rc=$?");
-  check("stat -c %N quotes three apostrophes before a tab, as GNU stat does on Linux", gr1.stdout === "'x'\\'''\\'''\\'''$'\\t''y'\nrc=0\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "echo a > \"'\tx\t'\" && stat -c \"%N\" \"'\tx\t'\"; echo rc=$?");
-  check("stat -c %N quotes an apostrophe between two tabs, as GNU stat does on Linux", gr2.stdout === "''\\'''$'\\t''x'$'\\t'\\'''\nrc=0\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "echo a > \"é''x\" && LC_ALL=C stat -c \"%N\" \"é''x\"; echo rc=$?");
-  check("stat -c %N quotes two apostrophes after a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", gr3.stdout === "''$'\\303\\251'\\'''\\''x'\nrc=0\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "echo a > \"x\t'''\" && stat -c \"%N\" \"x\t'''\"; echo rc=$?");
-  check("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", gr4.stdout === "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
+  await printsAsBash("stat -c %N quotes two apostrophes before a tab, as GNU stat does on Linux", "echo a > \"x''\ty\" && stat -c \"%N\" \"x''\ty\"; echo rc=$?", "'x'\\'''\\'''$'\\t''y'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes three apostrophes before a tab, as GNU stat does on Linux", "echo a > \"x'''\ty\" && stat -c \"%N\" \"x'''\ty\"; echo rc=$?", "'x'\\'''\\'''\\'''$'\\t''y'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes an apostrophe between two tabs, as GNU stat does on Linux", "echo a > \"'\tx\t'\" && stat -c \"%N\" \"'\tx\t'\"; echo rc=$?", "''\\'''$'\\t''x'$'\\t'\\'''\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes two apostrophes after a non-ASCII character, as GNU stat does on Linux under LC_ALL=C", "echo a > \"é''x\" && LC_ALL=C stat -c \"%N\" \"é''x\"; echo rc=$?", "''$'\\303\\251'\\'''\\''x'\nrc=0\n", "");
+  await printsAsBash("stat -c %N quotes three apostrophes after a tab, as GNU stat does on Linux", "echo a > \"x\t'''\" && stat -c \"%N\" \"x\t'''\"; echo rc=$?", "'x'$'\\t'\\'''\\'''\\'''\nrc=0\n", "");
 });
 
 group('case: a newline may come before the first pattern, but a semicolon may not, as bash does', async () => {
@@ -2791,22 +2724,14 @@ group("locale precedence: when LC_ALL and LC_CTYPE both name a locale, LC_ALL de
 });
 
 group("LINENO: a command after a backslash continuation, a comment, or in a multi-line compound body numbers its line as bash does", async () => {
-  const gr0 = await run(await shell({}), "echo a \\\necho $LINENO");
-  check("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", gr0.stdout === "a echo 1\n" && gr0.stderr === "", JSON.stringify([gr0.stdout, gr0.stderr]));
-  const gr1 = await run(await shell({}), "f() {\necho $LINENO\n}\nf");
-  check("LINENO in a function body defined over several lines numbers the body line, as bash does", gr1.stdout === "2\n" && gr1.stderr === "", JSON.stringify([gr1.stdout, gr1.stderr]));
-  const gr2 = await run(await shell({}), "for i in 1 2; do\necho $LINENO\ndone");
-  check("LINENO in a for body over several lines numbers the body line, as bash does", gr2.stdout === "2\n2\n" && gr2.stderr === "", JSON.stringify([gr2.stdout, gr2.stderr]));
-  const gr3 = await run(await shell({}), "cat <<E\na\n$LINENO\nE");
-  check("LINENO in a heredoc body numbers the body line, as bash does", gr3.stdout === "a\n1\n" && gr3.stderr === "", JSON.stringify([gr3.stdout, gr3.stderr]));
-  const gr4 = await run(await shell({}), "case a in\na) echo $LINENO;;\nesac");
-  check("LINENO in a case arm over several lines numbers the arm line, as bash does", gr4.stdout === "2\n" && gr4.stderr === "", JSON.stringify([gr4.stdout, gr4.stderr]));
-  const gr5 = await run(await shell({}), "# c\necho $LINENO");
-  check("LINENO after a comment line numbers the command line, as bash does", gr5.stdout === "2\n" && gr5.stderr === "", JSON.stringify([gr5.stdout, gr5.stderr]));
-  const gr6 = await run(await shell({}), "if true\nthen\necho $LINENO\nfi");
-  check("LINENO in an if body over several lines numbers the body line, as bash does", gr6.stdout === "3\n" && gr6.stderr === "", JSON.stringify([gr6.stdout, gr6.stderr]));
-  const gr7 = await run(await shell({}), "while echo $LINENO\ndo\nbreak\ndone");
-  check("LINENO in a while condition over several lines numbers the condition line, as bash does", gr7.stdout === "1\n" && gr7.stderr === "", JSON.stringify([gr7.stdout, gr7.stderr]));
+  await printsAsBash("LINENO after a backslash-newline continuation numbers the command by its first line, as bash does", "echo a \\\necho $LINENO", "a echo 1\n", "");
+  await printsAsBash("LINENO in a function body defined over several lines numbers the body line, as bash does", "f() {\necho $LINENO\n}\nf", "2\n", "");
+  await printsAsBash("LINENO in a for body over several lines numbers the body line, as bash does", "for i in 1 2; do\necho $LINENO\ndone", "2\n2\n", "");
+  await printsAsBash("LINENO in a heredoc body numbers the body line, as bash does", "cat <<E\na\n$LINENO\nE", "a\n1\n", "");
+  await printsAsBash("LINENO in a case arm over several lines numbers the arm line, as bash does", "case a in\na) echo $LINENO;;\nesac", "2\n", "");
+  await printsAsBash("LINENO after a comment line numbers the command line, as bash does", "# c\necho $LINENO", "2\n", "");
+  await printsAsBash("LINENO in an if body over several lines numbers the body line, as bash does", "if true\nthen\necho $LINENO\nfi", "3\n", "");
+  await printsAsBash("LINENO in a while condition over several lines numbers the condition line, as bash does", "while echo $LINENO\ndo\nbreak\ndone", "1\n", "");
 });
 
 group('chmod -R: a recursive chmod matches GNU chmod on a tree, and its errors match', async () => {

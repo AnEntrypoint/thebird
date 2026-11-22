@@ -135,8 +135,8 @@
  {
   "name": "rows",
   "file": "scripts/witness-shell.mjs",
-  "anchor": "const r = await run(await shell({}), script);",
-  "replace": "const r = await run(await shell({}), script + '; exit 7');",
+  "anchor": "    const r = await run(await shell({}), script);\n    check(label + ': '",
+  "replace": "    const r = await run(await shell({}), script + '; exit 7');\n    check(label + ': '",
   "command": [
    "npm",
    "run",
@@ -209,6 +209,18 @@
    "node",
    "--test",
    "test/scratch.test.mjs"
+  ]
+ },
+ {
+  "name": "prints",
+  "file": "scripts/witness-shell.mjs",
+  "anchor": "check(title, r.stdout === stdout && r.stderr === stderr",
+  "replace": "check(title, r.stdout !== stdout && r.stderr === stderr",
+  "command": [
+   "npm",
+   "run",
+   "-s",
+   "witness:shell"
   ]
  }
 ]
