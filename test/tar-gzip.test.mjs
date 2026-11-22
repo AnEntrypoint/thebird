@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { scratchDir } from './scratch.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { createShell } = await import(pathToFileURL(join(root, 'web', 'shell-core.js')).href);
@@ -40,7 +40,7 @@ function isLink(path) {
 }
 
 function workspace() {
-  return mkdtempSync(join(tmpdir(), 'tar-gzip-'));
+  return scratchDir('tar-gzip-');
 }
 
 function lines(length, seed) {

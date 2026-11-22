@@ -14,7 +14,7 @@ if (unknown.length) {
 let live = null;
 const restore = () => live && writeFileSync(live.file, live.text);
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { restore(); process.exit(130); });
-const command = (red) => (red.shell ? ['npm', ['run', '-s', 'witness:shell']] : [process.execPath, [join(root, 'scripts', 'witness.mjs'), '--check=' + red.check]]);
+const command = (red) => (red.command ? [red.command[0], red.command.slice(1)] : [process.execPath, [join(root, 'scripts', 'witness.mjs'), '--check=' + red.check]]);
 let missed = 0;
 for (const red of table.filter((entry) => wanted.length === 0 || wanted.includes(entry.name))) {
   const file = join(root, red.file);

@@ -137,7 +137,12 @@
   "file": "scripts/witness-shell.mjs",
   "anchor": "const r = await run(await shell({}), script);",
   "replace": "const r = await run(await shell({}), script + '; exit 7');",
-  "shell": true
+  "command": [
+   "npm",
+   "run",
+   "-s",
+   "witness:shell"
+  ]
  },
  {
   "name": "txtouch",
@@ -194,5 +199,16 @@
   "anchor": "return { verdict: 'fail', detail: 'HTTP ' + res.status",
   "replace": "return { verdict: 'skip', detail: 'HTTP ' + res.status",
   "check": "providerVerdict"
+ },
+ {
+  "name": "scratchdir",
+  "file": "test/scratch.mjs",
+  "anchor": "  made.push(dir);\n",
+  "replace": "",
+  "command": [
+   "node",
+   "--test",
+   "test/scratch.test.mjs"
+  ]
  }
 ]
