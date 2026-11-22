@@ -2206,10 +2206,6 @@ const argv = Object.fromEntries(process.argv.slice(2).map((arg) => {
   const [key, ...rest] = arg.replace(/^--/, '').split('=');
   return [key, rest.length ? rest.join('=') : true];
 }));
-if (argv.list) {
-  for (const entry of groups) console.log(entry.name);
-  process.exit(0);
-}
 let selected = groups;
 if (typeof argv.group === 'string') {
   const names = argv.group.split(',');
@@ -2221,6 +2217,14 @@ if (typeof argv.group === 'string') {
   selected = selected.filter((entry) => names.includes(entry.name));
 }
 if (typeof argv.check === 'string') selected = selected.filter((entry) => entry.source.includes(argv.check));
+if (typeof argv.part === 'string') {
+  const [index, total] = argv.part.split('/').map(Number);
+  selected = selected.filter((_, position) => position % total === index - 1);
+}
+if (argv.list) {
+  for (const entry of selected) console.log(entry.name);
+  process.exit(0);
+}
 if (selected.length === 0) {
   console.error('no group matches the selection (see --list)');
   process.exit(2);
