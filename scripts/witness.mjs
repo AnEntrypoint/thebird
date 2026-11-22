@@ -50,7 +50,14 @@ const shared = (name, make) => {
 };
 const getRelay = () => shared('relay', () => startRelay({ port: 0 }));
 const getMirror = () => shared('npm-mirror', () => startNpmMirror());
-const sharedPages = () => shared('pages', () => buildPages(mkdtempSync(join(tmpdir(), 'thebird-site-'))));
+const scratchDirs = new Set();
+const scratchDir = (prefix) => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  scratchDirs.add(dir);
+  return dir;
+};
+process.on('exit', () => { for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true }); });
+const sharedPages = () => shared('pages', () => buildPages(scratchDir('thebird-site-')));
 const current = () => scope.getStore();
 const group = (name, run) => groups.push({ name, run, source: run.toString(), browser: /\b(terminal|runAt)\(/.test(run.toString()), heavy: /python3|\bpip\b|pyodide/.test(run.toString()) });
 let heavyTail = Promise.resolve();
@@ -130,11 +137,12 @@ const liveRun = async (names) => {
   }
   return { ...live, model: verdict.model };
 };
-const sharedProfile = mkdtempSync(join(tmpdir(), 'thebird-profile-shared-'));
+let sharedProfile = null;
+const profileDir = () => (sharedProfile ??= scratchDir('thebird-profile-shared-'));
 const DEFAULT_CONTEXT_GROUPS = new Set(['pip']);
 let sharedBrowserStart = null;
 const sharedBrowserFor = () => {
-  sharedBrowserStart ??= startBrowser({ chrome, profile: sharedProfile });
+  sharedBrowserStart ??= startBrowser({ chrome, profile: profileDir() });
   return sharedBrowserStart;
 };
 async function disposeContext(context) {
@@ -2281,6 +2289,4 @@ console.log(`peak witness tree RSS ${treeRss.mb.toFixed(0)} MB across ${treeRss.
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 await (await sharedBrowserStart)?.close();
 for (const pending of services.values()) await (await pending.catch(() => null))?.close?.();
-rmSync(sharedProfile, { recursive: true, force: true });
-if (services.has('pages')) rmSync(await services.get('pages'), { recursive: true, force: true });
 process.exit(failures ? 1 : 0);
