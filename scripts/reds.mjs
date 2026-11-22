@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,9 +12,19 @@ if (unknown.length) {
   process.exit(2);
 }
 let live = null;
-const restore = () => live && writeFileSync(live.file, live.text);
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { restore(); process.exit(130); });
+const stopLive = () => {
+  if (!live) return;
+  if (live.child) try { process.kill(-live.child.pid, 'SIGKILL'); } catch {}
+  writeFileSync(live.file, live.text);
+};
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { stopLive(); process.exit(130); });
 const command = (red) => (red.command ? [red.command[0], red.command.slice(1)] : [process.execPath, [join(root, 'scripts', 'witness.mjs'), '--check=' + red.check]]);
+const runWitness = (red) => new Promise((resolve) => {
+  const [program, args] = command(red);
+  live.child = spawn(program, args, { cwd: root, stdio: 'ignore', detached: true });
+  const timer = setTimeout(() => process.kill(-live.child.pid, 'SIGKILL'), red.timeoutMs ?? 1500000);
+  live.child.on('close', (code) => { clearTimeout(timer); resolve(code); });
+});
 let missed = 0;
 for (const red of table.filter((entry) => wanted.length === 0 || wanted.includes(entry.name))) {
   const file = join(root, red.file);
@@ -28,8 +38,8 @@ for (const red of table.filter((entry) => wanted.length === 0 || wanted.includes
   live = { file, text };
   writeFileSync(file, text.replace(red.anchor, () => red.replace));
   const started = Date.now();
-  const { status } = spawnSync(...command(red), { cwd: root, stdio: 'ignore', timeout: 1500000 });
-  restore();
+  const status = await runWitness(red);
+  writeFileSync(file, text);
   live = null;
   const restored = readFileSync(file, 'utf8') === text;
   const caught = status !== 0 && status !== null;

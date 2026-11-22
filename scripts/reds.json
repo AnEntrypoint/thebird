@@ -245,5 +245,16 @@
    "-c",
    "d=$(mktemp -d); TMPDIR=$d THEBIRD_LIVE_TIMEOUT_MS=8000 node scripts/lint-architecture.mjs > /dev/null 2>&1; sleep 3; left=\"$(ls -A $d)$(ps -eo args= | grep -F \"$d\" | grep -v grep)\"; rm -rf $d; [ -z \"$left\" ]"
   ]
+ },
+ {
+  "name": "runnerstop",
+  "file": "scripts/reds.mjs",
+  "anchor": "  writeFileSync(live.file, live.text);\n};",
+  "replace": "};",
+  "command": [
+   "bash",
+   "-c",
+   "node scripts/reds.mjs rows > /dev/null 2>&1 & p=$!; sleep 1; kill -TERM $p; wait $p; sleep 1; clean=$(git diff --quiet -- scripts/witness-shell.mjs && echo y); left=$(ps -eo args= | grep -F \"scripts/witness-shell.mjs\" | grep -v grep); git checkout -- scripts/witness-shell.mjs; [ \"$clean\" = y ] && [ -z \"$left\" ]"
+  ]
  }
 ]
