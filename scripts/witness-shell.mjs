@@ -4224,6 +4224,15 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
 });
 
+group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
+  const cases = [
+    ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
+    ['kill -NOPE 1; echo rc=$?', 'rc=1\n', 'kill: NOPE: invalid signal specification\n', 0],
+    ['x="a b"; echo hi > $x"q"; echo rc=$?', 'rc=1\n', 'thebird: $x"q": ambiguous redirect\n', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
 for (const { title, body } of cases) {
   console.log(`== ${title}`);
   if (!coreReady) {

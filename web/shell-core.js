@@ -3534,7 +3534,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { error: ambiguousResult(word ?? redirect.text) };
   }
 
+  const ambiguity = async (redirect, sink) => ((await expandWord(redirect.target, sink)).length === 1 ? null : ambiguousResult(redirect.text));
+
   async function outputFailure(redirect, sink) {
+    const unclear = await ambiguity(redirect, sink);
+    if (unclear) return unclear;
     const path = await wordPath(redirect.target, sink);
     if (path === NULL_DEVICE) return null;
     let dir = parentOf(resolvePath(path));
@@ -3546,6 +3550,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   }
 
   async function inputFailure(redirect, sink) {
+    const unclear = await ambiguity(redirect, sink);
+    if (unclear) return unclear;
     const path = await wordPath(redirect.target, sink);
     if (path === NULL_DEVICE || host.exists(path)) return null;
     const word = (await expandWord(redirect.target, sink)).join('');
