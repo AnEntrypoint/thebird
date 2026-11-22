@@ -106,7 +106,7 @@ const providerVerdict = async (live) => {
     if (res.status === 429) continue;
     const body = await res.json().catch(() => null);
     if (res.ok && body?.choices?.length) return { verdict: 'ok', detail: '', model };
-    if (res.status === 403 && body?.error?.metadata?.scope === 'key_limit') return { verdict: 'skip', detail: 'OpenRouter key has a $' + body.error.metadata.limit_usd + ' limit (HTTP 403 key_limit)' };
+    if (res.status === 403 && body?.error?.metadata?.scope === 'key_limit') return { verdict: 'skip', detail: 'OpenRouter key is over its limit' + (body.error.metadata.limit_usd === undefined ? '' : ' of $' + body.error.metadata.limit_usd) + ' (HTTP 403 key_limit)' };
     return { verdict: 'fail', detail: 'HTTP ' + res.status + ' ' + (body?.error?.metadata?.scope ?? 'body not as expected') };
   }
   return { verdict: 'skip', detail: 'every free model is rate limited (HTTP 429 from ' + live.models.length + ' of ' + live.models.length + ')' };
@@ -742,6 +742,7 @@ group('code with no call site stays out: the stream hub and the exports nothing 
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
+    ['403 key_limit with no limit_usd', 403, { error: { code: 403, metadata: { scope: 'key_limit' } } }, 'skip'],
     ['403 with another code', 403, { error: { code: 403, metadata: { scope: 'model_access' } } }, 'fail'],
     ['429 from every model', 429, { error: { code: 429 } }, 'skip'],
     ['500', 500, { error: { code: 500, message: 'upstream' } }, 'fail'],
@@ -752,7 +753,7 @@ group('provider verdict: a 403 key_limit is a skip, and any other failure is a f
     const stub = await startProviderStub(status, body);
     try {
       const verdict = await providerVerdict({ url: stub.url, key: 'stub-key', models: ['stub-model-a', 'stub-model-b'] });
-      check(label + ' gives the ' + expected + ' verdict', verdict.verdict === expected, JSON.stringify({ pid: stub.pid, ...verdict }));
+      check(label + ' gives the ' + expected + ' verdict with a defined reason', verdict.verdict === expected && !String(verdict.detail).includes('undefined'), JSON.stringify({ pid: stub.pid, ...verdict }));
     } finally {
       await stub.stop();
     }
