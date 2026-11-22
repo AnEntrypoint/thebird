@@ -1,0 +1,12 @@
+{
+  "sdk": {
+    "name": "@wasmer/sdk",
+    "version": "0.19.1",
+    "sha256": "624318b597cc9539ab3615c4aba3bc2a428916ae5d04635736cfdd3ccfd93399"
+  },
+  "packages": [
+    "wasmer/edgejs@0.2.5",
+    "syrusakbary/edgejs@0.2.5-gfbc0e8e"
+  ],
+  "baseline": "web/vendor/txiki/tjs.wasm"
+}
