@@ -49,7 +49,6 @@ function streamProbes(text) {
 }
 
 async function main() {
-  const workspace = mkdtempSync(join(tmpdir(), 'lint-workspace-'));
   const profile = mkdtempSync(join(tmpdir(), 'lint-profile-'));
   say(`live: chromium ${chrome}, profile ${profile}`);
   const relay = await startRelay({});
@@ -80,7 +79,7 @@ async function main() {
     await relay.close();
     say('live: relay closed');
     corsHost.close();
-    for (const dir of [workspace, profile]) rmSync(dir, { recursive: true, force: true });
+    rmSync(profile, { recursive: true, force: true });
     say('live: temporary directories removed');
   }
 }

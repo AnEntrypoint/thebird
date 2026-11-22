@@ -1,13 +1,14 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const staticOnly = process.argv.includes('--static');
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
-const LIVE_TIMEOUT_MS = 900000;
+const LIVE_TIMEOUT_MS = Number(process.env.THEBIRD_LIVE_TIMEOUT_MS ?? 900000);
 const stamp = () => new Date().toISOString().slice(11, 23);
 const label = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : ok === 'NO_CLAIM' ? 'NO_CLAIM' : 'UNVERIFIED');
 const docs = Object.fromEntries(['ARCHITECTURE.md', 'AGENTS.md'].map((name) => [name, readFileSync(join(root, name), 'utf8').split('\n')]));
@@ -271,7 +272,9 @@ function probe(blocks, id, pass, detail) {
 
 function runLive() {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [join(root, 'scripts', 'lint-live.mjs')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const scratch = mkdtempSync(join(tmpdir(), 'lint-live-'));
+    const child = spawn(process.execPath, [join(root, 'scripts', 'lint-live.mjs')], { env: { ...process.env, TMPDIR: scratch }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    child.on('close', () => rmSync(scratch, { recursive: true, force: true }));
     let result = null;
     let last = 'no line streamed yet';
     let pending = '';
@@ -293,7 +296,7 @@ function runLive() {
     });
     child.stderr.on('data', (chunk) => onLine(`stderr: ${String(chunk).trim()}`));
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      process.kill(-child.pid, 'SIGKILL');
       resolve({ timedOut: true, last, result: null });
     }, LIVE_TIMEOUT_MS);
     child.on('close', (code) => {

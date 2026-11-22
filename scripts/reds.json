@@ -234,5 +234,16 @@
    "-s",
    "witness:shell"
   ]
+ },
+ {
+  "name": "livescratch",
+  "file": "scripts/lint-architecture.mjs",
+  "anchor": "    child.on('close', () => rmSync(scratch, { recursive: true, force: true }));\n",
+  "replace": "",
+  "command": [
+   "bash",
+   "-c",
+   "d=$(mktemp -d); TMPDIR=$d THEBIRD_LIVE_TIMEOUT_MS=8000 node scripts/lint-architecture.mjs > /dev/null 2>&1; sleep 3; left=\"$(ls -A $d)$(ps -eo args= | grep -F \"$d\" | grep -v grep)\"; rm -rf $d; [ -z \"$left\" ]"
+  ]
  }
 ]
