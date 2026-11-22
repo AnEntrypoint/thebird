@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startRelay } from '../src/relay.js';
-import { closeBrowserTree, runTerminal, startBrowser } from './browser-driver.mjs';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser } from './browser-driver.mjs';
 
 const chrome = process.env.CHROME_BIN ?? '/usr/bin/chromium-browser';
 const COMMANDS = 'echo printf test seq sed awk grep sort uniq wc head tail cut tr find xargs tee ls cp mv rm mkdir touch cat basename dirname date env export type jq base64 md5sum sha256sum gzip gunzip sleep';
@@ -83,6 +83,11 @@ async function main() {
     say('live: temporary directories removed');
   }
 }
+
+process.on('SIGTERM', () => {
+  closeBrowserTrees();
+  process.exit(143);
+});
 
 main().then(() => process.exit(0), (error) => {
   say(`live error: ${error.message}`);

@@ -296,7 +296,9 @@ function runLive() {
     });
     child.stderr.on('data', (chunk) => onLine(`stderr: ${String(chunk).trim()}`));
     const timer = setTimeout(() => {
-      process.kill(-child.pid, 'SIGKILL');
+      child.kill('SIGTERM');
+      const hard = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, 5000);
+      child.on('close', () => clearTimeout(hard));
       resolve({ timedOut: true, last, result: null });
     }, LIVE_TIMEOUT_MS);
     child.on('close', (code) => {
