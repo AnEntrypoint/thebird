@@ -6705,3 +6705,22 @@ Other findings:
   - Part A (gate-ticket PID 3940037, HEAD 622a0ff, 01:40 to 01:53): full browser PASS 296 FAIL 0 SKIP 3 GROUPS 83, RC 0, 818.6 s (the longest step). The three SKIPs are the live rows: every free OpenRouter model answered 429 (11 of 11). Rule group RC 0. Skip witness RC 0. No process was left in the scratch directory, and no scratch entry of ours remained.
   - Part B (gate-ticket PID 71987, HEAD 622a0ff, 04:41 to 05:38): the seven reds of stretches 10 and 11 each RC 1 and each restored with cmp ok: settle, rundir, coldstart, pollanswer, binrunner, leak, dead. No process or scratch entry was left. Each red ran a few minutes. The part's wall clock was 58 min because each step waited for the machine gate (si/so and the heavy-jobs check) under other agents' load. The gate queue before each part was granted took about 3 hours.
 - Not re-run in this window: W1 to W9 and the 21 shell-core reds. web/shell-core.js and the shell witness are unchanged since window 7, which ran them.
+
+### Ranked remaining work for thebird (stretch 12, base 4fa97d5; spec /workspace/hyperagent/specs/fx-freddie-txiki.md re-read)
+
+Mine now, needs nothing from fx (taken in this order):
+1. The key_limit skip reason read "$undefined limit" when the body had no limit_usd. Closed by a0cef14 (the reason names the limit only when present), with a rule-group case that has no limit_usd, and every case now also checks that its reason has no "undefined" in it.
+2. witness-shell.mjs dedup: 14 groups repeated the same bash-row loop (two shapes). Closed by 90729db (one matchesBash helper, +25/-78).
+3. Old scratch in /tmp/k13 (151 MB, peer rule: scratch under /workspace/tmp/thebird): removed; nothing referenced it and no process used it.
+4. bashkit registry check at the start of the stretch: latest is still 0.21.1, so nothing changes.
+5. Still mine, not taken in this stretch: witness.mjs (about 2,250 lines) split into modules (helpers, providers, groups by area); the remaining hand-written single-row checks in witness-shell.mjs (the gr0/gr1 output-and-stderr pattern, 24 rows) into tables; the lint scripts; /__thebird/progress, /__thebird/craft and /sites/<id>/settings, which only host:check names.
+
+Waits on fx (or gm) publishing:
+6. Stage 6 host half: thebird's fx:host module over the browser txiki port, so one JavaScript root loads in fx and in thebird. fx has published docs/host-interface.md (a spec with a thebird column; 52 rows exist and 56 are planned in the fx tree), not a running fx:host. Not started, as the dispatcher ruled.
+7. The shared txiki vendor step (stage 1: one pin file and one script from gm, verified by sha256). It replaces thebird's scripts/vendor-txiki.mjs once gm publishes it; it is not in /workspace/gm/tools yet.
+
+Waits on the owner (or the machine):
+8. The live rows: free OpenRouter models answer 429 often (window 12a: 11 of 11), so the rows are explicit SKIPs. A funded key or a quieter quota would let them run.
+9. The 8793 gy4 gateway: needs a tclaude upstream or a hyperswarm peer; the rows skip when nothing listens.
+10. Browser -O/-G on a file another user owns: needs the WASM rebuilt with stat_object carrying uid and gid (zig 0.17.1 and a pin decision).
+11. Owner decisions already recorded: Ctrl-C on the Pages site without isolation; ~ with HOME unset, ~name, $HOME empty, $ENV exported-only; the Pyodide bundle licence notices.
