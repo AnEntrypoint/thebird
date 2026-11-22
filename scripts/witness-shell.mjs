@@ -107,6 +107,17 @@ async function run(sh, script, options) {
   return sh.run(script, options);
 }
 
+async function matchesBash(label, rows, { syntaxErrorsByParse = false } = {}) {
+  for (const [script, stdout, stderr, status] of rows) {
+    if (syntaxErrorsByParse && status === 2) {
+      check(label + ': ' + JSON.stringify(script) + ' is a syntax error with the bash text, and is not run', core.syntaxText(script) === stderr && stdout === '', JSON.stringify([script, stderr]));
+      continue;
+    }
+    const r = await run(await shell({}), script);
+    check(label + ': ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
+  }
+}
+
 const cases = [];
 function group(title, body) {
   cases.push({ title, body });
@@ -3735,15 +3746,7 @@ group('parse: shell core gives bash output for each of these inputs (bash output
   ["! false; echo $?", "0\n", "", 0],
   ["x=`echo a`; echo $x", "a\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    if (status === 2) {
-      check('parse: ' + JSON.stringify(script) + ' is a syntax error with the bash text, and is not run', core.syntaxText(script) === stderr && stdout === '', JSON.stringify([script, stderr]));
-      continue;
-    }
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('parse: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('parse', cases, { syntaxErrorsByParse: true });
 });
 
 group('conditional: [[ ]] gives bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
@@ -3794,15 +3797,7 @@ group('conditional: [[ ]] gives bash output for each of these inputs, stdout, st
   ["[[ a b", "", "bash: -c: line 1: unexpected token `b', conditional binary operator expected\nbash: -c: line 1: syntax error near `b'\nbash: -c: line 1: `[[ a b'\n", 2],
   ["[[ a ) ]]", "", "bash: -c: line 1: syntax error in conditional expression: unexpected token `)'\nbash: -c: line 1: syntax error near `)'\nbash: -c: line 1: `[[ a ) ]]'\n", 2],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    if (status === 2) {
-      check('conditional: ' + JSON.stringify(script) + ' is a syntax error with the bash text, and is not run', core.syntaxText(script) === stderr && stdout === '', JSON.stringify([script, stderr]));
-      continue;
-    }
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('conditional: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('conditional', cases, { syntaxErrorsByParse: true });
 });
 
 group('function keyword and select: shell core gives bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
@@ -3830,11 +3825,7 @@ group('function keyword and select: shell core gives bash output for each of the
   ["function g { echo hi; }; g; g | tr a-z A-Z", "hi\nHI\n", "", 0],
   ["function g { return 3; }; g; echo rc=$?", "rc=3\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('function and select: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('function and select', cases);
 });
 
 group('size test: -s and test -s give bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
@@ -3843,11 +3834,7 @@ group('size test: -s and test -s give bash output for each of these inputs, stdo
   ["printf x > f; test -s f && echo tfull; : > e; test -s e || echo tempty", "tfull\ntempty\n", "", 0],
   ["printf 'ab' > f; [[ -s f && -n x ]] && echo both; [[ ! -s e ]] 2>/dev/null; echo rc=$?", "both\nrc=0\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('size test: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('size test', cases);
 });
 
 group('numeric operands: [[ ]] evaluates them as arithmetic, test and [ take integers, with bash output (locale en_US.UTF-8)', async () => {
@@ -3895,11 +3882,7 @@ group('select menu: ten or more items are laid out in columns as bash lays them 
   ["printf '\\n2\\n' | { select x in i1 i2 i3 i4 i5 i6 i7 i8 i9 i10; do echo \"[$x] [$REPLY]\"; break; done; }; echo rc=$?", "[i2] [2]\nrc=0\n", "1) i1\t  3) i3\t   5) i5    7) i7    9) i9\n2) i2\t  4) i4\t   6) i6    8) i8   10) i10\n#? 1) i1\t  3) i3\t   5) i5    7) i7    9) i9\n2) i2\t  4) i4\t   6) i6    8) i8   10) i10\n#? ", 0],
   ["COLUMNS=60; printf '11\\n' | { select x in a b c d e f g h i j k; do echo \"[$x]\"; break; done; }; echo rc=$?", "[k]\nrc=0\n", "1) a    3) c   5) e   7) g   9) i  11) k\n2) b    4) d   6) f   8) h  10) j\n#? ", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('select menu: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('select menu', cases);
 });
 
 group('permission tests: -r -w -x -O -G -N give bash output for each of these inputs, stdout, stderr and status (bash output, locale en_US.UTF-8)', async () => {
@@ -3916,11 +3899,7 @@ group('permission tests: -r -w -x -O -G -N give bash output for each of these in
   ["printf x > f; chmod 000 f; [[ -r f ]] || echo unread; chmod 400 f; [[ -r f ]] && echo readable", "unread\nreadable\n", "", 0],
   ["mkdir -p a/b; printf x > a/b/f; chmod 644 a/b/f; chmod 600 a; [[ -r a/b/f ]] || echo blocked; chmod 700 a", "blocked\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('permission: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('permission', cases);
 });
 
 group('BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME read them, with bash output (bash output, locale en_US.UTF-8)', async () => {
@@ -3939,11 +3918,7 @@ group('BASH_REMATCH: =~ sets the groups, and ${NAME[i]}, ${#NAME[@]} and $NAME r
   ["[[ abc =~ b ]]; echo \"${BASH_REMATCH[0]}\"", "b\n", "", 0],
   ["[[ abc =~ (b)(c) ]]; echo \"${#BASH_REMATCH}\"", "2\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('BASH_REMATCH: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('BASH_REMATCH', cases);
 });
 
 group('stray ]] at the start of a command is a syntax error near ]], and an argument of ]] is an ordinary word (bash output, locale en_US.UTF-8)', async () => {
@@ -3957,11 +3932,7 @@ group('stray ]] at the start of a command is a syntax error near ]], and an argu
   ["[[ a ]] && echo ok ]]", "ok ]]\n", "", 0],
   ["echo a\n]]\necho b", "a\n", "bash: -c: line 2: syntax error near unexpected token `]]'\nbash: -c: line 2: `]]'\n", 2],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('stray ]]: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('stray ]]', cases);
 });
 
 group('a word after a compound command is a syntax error near that word, as bash reports it (bash output, locale en_US.UTF-8)', async () => {
@@ -3971,11 +3942,7 @@ group('a word after a compound command is a syntax error near that word, as bash
   ["{ echo; } b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `{ echo; } b'\n", 2],
   ["if true; then echo; fi b", "", "bash: -c: line 1: syntax error near unexpected token `b'\nbash: -c: line 1: `if true; then echo; fi b'\n", 2],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('leftover word: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('leftover word', cases);
 });
 
 group('permission tests read the host mode bits when the shell has no chmod for the file (bash output with chmod, locale en_US.UTF-8)', async () => {
@@ -4015,11 +3982,7 @@ group('indexed arrays: NAME=(…), NAME[i]=, element and count reads, and unquot
   ["a=(7 8 9); echo \"${#a[1]}\" \"${a[2]}x\"", "1 9x\n", "", 0],
   ["a=(1 2); echo \"${a[5]}\" \"${#a[5]}\"", " 0\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('array: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('array', cases);
 });
 
 group('indexed arrays: "${NAME[@]}" is one word per element, "${!NAME[@]}" is the keys, with bash output (bash output, locale en_US.UTF-8)', async () => {
@@ -4041,11 +4004,7 @@ group('indexed arrays: "${NAME[@]}" is one word per element, "${!NAME[@]}" is th
   ["a=(1 2); printf \"[%s]\n\" \"${a[-1]}\"", "[2]\n", "", 0],
   ["a=(1 2); printf \"[%s]\n\" \"${a[@]:0}\"", "[1]\n[2]\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('array fields: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('array fields', cases);
 });
 
 group('indexed arrays: "${NAME[@]:OFFSET:LENGTH}" slices the elements, with bash output (bash output, locale en_US.UTF-8)', async () => {
@@ -4059,11 +4018,7 @@ group('indexed arrays: "${NAME[@]:OFFSET:LENGTH}" slices the elements, with bash
   ["a=(1 2 3); echo \"${a[@]:5}\" end", "end\n", "", 0],
   ["a=(1 2 3); n=2; echo \"${a[@]:n}\"", "3\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('array slice: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('array slice', cases);
 });
 
 group('permission tests: -O and -G compare the file owner and group with the shell user, with bash output (bash output, locale en_US.UTF-8)', async () => {
@@ -4101,11 +4056,7 @@ group('indexed arrays: NAME=(…) before a command is a prefix that the command 
   ["a=(p q); a=(r) true; echo \"${a[@]}\"", "p q\n", "", 0],
   ["a=(s); a=(p q) echo \"${a[@]}\"; echo \"${a[@]}\"", "s\ns\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('array prefix: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('array prefix', cases);
 });
 
 group('touch: -m, -a and plain touch set the times that -N reads, and -c creates nothing, with bash output (bash output, locale en_US.UTF-8)', async () => {
@@ -4117,11 +4068,7 @@ group('touch: -m, -a and plain touch set the times that -N reads, and -c creates
   ["printf a > f; sleep 0.05; touch -am f; [[ -N f ]] && echo modified || echo notmod", "notmod\n", "", 0],
   ["touch -c nofile; [ -e nofile ] && echo created || echo absent", "absent\n", "", 0],
   ];
-  for (const [script, stdout, stderr, status] of cases) {
-    const sh = await shell({});
-    const r = await run(sh, script);
-    check('touch: ' + JSON.stringify(script) + ' matches bash', r.stdout === stdout && r.stderr === stderr && r.exitCode === status, JSON.stringify(r));
-  }
+  await matchesBash('touch', cases);
 });
 
 group('find and sed: -empty, -exec, the i command and the = command, as GNU find and sed do', async () => {
