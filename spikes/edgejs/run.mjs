@@ -34,14 +34,21 @@ try {
     const file = path.startsWith('sdk/') ? join(sdk, path.slice(4)) : path === 'fetch.txt' ? null : join(here, path);
     const headers = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' };
     if (file === null) return res.writeHead(200, { ...headers, 'content-type': 'text/plain' }).end('spike-fetch-ok\n');
+    let body;
     try {
-      res.writeHead(200, { ...headers, 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(readFileSync(file));
+      body = readFileSync(file);
     } catch {
-      res.writeHead(404, headers).end();
+      return res.writeHead(404, headers).end();
     }
+    res.writeHead(200, { ...headers, 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(body);
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   const url = 'http://127.0.0.1:' + server.address().port + '/page.html?packages=' + encodeURIComponent(JSON.stringify(pin.packages));
+  if (process.env.EDGEJS_SPIKE_DRY) {
+    const origin = 'http://127.0.0.1:' + server.address().port;
+    const probes = await Promise.all(['/page.html', '/page.js', '/sdk/dist/index.js', '/sdk/pkg/wasmer_sdk_js_bg.wasm', '/fetch.txt'].map(async (path) => { const res = await fetch(origin + path); return [path, res.status, res.headers.get('cross-origin-opener-policy'), res.headers.get('cross-origin-embedder-policy')]; }));
+    await finish(probes.every(([, status, opener, embedder]) => status === 200 && opener === 'same-origin' && embedder === 'require-corp') ? 0 : 1, { probes });
+  }
   browser = await startBrowser({ chrome: process.env.CHROME_BIN ?? '/usr/bin/chromium-browser', profile: mkdtempSync(join(scratch, 'profile-')) });
   const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true });
