@@ -6871,3 +6871,11 @@ Waits on the owner (or the machine):
 - Reds: sibmirror (the entry no longer mirrors its siblings) and mirrorwrite (the mirror copy is not written), plus the engine reds enginehost, enginealias, enginepath, engineurl re-run on the final tree.
 - Two harness defects found while building the witness, not in the product: a group heredoc or a second terminal line in the same run can end the group early (the page reports done while the second command is still typed), so the group runs its file writes and the node call as one command with &&; and the check detail now shows the whole transcript's head and tail.
 - The stale thebird-ng ticket queued before the prelude change was stopped by PID (2790071) before it ran; its result file is empty.
+
+### Window on 8574218: the nested group, and the push
+
+- thebird-ng2 (8574218, 16:32 to 16:50): ng2_DONE 1, PASS 11 FAIL 1 over 5 groups. The one failing row was in group nested: the txiki shell serves git, node, qjs and python3 from inside itself, with stderr "python3: Failed to fetch". The row's python3 loads the Pyodide bundle over the network from anentrypoint.github.io/pyodide-minimal, and the window preflight did not check that host (it checked npm, jsdelivr, pypi and openrouter). The host answered 200 when checked after the window.
+- No local bundle exists in the repo (the copies are under /tmp, which is forbidden), so the row keeps its network fetch and the preflight now checks the bundle host. The preflight change is in the window script /workspace/tmp/thebird/k/part.sh, outside the repo.
+- thebird-nest2 (8574218, granted at the gate): nest_DONE 0. Group nested PASS 2 FAIL 0 in 121.7 s; the row's stdout is git-ok, 4, 3, 42, done, exit 0.
+- The window's other groups from thebird-ng2 (node-txiki-npm-registry, spin, loops) passed in that window, and node-txiki-npm passed in thebird-sq8 on the final engine, so the push covers the whole node command set.
+- Push: origin main was d38c55a; git merge-base confirmed it is an ancestor of 8574218; git push origin 8574218:refs/heads/main gave d38c55a..8574218; git ls-remote origin main then showed 857421873d2efc36c05deaac9c079f2caac9768c.
