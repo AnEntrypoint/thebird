@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { default: host, unsupported } = await import(pathToFileURL(join(root, 'web', 'fx-host.js')).href);
+const { default: host } = await import(pathToFileURL(join(root, 'web', 'fx-host.js')).href);
 
 test('the default export is a frozen object of the five fields, and the host names itself thebird', () => {
   assert.deepEqual(Object.keys(host).sort(), ['capabilities', 'modules', 'tools', 'verbs', 'version']);
@@ -33,7 +33,7 @@ test('the tools write and read a file in the workspace, and an absent tool names
   assert.equal(host.tools.write_file({ path: '/workspace/fx-host-test.txt', content: 'hi' }), 'wrote /workspace/fx-host-test.txt');
   assert.equal(host.tools.read_file({ path: '/workspace/fx-host-test.txt' }), 'hi');
   assert.throws(() => host.tools.Bash, (error) => error.code === 'ERR_FX_UNSUPPORTED' && error.name === 'FxUnsupported' && error.target === 'tools.Bash');
-  assert.throws(() => host.verbs.anything, (error) => error.code === unsupported('x').code);
+  assert.throws(() => host.verbs.anything, (error) => error.code === 'ERR_FX_UNSUPPORTED');
 });
 
 test('the timers module waits and the crypto module hashes, as in Node', async () => {

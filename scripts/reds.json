@@ -68,5 +68,8 @@
 {"name":"hostcaps","file":"web/fx-host.js","anchor":"capabilities: Object.freeze(['tools', ...Object.keys(modules)])","replace":"capabilities: Object.freeze(['tools', 'verbs', ...Object.keys(modules)])","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"hostmodule","file":"web/fx-host.js","anchor":"  ['path', path],\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"hostguard","file":"web/fx-host.js","anchor":"    throw unsupported(name + '.' + key);","replace":"    return undefined;","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
-{"name":"hosttool","file":"web/fx-host.js","anchor":"fs.writeFileSync(file, content);","replace":"fs.writeFileSync(file, '');","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000}
+{"name":"hosttool","file":"web/fx-host.js","anchor":"fs.writeFileSync(file, content);","replace":"fs.writeFileSync(file, '');","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"enginehost","file":"web/node-in-txiki.js","anchor":"    host: 'thebird',\n    modules: { fs: fsModule,","replace":"    host: 'fx',\n    modules: { fs: fsModule,","check":"fx:host","timeoutMs":300000},
+{"name":"enginealias","file":"web/node-in-txiki.js","anchor":"const key = name.replace(/^node:/, '');","replace":"const key = name;","check":"fx:host","timeoutMs":300000},
+{"name":"enginepath","file":"web/node-in-txiki.js","anchor":"path: (await import('tjs:path')).default, ","replace":"","check":"fx:host","timeoutMs":300000}
 ]

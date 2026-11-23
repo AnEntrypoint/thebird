@@ -747,6 +747,16 @@ group('code with no call site stays out: the stream hub and the exports nothing 
   for (const name of gone) check(name + ' has no definition or call site', !new RegExp('\\b' + name + '\\b').test(text), name);
 });
 
+group('fx:host loads in the page node: version, capabilities, modules and the node: aliases, and an absent tool refuses', async () => {
+  const code = "const h = require('fx:host'); const path = require('node:path'); h.modules.fs.writeFileSync('/workspace/fxh.txt', 'ok'); h.modules['timers/promises'].setTimeout(5, 'late').then((late) => console.log('FXH ' + JSON.stringify({ version: h.version, capabilities: h.capabilities, joined: path.join('/a', 'b', '../c'), aliased: path === h.modules.path && require('fs') === h.modules.fs, read: require('fs').readFileSync('/workspace/fxh.txt', 'utf8'), late, refusal: (() => { try { return h.tools.Bash; } catch (error) { return error.code + ' ' + error.target; } })() })))";
+  const out = await terminal([['run', 'node -e "' + code + '"'], ['run', 'node -e "require(\'nonesuch\')"; echo rc=$?']]);
+  const line = out.out.split('\n').find((row) => row.startsWith('FXH '));
+  const seen = line ? JSON.parse(line.slice(4)) : null;
+  check('require fx:host in the page node returns the thebird host with its version and capability list', JSON.stringify(seen?.version) === '{"interface":1,"minor":0,"host":"thebird"}' && JSON.stringify(seen?.capabilities) === '["tools","fs","path","timers/promises"]', JSON.stringify(seen));
+  check('the node: and bare names return the host modules, path joins and fs and timers work through them', seen?.joined === '/a/c' && seen?.aliased === true && seen?.read === 'ok' && seen?.late === 'late', JSON.stringify(seen));
+  check('a tool the host lacks refuses with ERR_FX_UNSUPPORTED naming it, and an unknown module is still not found', seen?.refusal === 'ERR_FX_UNSUPPORTED tools.Bash' && /Cannot find module 'nonesuch'/.test(out.out), JSON.stringify(seen?.refusal) + ' ' + out.out.slice(-200));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],

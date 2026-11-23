@@ -1,10 +1,11 @@
 import { runTjs, TJS_CANCELLED, TJS_TIMED_OUT } from './txiki-in-page.js';
 import * as fs from './shims/fs.js';
+import { createHost } from './fx-host-core.js';
 import { resolve } from './shims/path.js';
 
 const USAGE = 'usage: node <script> [args] | node -e <code> | node -v';
 
-function installNodeGlobals(cwd, argv) {
+async function installNodeGlobals(cwd, argv) {
   const absolute = (path) => (path.startsWith('/') ? path : `${cwd}/${path}`);
   const enoent = (path) => Object.assign(new Error(`ENOENT: no such file or directory, open '${path}'`), { code: 'ENOENT' });
   const fsModule = {
@@ -37,8 +38,22 @@ function installNodeGlobals(cwd, argv) {
     cwd: () => cwd,
     exit: (code = 0) => tjs.exit(code),
   };
+  const wait = (ms, value) => new Promise((resolve) => setTimeout(resolve, ms, value));
+  const host = createHost({
+    host: 'thebird',
+    modules: { fs: fsModule, path: (await import('tjs:path')).default, 'timers/promises': { setTimeout: wait, scheduler: { wait } } },
+    tools: {
+      read_file: ({ path }) => fsModule.readFileSync(path, 'utf8'),
+      write_file: ({ path, content }) => {
+        fsModule.writeFileSync(path, content);
+        return 'wrote ' + path;
+      },
+    },
+  });
   globalThis.require = (name) => {
-    if (name === 'fs' || name === 'node:fs') return fsModule;
+    const key = name.replace(/^node:/, '');
+    if (name === 'fx:host') return host;
+    if (key in host.modules) return host.modules[key];
     throw Object.assign(new Error(`Cannot find module '${name}'`), { code: 'MODULE_NOT_FOUND' });
   };
 }
@@ -59,7 +74,7 @@ export async function nodeBuiltin(argv, dir, options) {
     scriptArgv = ['node', path, ...argv.slice(1)];
     name = path;
   } else throw new Error(USAGE);
-  const prelude = `(${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
+  const prelude = `const createHost = ${createHost.toString()};\nawait (${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
   const { output, status } = await runTjs(prelude + source, dir, { ...options, name });
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
