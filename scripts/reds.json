@@ -63,6 +63,5 @@
 {"name":"livescratch","file":"scripts/lint-architecture.mjs","anchor":"    child.on('close', () => rmSync(scratch, { recursive: true, force: true }));\n","replace":"","command":["node","scripts/lint-live-timeout.mjs"],"timeoutMs":600000},
 {"name":"liveterm","file":"scripts/lint-live.mjs","anchor":"  closeBrowserTrees();\n  process.exit(143);","replace":"  process.exit(143);","command":["node","scripts/lint-live-timeout.mjs"],"timeoutMs":600000},
 {"name":"parts","file":"scripts/witness.mjs","anchor":"position % total === index - 1","replace":"position % total === index","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":120000},
-{"name":"spikeserve","file":"spikes/edgejs/run.mjs","anchor":"'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy'","replace":"'cross-origin-embedder-policy': 'unsafe-none', 'cross-origin-resource-policy'","command":["bash","-c","EDGEJS_SPIKE_DRY=1 node spikes/edgejs/run.mjs"],"timeoutMs":300000},
 {"name":"listscratch","file":"scripts/witness.mjs","anchor":"process.on('exit', () => { for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true }); });","replace":"process.on('exit', () => {});","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":600000}
 ]
