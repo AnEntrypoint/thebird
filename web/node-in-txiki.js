@@ -1,12 +1,12 @@
 import { runTjs, TJS_CANCELLED, TJS_TIMED_OUT } from './txiki-in-page.js';
 import * as fs from './shims/fs.js';
 import { createHost } from './fx-host-core.js';
-import { hostImports } from './host-imports.js';
-import { resolve } from './shims/path.js';
+import { hostImports, MIRROR_ROOT, mirrorRelativeImports } from './host-imports.js';
+import { dirname, resolve } from './shims/path.js';
 
 const USAGE = 'usage: node <script> [args] | node -e <code> | node -v';
 
-async function installNodeGlobals(cwd, argv) {
+function installNodeGlobals(cwd, argv, tjsPath) {
   const absolute = (path) => (path.startsWith('/') ? path : `${cwd}/${path}`);
   const enoent = (path) => Object.assign(new Error(`ENOENT: no such file or directory, open '${path}'`), { code: 'ENOENT' });
   const fsModule = {
@@ -51,7 +51,7 @@ async function installNodeGlobals(cwd, argv) {
   const wait = (ms, value) => new Promise((resolve) => setTimeout(resolve, ms, value));
   const host = createHost({
     host: 'thebird',
-    modules: { fs: fsModule, url: { URL, URLSearchParams }, path: (await import('tjs:path')).default, 'timers/promises': { setTimeout: wait, scheduler: { wait } } },
+    modules: { fs: fsModule, url: { URL, URLSearchParams }, path: tjsPath, 'timers/promises': { setTimeout: wait, scheduler: { wait } } },
     tools: {
       read_file: ({ path }) => fsModule.readFileSync(path, 'utf8'),
       write_file: ({ path, content }) => {
@@ -72,20 +72,28 @@ export async function nodeBuiltin(argv, dir, options) {
   let source;
   let name = '<tjs -e>';
   let scriptArgv = ['node'];
+  let file;
   if (argv.length === 2 && argv[0] === '-e') source = argv[1];
   else if (argv.length === 1 && (argv[0] === '-v' || argv[0] === '--version')) source = 'console.log(process.version);';
   else if (argv.length >= 1 && !argv[0].startsWith('-')) {
     const path = resolve(dir, argv[0]);
     try {
-      source = fs.readFileSync(path, 'utf8');
+      source = mirrorRelativeImports(fs.readFileSync(path, 'utf8'), dirname(path), fs);
     } catch {
       throw new Error(`Cannot find module '${path}'`);
     }
     scriptArgv = ['node', path, ...argv.slice(1)];
     name = path;
+    file = path;
   } else throw new Error(USAGE);
-  const prelude = `const createHost = ${createHost.toString()};\nawait (${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
-  const { output, status } = await runTjs(prelude + hostImports(source), dir, { ...options, name });
+  const prelude = `import tjsPath from 'tjs:path';\nconst createHost = ${createHost.toString()};\n(${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)}, tjsPath);\n`;
+  let code = prelude + hostImports(source);
+  if (file !== undefined) {
+    fs.mkdirSync(MIRROR_ROOT, { recursive: true });
+    fs.writeFileSync(MIRROR_ROOT + '/prelude.mjs', prelude);
+    code = 'import ' + JSON.stringify(MIRROR_ROOT + '/prelude.mjs') + ';\n' + hostImports(source);
+  }
+  const { output, status } = await runTjs(code, dir, { ...options, name });
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
   if (status !== 0) throw Object.assign(new Error(`node exited with status ${status}`), { exitCode: status, stdout: output.trimEnd() });

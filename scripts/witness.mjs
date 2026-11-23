@@ -767,6 +767,15 @@ group('two hosts, one plugin: fx-host-plugin.mjs prints on the page node the lin
   check('the plugin prints on the page node fx\'s exact line, the host field naming thebird and every other byte equal', printed === thebirdLine, JSON.stringify(printed) + ' vs ' + JSON.stringify(fxLine));
 });
 
+group('a sibling module imports fx:host, and the entry reaches it through the mirror on the page node', async () => {
+  const out = await terminal([
+    ['run', "mkdir -p /workspace/sib2 && cd /workspace/sib2"],
+    ['run', "printf '%s\\n' \"import host from 'fx:host';\" \"export const joined = host.modules.path.join('a', 'b');\" 'export default 7;' > dep.mjs && printf '%s\\n' \"import dep, { joined } from './dep.mjs';\" \"console.log('SIB', dep, joined);\" > main.mjs && node main.mjs"],
+    ['run', 'echo @@END'],
+  ]);
+  check('the sibling line prints 7 and a/b, read through the mirror', out.out.split('\n').some((row) => row.trim() === 'SIB 7 a/b'), JSON.stringify(out.out.slice(0, 900)) + ' ... ' + JSON.stringify(out.out.slice(-300)));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],
