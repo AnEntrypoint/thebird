@@ -63,5 +63,10 @@
 {"name":"livescratch","file":"scripts/lint-architecture.mjs","anchor":"    child.on('close', () => rmSync(scratch, { recursive: true, force: true }));\n","replace":"","command":["node","scripts/lint-live-timeout.mjs"],"timeoutMs":600000},
 {"name":"liveterm","file":"scripts/lint-live.mjs","anchor":"  closeBrowserTrees();\n  process.exit(143);","replace":"  process.exit(143);","command":["node","scripts/lint-live-timeout.mjs"],"timeoutMs":600000},
 {"name":"parts","file":"scripts/witness.mjs","anchor":"position % total === index - 1","replace":"position % total === index","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":120000},
-{"name":"listscratch","file":"scripts/witness.mjs","anchor":"process.on('exit', () => { for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true }); });","replace":"process.on('exit', () => {});","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":600000}
+{"name":"listscratch","file":"scripts/witness.mjs","anchor":"process.on('exit', () => { for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true }); });","replace":"process.on('exit', () => {});","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":600000},
+{"name":"hosthost","file":"web/fx-host.js","anchor":"host: 'thebird'","replace":"host: 'fx'","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostcaps","file":"web/fx-host.js","anchor":"capabilities: Object.freeze(['tools', ...Object.keys(modules)])","replace":"capabilities: Object.freeze(['tools', 'verbs', ...Object.keys(modules)])","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostmodule","file":"web/fx-host.js","anchor":"  ['path', path],\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostguard","file":"web/fx-host.js","anchor":"    throw unsupported(name + '.' + key);","replace":"    return undefined;","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hosttool","file":"web/fx-host.js","anchor":"fs.writeFileSync(file, content);","replace":"fs.writeFileSync(file, '');","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000}
 ]
