@@ -1,30 +1,33 @@
 import { Wasmer } from './sdk/dist/index.js';
 
-const program = String.raw`
-const fs = require('node:fs');
-fs.writeFileSync('/tmp/spike.txt', 'spike-fs-ok');
-const back = fs.readFileSync('/tmp/spike.txt', 'utf8');
-setTimeout(async () => {
-  const res = await fetch(process.argv[1]);
-  console.log(JSON.stringify({ back, timer: true, status: res.status, body: (await res.text()).trim() }));
-}, 50);
-`;
+const params = new URL(location.href).searchParams;
+const packages = JSON.parse(params.get('packages'));
+const steps = await (await fetch('steps.json')).json();
+const fetchUrl = new URL('fetch.txt', location.href).href;
 
-const runPackage = async (wasmer, name) => {
+const timed = async (work) => {
   const started = performance.now();
   try {
-    const sandbox = await wasmer.sandboxes.create({ packages: [name], network: { mode: 'http' } });
-    const loadMs = performance.now() - started;
-    const output = await sandbox.command('node', ['-e', program, new URL('fetch.txt', location.href).href]).run();
-    const text = output.text();
-    const line = text.split('\n').find((row) => row.startsWith('{'));
-    return { name, loadMs, runMs: performance.now() - started - loadMs, result: line ? JSON.parse(line) : null, text: text.slice(-400) };
+    return { ...(await work()), ms: Math.round(performance.now() - started) };
   } catch (error) {
-    return { name, loadMs: performance.now() - started, error: String(error?.message ?? error).slice(0, 400) };
+    return { error: String(error?.message ?? error).slice(0, 400), ms: Math.round(performance.now() - started) };
   }
 };
 
-const packages = JSON.parse(new URL(location.href).searchParams.get('packages'));
+const runStep = (sandbox, step) => timed(async () => {
+  const output = await sandbox.command('node', ['-e', step.code, ...(step.fetch ? [fetchUrl] : [])]).run();
+  const out = output.text().trim();
+  return { exitCode: output.exitCode, out: out.slice(-300), err: output.stderr.text().slice(-300), ok: output.exitCode === 0 && out.includes(step.expect) };
+});
+
+const runPackage = async (wasmer, name) => {
+  const loaded = await timed(() => wasmer.sandboxes.create({ packages: [name], network: { mode: 'http' } }).then((sandbox) => ({ sandbox })));
+  if (loaded.error) return { name, loadMs: loaded.ms, error: loaded.error, steps: [] };
+  const results = [];
+  for (const step of steps) results.push({ name: step.name, ...(await runStep(loaded.sandbox, step)) });
+  return { name, loadMs: loaded.ms, steps: results };
+};
+
 const wasmer = new Wasmer();
 const results = [];
 for (const name of packages) results.push(await runPackage(wasmer, name));

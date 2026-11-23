@@ -43,10 +43,11 @@ try {
     res.writeHead(200, { ...headers, 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(body);
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-  const url = 'http://127.0.0.1:' + server.address().port + '/page.html?packages=' + encodeURIComponent(JSON.stringify(pin.packages));
+  const chosen = process.env.EDGEJS_SPIKE_PACKAGE === undefined ? pin.packages : [pin.packages[Number(process.env.EDGEJS_SPIKE_PACKAGE)]];
+  const url = 'http://127.0.0.1:' + server.address().port + '/page.html?packages=' + encodeURIComponent(JSON.stringify(chosen));
   if (process.env.EDGEJS_SPIKE_DRY) {
     const origin = 'http://127.0.0.1:' + server.address().port;
-    const probes = await Promise.all(['/page.html', '/page.js', '/sdk/dist/index.js', '/sdk/pkg/wasmer_sdk_js_bg.wasm', '/fetch.txt'].map(async (path) => { const res = await fetch(origin + path); return [path, res.status, res.headers.get('cross-origin-opener-policy'), res.headers.get('cross-origin-embedder-policy')]; }));
+    const probes = await Promise.all(['/page.html', '/page.js', '/steps.json', '/sdk/dist/index.js', '/sdk/pkg/wasmer_sdk_js_bg.wasm', '/fetch.txt'].map(async (path) => { const res = await fetch(origin + path); return [path, res.status, res.headers.get('cross-origin-opener-policy'), res.headers.get('cross-origin-embedder-policy')]; }));
     await finish(probes.every(([, status, opener, embedder]) => status === 200 && opener === 'same-origin' && embedder === 'require-corp') ? 0 : 1, { probes });
   }
   browser = await startBrowser({ chrome: process.env.CHROME_BIN ?? '/usr/bin/chromium-browser', profile: mkdtempSync(join(scratch, 'profile-')) });
@@ -62,7 +63,7 @@ try {
     if (!results) await new Promise((ok) => setTimeout(ok, 1000));
   }
   const parsed = results ? JSON.parse(results) : [];
-  const meets = (run) => run.result?.back === 'spike-fs-ok' && run.result?.timer === true && run.result?.status === 200 && run.result?.body === 'spike-fetch-ok';
+  const meets = (run) => run.steps.length > 0 && run.steps.every((step) => step.ok);
   const report = {
     baselineBytes: statSync(join(root, pin.baseline)).size,
     sdkWasmBytes: statSync(join(sdk, 'pkg', 'wasmer_sdk_js_bg.wasm')).size,
@@ -70,7 +71,7 @@ try {
     timedOut: results === null,
     runs: parsed.map((run) => ({ ...run, meetsWitnesses: meets(run) })),
   };
-  await finish(report.runs.length === pin.packages.length && report.runs.some(meets) ? 0 : 1, report);
+  await finish(report.runs.length === chosen.length && report.runs.every(meets) ? 0 : 1, report);
 } catch (error) {
   await finish(3, { error: String(error?.stack ?? error).slice(0, 600) });
 }
