@@ -752,7 +752,7 @@ group('fx:host loads in the page node: version, capabilities, modules and the no
   const out = await terminal([['run', 'node -e "' + code + '"'], ['run', 'node -e "require(\'nonesuch\')"; echo rc=$?']]);
   const line = out.out.split('\n').find((row) => row.startsWith('FXH '));
   const seen = line ? JSON.parse(line.slice(4)) : null;
-  check('require fx:host in the page node returns the thebird host with its version and capability list', JSON.stringify(seen?.version) === '{"interface":1,"minor":0,"host":"thebird"}' && JSON.stringify(seen?.capabilities) === '["tools","fs","path","timers/promises"]', JSON.stringify(seen));
+  check('require fx:host in the page node returns the thebird host with its version and capability list', JSON.stringify(seen?.version) === '{"interface":1,"minor":0,"host":"thebird"}' && JSON.stringify(seen?.capabilities) === '["tools","fs","url","path","timers/promises"]', JSON.stringify(seen));
   check('the node: and bare names return the host modules, path joins and fs and timers work through them', seen?.joined === '/a/c' && seen?.aliased === true && seen?.read === 'ok' && seen?.late === 'late', JSON.stringify(seen));
   check('a tool the host lacks refuses with ERR_FX_UNSUPPORTED naming it, and an unknown module is still not found', seen?.refusal === 'ERR_FX_UNSUPPORTED tools.Bash' && /Cannot find module 'nonesuch'/.test(out.out), JSON.stringify(seen?.refusal) + ' ' + out.out.slice(-200));
 });

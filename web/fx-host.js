@@ -15,6 +15,7 @@ export const host = createHost({
     path,
     crypto,
     buffer: { Buffer },
+    url: { URL, URLSearchParams },
     'timers/promises': { setTimeout: wait, scheduler: { wait } },
   },
   tools: {

@@ -51,7 +51,7 @@ async function installNodeGlobals(cwd, argv) {
   const wait = (ms, value) => new Promise((resolve) => setTimeout(resolve, ms, value));
   const host = createHost({
     host: 'thebird',
-    modules: { fs: fsModule, path: (await import('tjs:path')).default, 'timers/promises': { setTimeout: wait, scheduler: { wait } } },
+    modules: { fs: fsModule, url: { URL, URLSearchParams }, path: (await import('tjs:path')).default, 'timers/promises': { setTimeout: wait, scheduler: { wait } } },
     tools: {
       read_file: ({ path }) => fsModule.readFileSync(path, 'utf8'),
       write_file: ({ path, content }) => {

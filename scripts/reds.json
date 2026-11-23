@@ -65,14 +65,16 @@
 {"name":"parts","file":"scripts/witness.mjs","anchor":"position % total === index - 1","replace":"position % total === index","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":120000},
 {"name":"listscratch","file":"scripts/witness.mjs","anchor":"process.on('exit', () => { for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true }); });","replace":"process.on('exit', () => {});","command":["node","--test","test/witness-parts.test.mjs"],"timeoutMs":600000},
 {"name":"hosthost","file":"web/fx-host.js","anchor":"host: 'thebird'","replace":"host: 'fx'","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
-{"name":"hostcaps","file":"web/fx-host.js","anchor":"capabilities: Object.freeze(['tools', ...Object.keys(modules)])","replace":"capabilities: Object.freeze(['tools', 'verbs', ...Object.keys(modules)])","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
-{"name":"hostmodule","file":"web/fx-host.js","anchor":"  ['path', path],\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
-{"name":"hostguard","file":"web/fx-host.js","anchor":"    throw unsupported(name + '.' + key);","replace":"    return undefined;","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostcaps","file":"web/fx-host-core.js","anchor":"? ['tools'] : []), ...Object.keys(modules)","replace":"? ['tools', 'verbs'] : []), ...Object.keys(modules)","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostmodule","file":"web/fx-host.js","anchor":"    path,\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"hostguard","file":"web/fx-host-core.js","anchor":"      throw unsupported(name + '.' + key);","replace":"      return undefined;","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"hosttool","file":"web/fx-host.js","anchor":"fs.writeFileSync(file, content);","replace":"fs.writeFileSync(file, '');","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"enginehost","file":"web/node-in-txiki.js","anchor":"    host: 'thebird',\n    modules: { fs: fsModule,","replace":"    host: 'fx',\n    modules: { fs: fsModule,","check":"fx:host","timeoutMs":300000},
-{"name":"enginealias","file":"web/node-in-txiki.js","anchor":"const key = name.replace(/^node:/, '');","replace":"const key = name;","check":"fx:host","timeoutMs":300000},
+{"name":"enginealias","file":"web/node-in-txiki.js","anchor":"const key = name.replace(/^(node:|fx:host\\/)/, '');","replace":"const key = name;","check":"fx:host","timeoutMs":300000},
 {"name":"enginepath","file":"web/node-in-txiki.js","anchor":"path: (await import('tjs:path')).default, ","replace":"","check":"fx:host","timeoutMs":300000},
 {"name":"twointerface","file":"web/fx-host-core.js","anchor":"interface: 1,","replace":"interface: 2,","check":"fx-host-plugin.mjs","timeoutMs":300000},
 {"name":"twotimers","file":"web/node-in-txiki.js","anchor":", 'timers/promises': { setTimeout: wait, scheduler: { wait } } }","replace":" }","check":"fx-host-plugin.mjs","timeoutMs":300000},
-{"name":"twoimport","file":"web/node-in-txiki.js","anchor":"hostImports(source)","replace":"source","check":"fx-host-plugin.mjs","timeoutMs":300000}
+{"name":"twoimport","file":"web/node-in-txiki.js","anchor":"hostImports(source)","replace":"source","check":"fx-host-plugin.mjs","timeoutMs":300000},
+{"name":"hosturl","file":"web/fx-host.js","anchor":"    url: { URL, URLSearchParams },\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
+{"name":"engineurl","file":"web/node-in-txiki.js","anchor":"url: { URL, URLSearchParams }, ","replace":"","check":"fx:host","timeoutMs":300000}
 ]

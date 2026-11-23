@@ -14,7 +14,7 @@ test('the default export is a frozen object of the five fields, and the host nam
 
 test('capabilities lists tools and exactly the modules the host provides', () => {
   assert.deepEqual([...host.capabilities], ['tools', ...Object.keys(host.modules)]);
-  assert.deepEqual(Object.keys(host.modules).sort(), ['buffer', 'crypto', 'fs', 'fs/promises', 'path', 'timers/promises']);
+  assert.deepEqual(Object.keys(host.modules).sort(), ['buffer', 'crypto', 'fs', 'fs/promises', 'path', 'timers/promises', 'url']);
 });
 
 test('each provided module carries the names the fx alias table gives it', () => {
@@ -24,6 +24,7 @@ test('each provided module carries the names the fx alias table gives it', () =>
     fs: ['existsSync', 'lstatSync', 'mkdirSync', 'mkdtempSync', 'openSync', 'readFileSync', 'readSync', 'readdirSync', 'readlinkSync', 'realpathSync', 'renameSync', 'rmSync', 'statSync', 'symlinkSync', 'unlinkSync', 'writeFileSync'],
     'fs/promises': ['access', 'lstat', 'mkdir', 'mkdtemp', 'readFile', 'readdir', 'realpath', 'rename', 'rm', 'stat', 'unlink', 'writeFile'],
     'timers/promises': ['scheduler', 'setTimeout'],
+    url: ['URL', 'URLSearchParams'],
   };
   for (const [name, names] of Object.entries(expected)) for (const member of names) assert.ok(member in host.modules[name], name + '.' + member);
 });
@@ -40,4 +41,10 @@ test('the timers module waits and the crypto module hashes, as in Node', async (
   assert.equal(await host.modules['timers/promises'].setTimeout(5, 'late'), 'late');
   assert.equal(host.modules.crypto.createHash('sha256').update('abc').digest('hex'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   assert.equal(host.modules.path.join('/a', 'b', '../c'), '/a/c');
+});
+
+test('the url module parses a URL as Node does', () => {
+  const parsed = new host.modules.url.URL('https://example.com/a?b=1');
+  assert.equal(parsed.pathname, '/a');
+  assert.equal(parsed.searchParams.get('b'), '1');
 });
