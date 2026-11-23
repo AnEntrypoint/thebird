@@ -1,6 +1,7 @@
 import { runTjs, TJS_CANCELLED, TJS_TIMED_OUT } from './txiki-in-page.js';
 import * as fs from './shims/fs.js';
 import { createHost } from './fx-host-core.js';
+import { hostImports } from './host-imports.js';
 import { resolve } from './shims/path.js';
 
 const USAGE = 'usage: node <script> [args] | node -e <code> | node -v';
@@ -25,8 +26,17 @@ async function installNodeGlobals(cwd, argv) {
       if (names === undefined) throw enoent(path);
       return names;
     },
-    mkdirSync(path) {
-      if (!__thebirdFs.mkdir(absolute(path))) throw Object.assign(new Error(`EEXIST: file already exists, mkdir '${path}'`), { code: 'EEXIST' });
+    mkdirSync(path, options) {
+      const target = absolute(path);
+      if (options?.recursive) {
+        let built = '';
+        for (const part of target.split('/').filter(Boolean)) {
+          built += '/' + part;
+          if (__thebirdFs.stat(built) == null) __thebirdFs.mkdir(built);
+        }
+        return;
+      }
+      if (!__thebirdFs.mkdir(target)) throw Object.assign(new Error(`EEXIST: file already exists, mkdir '${path}'`), { code: 'EEXIST' });
     },
   };
   globalThis.process = {
@@ -51,7 +61,7 @@ async function installNodeGlobals(cwd, argv) {
     },
   });
   globalThis.require = (name) => {
-    const key = name.replace(/^node:/, '');
+    const key = name.replace(/^(node:|fx:host\/)/, '');
     if (name === 'fx:host') return host;
     if (key in host.modules) return host.modules[key];
     throw Object.assign(new Error(`Cannot find module '${name}'`), { code: 'MODULE_NOT_FOUND' });
@@ -75,7 +85,7 @@ export async function nodeBuiltin(argv, dir, options) {
     name = path;
   } else throw new Error(USAGE);
   const prelude = `const createHost = ${createHost.toString()};\nawait (${installNodeGlobals.toString()})(${JSON.stringify(dir)}, ${JSON.stringify(scriptArgv)});\n`;
-  const { output, status } = await runTjs(prelude + source, dir, { ...options, name });
+  const { output, status } = await runTjs(prelude + hostImports(source), dir, { ...options, name });
   if (status === TJS_CANCELLED) throw new Error('cancelled');
   if (status === TJS_TIMED_OUT) throw new Error('timeout: command timed out');
   if (status !== 0) throw Object.assign(new Error(`node exited with status ${status}`), { exitCode: status, stdout: output.trimEnd() });

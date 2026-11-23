@@ -757,6 +757,16 @@ group('fx:host loads in the page node: version, capabilities, modules and the no
   check('a tool the host lacks refuses with ERR_FX_UNSUPPORTED naming it, and an unknown module is still not found', seen?.refusal === 'ERR_FX_UNSUPPORTED tools.Bash' && /Cannot find module 'nonesuch'/.test(out.out), JSON.stringify(seen?.refusal) + ' ' + out.out.slice(-200));
 });
 
+group('two hosts, one plugin: fx-host-plugin.mjs prints on the page node the line fx prints', async () => {
+  const plugin = readFileSync(join(root, 'test', 'fixtures', 'fx-host-plugin.mjs'), 'utf8');
+  const fxLine = readFileSync(join(root, 'test', 'fixtures', 'fx-host-plugin.expected.txt'), 'utf8').trim();
+  const out = await terminal([['run', 'mkdir -p /workspace/two && cd /workspace/two'], ['run', "cat > plugin.mjs <<'PLUGIN_END'\n" + plugin + "PLUGIN_END"], ['run', 'node plugin.mjs'], ['run', 'echo @@END']]);
+  const lines = out.out.split('\n').map((row) => row.trim());
+  const printed = lines.find((row) => row.startsWith('{"interface"'));
+  const thebirdLine = fxLine.replace('"host":"fx"', '"host":"thebird"');
+  check('the plugin prints on the page node fx\'s exact line, the host field naming thebird and every other byte equal', printed === thebirdLine, JSON.stringify(printed) + ' vs ' + JSON.stringify(fxLine));
+});
+
 group('provider verdict: a 403 key_limit is a skip, and any other failure is a failure', async () => {
   const cases = [
     ['403 key_limit', 403, { error: { code: 403, metadata: { scope: 'key_limit', limit_usd: 0 } } }, 'skip'],

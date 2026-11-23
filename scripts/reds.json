@@ -71,5 +71,8 @@
 {"name":"hosttool","file":"web/fx-host.js","anchor":"fs.writeFileSync(file, content);","replace":"fs.writeFileSync(file, '');","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"enginehost","file":"web/node-in-txiki.js","anchor":"    host: 'thebird',\n    modules: { fs: fsModule,","replace":"    host: 'fx',\n    modules: { fs: fsModule,","check":"fx:host","timeoutMs":300000},
 {"name":"enginealias","file":"web/node-in-txiki.js","anchor":"const key = name.replace(/^node:/, '');","replace":"const key = name;","check":"fx:host","timeoutMs":300000},
-{"name":"enginepath","file":"web/node-in-txiki.js","anchor":"path: (await import('tjs:path')).default, ","replace":"","check":"fx:host","timeoutMs":300000}
+{"name":"enginepath","file":"web/node-in-txiki.js","anchor":"path: (await import('tjs:path')).default, ","replace":"","check":"fx:host","timeoutMs":300000},
+{"name":"twointerface","file":"web/fx-host-core.js","anchor":"interface: 1,","replace":"interface: 2,","check":"fx-host-plugin.mjs","timeoutMs":300000},
+{"name":"twotimers","file":"web/node-in-txiki.js","anchor":", 'timers/promises': { setTimeout: wait, scheduler: { wait } } }","replace":" }","check":"fx-host-plugin.mjs","timeoutMs":300000},
+{"name":"twoimport","file":"web/node-in-txiki.js","anchor":"hostImports(source)","replace":"source","check":"fx-host-plugin.mjs","timeoutMs":300000}
 ]

@@ -1,0 +1,1 @@
+{"interface":1,"host":"fx","hasFs":true,"hasTimers":true,"joined":"fx-host-plugin-out/note.txt","read":"hello","slept":true}
