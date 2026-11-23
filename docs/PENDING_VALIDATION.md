@@ -6858,3 +6858,16 @@ Waits on the owner (or the machine):
 - Witness, plain: test/fx-host.test.mjs PASS 6 (the url test parses https://example.com/a?b=1 as Node does). Reds: hosthost, hostcaps, hostmodule, hostguard, hosttool, hosturl all CAUGHT rc 1 restored (plain run, 0 s each).
 - Witness, quick lane: thebird-url2 (fx:host group PASS 4 with the new capability list; the two-host group PASS 2) and the three engine reds enginehost, enginepath, engineurl CAUGHT; enginealias re-run alone in thebird-ea, CAUGHT rc 1 restored.
 - Missed reds reported as "3 missed" by reds.mjs did exit 1, so thebird-url's first run ended url_DONE 1 and was not a silent pass.
+
+### Stage 6, fx hand-off section 3: a sibling module imports fx:host on the page node
+
+- fx's hand-off (section 3) says a sibling dep.mjs that imports fx:host and exports a value works today on fx. Thebird did not: a run of main.mjs (import dep from './dep.mjs') failed with "could not load 'fx:host'", because the engine's own loader loads the sibling and never sees the host-import rewrite. This item needs nothing from fx, so it is the first reachable item on the hand-off list.
+- Fix, three parts, all in thebird:
+  1. web/host-imports.js: mirrorRelativeImports rewrites each relative static import of a file into a mirror copy under MIRROR_ROOT (/.thebird-host), recursively with a seen set (cycles terminate, each file mirrored once), and each copy gets the fx:host rewrite. The entry's relative specifiers point at the mirror. Nothing is written into the user's directory.
+  2. web/node-in-txiki.js: a file entry (not node -e) writes the prelude to /.thebird-host/prelude.mjs and puts import of it first in the entry, so the prelude module evaluates before any mirrored sibling. The prelude is synchronous: it imports tjs:path statically (tjsPath parameter of installNodeGlobals), because an async module let the sibling run before require existed (the first live run failed with "require is not defined").
+  3. node -e keeps the prelude prefix (no siblings to order).
+- Witness, plain: test/host-imports.test.mjs PASS 3 (a relative import is mirrored, its copy has the rewrite, the entry points at the copy; a cycle mirrors each file once and terminates; a module without relative imports is unchanged).
+- Witness, page node: group "a sibling module imports fx:host, and the entry reaches it through the mirror on the page node" prints SIB 7 a/b (fx's section 3 case: a sibling importing fx:host and exporting a value). Window thebird-sq8 (quick, final tree) also ran node-txiki-npm (the group whose check matched) PASS 40 FAIL 0.
+- Reds: sibmirror (the entry no longer mirrors its siblings) and mirrorwrite (the mirror copy is not written), plus the engine reds enginehost, enginealias, enginepath, engineurl re-run on the final tree.
+- Two harness defects found while building the witness, not in the product: a group heredoc or a second terminal line in the same run can end the group early (the page reports done while the second command is still typed), so the group runs its file writes and the node call as one command with &&; and the check detail now shows the whole transcript's head and tail.
+- The stale thebird-ng ticket queued before the prelude change was stopped by PID (2790071) before it ran; its result file is empty.
