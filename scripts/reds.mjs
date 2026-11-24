@@ -4,8 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const table = JSON.parse(readFileSync(join(root, 'scripts', 'reds.json'), 'utf8'));
-const wanted = process.argv.slice(2);
+const table = JSON.parse(readFileSync(process.env.REDS_TABLE ?? join(root, 'scripts', 'reds.json'), 'utf8'));
+const anchorsOnly = process.argv.includes('--anchors');
+const wanted = process.argv.slice(2).filter((arg) => arg !== '--anchors');
 const unknown = wanted.filter((name) => !table.some((red) => red.name === name));
 if (unknown.length) {
   console.error('unknown red: ' + unknown.join(', '));
@@ -25,11 +26,19 @@ const runWitness = (red) => new Promise((resolve) => {
   const timer = setTimeout(() => process.kill(-live.child.pid, 'SIGKILL'), red.timeoutMs ?? 1500000);
   live.child.on('close', (code) => { clearTimeout(timer); resolve(code); });
 });
+const anchorHits = (red) => readFileSync(join(root, red.file), 'utf8').split(red.anchor).length - 1;
+const selected = table.filter((entry) => wanted.length === 0 || wanted.includes(entry.name));
+if (anchorsOnly) {
+  const bad = selected.filter((red) => anchorHits(red) !== 1);
+  for (const red of bad) console.log('RED ' + red.name + ' ANCHOR ' + anchorHits(red));
+  console.log(bad.length ? 'anchors: ' + bad.length + ' not unique or missing' : 'anchors: all ' + selected.length + ' unique');
+  process.exit(bad.length ? 1 : 0);
+}
 let missed = 0;
-for (const red of table.filter((entry) => wanted.length === 0 || wanted.includes(entry.name))) {
+for (const red of selected) {
   const file = join(root, red.file);
   const text = readFileSync(file, 'utf8');
-  const hits = text.split(red.anchor).length - 1;
+  const hits = anchorHits(red);
   if (hits !== 1) {
     console.log('RED ' + red.name + ' ANCHOR ' + hits);
     missed++;

@@ -98,9 +98,13 @@ function memoryHost(files = {}, modes = {}, owners = {}) {
 
 const BUILTINS = ['git', 'sqlite3', 'python3', 'pip', 'qjs', 'tjs', 'curl', 'wget'];
 
+const ROW_TIMEOUT_MS = 3000;
+
 async function shell(files, modes = {}, owners = {}) {
   const host = memoryHost(files, modes, owners);
-  return core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+  const sh = core.createShell({ host, cwd: '/workspace', builtins: BUILTINS });
+  const run = sh.run;
+  return { ...sh, run: (script, options = {}) => run(script, { timeoutMs: ROW_TIMEOUT_MS, ...options }) };
 }
 
 const bash = async (script) => (await shell({})).run(script);
@@ -4229,6 +4233,7 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
+    ['false; echo $? $?', '1 1\n', '', 0],
     ['kill -NOPE 1; echo rc=$?', 'rc=1\n', 'kill: NOPE: invalid signal specification\n', 0],
     ['x="a b"; echo hi > $x"q"; echo rc=$?', 'rc=1\n', 'thebird: $x"q": ambiguous redirect\n', 0],
   ];
