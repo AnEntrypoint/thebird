@@ -81,5 +81,6 @@
 {"name":"mirrorwrite","file":"web/host-imports.js","anchor":"    fs.writeFileSync(target, source);","replace":"","command":["node","--test","test/host-imports.test.mjs"],"timeoutMs":120000},
 {"name":"core3438","file":"web/shell-core.js","anchor":"if (part.k === 'dq') return","replace":"if (part.k !== 'dq') return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"core1834","file":"web/shell-core.js","anchor":"  if (op === '>') return Number(left > right);","replace":"  if (op !== '>') return Number(left > right);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"core3233","file":"web/shell-core.js","anchor":"    if (name === '?') return String(state.status);","replace":"    if (name !== '?') return String(state.status);","command":["npm","run","-s","witness:shell"],"timeoutMs":300000}
+{"name":"core3233","file":"web/shell-core.js","anchor":"    if (name === '?') return String(state.status);","replace":"    if (name !== '?') return String(state.status);","command":["npm","run","-s","witness:shell"],"timeoutMs":300000},
+{"name":"docpath","file":"AGENTS.md","anchor":"bin/thebird-relay.js","replace":"bin/thebird-relay.jsgone","command":["node","--test","test/doc-paths.test.mjs"],"timeoutMs":120000}
 ]
