@@ -6916,3 +6916,10 @@ Waits on the owner (or the machine):
 - Moved into SORT_ROWS, one table of [title, script, stdout, stderr, exit code] and one loop. Titles, scripts and expected outputs are the original literals. Each check's detail is now JSON of [stdout, stderr, exitCode] from the row (the detail text is not part of a check's name).
 - Witness: npm run -s witness:shell, unmutated, quick lane (thebird-sort, sort_DONE 0): PASS=1969 FAIL=0, and the PASS/FAIL check names are identical to the baseline run before the move (shell-after2.txt), compared line by line with detail text removed.
 - The other single-row checks in the file do not share one shape (their stderr or exit forms vary), so a further move needs a converter per shape, not one regex.
+
+### Ranked item 2: the regular run-then-check rows move into tables
+
+- Converted, all of one shape (a run, then check(title, V.stdout === O && V.stderr === E, JSON.stringify(V)) with no exit check): 18 rows in runs of 3, 4, 5 and 6, and the 6-row jq $ENV group; 24 rows in five tables (STREAM_ROWS_L<line>). Each table keeps the original title, script, stdout and stderr literals; the check now reads row.stdout, row.stderr and JSON.stringify(row).
+- A first attempt used a greedy capture that folded "&& V.exitCode === 2" into the stdout literal, which referenced an undefined variable and failed the parse-errors group (FAIL parse errors: runs without an error). That attempt was discarded (git checkout of this file, which held only the uncommitted conversion), and the converter now refuses any row whose text refers to its run variable.
+- Witness: npm run -s witness:shell, unmutated, quick lane (thebird-stream3, DONE 0): PASS=1969 FAIL=0, and the PASS/FAIL check names are identical to the sort-table baseline (shell-sort.txt).
+- Not converted, and why: the remaining single-row checks do not share one shape. They compare more than stdout and stderr (exit codes, bytes, includes()), and the date, awk and parse-error rows use different expectation forms. Item 2 is therefore finished for the regular shape; a further move needs a converter per shape.

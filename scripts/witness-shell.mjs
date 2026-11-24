@@ -391,44 +391,47 @@ group('tar: create, list, extract and errors', async () => {
 
 group('date: an invalid date is quoted with the locale quote marks, as GNU date prints it', async () => {
   const sh = await shell({});
-  const utf8 = await sh.run("date -d foo; echo rc=$?");
-  check('date: an invalid date in the default en_US.UTF-8 locale uses curly quotes (GNU date output)', utf8.stdout === 'rc=1\n' && utf8.stderr === 'date: invalid date ‘foo’\n', JSON.stringify(utf8));
-  const utf8c = await sh.run("LC_ALL=C.UTF-8 date -d foo; echo rc=$?");
-  check('date: C.UTF-8 also uses curly quotes (GNU date output)', utf8c.stdout === 'rc=1\n' && utf8c.stderr === 'date: invalid date ‘foo’\n', JSON.stringify(utf8c));
-  const plain = await sh.run("LC_ALL=C date -d foo; echo rc=$?");
-  check('date: the C locale uses straight quotes (GNU date output)', plain.stdout === 'rc=1\n' && plain.stderr === "date: invalid date 'foo'\n", JSON.stringify(plain));
-  const langC = await sh.run("LANG=C date -d foo; echo rc=$?");
-  check('date: LANG=C alone also uses straight quotes (GNU date output)', langC.stdout === 'rc=1\n' && langC.stderr === "date: invalid date 'foo'\n", JSON.stringify(langC));
+  const STREAM_ROWS_L394 = [
+    ['date: an invalid date in the default en_US.UTF-8 locale uses curly quotes (GNU date output)', "date -d foo; echo rc=$?", 'rc=1\n', 'date: invalid date ‘foo’\n'],
+    ['date: C.UTF-8 also uses curly quotes (GNU date output)', "LC_ALL=C.UTF-8 date -d foo; echo rc=$?", 'rc=1\n', 'date: invalid date ‘foo’\n'],
+    ['date: the C locale uses straight quotes (GNU date output)', "LC_ALL=C date -d foo; echo rc=$?", 'rc=1\n', "date: invalid date 'foo'\n"],
+    ['date: LANG=C alone also uses straight quotes (GNU date output)', "LANG=C date -d foo; echo rc=$?", 'rc=1\n', "date: invalid date 'foo'\n"],
+  ];
+  for (const [title, script, stdout, stderr] of STREAM_ROWS_L394) {
+    const row = await sh.run(script);
+    check(title, row.stdout === stdout && row.stderr === stderr, JSON.stringify(row));
+  }
 });
 
 group('jq: $ENV is the environment of the shell as an object, and --arg ENV does not replace it, as jq 1.8.2 does', async () => {
   const sh = await shell({});
-  const exported = await sh.run("export FOO=bar; jq -n -r '$ENV.FOO'; echo rc=$?");
-  check('jq: $ENV.FOO reads an exported variable (jq 1.8.2 output)', exported.stdout === 'bar\nrc=0\n' && exported.stderr === '', JSON.stringify(exported));
-  const typed = await sh.run("jq -n '$ENV | type'; echo rc=$?");
-  check('jq: $ENV is an object (jq 1.8.2 output)', typed.stdout === '"object"\nrc=0\n' && typed.stderr === '', JSON.stringify(typed));
-  const missing = await sh.run("jq -n '$ENV.NOPE'; echo rc=$?");
-  check('jq: a variable missing from $ENV reads as null (jq 1.8.2 output)', missing.stdout === 'null\nrc=0\n' && missing.stderr === '', JSON.stringify(missing));
-  const has = await sh.run("jq -n '$ENV | has(\"NOPE\")'; echo rc=$?");
-  check('jq: has on $ENV is false for a missing name (jq 1.8.2 output)', has.stdout === 'false\nrc=0\n' && has.stderr === '', JSON.stringify(has));
-  const shadow = await sh.run("export FOO=bar; jq -n --arg ENV x -r '$ENV.FOO'; echo rc=$?");
-  check('jq: --arg ENV does not replace $ENV (jq 1.8.2 output)', shadow.stdout === 'bar\nrc=0\n' && shadow.stderr === '', JSON.stringify(shadow));
+  const STREAM_ROWS_L406 = [
+    ['jq: $ENV.FOO reads an exported variable (jq 1.8.2 output)', "export FOO=bar; jq -n -r '$ENV.FOO'; echo rc=$?", 'bar\nrc=0\n', ''],
+    ['jq: $ENV is an object (jq 1.8.2 output)', "jq -n '$ENV | type'; echo rc=$?", '"object"\nrc=0\n', ''],
+    ['jq: a variable missing from $ENV reads as null (jq 1.8.2 output)', "jq -n '$ENV.NOPE'; echo rc=$?", 'null\nrc=0\n', ''],
+    ['jq: has on $ENV is false for a missing name (jq 1.8.2 output)', "jq -n '$ENV | has(\"NOPE\")'; echo rc=$?", 'false\nrc=0\n', ''],
+    ['jq: --arg ENV does not replace $ENV (jq 1.8.2 output)', "export FOO=bar; jq -n --arg ENV x -r '$ENV.FOO'; echo rc=$?", 'bar\nrc=0\n', ''],
+  ];
+  for (const [title, script, stdout, stderr] of STREAM_ROWS_L406) {
+    const row = await sh.run(script);
+    check(title, row.stdout === stdout && row.stderr === stderr, JSON.stringify(row));
+  }
 });
 
 group('jq: an unbound variable is a compile error with status 3, reported as jq 1.8.2 reports it', async () => {
   const sh = await shell({});
-  const bare = await sh.run("jq -n '$x'; echo rc=$?");
-  check('jq: $x with no binding is a compile error at column 1 (jq 1.8.2 output)', bare.stdout === 'rc=3\n' && bare.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x\n    ^^\njq: 1 compile error\n', JSON.stringify(bare));
-  const column = await sh.run("jq -n '1 + $x'; echo rc=$?");
-  check('jq: an unbound variable reports its column in the filter (jq 1.8.2 output)', column.stdout === 'rc=3\n' && column.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 5:\n    1 + $x\n        ^^\njq: 1 compile error\n', JSON.stringify(column));
-  const two = await sh.run("jq -n '$x, $y'; echo rc=$?");
-  check('jq: two unbound variables are both reported, then the count (jq 1.8.2 output)', two.stdout === 'rc=3\n' && two.stderr === 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x, $y\n    ^^\njq: error: $y is not defined at <top-level>, line 1, column 5:\n    $x, $y\n        ^^\njq: 2 compile errors\n', JSON.stringify(two));
-  const long = await sh.run("jq -n '$longname'; echo rc=$?");
-  check('jq: the caret run is as long as the variable name (jq 1.8.2 output)', long.stdout === 'rc=3\n' && long.stderr === 'jq: error: $longname is not defined at <top-level>, line 1, column 1:\n    $longname\n    ^^^^^^^^^\njq: 1 compile error\n', JSON.stringify(long));
-  const lines = await sh.run("jq -n '1 |\n  $z'; echo rc=$?");
-  check('jq: a variable on a later line reports that line and column (jq 1.8.2 output)', lines.stdout === 'rc=3\n' && lines.stderr === 'jq: error: $z is not defined at <top-level>, line 2, column 3:\n      $z\n      ^^\njq: 1 compile error\n', JSON.stringify(lines));
-  const bound = await sh.run("jq -n --arg x 1 '$x'; echo rc=$?");
-  check('jq: a variable bound by --arg is not a compile error (jq 1.8.2 output)', bound.stdout === '"1"\nrc=0\n' && bound.stderr === '', JSON.stringify(bound));
+  const STREAM_ROWS_L420 = [
+    ['jq: $x with no binding is a compile error at column 1 (jq 1.8.2 output)', "jq -n '$x'; echo rc=$?", 'rc=3\n', 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x\n    ^^\njq: 1 compile error\n'],
+    ['jq: an unbound variable reports its column in the filter (jq 1.8.2 output)', "jq -n '1 + $x'; echo rc=$?", 'rc=3\n', 'jq: error: $x is not defined at <top-level>, line 1, column 5:\n    1 + $x\n        ^^\njq: 1 compile error\n'],
+    ['jq: two unbound variables are both reported, then the count (jq 1.8.2 output)', "jq -n '$x, $y'; echo rc=$?", 'rc=3\n', 'jq: error: $x is not defined at <top-level>, line 1, column 1:\n    $x, $y\n    ^^\njq: error: $y is not defined at <top-level>, line 1, column 5:\n    $x, $y\n        ^^\njq: 2 compile errors\n'],
+    ['jq: the caret run is as long as the variable name (jq 1.8.2 output)', "jq -n '$longname'; echo rc=$?", 'rc=3\n', 'jq: error: $longname is not defined at <top-level>, line 1, column 1:\n    $longname\n    ^^^^^^^^^\njq: 1 compile error\n'],
+    ['jq: a variable on a later line reports that line and column (jq 1.8.2 output)', "jq -n '1 |\n  $z'; echo rc=$?", 'rc=3\n', 'jq: error: $z is not defined at <top-level>, line 2, column 3:\n      $z\n      ^^\njq: 1 compile error\n'],
+    ['jq: a variable bound by --arg is not a compile error (jq 1.8.2 output)', "jq -n --arg x 1 '$x'; echo rc=$?", '"1"\nrc=0\n', ''],
+  ];
+  for (const [title, script, stdout, stderr] of STREAM_ROWS_L420) {
+    const row = await sh.run(script);
+    check(title, row.stdout === stdout && row.stderr === stderr, JSON.stringify(row));
+  }
 });
 
 group('jq: filters, output and errors', async () => {
@@ -3587,12 +3590,15 @@ group('tar: an archive written to stdout is bytes, so gzip output passes through
   const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const sh = await shell({ '/workspace/x.txt': 'hit\n' });
-  const toFile = await sh.run('cd /workspace && tar -czf - x.txt > a.tgz; echo rc=$?; tar -tzf a.tgz');
-  check('tar: tar -czf - writes the gzip bytes into a file, and tar -tzf reads them back', toFile.stdout === 'rc=0\nx.txt\n' && toFile.stderr === '', JSON.stringify(toFile));
-  const piped = await sh.run('cd /workspace && tar -czf - x.txt | tar -tzf -; echo rc=$?');
-  check('tar: gzip output passes through a pipe into tar -tzf -', piped.stdout === 'x.txt\nrc=0\n' && piped.stderr === '', JSON.stringify(piped));
-  const extracted = await sh.run('cd /workspace && mkdir -p d && tar -czf - x.txt | tar -xzf - -C d; echo rc=$?; cat d/x.txt');
-  check('tar: gzip output passes through a pipe into tar -xzf - and extracts the member', extracted.stdout === 'rc=0\nhit\n' && extracted.stderr === '', JSON.stringify(extracted));
+  const STREAM_ROWS_L3590 = [
+    ['tar: tar -czf - writes the gzip bytes into a file, and tar -tzf reads them back', 'cd /workspace && tar -czf - x.txt > a.tgz; echo rc=$?; tar -tzf a.tgz', 'rc=0\nx.txt\n', ''],
+    ['tar: gzip output passes through a pipe into tar -tzf -', 'cd /workspace && tar -czf - x.txt | tar -tzf -; echo rc=$?', 'x.txt\nrc=0\n', ''],
+    ['tar: gzip output passes through a pipe into tar -xzf - and extracts the member', 'cd /workspace && mkdir -p d && tar -czf - x.txt | tar -xzf - -C d; echo rc=$?; cat d/x.txt', 'rc=0\nhit\n', ''],
+  ];
+  for (const [title, script, stdout, stderr] of STREAM_ROWS_L3590) {
+    const row = await sh.run(script);
+    check(title, row.stdout === stdout && row.stderr === stderr, JSON.stringify(row));
+  }
   const written = await sh.run('cd /workspace && tar -czf - x.txt');
   check('tar: the stdout of tar -czf - is the gzip bytes, with the gzip magic', written.bytes !== null && written.bytes[0] === 0x1f && written.bytes[1] === 0x8b, JSON.stringify([written.stdout.length, written.bytes && written.bytes.length]));
   const dir = mkdtempSync(join(tmpdir(), 'tar-stdout-'));
