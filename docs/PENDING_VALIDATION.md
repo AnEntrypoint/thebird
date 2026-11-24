@@ -6939,3 +6939,9 @@ Waits on the owner (or the machine):
 ### Mistake record
 
 - 9ac8d35 (item 6, the endpoint group) was pushed in 88af867 (push a20df2a..88af867) before its gated window thebird-ep2 had run; that window then failed (endpoints group PASS 3 FAIL 5: the call helper read each response body twice, so parsed bodies were null), and 9ac8d35 is taken back by the next commit on main.
+
+### Item 6, repaired and passed
+
+- The endpoint group (progress, craft registry and intents, settings GET and POST) reads each response once and parses the text (parse(text) in the call helper), so its bodies are not null. Commit 6f0370c.
+- Window thebird-ep3, GATE_EXCLUSIVE=1 (granted at 01:53, host quiet), on 6f0370c: ep3_DONE 0, PASS 8 FAIL 0 over 2 groups, 93.1 s. Every endpoint check passes: the settings GET (200 with fields and POST path), the settings POST (saves the title), the progress POST (ok), the craft registry (lazy gridcraft, wordcraft, pdfcraft), and the three intent routes.
+- Pushed after that pass, with this ledger line.
