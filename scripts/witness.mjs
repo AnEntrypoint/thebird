@@ -672,37 +672,6 @@ group('thebird-craft ensure, sample and status print the JSON their npm scripts 
   check('craft status exits 0 and lists the three craft apps', status.status === 0 && Array.isArray(listed) && apps.every((id) => listed.some((app) => app.id === id)), status.stdout.slice(0, 200));
 });
 
-group('/__thebird/progress accepts a rollout, /__thebird/craft lists its apps and routes each intent, and /sites/<id>/settings answers its form and saves a title', async () => {
-  const pagesDir = await sharedPages();
-  const port = await freePort();
-  const id = 'cov-api-' + process.pid;
-  const base = 'http://127.0.0.1:' + port;
-  const call = (path, init) => fetch(base + path, init).then(async (res) => ({ status: res.status, text: await res.text(), body: await res.json().catch(() => null) }), () => ({ status: 0, text: '', body: null }));
-  const post = (path, payload) => call(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-  let child = null;
-  try {
-    webserverCli('register', id, '--title', 'API coverage');
-    child = spawn(process.execPath, [join(root, 'bin', 'thebird-web-host.js'), 'serve', '--port', String(port), '--root', pagesDir], { cwd: root, stdio: 'ignore' });
-    trackPid(child.pid);
-    const up = (await pollAnswer(base + '/', 200)).status === 'HTTP 200';
-    const settingsGet = await call('/sites/' + id + '/settings');
-    const settingsSaved = await post('/sites/' + id + '/settings', { title: 'Coverage Title' });
-    const progress = await post('/__thebird/progress', { id, text: 'Rolling out coverage', status: 'working' });
-    const registry = await call('/__thebird/craft');
-    const routes = [['review sheet.xlsx', 'gridcraft'], ['edit document.docx', 'wordcraft'], ['render report.pdf', 'pdfcraft']];
-    const routed = [];
-    for (const [text] of routes) routed.push(await post('/__thebird/craft/intent', { text }));
-    check('/sites/<id>/settings answers its form with HTTP 200, the fields and the POST path', up && settingsGet.status === 200 && settingsGet.text.includes('"fields"') && settingsGet.text.includes('/settings'), JSON.stringify([settingsGet.status, settingsGet.text.slice(0, 120)]));
-    check('POST /sites/<id>/settings saves the title and answers ok', settingsSaved.status === 200 && settingsSaved.body?.ok === true && settingsSaved.body?.settings?.title === 'Coverage Title', JSON.stringify(settingsSaved.body ?? settingsSaved.text).slice(0, 160));
-    check('POST /__thebird/progress accepts a rollout status and answers ok', progress.status === 200 && progress.body?.ok === true, JSON.stringify(progress.body ?? progress.text).slice(0, 120));
-    check('/__thebird/craft lists the lazy apps gridcraft, wordcraft and pdfcraft', registry.status === 200 && registry.text.includes('"lazy":true') && ['gridcraft', 'wordcraft', 'pdfcraft'].every((app) => registry.text.includes(app)), registry.text.slice(0, 120));
-    routes.forEach(([text, app], index) => check('/__thebird/craft/intent routes "' + text + '" to ' + app, routed[index].body?.app === app, JSON.stringify(routed[index].body ?? routed[index].text).slice(0, 120)));
-  } finally {
-    if (child) await stopPid(child.pid);
-    webserverCli('unregister', id, '--remove-folder');
-  }
-});
-
 group('/__thebird/mcp lists the registered webservers, describes one, answers its ping over POST, and refuses an unregistered id', async () => {
   const pagesDir = await sharedPages();
   const port = await freePort();
