@@ -6716,7 +6716,7 @@ Mine now, needs nothing from fx (taken in this order):
 5. Still mine, not taken in this stretch: witness.mjs (about 2,250 lines) split into modules (helpers, providers, groups by area); the remaining hand-written single-row checks in witness-shell.mjs (the gr0/gr1 output-and-stderr pattern, 24 rows) into tables; the lint scripts; /__thebird/progress, /__thebird/craft and /sites/<id>/settings, which only host:check names.
 
 Waits on fx (or gm) publishing:
-6. Stage 6 host half: thebird's fx:host module over the browser txiki port, so one JavaScript root loads in fx and in thebird. fx has published docs/host-interface.md (a spec with a thebird column; 52 rows exist and 56 are planned in the fx tree), not a running fx:host. Not started, as the dispatcher ruled.
+6. Stage 6 host half: thebird's fx:host module over the browser txiki port, so one JavaScript root loads in fx and in thebird. fx has published docs/host-interface.md (a spec with a thebird column; 52 rows exist and 56 are planned in the fx tree), not a running fx:host. Built since this entry was written, so this line is corrected: steps 1 to 4 and the sibling case are pushed. The fx:host module is 541d570, its page-node core 95dc04c, the two-host witness 64db12d (ledger af761b1), the url module 203268b, and the sibling import 769a455 (ledger 8574218, fd73e17). Still waiting on fx: the JS root, the import map, host.loader and hot reload (the fx-blocked items 4 to 7 of the ranked list).
 7. The shared txiki vendor step (stage 1: one pin file and one script from gm, verified by sha256). It replaces thebird's scripts/vendor-txiki.mjs once gm publishes it; it is not in /workspace/gm/tools yet.
 
 Waits on the owner (or the machine):
@@ -6879,3 +6879,12 @@ Waits on the owner (or the machine):
 - thebird-nest2 (8574218, granted at the gate): nest_DONE 0. Group nested PASS 2 FAIL 0 in 121.7 s; the row's stdout is git-ok, 4, 3, 42, done, exit 0.
 - The window's other groups from thebird-ng2 (node-txiki-npm-registry, spin, loops) passed in that window, and node-txiki-npm passed in thebird-sq8 on the final engine, so the push covers the whole node command set.
 - Push: origin main was d38c55a; git merge-base confirmed it is an ancestor of 8574218; git push origin 8574218:refs/heads/main gave d38c55a..8574218; git ls-remote origin main then showed 857421873d2efc36c05deaac9c079f2caac9768c.
+
+### Ranked item 15 and item 12: the stale stage 6 status, and the surviving shell mutant at line 3438
+
+- Item 15: the stage 6 line in the older status list said "Not started, as the dispatcher ruled." It now says what was built and where it is pushed (541d570, 95dc04c, 64db12d with ledger af761b1, 203268b, 769a455 with ledger 8574218 and fd73e17), and that the fx-blocked items remain. The line is corrected in place; the entry's other text is unchanged.
+- Item 12, read-only checks first: web/shell-core.js line 3438 is the dq branch of describePart (`if (part.k === 'dq') return`), which builds the COMMAND column of the emulated ps through describePipe (startJob, line 3451). The anchor occurs once. The only ps rows in scripts/witness-shell.mjs are the process group (lines 321 to 328), and none prints a double-quoted job word, so no existing row observes the branch.
+- Survival, confirmed before the row: red core3438 (the flip to `part.k !== 'dq'`, command npm run -s witness:shell, 60 s) ran as MISSED rc 0, restored true (thebird-c3438pre, 19:11).
+- The row: in the process group, right after the ps listing check, sleep "30" & ps; kill $!; wait $! must print a line matching the pid, parent 100, S and sleep "30" with the quotes kept. The output on the unmutated tree is PID PPID STAT COMMAND / 100 0 S thebird / 102 100 S sleep "30". This is the shell's own COMMAND column, not a bash comparison, because bash's ps is not ours.
+- Witness after the row: npm run -s witness:shell PASS=1968 FAIL=0 on the unmutated tree (thebird-c3438b, 19:12, RC 0). Red core3438 CAUGHT rc=1, restored true, 7 s, in the same window.
+- Plain checks: lint:comments 0 comments in 158 files; reds.json parses. Only one red was added (core3438), so the other 59 reds are unchanged.

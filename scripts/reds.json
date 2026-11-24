@@ -78,5 +78,6 @@
 {"name":"hosturl","file":"web/fx-host.js","anchor":"    url: { URL, URLSearchParams },\n","replace":"","command":["node","--test","test/fx-host.test.mjs"],"timeoutMs":120000},
 {"name":"engineurl","file":"web/node-in-txiki.js","anchor":"url: { URL, URLSearchParams }, ","replace":"","check":"fx:host","timeoutMs":300000},
 {"name":"sibmirror","file":"web/node-in-txiki.js","anchor":"      source = mirrorRelativeImports(fs.readFileSync(path, 'utf8'), dirname(path), fs);","replace":"      source = fs.readFileSync(path, 'utf8');","check":"sibling","timeoutMs":300000},
-{"name":"mirrorwrite","file":"web/host-imports.js","anchor":"    fs.writeFileSync(target, source);","replace":"","command":["node","--test","test/host-imports.test.mjs"],"timeoutMs":120000}
+{"name":"mirrorwrite","file":"web/host-imports.js","anchor":"    fs.writeFileSync(target, source);","replace":"","command":["node","--test","test/host-imports.test.mjs"],"timeoutMs":120000},
+{"name":"core3438","file":"web/shell-core.js","anchor":"if (part.k === 'dq') return","replace":"if (part.k !== 'dq') return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
 ]

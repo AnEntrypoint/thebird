@@ -324,6 +324,8 @@ group('process: & starts a job, $! names its PID, ps lists it, kill signals it a
   check('process: $! after & names a PID above the shell PID', pid !== '' && Number(pid) > 100, JSON.stringify(lines[0]));
   const listed = lines.find((line) => line.includes('sleep 30')) ?? '';
   check('process: ps lists the background job by its PID, parent 100 and command', listed.trim().split(/\s+/).join(' ') === `${pid} 100 S sleep 30`, JSON.stringify(listed));
+  const quoted = await sh.run('sleep "30" & ps; kill $!; wait $!');
+  check('process: ps shows a job whose command has a double-quoted word with the quotes kept', /^\s*\d+\s+100\s+S\s+sleep "30"\s*$/m.test(quoted.stdout), JSON.stringify(quoted.stdout));
   check('process: kill -TERM stops the job and wait returns 128 + 15', lines.includes('rc=143'), JSON.stringify(started.stdout));
   const plain = await sh.run('ps');
   check('process: ps prints the header and the shell row when no job runs', plain.stdout === 'PID PPID STAT COMMAND\n100    0 S    thebird\n', JSON.stringify(plain.stdout));
