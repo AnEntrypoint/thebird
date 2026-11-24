@@ -6888,3 +6888,12 @@ Waits on the owner (or the machine):
 - The row: in the process group, right after the ps listing check, sleep "30" & ps; kill $!; wait $! must print a line matching the pid, parent 100, S and sleep "30" with the quotes kept. The output on the unmutated tree is PID PPID STAT COMMAND / 100 0 S thebird / 102 100 S sleep "30". This is the shell's own COMMAND column, not a bash comparison, because bash's ps is not ours.
 - Witness after the row: npm run -s witness:shell PASS=1968 FAIL=0 on the unmutated tree (thebird-c3438b, 19:12, RC 0). Red core3438 CAUGHT rc=1, restored true, 7 s, in the same window.
 - Plain checks: lint:comments 0 comments in 158 files; reds.json parses. Only one red was added (core3438), so the other 59 reds are unchanged.
+
+### Survivor sweep, the sampled shell-core lines: what the reds say now
+
+- Line 1834 (the > case of applyOperator, reached by $(( a > b ))): the ledger listed it as surviving, but red core1834 (the flip to op !== '>') is CAUGHT rc 1 restored on the current tree (thebird-c1834, 00:49). An existing row already kills it, so no row was added (YAGNI). The red is kept.
+- Line 2272 (kill with an invalid signal): red core2272 CAUGHT rc 1 restored on the current tree (thebird-c2, 00:54). Killed since 5c1ed4e.
+- Line 3233 (the name === '?' special parameter): red core3233 is MISSED with rc null after 300 s: the flipped code hangs the witness rather than failing a row. The runner cannot count a timeout as a catch, so the red is removed from scripts/reds.json and the line stays open. Done condition: a row whose expected output differs from the flipped output and finishes within the sh.run limit, then the red caught rc 1.
+- Line 3438: done in bdb91db (the ps COMMAND row and red core3438).
+- Sample coverage: 430 of 459 shell-core lines containing " === " have no red. That is the broad gap; the sample was 30 lines. A full sweep is heavy (each red runs witness:shell, about 60 s), so it is held for a window design, not started.
+- Witness for this push: witness:shell is unchanged since bdb91db (PASS 1968 FAIL 0); the new red core1834 is CAUGHT on this tree; core2272 is CAUGHT on this tree; reds.json parses and holds 61 reds.
