@@ -2764,52 +2764,35 @@ group('text: sort, uniq, head, tail and cut read lines and pick from them', asyn
   check('text: sort -n compares the lines as numbers', numeric.stdout === '1\n2\n3\n', JSON.stringify(numeric.stdout));
   const reversed = await sh.run('printf "b\na\nb\n" | sort -ru');
   check('text: sort -ru reverses the order and keeps one of each line', reversed.stdout === 'b\na\n', JSON.stringify(reversed.stdout));
-  const gs1 = await sh.run("printf \"b\\nA\\na\\nB\\n\" | LC_ALL=C sort");
-  check("text: LC_ALL=C sort: mixed case is in byte order (bash output, locale LC_ALL=C)", gs1.stdout === "A\nB\na\nb\n" && gs1.stderr === "" && gs1.exitCode === 0, JSON.stringify([gs1.stdout, gs1.stderr, gs1.exitCode]));
-  const gs2 = await sh.run("printf \"b\\nA\\na\\nB\\n\" | LC_ALL=C sort -r");
-  check("text: LC_ALL=C sort -r: mixed case is reversed in byte order (bash output, locale LC_ALL=C)", gs2.stdout === "b\na\nB\nA\n" && gs2.stderr === "" && gs2.exitCode === 0, JSON.stringify([gs2.stdout, gs2.stderr, gs2.exitCode]));
-  const gs3 = await sh.run("printf \"a-b\\nab\\na b\\na_c\\n\" | LC_ALL=C sort");
-  check("text: LC_ALL=C sort: punctuation sorts before letters (bash output, locale LC_ALL=C)", gs3.stdout === "a b\na-b\na_c\nab\n" && gs3.stderr === "" && gs3.exitCode === 0, JSON.stringify([gs3.stdout, gs3.stderr, gs3.exitCode]));
-  const gs4 = await sh.run("printf \"10\\n9\\n1a\\né\\nz\\nb\\n\" | LC_ALL=C sort");
-  check("text: LC_ALL=C sort: digits, then letters, then accented bytes (bash output, locale LC_ALL=C)", gs4.stdout === "10\n1a\n9\nb\nz\né\n" && gs4.stderr === "" && gs4.exitCode === 0, JSON.stringify([gs4.stdout, gs4.stderr, gs4.exitCode]));
-  const gs5 = await sh.run("printf \"b\\nA\\na\\nb\\nA\\n\" | LC_ALL=C sort -u");
-  check("text: LC_ALL=C sort -u: duplicates are dropped in byte order (bash output, locale LC_ALL=C)", gs5.stdout === "A\na\nb\n" && gs5.stderr === "" && gs5.exitCode === 0, JSON.stringify([gs5.stdout, gs5.stderr, gs5.exitCode]));
-  const gs6 = await sh.run("printf \"b\\nA\\na\\nb\\n\" | LC_ALL=C sort -ru");
-  check("text: LC_ALL=C sort -ru: reversed and unique in byte order (bash output, locale LC_ALL=C)", gs6.stdout === "b\na\nA\n" && gs6.stderr === "" && gs6.exitCode === 0, JSON.stringify([gs6.stdout, gs6.stderr, gs6.exitCode]));
-  const gs7 = await sh.run("printf \"Ab\\naB\\nAB\\nab\\n\" | LC_ALL=C sort");
-  check("text: LC_ALL=C sort: case pairs keep byte order (bash output, locale LC_ALL=C)", gs7.stdout === "AB\nAb\naB\nab\n" && gs7.stderr === "" && gs7.exitCode === 0, JSON.stringify([gs7.stdout, gs7.stderr, gs7.exitCode]));
-  const gs8 = await sh.run("printf \"x\\nX\\n\" | LC_ALL=C sort");
-  check("text: LC_ALL=C sort: x and X are split by case (bash output, locale LC_ALL=C)", gs8.stdout === "X\nx\n" && gs8.stderr === "" && gs8.exitCode === 0, JSON.stringify([gs8.stdout, gs8.stderr, gs8.exitCode]));
-  const ec1 = await sh.run("printf 'b\\nA\\na\\nB\\n' | sort");
-  check("text: en_US.UTF-8 collates case pairs, a before A, as glibc does (bash output)", ec1.stdout === "a\nA\nb\nB\n" && ec1.stderr === "" && ec1.exitCode === 0, JSON.stringify([ec1.stdout, ec1.stderr, ec1.exitCode]));
-  const ec2 = await sh.run("printf 'a-b\\nab\\na b\\na_c\\nac\\n' | sort");
-  check("text: en_US.UTF-8 sort: punctuation and letters, bash output", ec2.stdout === "a b\na-b\nab\na_c\nac\n" && ec2.stderr === "" && ec2.exitCode === 0, JSON.stringify([ec2.stdout, ec2.stderr, ec2.exitCode]));
-  const ec3 = await sh.run("printf '10\\n9\\n1a\\nz\\nA1\\n' | sort");
-  check("text: en_US.UTF-8 sort: digits sort before letters, bash output", ec3.stdout === "10\n1a\n9\nA1\nz\n" && ec3.stderr === "" && ec3.exitCode === 0, JSON.stringify([ec3.stdout, ec3.stderr, ec3.exitCode]));
-  const ec4 = await sh.run("printf 'é\\ne\\nea\\nÉa\\nf\\nE\\n' | sort");
-  check("text: en_US.UTF-8 sort: accented letters sort with their base letter, bash output", ec4.stdout === "e\nE\né\nea\nÉa\nf\n" && ec4.stderr === "" && ec4.exitCode === 0, JSON.stringify([ec4.stdout, ec4.stderr, ec4.exitCode]));
-  const ec5 = await sh.run("printf '$a\\n0\\na\\n$\\n' | sort");
-  check("text: en_US.UTF-8 sort: a currency sign sorts before digits, bash output", ec5.stdout === "$\n$a\n0\na\n" && ec5.stderr === "" && ec5.exitCode === 0, JSON.stringify([ec5.stdout, ec5.stderr, ec5.exitCode]));
-  const ec6 = await sh.run("printf 'oah\\nm\\na\\na\\nI\\ny\\n8\\nC\\n1\\nO\\n5\\nW\\nd\\nS\\nQ\\nA\\nJ\\nX\\nG\\na\\nV\\nH\\nU\\nl\\nH\\n' | sort");
-  check("text: en_US.UTF-8 sort on random short ASCII lines with punctuation, bash output", ec6.stdout === "1\n5\n8\na\na\na\nA\nC\nd\nG\nH\nH\nI\nJ\nl\nm\nO\noah\nQ\nS\nU\nV\nW\nX\ny\n" && ec6.stderr === "" && ec6.exitCode === 0, JSON.stringify([ec6.stdout, ec6.stderr, ec6.exitCode]));
-  const ec7 = await sh.run("printf 'E\\né\\n2\\n1\\n6\\nÜ\\n$\\n3\\n4\\nÜ\\n0\\nè\\n8\\n5\\n5\\nè\\nB\\né\\nä\\nä\\nE\\nB\\na\\n4\\nÜ\\n' | sort");
-  check("text: en_US.UTF-8 sort on random short accented lines, bash output", ec7.stdout === "$\n0\n1\n2\n3\n4\n4\n5\n5\n6\n8\na\nä\nä\nB\nB\nE\nE\né\né\nè\nè\nÜ\nÜ\nÜ\n" && ec7.stderr === "" && ec7.exitCode === 0, JSON.stringify([ec7.stdout, ec7.stderr, ec7.exitCode]));
-  const gx1 = await sh.run("printf 'AE\\nÆ\\næ\\nae\\nAF\\n' | sort");
-  check("text: en_US.UTF-8 sort puts ae, AE and the ligature æ in glibc order (bash output)", gx1.stdout === "ae\nAE\næ\nÆ\nAF\n" && gx1.stderr === "" && gx1.exitCode === 0, JSON.stringify([gx1.stdout, gx1.stderr, gx1.exitCode]));
-  const gx2 = await sh.run("printf 'ß\\nst\\nss\\nssa\\nsz\\nt\\n' | sort");
-  check("text: en_US.UTF-8 sort places ß between ss and st (bash output)", gx2.stdout === "ss\nß\nssa\nst\nsz\nt\n" && gx2.stderr === "" && gx2.exitCode === 0, JSON.stringify([gx2.stdout, gx2.stderr, gx2.exitCode]));
-  const gx3 = await sh.run("printf 'oe\\nø\\nØ\\no\\nœ\\nof\\nö\\nó\\n' | sort");
-  check("text: en_US.UTF-8 sort puts ø after o and before oe, bash output", gx3.stdout === "o\nó\nö\nø\nØ\noe\nœ\nof\n" && gx3.stderr === "" && gx3.exitCode === 0, JSON.stringify([gx3.stdout, gx3.stderr, gx3.exitCode]));
-  const gx4 = await sh.run("printf 'ς\\nσa\\nςa\\nΣ\\nσ\\nςb\\nσb\\n' | sort");
-  check("text: en_US.UTF-8 sort puts the final sigma ς after σ and Σ (bash output)", gx4.stdout === "σ\nΣ\nς\nσa\nςa\nσb\nςb\n" && gx4.stderr === "" && gx4.exitCode === 0, JSON.stringify([gx4.stdout, gx4.stderr, gx4.exitCode]));
-  const gx5 = await sh.run("printf 'Œeoé\\nØ\\nt\\nt\\nς\\nœ\\nœ\\no\\nα\\na\\no\\nσ\\nς\\no\\nΣ\\nß\\næ\\ns\\nA\\ns\\ns\\nς\\na\\nB\\ns\\n' | sort");
-  check("text: en_US.UTF-8 sort on random short lines with æ, ß, ø, œ, final sigma, bash output", gx5.stdout === "a\na\nA\næ\nB\no\no\no\nØ\nœ\nœ\nŒeoé\ns\ns\ns\ns\nß\nt\nt\nα\nσ\nΣ\nς\nς\nς\n" && gx5.stderr === "" && gx5.exitCode === 0, JSON.stringify([gx5.stdout, gx5.stderr, gx5.exitCode]));
-  const gy1 = await sh.run("printf 'ð\\nÐ\\nđ\\nd\\nħ\\nh\\nł\\nl\\nŋ\\nn\\nŧ\\nt\\nþ\\nz\\nĳ\\nı\\nij\\n' | sort");
-  check("text: en_US.UTF-8 sort places the Latin letters ð, đ, ħ, ł, ŋ, ĳ, ı, ŧ, þ among ASCII as glibc does (bash output)", gy1.stdout === "d\nđ\nð\nÐ\nh\nħ\nij\nĳ\nı\nl\nł\nn\nŋ\nt\nŧ\nz\nþ\n" && gy1.stderr === "" && gy1.exitCode === 0, JSON.stringify([gy1.stdout, gy1.stderr, gy1.exitCode]));
-  const gy2 = await sh.run("printf 'ў\\nу\\nфх\\nѓ\\nґ\\nг\\nђ\\nд\\nе\\nѐ\\nё\\nє\\nж\\nі\\nї\\nй\\nј\\nћ\\nџ\\n' | sort");
-  check("text: en_US.UTF-8 sort orders the Cyrillic alphabet with its accented and extended letters (bash output)", gy2.stdout === "г\nѓ\nґ\nд\nђ\nе\nѐ\nё\nє\nж\nі\nї\nй\nј\nћ\nу\nў\nфх\nџ\n" && gy2.stderr === "" && gy2.exitCode === 0, JSON.stringify([gy2.stdout, gy2.stderr, gy2.exitCode]));
-  const gy3 = await sh.run("printf 'ŧa\\né\\n0\\nŧ\\n0\\nð\\nĳ\\na\\nł\\nł\\nĸ\\nŧ\\nŧ\\nа\\nł\\nа\\nŧ\\nð\\nа\\nα\\na\\nð\\n0\\nα\\nł\\n' | sort");
-  check("text: en_US.UTF-8 sort on random short lines with ð, ħ, ł, ŋ, ĳ, ı, ĸ, ſ, ŧ, þ, Greek, Cyrillic and accents (bash output)", gy3.stdout === "0\n0\n0\na\na\nð\nð\nð\né\nĳ\nł\nł\nł\nł\nĸ\nŧ\nŧ\nŧ\nŧ\nŧa\nα\nα\nа\nа\nа\n" && gy3.stderr === "" && gy3.exitCode === 0, JSON.stringify([gy3.stdout, gy3.stderr, gy3.exitCode]));
+  const SORT_ROWS = [
+    ["text: LC_ALL=C sort: mixed case is in byte order (bash output, locale LC_ALL=C)", "printf \"b\\nA\\na\\nB\\n\" | LC_ALL=C sort", "A\nB\na\nb\n", "", 0],
+    ["text: LC_ALL=C sort -r: mixed case is reversed in byte order (bash output, locale LC_ALL=C)", "printf \"b\\nA\\na\\nB\\n\" | LC_ALL=C sort -r", "b\na\nB\nA\n", "", 0],
+    ["text: LC_ALL=C sort: punctuation sorts before letters (bash output, locale LC_ALL=C)", "printf \"a-b\\nab\\na b\\na_c\\n\" | LC_ALL=C sort", "a b\na-b\na_c\nab\n", "", 0],
+    ["text: LC_ALL=C sort: digits, then letters, then accented bytes (bash output, locale LC_ALL=C)", "printf \"10\\n9\\n1a\\né\\nz\\nb\\n\" | LC_ALL=C sort", "10\n1a\n9\nb\nz\né\n", "", 0],
+    ["text: LC_ALL=C sort -u: duplicates are dropped in byte order (bash output, locale LC_ALL=C)", "printf \"b\\nA\\na\\nb\\nA\\n\" | LC_ALL=C sort -u", "A\na\nb\n", "", 0],
+    ["text: LC_ALL=C sort -ru: reversed and unique in byte order (bash output, locale LC_ALL=C)", "printf \"b\\nA\\na\\nb\\n\" | LC_ALL=C sort -ru", "b\na\nA\n", "", 0],
+    ["text: LC_ALL=C sort: case pairs keep byte order (bash output, locale LC_ALL=C)", "printf \"Ab\\naB\\nAB\\nab\\n\" | LC_ALL=C sort", "AB\nAb\naB\nab\n", "", 0],
+    ["text: LC_ALL=C sort: x and X are split by case (bash output, locale LC_ALL=C)", "printf \"x\\nX\\n\" | LC_ALL=C sort", "X\nx\n", "", 0],
+    ["text: en_US.UTF-8 collates case pairs, a before A, as glibc does (bash output)", "printf 'b\\nA\\na\\nB\\n' | sort", "a\nA\nb\nB\n", "", 0],
+    ["text: en_US.UTF-8 sort: punctuation and letters, bash output", "printf 'a-b\\nab\\na b\\na_c\\nac\\n' | sort", "a b\na-b\nab\na_c\nac\n", "", 0],
+    ["text: en_US.UTF-8 sort: digits sort before letters, bash output", "printf '10\\n9\\n1a\\nz\\nA1\\n' | sort", "10\n1a\n9\nA1\nz\n", "", 0],
+    ["text: en_US.UTF-8 sort: accented letters sort with their base letter, bash output", "printf 'é\\ne\\nea\\nÉa\\nf\\nE\\n' | sort", "e\nE\né\nea\nÉa\nf\n", "", 0],
+    ["text: en_US.UTF-8 sort: a currency sign sorts before digits, bash output", "printf '$a\\n0\\na\\n$\\n' | sort", "$\n$a\n0\na\n", "", 0],
+    ["text: en_US.UTF-8 sort on random short ASCII lines with punctuation, bash output", "printf 'oah\\nm\\na\\na\\nI\\ny\\n8\\nC\\n1\\nO\\n5\\nW\\nd\\nS\\nQ\\nA\\nJ\\nX\\nG\\na\\nV\\nH\\nU\\nl\\nH\\n' | sort", "1\n5\n8\na\na\na\nA\nC\nd\nG\nH\nH\nI\nJ\nl\nm\nO\noah\nQ\nS\nU\nV\nW\nX\ny\n", "", 0],
+    ["text: en_US.UTF-8 sort on random short accented lines, bash output", "printf 'E\\né\\n2\\n1\\n6\\nÜ\\n$\\n3\\n4\\nÜ\\n0\\nè\\n8\\n5\\n5\\nè\\nB\\né\\nä\\nä\\nE\\nB\\na\\n4\\nÜ\\n' | sort", "$\n0\n1\n2\n3\n4\n4\n5\n5\n6\n8\na\nä\nä\nB\nB\nE\nE\né\né\nè\nè\nÜ\nÜ\nÜ\n", "", 0],
+    ["text: en_US.UTF-8 sort puts ae, AE and the ligature æ in glibc order (bash output)", "printf 'AE\\nÆ\\næ\\nae\\nAF\\n' | sort", "ae\nAE\næ\nÆ\nAF\n", "", 0],
+    ["text: en_US.UTF-8 sort places ß between ss and st (bash output)", "printf 'ß\\nst\\nss\\nssa\\nsz\\nt\\n' | sort", "ss\nß\nssa\nst\nsz\nt\n", "", 0],
+    ["text: en_US.UTF-8 sort puts ø after o and before oe, bash output", "printf 'oe\\nø\\nØ\\no\\nœ\\nof\\nö\\nó\\n' | sort", "o\nó\nö\nø\nØ\noe\nœ\nof\n", "", 0],
+    ["text: en_US.UTF-8 sort puts the final sigma ς after σ and Σ (bash output)", "printf 'ς\\nσa\\nςa\\nΣ\\nσ\\nςb\\nσb\\n' | sort", "σ\nΣ\nς\nσa\nςa\nσb\nςb\n", "", 0],
+    ["text: en_US.UTF-8 sort on random short lines with æ, ß, ø, œ, final sigma, bash output", "printf 'Œeoé\\nØ\\nt\\nt\\nς\\nœ\\nœ\\no\\nα\\na\\no\\nσ\\nς\\no\\nΣ\\nß\\næ\\ns\\nA\\ns\\ns\\nς\\na\\nB\\ns\\n' | sort", "a\na\nA\næ\nB\no\no\no\nØ\nœ\nœ\nŒeoé\ns\ns\ns\ns\nß\nt\nt\nα\nσ\nΣ\nς\nς\nς\n", "", 0],
+    ["text: en_US.UTF-8 sort places the Latin letters ð, đ, ħ, ł, ŋ, ĳ, ı, ŧ, þ among ASCII as glibc does (bash output)", "printf 'ð\\nÐ\\nđ\\nd\\nħ\\nh\\nł\\nl\\nŋ\\nn\\nŧ\\nt\\nþ\\nz\\nĳ\\nı\\nij\\n' | sort", "d\nđ\nð\nÐ\nh\nħ\nij\nĳ\nı\nl\nł\nn\nŋ\nt\nŧ\nz\nþ\n", "", 0],
+    ["text: en_US.UTF-8 sort orders the Cyrillic alphabet with its accented and extended letters (bash output)", "printf 'ў\\nу\\nфх\\nѓ\\nґ\\nг\\nђ\\nд\\nе\\nѐ\\nё\\nє\\nж\\nі\\nї\\nй\\nј\\nћ\\nџ\\n' | sort", "г\nѓ\nґ\nд\nђ\nе\nѐ\nё\nє\nж\nі\nї\nй\nј\nћ\nу\nў\nфх\nџ\n", "", 0],
+    ["text: en_US.UTF-8 sort on random short lines with ð, ħ, ł, ŋ, ĳ, ı, ĸ, ſ, ŧ, þ, Greek, Cyrillic and accents (bash output)", "printf 'ŧa\\né\\n0\\nŧ\\n0\\nð\\nĳ\\na\\nł\\nł\\nĸ\\nŧ\\nŧ\\nа\\nł\\nа\\nŧ\\nð\\nа\\nα\\na\\nð\\n0\\nα\\nł\\n' | sort", "0\n0\n0\na\na\nð\nð\nð\né\nĳ\nł\nł\nł\nł\nĸ\nŧ\nŧ\nŧ\nŧ\nŧa\nα\nα\nа\nа\nа\n", "", 0],
+  ];
+  for (const [title, script, stdout, stderr, code] of SORT_ROWS) {
+    const row = await sh.run(script);
+    check(title, row.stdout === stdout && row.stderr === stderr && row.exitCode === code, JSON.stringify([row.stdout, row.stderr, row.exitCode]));
+  }
   const counted = await sh.run('printf "a\na\nb\n" | uniq -c');
   check('text: uniq -c counts each run of equal lines', counted.stdout === '      2 a\n      1 b\n', JSON.stringify(counted.stdout));
   const head = await sh.run('printf "1\n2\n3\n4\n" | head -n 2');
