@@ -1938,7 +1938,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   if (!vars.has('PWD')) vars.set('PWD', state.cwd);
   exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
-  const arrays = new Map();
+  const arrays = new Map((saved?.arrays ?? []).map(([name, entries]) => [name, new Map(entries)]));
   const evaluateText = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable);
   const indexValue = (text) => (/^\d+$/.test(text) ? Number(text) : Number(evaluateText(text)));
   const expandedText = async (parts, sink) => (await expandChars(parts, true, sink)).map((char) => char.c).join('');
@@ -1999,11 +1999,12 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const functions = new Map(saved?.functions ?? []);
   const inPage = new Set(builtins);
   const jobs = new Map();
+  let jobSeq = 0;
   let nextPid = saved?.nextPid ?? SHELL_PID + 1;
   let lastPid = saved?.lastPid ?? null;
   let runSink = null;
   const frames = [];
-  let positional = [];
+  let positional = saved?.positional ?? [];
   let loopDepth = 0;
 
   const hostModeText = (path) => {
@@ -2260,6 +2261,20 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       let err = '';
       let code = 0;
       for (const target of targets) {
+        if (target.startsWith('%')) {
+          const { job, ambiguous } = resolveJob(target);
+          if (ambiguous !== undefined) {
+            err += `kill: ${ambiguous}: ambiguous job spec\n`;
+            code = 1;
+          } else if (!job) {
+            err += `kill: ${target}: no such job\n`;
+            code = 1;
+          } else if (job.done) {
+            err += `kill: (${job.pid}) - No such process\n`;
+            code = 1;
+          } else job.control.abort(new Signalled(signo));
+          continue;
+        }
         const pid = Number(target);
         if (!Number.isInteger(pid)) {
           err += `kill: ${target}: arguments must be process or job IDs\n`;
@@ -2275,24 +2290,44 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out: '', err };
     },
     wait: async ({ argv, signal }) => {
-      const targets = argv.length ? argv : [...jobs.keys()];
+      if (argv.length === 0) {
+        const pending = [...jobs.values()];
+        for (const job of pending) await awaitJob(job, signal);
+        jobs.clear();
+        return { code: 0, out: '', err: '' };
+      }
       let code = 0;
       let err = '';
-      for (const arg of targets) {
-        if (!/^\d+$/.test(String(arg))) {
+      for (const arg of argv) {
+        if (arg.startsWith('%')) {
+          const { job, ambiguous } = resolveJob(arg);
+          if (ambiguous !== undefined) {
+            err += `wait: ${ambiguous}: ambiguous job spec\n`;
+            code = 127;
+            continue;
+          }
+          if (!job) {
+            err += `wait: ${arg}: no such job\n`;
+            code = 127;
+            continue;
+          }
+          code = await awaitJob(job, signal);
+          job.waited = true;
+          continue;
+        }
+        if (!/^\d+$/.test(arg)) {
           err += `wait: \`${arg}': not a pid or valid job spec\n`;
           code = 1;
           continue;
         }
-        const pid = Number(arg);
-        const job = jobs.get(pid);
+        const job = jobs.get(Number(arg));
         if (!job) {
-          err += `wait: pid ${pid} is not a child of this shell\n`;
+          err += `wait: pid ${Number(arg)} is not a child of this shell\n`;
           code = 127;
           continue;
         }
         code = await awaitJob(job, signal);
-        jobs.delete(pid);
+        job.waited = true;
       }
       return { code, out: '', err };
     },
@@ -3435,33 +3470,50 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return '';
   };
 
-  const describePipe = (pipe) =>
-    pipe.cmds.map((cmd) => (cmd.type === 'simple' ? cmd.words.map((parts) => parts.map(describePart).join('')).join(' ') : cmd.type)).join(' | ');
+  const describeList = (list) => list.items.map((item, i) => (i === 0 ? '' : ' ' + item.op + ' ') + describePipe(item.pipe)).join('');
+  const describeCommand = (cmd) => {
+    if (cmd.type === 'simple') return cmd.words.map((parts) => parts.map(describePart).join('')).join(' ');
+    if (cmd.type === 'subshell') return '(' + describeList(cmd.list) + ')';
+    if (cmd.type === 'group') return '{ ' + describeList(cmd.list) + '; }';
+    if (cmd.type === 'arith') return '((' + cmd.src + '))';
+    return cmd.type;
+  };
+  const describePipe = (pipe) => pipe.cmds.map(describeCommand).join(' | ');
 
+  const allocateJobNumber = () => {
+    for (const [key, job] of jobs) if (job.waited) jobs.delete(key);
+    const used = new Set([...jobs.values()].map((job) => job.number));
+    let number = 1;
+    while (used.has(number)) number++;
+    return number;
+  };
+  const resolveJob = (word) => {
+    const spec = word.slice(1);
+    const all = [...jobs.values()].sort((a, b) => a.seq - b.seq);
+    if (spec === '' || spec === '%' || spec === '+') return { job: all.at(-1) };
+    if (spec === '-') return { job: all.at(-2) ?? all.at(-1) };
+    if (/^\d+$/.test(spec)) return { job: all.find((job) => job.number === Number(spec)) };
+    const contains = spec.startsWith('?');
+    const text = contains ? spec.slice(1) : spec;
+    const matches = all.filter((job) => (contains ? job.command.includes(text) : job.command.startsWith(text)));
+    if (matches.length > 1) return { ambiguous: text };
+    return { job: matches[0] };
+  };
   const startJob = (pipe, stdin) => {
     const pid = nextPid++;
+    const number = allocateJobNumber();
     const control = new AbortController();
-    const job = { pid, command: describePipe(pipe), control, done: false, code: 0, promise: null };
+    const job = { pid, number, seq: ++jobSeq, command: describePipe(pipe), control, done: false, waited: false, code: 0, promise: null };
     jobs.set(pid, job);
     lastPid = pid;
+    const child = forkJobShell();
     job.promise = (async () => {
-      const sink = { out: '', err: '', signal: control.signal };
-      let code;
-      try {
-        code = await runPipeline(pipe, stdin, sink);
-      } catch (err) {
-        if (err instanceof Signalled) code = 128 + err.signo;
-        else if (err instanceof ShellExit) code = err.code;
-        else {
-          code = 2;
-          sink.err += `${err.message}\n`;
-        }
-      }
+      const result = await child.runBackground(pipe, stdin, control.signal);
       job.done = true;
-      job.code = code;
-      runSink.out += sink.out;
-      runSink.err += sink.err;
-      return code;
+      job.code = result.code;
+      runSink.out += result.out;
+      runSink.err += result.err;
+      return result.code;
     })();
     return job;
   };
@@ -4288,6 +4340,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   const toolContext = (stdin) => ({ host, cwd: state.cwd, stdin: stdin ?? '', resolve: resolvePath, format: formatPrintf });
 
+  const snapshotState = () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], arrays: [...arrays].map(([name, entries]) => [name, [...entries]]), positional: [...positional], nextPid, lastPid, errexit, xtrace });
+  const forkJobShell = () => createShell({ host, cwd: state.cwd, builtins, saved: snapshotState() });
   const stopJobs = async () => {
     const running = [...jobs.values()].filter((job) => !job.done);
     for (const job of running) job.control.abort(new Signalled(SIGNALS.HUP));
@@ -4345,6 +4399,21 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
     },
     cwd: () => state.cwd,
-    snapshot: () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], nextPid, lastPid, errexit, xtrace }),
+    snapshot: snapshotState,
+    runBackground: async (pipe, stdin, signal) => {
+      const sink = { out: '', err: '', signal };
+      let code;
+      try {
+        code = await runPipeline(pipe, stdin, sink);
+      } catch (err) {
+        if (err instanceof Signalled) code = 128 + err.signo;
+        else if (err instanceof ShellExit) code = err.code;
+        else {
+          code = 2;
+          sink.err += `${err.message}\n`;
+        }
+      }
+      return { code, out: sink.out, err: sink.err };
+    },
   };
 }

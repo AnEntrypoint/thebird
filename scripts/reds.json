@@ -114,9 +114,17 @@
 {"name":"arithsv11","file":"web/shell-arith.js","anchor":"left = { k: 'bin', op, left, right, start };","replace":"left = { k: 'binX', op, left, right, start };","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakheredoc","file":"web/shell-core.js","anchor":"if (!terminated) doc.token.warning = heredocWarning(src, doc);","replace":"if (terminated) doc.token.warning = heredocWarning(src, doc);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakreturn","file":"web/shell-core.js","anchor":"if (frames.length === 0) return","replace":"if (frames.length === 1) return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"leakwait","file":"web/shell-core.js","anchor":"if (!/^\\d+$/.test(String(arg))) {","replace":"if (false) {","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakwait","file":"web/shell-core.js","anchor":"if (!/^\\d+$/.test(arg)) {","replace":"if (false) {","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakprintf","file":"web/shell-core.js","anchor":"(argv.length ? ok(formatPrintf(argv))","replace":"(true ? ok(formatPrintf(argv))","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"pybundlesha","file":"web/python-bundle.js","anchor":"if (digest !== sha256) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
 {"name":"pybundlepin","file":"web/python-bundle.js","anchor":"if (CORE_PINS[name] && CORE_PINS[name] !== digest) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
-{"name":"pybundletrunc","file":"web/python-bundle.js","anchor":"if (data.length !== bytes) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000}
+{"name":"pybundletrunc","file":"web/python-bundle.js","anchor":"if (data.length !== bytes) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
+{"name":"jobpending","file":"web/shell-core.js","anchor":"const pending = [...jobs.values()];","replace":"const pending = [];","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobreap","file":"web/shell-core.js","anchor":"for (const [key, job] of jobs) if (job.waited) jobs.delete(key);","replace":"for (const [key, job] of jobs) if (job.waited && false) jobs.delete(key);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobambig","file":"web/shell-core.js","anchor":"if (matches.length > 1) return { ambiguous: text };","replace":"if (matches.length > 9) return { ambiguous: text };","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobprev","file":"web/shell-core.js","anchor":"if (spec === '-') return { job: all.at(-2) ?? all.at(-1) };","replace":"if (spec === '-') return { job: all.at(-1) };","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobkill","file":"web/shell-core.js","anchor":"`kill: ${target}: no such job","replace":"`kill: ${target}: no such jobs","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobfork","file":"web/shell-core.js","anchor":"saved: snapshotState() });","replace":"saved: null });","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobarrays","file":"web/shell-core.js","anchor":"arrays: [...arrays].map(([name, entries]) => [name, [...entries]]), positional: [...positional],","replace":"positional: [...positional],","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"jobdescribe","file":"web/shell-core.js","anchor":"if (cmd.type === 'subshell') return '(' + describeList(cmd.list) + ')';","replace":"if (cmd.type === 'subshell') return 'sub';","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
 ]
