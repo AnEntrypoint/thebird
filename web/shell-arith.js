@@ -1,7 +1,8 @@
 export class ArithmeticError extends Error {}
 
+const OPEN_QUOTE = String.fromCharCode(96);
 const IDENTIFIER = /^[A-Za-z_]\w*$/;
-const NUMBER = /^(?:\d+#.+|0[xX][0-9A-Fa-f]+|\d+)$/;
+const NUMBER = /^(?:\d+#[0-9A-Za-z@_]+|0[xX][0-9A-Fa-f]+|\d+)$/;
 const TOKEN = /\s*(\d+#[0-9A-Za-z@_]+|0[xX][0-9A-Fa-f]+|\d+|[A-Za-z_]\w*|<<=|>>=|\*\*=|\*\*|<<|>>|<=|>=|==|!=|&&|\|\||\+\+|--|[-+*/%&|^]=|[-+*/%<>=!~^&|?:,()])/y;
 const ASSIGNMENTS = new Set(['=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=', '**=']);
 const BINARY = new Map([
@@ -10,6 +11,12 @@ const BINARY = new Map([
   ['<<', 8], ['>>', 8], ['+', 9], ['-', 9], ['*', 10], ['/', 10], ['%', 10], ['**', 12],
 ]);
 const MAX_DEPTH = 16;
+const UNARY = new Set(['-', '+', '!', '~']);
+const OPERAND_EXPECTED = 'arithmetic syntax error: operand expected';
+const SYNTAX_IN_EXPRESSION = 'arithmetic syntax error in expression';
+const DIVISION_BY_ZERO = 'division by 0';
+const COLON_EXPECTED = OPEN_QUOTE + ":' expected for conditional expression";
+const CLOSE_EXPECTED = OPEN_QUOTE + ")' expected";
 
 const wrap = (value) => BigInt.asIntN(64, value);
 const truth = (value) => value !== 0n;
@@ -22,47 +29,56 @@ const digitValue = (char, base) => {
   return char === '@' ? 62n : 63n;
 };
 
-const numberValue = (token) => {
-  const based = /^(\d+)#(.+)$/.exec(token);
+const numberValue = (token, failAt) => {
+  const based = /^(\d+)#(.+)$/.exec(token.text);
   if (based) {
     const base = BigInt(based[1]);
-    if (base < 2n || base > 64n) throw new ArithmeticError('arithmetic: invalid arithmetic base');
+    if (base < 2n || base > 64n) throw failAt('invalid arithmetic base', token.start, token.start + token.text.length);
     let value = 0n;
     for (const char of based[2]) {
       const digit = digitValue(char, Number(base));
-      if (digit >= base) throw new ArithmeticError('arithmetic: value too great for base');
+      if (digit >= base) throw failAt('value too great for base', token.start, token.start + token.text.length);
       value = value * base + digit;
     }
     return value;
   }
-  if (/^0[xX]/.test(token)) return BigInt(token);
-  if (/^0\d/.test(token)) {
-    if (/[89]/.test(token)) throw new ArithmeticError('arithmetic: value too great for base');
-    return BigInt('0o' + token.slice(1));
+  if (/^0[xX]/.test(token.text)) return BigInt(token.text);
+  if (/^0\d/.test(token.text)) {
+    if (/[89]/.test(token.text)) throw failAt('value too great for base', token.start, token.start + token.text.length);
+    return BigInt('0o' + token.text.slice(1));
   }
-  return BigInt(token);
+  return BigInt(token.text);
 };
 
-const tokenize = (text, src) => {
+const tokenize = (text) => {
   const tokens = [];
   let end = 0;
-  while (end < text.length) {
+  for (;;) {
     TOKEN.lastIndex = end;
     const match = TOKEN.exec(text);
     if (match === null) {
-      if (text.slice(end).trim() === '') break;
-      throw new ArithmeticError("arithmetic: bad expression '" + src.trim() + "'");
+      const at = end + (text.slice(end).length - text.slice(end).trimStart().length);
+      if (at >= text.length) return tokens;
+      tokens.push({ text: text[at], start: at });
+      end = at + 1;
+    } else {
+      tokens.push({ text: match[1], start: TOKEN.lastIndex - match[1].length });
+      end = TOKEN.lastIndex;
     }
-    tokens.push(match[1]);
-    end = TOKEN.lastIndex;
   }
-  return tokens;
 };
 
-const parse = (tokens) => {
+const parse = (context) => {
+  const { tokens, failAt, failToken } = context;
   let pos = 0;
-  const peek = () => tokens[pos];
+  const peek = () => tokens[pos]?.text;
   const take = () => tokens[pos++];
+  const lastIndex = () => pos - 1;
+  const operandStart = () => {
+    let index = pos;
+    while (UNARY.has(tokens[index]?.text)) index++;
+    return index;
+  };
 
   const expression = () => {
     let node = assignment();
@@ -76,9 +92,11 @@ const parse = (tokens) => {
   const assignment = () => {
     const node = ternary();
     if (!ASSIGNMENTS.has(peek())) return node;
-    const op = take();
-    if (node.k !== 'var') throw new ArithmeticError('arithmetic: attempted assignment to non-variable');
-    return { k: 'assign', name: node.name, op, value: assignment() };
+    const op = take().text;
+    if (node.k !== 'var') throw failToken('attempted assignment to non-variable', lastIndex());
+    const start = operandStart();
+    const value = assignment();
+    return { k: 'assign', name: node.name, op, value, start };
   };
 
   const ternary = () => {
@@ -86,7 +104,8 @@ const parse = (tokens) => {
     if (peek() !== '?') return condition;
     take();
     const yes = assignment();
-    if (take() !== ':') throw new ArithmeticError("arithmetic: expected ':'");
+    if (peek() !== ':') throw failToken(COLON_EXPECTED, lastIndex());
+    take();
     return { k: 'cond', condition, yes, no: ternary() };
   };
 
@@ -97,50 +116,55 @@ const parse = (tokens) => {
       const precedence = BINARY.get(op);
       if (precedence === undefined || precedence < minimum) return left;
       take();
-      left = { k: 'bin', op, left, right: binary(op === '**' ? precedence : precedence + 1) };
+      const start = operandStart();
+      const right = binary(op === '**' ? precedence : precedence + 1);
+      left = { k: 'bin', op, left, right, start };
     }
   };
 
   const unary = () => {
-    const token = peek();
-    if (token === '-' || token === '+' || token === '!' || token === '~') {
+    const text = peek();
+    if (text === '-' || text === '+' || text === '!' || text === '~') {
       take();
-      return { k: 'unary', op: token, operand: unary() };
+      return { k: 'unary', op: text, operand: unary() };
     }
-    if (token === '++' || token === '--') {
+    if (text === '++' || text === '--') {
       take();
-      const name = take();
-      if (!IDENTIFIER.test(name ?? '')) throw new ArithmeticError('arithmetic: attempted assignment to non-variable');
-      return { k: 'step', name, delta: token === '++' ? 1n : -1n, prefix: true };
+      if (pos >= tokens.length) throw failToken(OPERAND_EXPECTED, lastIndex());
+      if (!IDENTIFIER.test(peek())) throw failToken('attempted assignment to non-variable', pos);
+      const name = take().text;
+      return { k: 'step', name, delta: text === '++' ? 1n : -1n, prefix: true };
     }
     return postfix();
   };
 
   const postfix = () => {
     const node = primary();
-    const token = peek();
-    if ((token === '++' || token === '--') && node.k === 'var') {
+    const text = peek();
+    if (text === '++' || text === '--') {
+      if (node.k !== 'var') throw failAt(OPERAND_EXPECTED, tokens[pos].start + 1);
       take();
-      return { k: 'step', name: node.name, delta: token === '++' ? 1n : -1n, prefix: false };
+      return { k: 'step', name: node.name, delta: text === '++' ? 1n : -1n, prefix: false };
     }
     return node;
   };
 
   const primary = () => {
+    if (pos >= tokens.length) throw failToken(OPERAND_EXPECTED, lastIndex());
     const token = take();
-    if (token === undefined) throw new ArithmeticError('arithmetic: unexpected end of expression');
-    if (token === '(') {
+    if (token.text === '(') {
       const node = expression();
-      if (take() !== ')') throw new ArithmeticError('arithmetic: expected )');
+      if (peek() !== ')') throw failToken(CLOSE_EXPECTED, lastIndex());
+      take();
       return node;
     }
-    if (IDENTIFIER.test(token)) return { k: 'var', name: token };
-    if (NUMBER.test(token)) return { k: 'num', value: wrap(numberValue(token)) };
-    throw new ArithmeticError("arithmetic: unexpected '" + token + "'");
+    if (IDENTIFIER.test(token.text)) return { k: 'var', name: token.text };
+    if (NUMBER.test(token.text)) return { k: 'num', value: wrap(numberValue(token, failAt)) };
+    throw failToken(OPERAND_EXPECTED, lastIndex());
   };
 
   const node = expression();
-  if (pos < tokens.length) throw new ArithmeticError("arithmetic: unexpected '" + tokens[pos] + "'");
+  if (pos < tokens.length) throw failToken(SYNTAX_IN_EXPRESSION, pos);
   return node;
 };
 
@@ -167,17 +191,17 @@ const shiftRight = (value, count) => {
   return value >> count;
 };
 
-const operate = (op, left, right) => {
+const operate = (op, left, right, fail) => {
   switch (op) {
     case '+': return wrap(left + right);
     case '-': return wrap(left - right);
     case '*': return wrap(left * right);
     case '/':
     case '%':
-      if (right === 0n) throw new ArithmeticError('arithmetic: division by zero');
+      if (right === 0n) throw fail(DIVISION_BY_ZERO);
       return wrap(op === '/' ? left / right : left % right);
     case '**':
-      if (right < 0n) throw new ArithmeticError('arithmetic: exponent less than 0');
+      if (right < 0n) throw fail('exponent less than 0');
       return power(left, right);
     case '<<': return wrap(shiftLeft(left, right));
     case '>>': return wrap(shiftRight(left, right));
@@ -210,7 +234,7 @@ const binaryValue = (node, env) => {
   const left = evaluate(node.left, env);
   if (node.op === '&&') return truth(left) ? flag(truth(evaluate(node.right, env))) : 0n;
   if (node.op === '||') return truth(left) ? 1n : flag(truth(evaluate(node.right, env)));
-  return operate(node.op, left, evaluate(node.right, env));
+  return operate(node.op, left, evaluate(node.right, env), (detail) => env.failToken(detail, node.start));
 };
 
 const evaluate = (node, env) => {
@@ -227,7 +251,7 @@ const evaluate = (node, env) => {
     case 'assign': {
       const old = node.op === '=' ? 0n : readVariable(node.name, env);
       const right = evaluate(node.value, env);
-      const value = node.op === '=' ? right : operate(node.op.slice(0, -1), old, right);
+      const value = node.op === '=' ? right : operate(node.op.slice(0, -1), old, right, (detail) => env.failToken(detail, node.start));
       env.assign(node.name, String(value));
       return value;
     }
@@ -240,10 +264,14 @@ const evaluate = (node, env) => {
 };
 
 const run = (src, lookup, assign, depth) => {
-  if (depth > MAX_DEPTH) throw new ArithmeticError('arithmetic: expression recursion level exceeded');
-  const tokens = tokenize(src.replace(/\\\n/g, ''), src);
+  const text = src.replace(/\\\n/g, '');
+  if (depth > MAX_DEPTH) throw new ArithmeticError(text.replace(/^\s+/, '') + ': expression recursion level exceeded');
+  const tokens = tokenize(text);
   if (tokens.length === 0) return 0n;
-  return evaluate(parse(tokens), { lookup, assign, depth });
+  const failAt = (detail, start, end = text.length) => new ArithmeticError(text.slice(0, end).replace(/^\s+/, '') + ': ' + detail + ' (error token is "' + text.slice(start, end) + '")');
+  const failToken = (detail, index) => failAt(detail, tokens[index].start);
+  const context = { tokens, failAt, failToken, lookup, assign, depth, failToken };
+  return evaluate(parse(context), context);
 };
 
 export function evaluateArithmetic(src, lookup, assign) {

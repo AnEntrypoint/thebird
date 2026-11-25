@@ -220,10 +220,19 @@ function parameterPart(text) {
   return { k: 'param', name: m[2], index: m[3], op: m[4] ?? null, word: readParts(m[5] ?? '', 0, new Set()).parts };
 }
 
+function arithmeticClose(src, dollar) {
+  try {
+    return matchParen(src, dollar + 1);
+  } catch (err) {
+    if (!err.eof) throw err;
+    throw bashSyntaxError(err.message, { at: dollar });
+  }
+}
+
 function readDollar(src, i) {
   const next = src[i + 1];
   if (next === '(' && src[i + 2] === '(') {
-    const close = matchParen(src, i + 1);
+    const close = arithmeticClose(src, i);
     if (src[close - 1] !== ')') throw syntaxError('bad arithmetic expansion');
     return { part: { k: 'arith', src: src.slice(i + 3, close - 1) }, end: close + 1 };
   }
@@ -3979,7 +3988,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
     } catch (err) {
       if (!(err instanceof ArithmeticError)) throw err;
-      inner.err += err.message + '\n';
+      inner.err += 'thebird: ((: ' + err.message + '\n';
       code = 1;
     } finally {
       loopDepth--;
@@ -4153,7 +4162,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const value = await runArithmetic(node.src, sink);
       return { code: value === 0n ? 1 : 0, out: '', err: '' };
     } catch (error) {
-      return { code: 1, out: '', err: error.message + '\n' };
+      if (!(error instanceof ArithmeticError)) throw error;
+      return { code: 1, out: '', err: 'thebird: ((: ' + error.message + '\n' };
     }
   };
 
@@ -4291,6 +4301,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         } else if (control.signal.aborted) {
           code = 130;
           sink.err += 'cancelled\n';
+        } else if (err instanceof ArithmeticError) {
+          code = 1;
+          sink.err += 'thebird: ' + err.message + '\n';
         } else {
           code = 2;
           sink.err += `${err.message}\n`;

@@ -4366,6 +4366,38 @@ group("arithmetic comparisons: each relational and equality operator gives 1 or 
   await matchesBash('bash rows', cases);
 });
 
+group("arithmetic errors: the message, the error token, the status and the abort of a word are bash's, with the thebird prefix", async () => {
+  const cases = [
+    ["echo $(( 1 / 0 ))", "", "thebird: 1 / 0 : division by 0 (error token is \"0 \")\n", 1],
+    ["echo $(( 1 % 0 ))", "", "thebird: 1 % 0 : division by 0 (error token is \"0 \")\n", 1],
+    ["echo $(( 1 + ))", "", "thebird: 1 + : arithmetic syntax error: operand expected (error token is \"+ \")\n", 1],
+    ["echo $(( 1 2 ))", "", "thebird: 1 2 : arithmetic syntax error in expression (error token is \"2 \")\n", 1],
+    ["echo $(( 08 ))", "", "thebird: 08: value too great for base (error token is \"08\")\n", 1],
+    ["echo $(( 2 ** -1 ))", "", "thebird: 2 ** -1 : exponent less than 0 (error token is \"1 \")\n", 1],
+    ["echo $(( 1 ? 2 ))", "", "thebird: 1 ? 2 : `:' expected for conditional expression (error token is \"2 \")\n", 1],
+    ["echo $(( @ ))", "", "thebird: @ : arithmetic syntax error: operand expected (error token is \"@ \")\n", 1],
+    ["echo $(( 1 ++ ))", "", "thebird: 1 ++ : arithmetic syntax error: operand expected (error token is \"+ \")\n", 1],
+    ["echo $(( 36#zz + 2#3 ))", "", "thebird: 36#zz + 2#3: value too great for base (error token is \"2#3\")\n", 1],
+    ["echo $(( 2#1x ))", "", "thebird: 2#1x: value too great for base (error token is \"2#1x\")\n", 1],
+    ["echo before; echo $(( 1 / 0 )); echo after", "before\n", "thebird: 1 / 0 : division by 0 (error token is \"0 \")\n", 1],
+    ["x=$(( 1 / 0 )); echo after", "", "thebird: 1 / 0 : division by 0 (error token is \"0 \")\n", 1],
+    ["(( 1 / 0 )); echo after st=$?", "after st=1\n", "thebird: ((: 1 / 0 : division by 0 (error token is \"0 \")\n", 0],
+    ["(( 1 + )); echo st=$?", "st=1\n", "thebird: ((: 1 + : arithmetic syntax error: operand expected (error token is \"+ \")\n", 0],
+    ["let 1/0; echo after st=$?", "after st=1\n", "let: 1/0: division by 0 (error token is \"0\")\n", 0],
+    ["let; echo $?", "1\n", "let: expression expected\n", 0],
+    ["a=1; echo $(( a / (a - 1) ))", "", "thebird: a / (a - 1) : division by 0 (error token is \"(a - 1) \")\n", 1],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
+group("parse: an unterminated $(( is reported at the line where it starts, as bash reports it", async () => {
+  const cases = [
+    ["echo $(( (1 + 2 ))", "", "bash: -c: line 1: unexpected EOF while looking for matching `)'\n", 2],
+    ["echo a\necho $(( (1 + 2 ))", "a\n", "bash: -c: line 2: unexpected EOF while looking for matching `)'\n", 2],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
