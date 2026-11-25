@@ -553,6 +553,55 @@ group('awk: fields, patterns, actions and errors', async () => {
   check('awk: a missing file is reported, the rest are read, and the exit is 2', missing.exitCode === 2 && missing.stdout === 'one\nthree\n' && missing.stderr === "awk: can't open file nope.txt\n", JSON.stringify(missing));
 });
 
+group('shell-core survivors: each check kills a flip of shell-core that the sweep found uncaught, with the expectation from bash or from the shell spec', async () => {
+  const sh = await shell({});
+  const arithmetic = await sh.run('echo $(( 3 >= 3 )) $(( 2 >= 3 )); echo $(( 3 == 3 )) $(( 3 == 4 )); echo $(( 3 != 3 )) $(( 3 != 4 )); echo $(( 1 && 0 )) $(( 1 && 2 ))');
+  check('arithmetic: >=, ==, != and && give 1 or 0 for each pair of operands, as bash does', arithmetic.stdout === '1 0\n1 0\n0 1\n0 1\n' && arithmetic.exitCode === 0, JSON.stringify(arithmetic.stdout));
+  const ps = await sh.run('x=30; sleep $x & ps; kill $!; wait $!; sleep $(echo 30) & ps; kill $!; wait $!; sleep $((1+29)) & ps; kill $!; wait $!');
+  check('ps lists a background job with its $name, $(...) and $((...)) words as written', /^\s*\d+\s+100\s+S\s+sleep \$x\s*$/m.test(ps.stdout) && /^\s*\d+\s+100\s+S\s+sleep \$\(echo 30\)\s*$/m.test(ps.stdout) && /^\s*\d+\s+100\s+S\s+sleep \$\(\(1\+29\)\)\s*$/m.test(ps.stdout), JSON.stringify(ps.stdout));
+  const prefix = await sh.run('x=1; x=2 echo hi; echo $x; f() { echo $x; }; x=2 f; echo $x');
+  check('a prefix assignment is undone after its command, for a builtin and for a function, as bash does', prefix.stdout === 'hi\n1\n2\n1\n' && prefix.exitCode === 0, JSON.stringify(prefix.stdout));
+  const envPrefix = await sh.run('x=1; env x=2 echo hi; echo $x');
+  check('env x=2 sets x for its command only, and x keeps its value afterwards, as bash does', envPrefix.stdout === 'hi\n1\n', JSON.stringify(envPrefix.stdout));
+  const seek = await sh.run("printf \"a\\nb\\nc\\n\" > g; { { head -n 1; cat; } 4>/dev/null; } < g");
+  check('head on a file read through two compound commands leaves the rest for cat, as bash does', seek.stdout === 'a\nb\nc\n' && seek.exitCode === 0, JSON.stringify(seek.stdout));
+  const mode = await sh.run('echo a > f; chmod 644 f; chmod o+t f; stat -c %a f');
+  check('chmod o+t sets the sticky bit, as bash does (stat output)', mode.stdout === '1644\n', JSON.stringify(mode.stdout));
+  const locale = await sh.run("export LC_ALL=C; printf 'b\\nA\\na\\nB\\n' | sort");
+  check('export LC_ALL=C settles the locale to byte order for sort, as bash does', locale.stdout === 'A\nB\na\nb\n', JSON.stringify(locale.stdout));
+  const globShell = await shell({});
+  const glob = await globShell.run('touch .h v; echo *');
+  check('a glob does not match a dot file, as bash does', glob.stdout === 'v\n', JSON.stringify(glob.stdout));
+  const copied = await sh.run('mkdir d; echo x > s; cp s d; cat d/s');
+  check('cp of a file into a directory writes it inside the directory', copied.stdout === 'x\n' && copied.exitCode === 0, JSON.stringify(copied.stdout));
+  const linked = await sh.run('mkdir l; echo t > tgt; ln -s /workspace/tgt l; readlink l/tgt');
+  check('ln -s into an existing directory names the link inside it, as bash does', linked.stdout === '/workspace/tgt\n', JSON.stringify(linked.stdout));
+  const truncated = await sh.run('echo a > f; echo b > f; cat f');
+  check('a > redirect truncates the file it writes, as bash does', truncated.stdout === 'b\n', JSON.stringify(truncated.stdout));
+  const archives = await shell({ '/workspace/x.txt': 'hit\n' });
+  const listed = await archives.run('cd /workspace && printf junk > a.tgz; tar -czf - x.txt > a.tgz; tar -czf - x.txt > b.tgz; [ "$(wc -c < a.tgz)" = "$(wc -c < b.tgz)" ] && echo same || echo differ');
+  check('a gzip write with > replaces an older file of other bytes, so its size is that of a fresh archive, as bash does', listed.stdout === 'same\n' && listed.exitCode === 0, JSON.stringify(listed.stdout));
+  const replaced = await archives.run('cd /workspace && printf junk > a.tgz; tar -czf - x.txt > a.tgz; tar -tzf a.tgz');
+  check('a gzip write with > over other bytes leaves an archive tar can list, as bash does', replaced.stdout === 'x.txt\n' && replaced.exitCode === 0, JSON.stringify(replaced.stdout));
+  const piped = await sh.run("printf 'a\\nb\\nc\\n' | { head -n 1; cat; }");
+  check('head on a pipe read by a compound command takes the whole pipe, as bash does', piped.stdout === 'a\n' && piped.exitCode === 0, JSON.stringify(piped.stdout));
+  const heredoc = await sh.run('{ head -n 1; cat; } <<EOF\na\nb\nc\nEOF');
+  check('head on a here-document takes the whole body, as bash does', heredoc.stdout === 'a\n' && heredoc.exitCode === 0, JSON.stringify(heredoc.stdout));
+  const descriptor = await sh.run("printf \"a\\nb\\nc\\n\" > g; { head -n 1 4>/dev/null; cat; } < g");
+  check('head with a descriptor redirect still reads its file in place, as bash does', descriptor.stdout === 'a\nb\nc\n' && descriptor.exitCode === 0, JSON.stringify(descriptor.stdout));
+  const results = [await sh.run('true'), await sh.run('exit 3')];
+  check('the run result is ok for status 0 and not ok for another status', results[0].ok === true && results[1].ok === false && results[1].exitCode === 3, JSON.stringify(results.map((r) => [r.ok, r.exitCode])));
+  const moved = await sh.run("echo x > a; mv a nodir/b; echo rc=$?");
+  check('mv names itself when the destination directory is missing, with rc 1', moved.stdout === 'rc=1\n' && moved.stderr.startsWith("mv: cannot move 'a' to '") && moved.stderr.includes('nodir/b'), JSON.stringify([moved.stdout, moved.stderr]));
+  const fdSwap = await sh.run('exec 3>a; { echo in >&3; } 3>b; echo out >&3; exec 3>&-; cat a b');
+  check('a descriptor opened for a compound command is restored after it, as bash does', fdSwap.stdout === 'out\nin\n', JSON.stringify(fdSwap.stdout));
+  const syntax = await sh.run('a (b)');
+  check('a command word followed by ( reports the token after the parenthesis, with status 2 and no output, as bash does', syntax.exitCode === 2 && syntax.stdout === '' && syntax.stderr.includes('unexpected token') && syntax.stderr.includes("b'"), JSON.stringify([syntax.exitCode, syntax.stderr]));
+  const owner = await shell({ '/workspace/f': 'x' }, {}, { '/workspace/f': { uid: 1000, gid: 1001 } });
+  const owned = await owner.run('[[ -O f ]] && echo owned; [[ -G f ]] || echo notgroup');
+  check('-O tests the owner id and -G the group id, separately', owned.stdout === 'owned\nnotgroup\n', JSON.stringify(owned.stdout));
+});
+
 group('loops: while and until run their body while the condition holds', async () => {
   const sh = await shell({});
   const counted = await sh.run('n=0; while [ $n -lt 3 ]; do echo w$n; n=$((n+1)); done');
