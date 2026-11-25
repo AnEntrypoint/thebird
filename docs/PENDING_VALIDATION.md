@@ -6997,3 +6997,14 @@ Waits on the owner (or the machine):
 - The red that was asked for (a function that sets local LC_ALL, then sort, then a check of the caller's locale) was run against the current tree and is not caught. With LANG=en_US.UTF-8 set by the caller: sort gives a A b B inside and after the function, as bash does; the length of x=é is 2 inside and 1 after, as bash does. Unmutated witness with both checks in place: PASS=1993 FAIL=0. Those two checks were not committed, because a row that passes is not the red that the rule requires.
 - Bash reference, checked in this session with LANG=en_US.UTF-8: sort inside and after the function gives a A b B both times (local is not exported to sort); the length gives 2 inside and 1 after (bash applies a local LC_ALL to its own string operations and restores it on return).
 - Still open from batch 3, unchanged: the flip at 3000 and the warning row (killed); 3819 (not reached); the five hang-only timeouts.
+
+### 3819 is closed by a fix; the flipped condition is bash behaviour
+
+- Line 3819 was the append test in applyOutputRedirects: byte output read the target file first only when the redirect was >> or 1>> or &>>. The flip made the test true for the other operators too, so a plain > over existing bytes would keep them.
+- Probe, run outside the gate on copies of web/: exec 3> c.tgz; echo junk >&3; tar -czf - x.txt >&3. Bash writes the junk line and then the gzip bytes (checked: ok). The baseline wrote the gzip bytes alone, so the junk was lost. The flipped tree kept it and matched bash.
+- So the flip is the correct behaviour and the baseline was the defect. No bash-true row can fail the flip, so it is not a kill; line 3819 no longer exists, which closes the survivor.
+- Plain > cannot differ under the flip: openFile truncates a non-append target before the command runs, so the prior bytes are empty. The flip is observable only through a shared fd, which is the case above.
+- Fix: the append test is removed. Byte output reads the target file current bytes before it writes, as the text path already does (the files loop writes prior plus text).
+- Red: witness row "tar: bytes written to a fd that already holds text land after that text, as bash writes them" in scripts/witness-shell.mjs. On the baseline it exits 1 with no output; on the fixed tree it prints ok, and bash prints ok.
+- Also checked on both trees and in bash: >> appends after existing bytes (ok); a plain > over junk replaces them (ok).
+- Open defect found while writing the row: arithmetic does not expand a command substitution inside $((...)). a=$(wc -c < c.tgz); [ $a -eq $(( $(wc -c < d.tgz) + 5 )) ] fails with "arithmetic: bad expression" and exit 2 on both trees, where bash computes it. The row uses variables, so it does not depend on this. Not fixed in this item.

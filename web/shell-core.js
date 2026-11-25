@@ -3816,8 +3816,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (outBytes && fds[1] !== 'out') {
       const target = fds[1];
       if (typeof target === 'object' && target.path !== undefined && target.rw !== true && target.read === undefined && target.heredoc === undefined) {
-        const append = redirects.some((redirect) => redirect.op === '>>' || redirect.op === '1>>' || redirect.op === '&>>');
-        const prior = append && host.exists(target.path) ? host.readBytes(target.path) : new Uint8Array(0);
+        const prior = host.exists(target.path) ? host.readBytes(target.path) : new Uint8Array(0);
         writeRedirect(target.path, tarConcat([prior, outBytes]));
       }
       outBytes = null;

@@ -3584,6 +3584,12 @@ group("wc total: wc prints a total line when it reads several files, and the tot
   const wwt3 = await sh.run("echo hello > f.txt; wc -l f.txt");
   check("wc -l on one file prints no total line (bash output, locale en_US.UTF-8)", wwt3.stdout === "1 f.txt\n" && wwt3.exitCode === 0 && wwt3.stderr === "", JSON.stringify([wwt3.stdout, wwt3.stderr, wwt3.exitCode]));
 });
+group('tar: bytes written to a fd that already holds text land after that text, as bash writes them', async () => {
+  const sh = await shell({ '/workspace/x.txt': 'hit\n' });
+  const shared = await sh.run('cd /workspace && exec 3> c.tgz; echo junk >&3; tar -czf - x.txt >&3; exec 3>&-; tar -czf - x.txt > d.tgz; a=$(wc -c < c.tgz); b=$(wc -c < d.tgz); [ $a -eq $((b+5)) ] && echo ok');
+  check('tar: tar -czf - writes its gzip bytes after the text on a shared fd, as bash does (bash output: ok)', shared.stdout === 'ok\n' && shared.stderr === '', JSON.stringify([shared.stdout, shared.stderr]));
+});
+
 group('tar -z: tar writes and reads a gzip archive, as GNU tar does', async () => {
   const sh = await shell({ '/workspace/x.txt': 'hit\n' });
   const made = await sh.run('cd /workspace && tar -czf a.tgz x.txt; echo rc=$?');
