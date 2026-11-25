@@ -6969,3 +6969,12 @@ Waits on the owner (or the machine):
   - line 3683 (seekable for a compound's input): equivalent by reading: resolveInput overwrites seekable on every input redirect, and with no input redirect the cursor is the original stream, so the flipped flag is never read. Three rows (a here-document, a pipe, a descriptor redirect) all passed under the flip. Red removed.
   - line 3716 (seekable initial value of a simple command with redirects): three rows tried, none changed under the flip; not proven equivalent. Red removed.
   - line 3819 (append detection for byte output): the junk-prior tar rows, both the size comparison and the tar -tzf read-back, pass under the flip; not proven equivalent. Red removed.
+
+### Survivor batch 2: no kill, and the open survivors after it
+
+- Starting set (open after batch 1): 3000, 3683, 3716 and 3819, plus the five hang-only timeouts (401, 402, 427, 2705, 4080).
+- 3683: equivalent by reading. resolveInput overwrites seekable on every input redirect; with no input redirect the cursor is the original stream, so the flipped flag is never read. No row written.
+- 3716: equivalent by reading. The initial seekable value is read only when redirected is true, and every branch that sets redirected also sets seekable first (a here-document, a here-string, a file input, a non-shared duplicate). No row written.
+- 3000: needs a decision on the shell's local semantics before a row can be written. Bash does not export a local variable to sort, so there is no bash reference for local LC_ALL=C.
+- 3819: a row that overwrites an archive of other members (tar -czf - x.txt > a.tgz, then tar -czf - y.txt > a.tgz, then tar -tzf a.tgz, which bash lists as y.txt) passes under the flip. Gated window survred-b2 (GATE_EXCLUSIVE=1, host si 240 KB/s, so 0 KB/s at launch): the unmutated witness passes (PASS=1991 FAIL=0) and red core3819 is MISSED rc 0. So the append branch is not reached by tar output in any row tried. Not pushed: batch 2 had no caught red, so its row and red were reverted from the tree.
+- Open after batch 2: 3000, 3716 (equivalent by reading), 3819 (open, not reached), 3683 (equivalent by reading); and the five hang-only timeouts. The $0 key is still owner-held, and no live row depends on it here.
