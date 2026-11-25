@@ -569,6 +569,8 @@ group('shell-core survivors: each check kills a flip of shell-core that the swee
   check('chmod o+t sets the sticky bit, as bash does (stat output)', mode.stdout === '1644\n', JSON.stringify(mode.stdout));
   const locale = await sh.run("export LC_ALL=C; printf 'b\\nA\\na\\nB\\n' | sort");
   check('export LC_ALL=C settles the locale to byte order for sort, as bash does', locale.stdout === 'A\nB\na\nb\n', JSON.stringify(locale.stdout));
+  const warned = await sh.run("LANG=C; f() { local LC_ALL=xx; echo in; }; f");
+  check('local LC_ALL=xx with LANG=C warns that the locale cannot change, and keeps going, as bash does', warned.stdout === 'in\n' && warned.stderr.includes('setlocale: LC_ALL: cannot change locale (xx)') && warned.exitCode === 0, JSON.stringify([warned.stdout, warned.stderr]));
   const globShell = await shell({});
   const glob = await globShell.run('touch .h v; echo *');
   check('a glob does not match a dot file, as bash does', glob.stdout === 'v\n', JSON.stringify(glob.stdout));
