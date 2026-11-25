@@ -2,7 +2,7 @@ import { runTjs } from './txiki-in-page.js';
 import { flushFs } from './shims/fs.js';
 import { BUILTIN_NAMES, runBuiltin } from './builtins.js';
 
-const MODULES = ['shell-sed.js', 'shell-tar.js', 'shell-jq.js', 'shell-awk.js', 'shell-core.js', 'shell-program.js'];
+const MODULES = ['shell-sed.js', 'shell-tar.js', 'shell-jq.js', 'shell-awk.js', 'shell-arith.js', 'shell-core.js', 'shell-program.js'];
 const MARKER = '\u0001';
 const withNewline = (text) => (text ? text + '\n' : '');
 

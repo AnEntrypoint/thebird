@@ -4297,6 +4297,65 @@ group('arithmetic expansion: command substitutions, parameters and subscripts in
   await matchesBash('bash rows', cases);
 });
 
+group("arithmetic operators: ?:, ** (right to left), bitwise, shifts, the comma operator and the logical operators match bash, and && || and ?: evaluate lazily", async () => {
+  const cases = [
+    ["echo $(( 1 ? 2 : 3 )) $(( 0 ? 2 : 3 ))", "2 3\n", '', 0],
+    ["echo $(( 2 ** 3 ** 2 )) $(( -2 ** 2 )) $(( 3 ** 0 ))", "512 4 1\n", '', 0],
+    ["echo $(( 7 & 3 | 8 ^ 1 )) $(( 1 << 4 >> 2 )) $(( ~5 )) $(( 6 & ~2 ))", "11 4 -6 4\n", '', 0],
+    ["echo $(( 1, 2 + 3 )) $(( (4, 5) * 2 ))", "5 10\n", '', 0],
+    ["echo $(( 0 && (y=1) )) ${y:-unset}", "0 unset\n", '', 0],
+    ["echo $(( 1 || (z=1) )) ${z:-unset}", "1 unset\n", '', 0],
+    ["echo $(( 5 / -2 )) $(( -5 % 3 )) $(( -7 / 2 )) $(( !0 + !5 + ~0 ))", "-2 -2 -3 0\n", '', 0],
+    ["echo $(( 3 > 2 ? 10 : 20 )) $(( 3 == 3 && 2 != 2 )) $(( 1 << 40 )) $(( 2 ** 62 ))", "10 0 1099511627776 4611686018427387904\n", '', 0],
+    ["echo $(( 7 - -3 )) $(( +4 - -1 )) $(( (2 + 3) * (4 - 1) / 2 % 4 )) $(( 1 ? 0 ? 5 : 6 : 7 ))", "10 5 3 6\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
+group("arithmetic assignments: pre and post ++ and --, and every compound assignment operator, match bash", async () => {
+  const cases = [
+    ["x=5; echo $(( x++ + ++x )) $x", "12 7\n", '', 0],
+    ["x=5; echo $(( x-- - --x )) $x", "2 3\n", '', 0],
+    ["x=5; (( x<<=2 )); echo $x; (( x>>=1 )); echo $x; (( x&=6 )); echo $x; (( x|=9 )); echo $x; (( x^=3 )); echo $x; (( x*=2 )); echo $x; (( x%=5 )); echo $x; (( x/=2 )); echo $x; (( x-=7 )); echo $x", "20\n10\n2\n11\n8\n16\n1\n0\n-7\n", '', 0],
+    ["x=6; echo $(( x = 3, x * 2 )) $x", "6 3\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
+group("arithmetic numbers and names: base#, octal, hex, and a variable whose value is an expression, match bash", async () => {
+  const cases = [
+    ["echo $(( 16#ff + 2#101 + 8#17 + 36#zz ))", "1570\n", '', 0],
+    ["echo $(( 010 + 0x10 + 0XfF ))", "279\n", '', 0],
+    ["a=y; y=3; echo $(( a + 1 ))", "4\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
+group("for ((...)): the arithmetic for loop runs its init, condition and step, and break and continue work, as bash does", async () => {
+  const cases = [
+    ["for ((i=0;i<3;i++)); do echo $i; done", "0\n1\n2\n", '', 0],
+    ["for ((;;)); do echo once; break; done", "once\n", '', 0],
+    ["for ((i=0, j=5; i<j; i++, j--)); do :; done; echo $i $j", "3 2\n", '', 0],
+    ["for ((i=0;i<5;i++)); do [ $i -eq 1 ] && continue; [ $i -eq 3 ] && break; echo $i; done", "0\n2\n", '', 0],
+    ["n=2; for ((k=n; k>0; k--)); do echo k$k; done", "k2\nk1\n", '', 0],
+    ["for ((i=0;i<2;i++)) do echo x$i; done", "x0\nx1\n", '', 0],
+    ["for ((i=0;i<3;i++)); do for ((j=0;j<2;j++)); do echo $i$j; done; done", "00\n01\n10\n11\n20\n21\n", '', 0],
+    ["for ((i=0;i<3;i++)); do echo $i; done | wc -l", "3\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
+group("let: each argument is an arithmetic expression, and the status is 1 for a zero last value, as bash does", async () => {
+  const cases = [
+    ["let x=2+3; echo $x", "5\n", '', 0],
+    ["let \"y = $(echo 4) * 2\"; echo $y", "8\n", '', 0],
+    ["let 0; echo $?; let 1 2; echo $?; let 'z=0'; echo $?", "1\n0\n1\n", '', 0],
+    ["let 2>/dev/null; echo $?", "1\n", '', 0],
+    ["x=3; let x++; echo $x; let \"x = x * 2\" \"x += 1\"; echo $x", "4\n9\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],

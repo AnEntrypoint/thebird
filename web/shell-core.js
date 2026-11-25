@@ -1,4 +1,5 @@
 import { runSed } from './shell-sed.js';
+import { ArithmeticError, evaluateArithmetic } from './shell-arith.js';
 import { runTar, tarConcat } from './shell-tar.js';
 import { runJq } from './shell-jq.js';
 import { runAwk } from './shell-awk.js';
@@ -452,6 +453,18 @@ export function tokenize(src, firstLine = 1, substitution = false) {
   return tokens;
 }
 
+const forClauses = (src) => {
+  const clauses = [''];
+  let depth = 0;
+  for (const char of src) {
+    if (char === '(') depth++;
+    else if (char === ')') depth--;
+    if (char === ';' && depth === 0) clauses.push('');
+    else clauses[clauses.length - 1] += char;
+  }
+  return clauses;
+};
+
 const isWord = (token, text) => token?.parts?.length === 1 && token.parts[0].k === 'lit' && token.parts[0].s === text;
 
 const isAssignment = (parts) => parts[0]?.k === 'lit' && ASSIGNMENT.test(parts[0].s);
@@ -668,8 +681,19 @@ function parse(tokens, partial = false) {
     }
   };
 
+  const parseArithmeticFor = (token, line) => {
+    const [init, condition, step, ...extra] = forClauses(token.src);
+    if (step === undefined || extra.length) throw syntaxError('syntax error: arithmetic for loop needs three expressions');
+    while (tokens[pos]?.op === ';') pos++;
+    expectWord('do');
+    const body = parseBody(['done']);
+    expectWord('done');
+    return { type: 'arithfor', init: init.trim(), condition: condition.trim(), step: step.trim(), body, line, redirects: parseTrailingRedirects() };
+  };
+
   const parseFor = () => {
     const line = tokens[pos]?.line;
+    if (tokens[pos]?.op === '((') return parseArithmeticFor(tokens[pos++], line);
     const token = tokens[pos++];
     if (!token?.parts || token.parts.length !== 1 || token.parts[0].k !== 'lit') throw syntaxError("expected a name after 'for'");
     const name = token.parts[0].s;
@@ -1846,106 +1870,6 @@ function formatPrintf([format = '', ...args]) {
   return out;
 }
 
-const OPERATOR_LEVELS = [['||'], ['&&'], ['==', '!='], ['<', '>', '<=', '>='], ['+', '-'], ['*', '/', '%']];
-
-function applyOperator(op, left, right) {
-  if (op === '*') return left * right;
-  if (op === '/' || op === '%') {
-    if (right === 0) throw new Error('arithmetic: division by zero');
-    return op === '/' ? Math.trunc(left / right) : left % right;
-  }
-  if (op === '+') return left + right;
-  if (op === '-') return left - right;
-  if (op === '<') return Number(left < right);
-  if (op === '>') return Number(left > right);
-  if (op === '<=') return Number(left <= right);
-  if (op === '>=') return Number(left >= right);
-  if (op === '==') return Number(left === right);
-  if (op === '!=') return Number(left !== right);
-  if (op === '&&') return Number(Boolean(left) && Boolean(right));
-  return Number(Boolean(left) || Boolean(right));
-}
-
-export function evaluateArithmetic(src, lookup, assign) {
-  const compact = src.replace(/\\\n/g, '').replace(/\s+/g, '');
-  const tokens = compact.match(/0[xX][0-9a-fA-F]+|\d+|[A-Za-z_]\w*|\+\+|--|[-+*/%]=|<=|>=|==|!=|&&|\|\||=|[-+*/%<>()!]/g) ?? [];
-  if (tokens.join('') !== compact) throw new Error(`arithmetic: bad expression '${src.trim()}'`);
-  let pos = 0;
-  const peek = () => tokens[pos];
-
-  const primary = () => {
-    const token = tokens[pos++];
-    if (token === undefined) throw new Error('arithmetic: unexpected end of expression');
-    if (token === '(') {
-      const value = binary(0);
-      if (tokens[pos++] !== ')') throw new Error('arithmetic: expected )');
-      return value;
-    }
-    if (/^0[xX][0-9a-fA-F]+$/.test(token)) return parseInt(token.slice(2), 16);
-    if (/^0[0-7]+$/.test(token)) return parseInt(token, 8);
-    if (/^\d+$/.test(token)) return Number(token);
-    if (/^[A-Za-z_]/.test(token)) {
-      if (peek() === '++' || peek() === '--') {
-        const old = Number(lookup(token)) || 0;
-        assign(token, String(old + (tokens[pos++] === '++' ? 1 : -1)));
-        return old;
-      }
-      return Number(lookup(token)) || 0;
-    }
-    throw new Error(`arithmetic: unexpected '${token}'`);
-  };
-
-  const unary = () => {
-    if (peek() === '++' || peek() === '--') {
-      const op = tokens[pos++];
-      const name = tokens[pos++];
-      if (!/^[A-Za-z_]/.test(name ?? '')) throw new Error('arithmetic: attempted assignment to non-variable');
-      const value = (Number(lookup(name)) || 0) + (op === '++' ? 1 : -1);
-      assign(name, String(value));
-      return value;
-    }
-    if (peek() === '!') {
-      pos++;
-      return Number(!unary());
-    }
-    if (peek() === '-') {
-      pos++;
-      return -unary();
-    }
-    if (peek() === '+') {
-      pos++;
-      return unary();
-    }
-    return primary();
-  };
-
-  function binary(level) {
-    if (level === OPERATOR_LEVELS.length) return unary();
-    let left = binary(level + 1);
-    while (OPERATOR_LEVELS[level].includes(peek())) {
-      const op = tokens[pos++];
-      left = applyOperator(op, left, binary(level + 1));
-    }
-    return left;
-  }
-
-  const ASSIGNMENTS = ['=', '+=', '-=', '*=', '/=', '%='];
-  const expression = () => {
-    if (!ASSIGNMENTS.includes(tokens[1])) return binary(0);
-    if (!/^[A-Za-z_]/.test(tokens[0])) throw new Error('arithmetic: attempted assignment to non-variable');
-    const name = tokens[0];
-    const op = tokens[1];
-    pos = 2;
-    const right = binary(0);
-    const value = op === '=' ? right : applyOperator(op.slice(0, -1), Number(lookup(name)) || 0, right);
-    assign(name, String(value));
-    return value;
-  };
-  const value = expression();
-  if (pos < tokens.length) throw new Error(`arithmetic: unexpected '${tokens[pos]}'`);
-  return value;
-}
-
 export function createShell({ host, cwd = '/workspace', builtins = [], saved = null } = {}) {
   const state = { cwd: saved?.cwd ?? cwd, status: saved?.status ?? 0 };
   const vars = new Map(saved?.vars ?? [['LANG', DEFAULT_LANG]]);
@@ -1995,10 +1919,10 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
   const arrays = new Map();
-  const arithmeticValue = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable);
-  const indexValue = (text) => (/^\d+$/.test(text) ? Number(text) : arithmeticValue(text));
+  const evaluateText = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable);
+  const indexValue = (text) => (/^\d+$/.test(text) ? Number(text) : Number(evaluateText(text)));
   const expandedText = async (parts, sink) => (await expandChars(parts, true, sink)).map((char) => char.c).join('');
-  const runArithmetic = async (src, sink) => arithmeticValue(await expandedText(readBodyParts(src, true), sink));
+  const runArithmetic = async (src, sink) => evaluateText(await expandedText(readBodyParts(src, true), sink));
   const arrayIndex = async (text, sink) => indexValue(await expandedText(readBodyParts(text, true), sink));
   const arrayItems = (name) => {
     const items = arrays.get(name);
@@ -2264,6 +2188,17 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out, err };
   };
 
+  const letBuiltin = (argv) => {
+    if (!argv.length) return { code: 1, out: '', err: 'let: expression expected\n' };
+    try {
+      const value = argv.reduce((_, expression) => evaluateText(expression), 0n);
+      return { code: value === 0n ? 1 : 0, out: '', err: '' };
+    } catch (err) {
+      if (!(err instanceof ArithmeticError)) throw err;
+      return { code: 1, out: '', err: 'let: ' + err.message + '\n' };
+    }
+  };
+
   const commands = {
     break: ({ argv }) => loopControl('break', argv),
     continue: ({ argv }) => loopControl('continue', argv),
@@ -2271,6 +2206,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     printf: ({ argv }) => ok(formatPrintf(argv)),
     true: () => ok(''),
     read: ({ argv, stdin, stream }) => readBuiltin(argv, stream ?? { text: stdin, pos: 0 }),
+    let: ({ argv }) => letBuiltin(argv),
     unset: ({ argv }) => {
       const functionsOnly = argv[0] === '-f';
       for (const name of argv[0] === '-f' || argv[0] === '-v' ? argv.slice(1) : argv) {
@@ -4023,6 +3959,34 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out: inner.out, err: inner.err };
   }
 
+  async function runArithmeticFor(node, stdin, sink) {
+    const inner = sink;
+    let code = 0;
+    loopDepth++;
+    try {
+      if (node.init) await runArithmetic(node.init, inner);
+      while (!node.condition || (await runArithmetic(node.condition, inner)) !== 0n) {
+        await yieldTurn();
+        try {
+          code = await runSequence(node.body, stdin, inner);
+        } catch (err) {
+          if (!(err instanceof LoopSignal)) throw err;
+          if (err.levels > 1) throw new LoopSignal(err.kind, err.levels - 1);
+          code = 0;
+          if (err.kind === 'break') break;
+        }
+        if (node.step) await runArithmetic(node.step, inner);
+      }
+    } catch (err) {
+      if (!(err instanceof ArithmeticError)) throw err;
+      inner.err += err.message + '\n';
+      code = 1;
+    } finally {
+      loopDepth--;
+    }
+    return { code, out: inner.out, err: inner.err };
+  }
+
   const caseRegExp = (chars) => new RegExp(`^${chars.map((ch) => (isWildcard(ch) ? (ch.c === '*' ? '.*' : '.') : ch.c.replace(/[^A-Za-z0-9_]/g, (m) => String.fromCharCode(92) + m))).join('')}$`);
 
   async function runCase(node, stdin, sink) {
@@ -4085,7 +4049,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     const values = [];
     for (const text of [leftText, rightText]) {
       try {
-        values.push(text.trim() === '' ? 0 : evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable));
+        values.push(text.trim() === '' ? 0 : Number(evaluateText(text)));
       } catch {
         sink.err += '[[: ' + text + ': arithmetic syntax error\n';
         return 1;
@@ -4187,7 +4151,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   const runArithmeticCommand = async (node, _input, sink) => {
     try {
       const value = await runArithmetic(node.src, sink);
-      return { code: value === 0 ? 1 : 0, out: '', err: '' };
+      return { code: value === 0n ? 1 : 0, out: '', err: '' };
     } catch (error) {
       return { code: 1, out: '', err: error.message + '\n' };
     }
@@ -4203,6 +4167,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (cmd.type === 'group') return withRedirects(cmd, stdin, sink, runGroup, stream);
     if (cmd.type === 'if') return withRedirects(cmd, stdin, sink, runIf, stream);
     if (cmd.type === 'for') return withRedirects(cmd, stdin, sink, runFor, stream);
+    if (cmd.type === 'arithfor') return withRedirects(cmd, stdin, sink, runArithmeticFor, stream);
     if (cmd.type === 'select') return withRedirects(cmd, stdin, sink, runSelect, stream);
     if (cmd.type === 'while') return withRedirects(cmd, stdin, sink, runWhile, stream);
     if (cmd.type === 'case') return withRedirects(cmd, stdin, sink, runCase, stream);
