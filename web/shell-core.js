@@ -21,7 +21,6 @@ const DUP_OPS = new Set(['>&', '1>&', '2>&', ...FD_OPS.filter((op) => op.endsWit
 const FILE_FDS = { '>': [1], '1>': [1], '>>': [1], '1>>': [1], '&>': [1, 2], '&>>': [1, 2], '2>': [2], '2>>': [2] };
 const ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', e: '\x1b', '\\': '\\', '"': '"', "'": "'" };
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=/;
-const INDEXED_ASSIGN = /^([A-Za-z_][A-Za-z0-9_]*)\[([^\]]*)\]=/;
 class TestFailure extends Error {}
 
 const testInteger = (text) => {
@@ -327,29 +326,41 @@ const textOf = (part) => (part.k === 'dq' ? part.parts.map(textOf).join('') : pa
 
 const isQuoted = (part) => part.k === 'sq' || part.k === 'dq';
 
-function readBodyParts(text) {
+function readBodyParts(text, arithmetic = false) {
   const parts = [];
   let lit = '';
   let i = 0;
+  const flush = () => {
+    if (lit) parts.push({ k: 'lit', s: lit });
+    lit = '';
+  };
   while (i < text.length) {
     const c = text[i];
     if (c === '\\' && text[i + 1] === '\n') {
       i += 2;
-    } else if (c === '\\' && '$`\\'.includes(text[i + 1] ?? '')) {
+    } else if (c === '\\' && !arithmetic && '$`\\'.includes(text[i + 1] ?? '')) {
       lit += text[i + 1];
       i += 2;
+    } else if (c === '\\' && i + 1 < text.length) {
+      lit += c + text[i + 1];
+      i += 2;
     } else if (c === '$') {
-      if (lit) parts.push({ k: 'lit', s: lit });
-      lit = '';
+      flush();
       const r = readDollar(text, i);
       parts.push(r.part);
       i = r.end;
+    } else if (c === '`') {
+      flush();
+      const end = backquoteEnd(text, i + 1);
+      if (end < 0) throw unterminated('backquote', i);
+      parts.push({ k: 'cmd', src: text.slice(i + 1, end).replace(/\\([`\\$])/g, '$1') });
+      i = end + 1;
     } else {
       lit += c;
       i++;
     }
   }
-  if (lit) parts.push({ k: 'lit', s: lit });
+  flush();
   return parts;
 }
 
@@ -445,12 +456,27 @@ const isWord = (token, text) => token?.parts?.length === 1 && token.parts[0].k =
 
 const isAssignment = (parts) => parts[0]?.k === 'lit' && ASSIGNMENT.test(parts[0].s);
 const isArrayAssignment = (parts) => parts.length === 1 && parts[0].k === 'lit' && /^[A-Za-z_][A-Za-z0-9_]*=$/.test(parts[0].s);
-const isIndexedAssignment = (parts) => parts[0]?.k === 'lit' && INDEXED_ASSIGN.test(parts[0].s);
-
-function parseIndexedAssignment(parts) {
-  const [head, name, index] = INDEXED_ASSIGN.exec(parts[0].s);
-  const rest = parts[0].s.slice(head.length);
-  return { name, index: [{ k: 'lit', s: index }], value: rest ? [{ k: 'lit', s: rest }, ...parts.slice(1)] : parts.slice(1) };
+const INDEXED_HEAD = /^([A-Za-z_][A-Za-z0-9_]*)\[/;
+function indexedAssignment(parts) {
+  const head = parts[0]?.k === 'lit' ? INDEXED_HEAD.exec(parts[0].s) : null;
+  if (!head) return null;
+  const index = [];
+  for (let k = 0; k < parts.length; k++) {
+    const part = k === 0 ? { k: 'lit', s: parts[0].s.slice(head[0].length) } : parts[k];
+    if (part.k !== 'lit') {
+      index.push(part);
+      continue;
+    }
+    const close = part.s.indexOf(']=');
+    if (close < 0) {
+      if (part.s) index.push(part);
+      continue;
+    }
+    if (close > 0) index.push({ k: 'lit', s: part.s.slice(0, close) });
+    const rest = part.s.slice(close + 2);
+    return { name: head[1], index, value: [...(rest ? [{ k: 'lit', s: rest }] : []), ...parts.slice(k + 1)] };
+  }
+  return null;
 }
 
 function parseAssignment(parts) {
@@ -588,8 +614,8 @@ function parse(tokens, partial = false) {
       const token = tokens[pos];
       if (token.parts && !words.length && isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(') {
         assigns.push({ name: token.parts[0].s.slice(0, -1), array: parseArrayValue() });
-      } else if (token.parts && !words.length && isIndexedAssignment(token.parts)) {
-        assigns.push(parseIndexedAssignment(token.parts));
+      } else if (token.parts && !words.length && indexedAssignment(token.parts)) {
+        assigns.push(indexedAssignment(token.parts));
         pos++;
       } else if (token.parts && !words.length && isAssignment(token.parts)) {
         assigns.push(parseAssignment(token.parts));
@@ -1969,7 +1995,11 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   exported.add('PWD');
   const modes = new Map(saved?.modes ?? []);
   const arrays = new Map();
-  const arrayIndex = (part) => (/^\d+$/.test(part.index) ? Number(part.index) : evaluateArithmetic(part.index, (name) => variableValue(name) ?? '', setVariable));
+  const arithmeticValue = (text) => evaluateArithmetic(text, (name) => variableValue(name) ?? '', setVariable);
+  const indexValue = (text) => (/^\d+$/.test(text) ? Number(text) : arithmeticValue(text));
+  const expandedText = async (parts, sink) => (await expandChars(parts, true, sink)).map((char) => char.c).join('');
+  const runArithmetic = async (src, sink) => arithmeticValue(await expandedText(readBodyParts(src, true), sink));
+  const arrayIndex = async (text, sink) => indexValue(await expandedText(readBodyParts(text, true), sink));
   const arrayItems = (name) => {
     const items = arrays.get(name);
     return items ? [...items.keys()].sort((a, b) => a - b).map((key) => items.get(key)) : [];
@@ -1979,23 +2009,23 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
     return [...values.join(' ')].map((c) => ({ c, q: inDouble, split: !inDouble }));
   };
   const onlyAtArray = (part) => part.parts.length === 1 && (part.parts[0].k === 'keys' || part.parts[0].k === 'param' || part.parts[0].k === 'slice') && part.parts[0].index === '@';
-  const arraySlice = (part) => {
+  const arraySlice = async (part, sink) => {
     const items = arrays.get(part.name);
     const keys = [...(items?.keys() ?? [])].sort((a, b) => a - b);
     if (!keys.length) return [];
-    const offset = arrayIndex({ index: part.offset.trim() });
+    const offset = await arrayIndex(part.offset.trim(), sink);
     const start = offset < 0 ? keys.at(-1) + 1 + offset : offset;
     const picked = keys.filter((key) => key >= start).map((key) => items.get(key));
-    return part.length === null ? picked : picked.slice(0, arrayIndex({ index: part.length.trim() }));
+    return part.length === null ? picked : picked.slice(0, await arrayIndex(part.length.trim(), sink));
   };
   const arrayElement = (name, index) => {
     const items = arrays.get(name);
     if (!items) return undefined;
     return items.get(index < 0 ? Math.max(...items.keys()) + 1 + index : index);
   };
-  const arrayLength = (part) => {
+  const arrayLength = async (part, sink) => {
     if (part.index === '@' || part.index === '*') return arrayItems(part.name).length;
-    return characterCount(arrayElement(part.name, arrayIndex(part)) ?? '', shellLocale);
+    return characterCount(arrayElement(part.name, await arrayIndex(part.index, sink)) ?? '', shellLocale);
   };
   const setElement = (name, index, value) => {
     if (!arrays.has(name)) {
@@ -3303,12 +3333,12 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       else if (part.k === 'sq') add(part.s, true);
       else if (part.k === 'dq') chars.push(...(await expandChars(part.parts, true, sink)));
       else if (part.k === 'param' && part.index === '@') chars.push(...elementChars(arrayItems(part.name), '@', inDouble));
-      else if (part.k === 'slice') chars.push(...elementChars(arraySlice(part), part.index, inDouble));
+      else if (part.k === 'slice') chars.push(...elementChars(await arraySlice(part, sink), part.index, inDouble));
       else if (part.k === 'keys') chars.push(...elementChars([...(arrays.get(part.name)?.keys() ?? [])].sort((a, b) => a - b).map(String), part.index, inDouble));
       else if (part.k === 'param') add(await parameterText(part, sink), inDouble);
-      else if (part.k === 'len') add(String(part.index !== undefined ? arrayLength(part) : characterCount(arrays.has(part.name) ? (arrays.get(part.name).get(0) ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
+      else if (part.k === 'len') add(String(part.index !== undefined ? (await arrayLength(part, sink)) : characterCount(arrays.has(part.name) ? (arrays.get(part.name).get(0) ?? '') : (variableValue(part.name) ?? ''), shellLocale)), inDouble);
       else if (part.k === 'cmd') add(await commandText(part.src, sink), inDouble);
-      else if (part.k === 'arith') add(String(evaluateArithmetic(part.src, (name) => variableValue(name) ?? '', setVariable)), inDouble);
+      else if (part.k === 'arith') add(String(await runArithmetic(part.src, sink)), inDouble);
       else throw new Error(`${part.k} is not supported yet`);
     }
     return chars;
@@ -3317,7 +3347,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   async function parameterText(part, sink) {
     if (part.index !== undefined) {
       if (part.index === '*') return arrayItems(part.name).join(' ');
-      return arrayElement(part.name, arrayIndex(part)) ?? '';
+      return arrayElement(part.name, await arrayIndex(part.index, sink)) ?? '';
     }
     if (arrays.has(part.name)) return arrays.get(part.name).get(0) ?? '';
     const value = variableValue(part.name);
@@ -3479,7 +3509,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     const assigned = [];
     for (const assign of node.assigns) {
       if (assign.array) arrays.set(assign.name, new Map((await expandWords(assign.array, sink)).map((value, i) => [i, value])));
-      else if (assign.index) setElement(assign.name, arrayIndex({ index: await expandText(assign.index, sink) }), await expandText(assign.value, sink));
+      else if (assign.index) setElement(assign.name, indexValue(await expandText(assign.index, sink)), await expandText(assign.value, sink));
       else assigned.push([assign.name, await expandText(assign.value, sink)]);
     }
     const trace = xtrace ? traceLines(assigned, argv, await tracePrefix(sink)) : '';
@@ -4154,9 +4184,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return result;
   }
 
-  const runArithmeticCommand = (node) => {
+  const runArithmeticCommand = async (node, _input, sink) => {
     try {
-      const value = evaluateArithmetic(node.src, (name) => variableValue(name) ?? '', setVariable);
+      const value = await runArithmetic(node.src, sink);
       return { code: value === 0 ? 1 : 0, out: '', err: '' };
     } catch (error) {
       return { code: 1, out: '', err: error.message + '\n' };

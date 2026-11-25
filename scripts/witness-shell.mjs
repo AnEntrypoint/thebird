@@ -4277,6 +4277,26 @@ group('parity: the txiki shell and bashkit give the same stdout, stderr and stat
   }
 });
 
+group('arithmetic expansion: command substitutions, parameters and subscripts inside $(( )), (( )) and array subscripts run as bash runs them', async () => {
+  const cases = [
+    ["echo $(( $(echo 2) + 3 ))", "5\n", '', 0],
+    ["x=$(( $(echo 4) * $(echo 5) )); echo $x", "20\n", '', 0],
+    ["echo $(( `echo 6` + 1 ))", "7\n", '', 0],
+    ["(( $(echo 1) == 1 )) && echo yes", "yes\n", '', 0],
+    ["a=3; echo $(( a + $(echo $a) ))", "6\n", '', 0],
+    ["echo $(( ($(echo 2) + 1) * 2 ))", "6\n", '', 0],
+    ["arr=(a b c); i=1; echo ${arr[$(echo 2)]}", "c\n", '', 0],
+    ["arr=(a b c); i=1; arr[$i]=x; echo ${arr[1]}", "x\n", '', 0],
+    ["arr=(a b c); arr[$((1+1))]=x; echo ${arr[2]}", "x\n", '', 0],
+    ["x=2; echo $(( $x + 1 ))", "3\n", '', 0],
+    ["x=5; (( x = $(echo 3) + x )); echo $x", "8\n", '', 0],
+    ["arr=(a b c); echo ${#arr[$(echo 0)]}", "1\n", '', 0],
+    ["arr=(a b c); echo ${arr[@]:$(echo 1):1}", "b\n", '', 0],
+    ["cat <<EOF\n`echo hi`\nEOF\n", "hi\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
