@@ -374,20 +374,30 @@ function readBodyParts(text, arithmetic = false) {
   return parts;
 }
 
+function heredocWarning(src, doc) {
+  const newlines = src.split('\n').length - 1;
+  const line = src.endsWith('\n') ? newlines : newlines + 1;
+  return `bash: line ${line}: warning: here-document at line ${doc.token.line} delimited by end-of-file (wanted \`${doc.delim}')\n`;
+}
 function readHeredocBody(src, start, doc) {
   const lines = [];
   let i = start;
+  let terminated = false;
   while (i < src.length) {
     const end = src.indexOf('\n', i);
     const next = end < 0 ? src.length : end;
     const line = src.slice(i, next);
     i = next + 1;
     const bare = doc.strip ? line.replace(/^\t+/, '') : line;
-    if (bare === doc.delim) break;
+    if (bare === doc.delim) {
+      terminated = true;
+      break;
+    }
     lines.push(bare);
   }
   const text = lines.map((line) => line + '\n').join('');
   doc.token.body = doc.quoted ? [{ k: 'sq', s: text }] : readBodyParts(text);
+  if (!terminated) doc.token.warning = heredocWarning(src, doc);
   return i;
 }
 
@@ -459,6 +469,7 @@ export function tokenize(src, firstLine = 1, substitution = false) {
       }
     }
   }
+  while (heredocs.length) readHeredocBody(src, src.length, heredocs.shift());
   return tokens;
 }
 
@@ -517,7 +528,7 @@ function parse(tokens, partial = false) {
     const target = tokens[pos];
     if (!target?.parts) throw nearToken(target ?? { newline: true });
     pos++;
-    return { op, target: target.parts, text: target.text, body: opToken.body };
+    return { op, target: target.parts, text: target.text, body: opToken.body, warning: opToken.warning };
   };
 
   const litText = (token) => (token?.parts?.length === 1 && token.parts[0].k === 'lit' ? token.parts[0].s : null);
@@ -2212,7 +2223,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     break: ({ argv }) => loopControl('break', argv),
     continue: ({ argv }) => loopControl('continue', argv),
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
-    printf: ({ argv }) => ok(formatPrintf(argv)),
+    printf: ({ argv }) => (argv.length ? ok(formatPrintf(argv)) : { code: 2, out: '', err: 'printf: usage: printf [-v var] format [arguments]\n' }),
     true: () => ok(''),
     read: ({ argv, stdin, stream }) => readBuiltin(argv, stream ?? { text: stdin, pos: 0 }),
     let: ({ argv }) => letBuiltin(argv),
@@ -2264,10 +2275,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out: '', err };
     },
     wait: async ({ argv, signal }) => {
-      const targets = argv.length ? argv.map(Number) : [...jobs.keys()];
+      const targets = argv.length ? argv : [...jobs.keys()];
       let code = 0;
       let err = '';
-      for (const pid of targets) {
+      for (const arg of targets) {
+        if (!/^\d+$/.test(String(arg))) {
+          err += `wait: \`${arg}': not a pid or valid job spec\n`;
+          code = 1;
+          continue;
+        }
+        const pid = Number(arg);
         const job = jobs.get(pid);
         if (!job) {
           err += `wait: pid ${pid} is not a child of this shell\n`;
@@ -2977,6 +2994,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return ok('');
     },
     return: ({ argv }) => {
+      if (frames.length === 0) return { code: 2, out: '', err: "return: can only `return' from a function or sourced script\n" };
       throw new ReturnSignal(Number(argv[0] ?? state.status));
     },
     ':': () => ok(''),
@@ -3541,6 +3559,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   async function openRedirects(redirects, sink) {
     const open = new Set([0, 1, 2, ...fdTable.keys()]);
     for (const [index, redirect] of redirects.entries()) {
+      if (redirect.warning) sink.err += redirect.warning;
       const { op } = redirect;
       if (DUP_OPS.has(op) || op === '2>&1') {
         const fd = Number(op.startsWith('<') ? '0' : op.startsWith('>') ? '1' : op[0]);

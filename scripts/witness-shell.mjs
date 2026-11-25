@@ -4453,6 +4453,17 @@ group("arithmetic, mutant kills: the exponent sign, division by a signed zero, a
   await matchesBash('bash rows', cases);
 });
 
+group("internal messages: a heredoc at end of input, wait, return and printf report their bash text", async () => matchesBash("internal messages", [
+  ["cat <<EOF\necho in\n", "echo in\n", "bash: line 2: warning: here-document at line 1 delimited by end-of-file (wanted `EOF')\n", 0],
+  ["cat <<EOF", "", "bash: line 1: warning: here-document at line 1 delimited by end-of-file (wanted `EOF')\n", 0],
+  ["x=1; cat <<EOF | cat\nhi", "hi\n", "bash: line 2: warning: here-document at line 1 delimited by end-of-file (wanted `EOF')\n", 0],
+  ["mkdir awk{<< cp", "", "bash: line 1: warning: here-document at line 1 delimited by end-of-file (wanted `cp')\n", 0],
+  ["wait x; echo st=$?", "st=1\n", "wait: `x': not a pid or valid job spec\n", 0],
+  ["wait 999999; echo st=$?", "st=127\n", "wait: pid 999999 is not a child of this shell\n", 0],
+  ["return; echo st=$?", "st=2\n", "return: can only `return' from a function or sourced script\n", 0],
+  ["return 3; echo st=$?", "st=2\n", "return: can only `return' from a function or sourced script\n", 0],
+  ["printf; echo st=$?", "st=2\n", "printf: usage: printf [-v var] format [arguments]\n", 0],
+]));
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],

@@ -111,5 +111,9 @@
 {"name":"arithsv8","file":"web/shell-arith.js","anchor":"return run(text, env.lookup, env.assign, env.depth + 1);","replace":"return run(text, env.lookup, env.assign, env.depth - 1);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"arithsv9","file":"web/shell-arith.js","anchor":"if (tokens.length === 0) return 0n;","replace":"if (tokens.length === 0) return 1n;","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"arithsv10","file":"web/shell-arith.js","anchor":"if (node.k !== 'var') throw failToken('attempted assignment to non-variable', lastIndex());","replace":"if (node.k !== 'var') throw failToken('attempted assignment to non-variableX', lastIndex());","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"arithsv11","file":"web/shell-arith.js","anchor":"left = { k: 'bin', op, left, right, start };","replace":"left = { k: 'binX', op, left, right, start };","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
+{"name":"arithsv11","file":"web/shell-arith.js","anchor":"left = { k: 'bin', op, left, right, start };","replace":"left = { k: 'binX', op, left, right, start };","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakheredoc","file":"web/shell-core.js","anchor":"if (!terminated) doc.token.warning = heredocWarning(src, doc);","replace":"if (terminated) doc.token.warning = heredocWarning(src, doc);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakreturn","file":"web/shell-core.js","anchor":"if (frames.length === 0) return","replace":"if (frames.length === 1) return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakwait","file":"web/shell-core.js","anchor":"if (!/^\\d+$/.test(String(arg))) {","replace":"if (false) {","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakprintf","file":"web/shell-core.js","anchor":"(argv.length ? ok(formatPrintf(argv))","replace":"(true ? ok(formatPrintf(argv))","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
 ]
