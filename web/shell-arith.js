@@ -3,29 +3,29 @@ export class ArithmeticError extends Error {}
 const OPEN_QUOTE = String.fromCharCode(96);
 const IDENTIFIER = /^[A-Za-z_]\w*$/;
 const NUMBER = /^(?:\d+#[0-9A-Za-z@_]+|0[xX][0-9A-Fa-f]+|\d+)$/;
-const TOKEN = /\s*(\d+#[0-9A-Za-z@_]+|0[xX][0-9A-Fa-f]+|\d+|[A-Za-z_]\w*|<<=|>>=|\*\*=|\*\*|<<|>>|<=|>=|==|!=|&&|\|\||\+\+|--|[-+*/%&|^]=|[-+*/%<>=!~^&|?:,()])/y;
-const ASSIGNMENTS = new Set(['=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=', '**=']);
+const TOKEN = /\s*(\d+#[0-9A-Za-z@_]+|0[xX][0-9A-Fa-f]+|\d+|[A-Za-z_]\w*|<<=|>>=|\*\*|<<|>>|<=|>=|==|!=|&&|\|\||\+\+|--|[-+*/%&|^]=|[-+*/%<>=!~^&|?:,()])/y;
+const ASSIGNMENTS = new Set(['=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=']);
 const BINARY = new Map([
   ['||', 1], ['&&', 2], ['|', 3], ['^', 4], ['&', 5],
   ['==', 6], ['!=', 6], ['<', 7], ['<=', 7], ['>', 7], ['>=', 7],
   ['<<', 8], ['>>', 8], ['+', 9], ['-', 9], ['*', 10], ['/', 10], ['%', 10], ['**', 12],
 ]);
-const MAX_DEPTH = 16;
-const UNARY = new Set(['-', '+', '!', '~']);
+const MAX_DEPTH = 1023;
+const UNARY = new Set(['-', '+', '~']);
 const OPERAND_EXPECTED = 'arithmetic syntax error: operand expected';
 const SYNTAX_IN_EXPRESSION = 'arithmetic syntax error in expression';
 const DIVISION_BY_ZERO = 'division by 0';
 const COLON_EXPECTED = OPEN_QUOTE + ":' expected for conditional expression";
-const CLOSE_EXPECTED = OPEN_QUOTE + ")' expected";
+const CLOSE_EXPECTED = 'missing ' + OPEN_QUOTE + ")'";
 
 const wrap = (value) => BigInt.asIntN(64, value);
 const truth = (value) => value !== 0n;
 const flag = (condition) => (condition ? 1n : 0n);
 
 const digitValue = (char, base) => {
-  if (char >= '0' && char <= '9') return BigInt(char.charCodeAt(0) - 48);
-  if (char >= 'a' && char <= 'z') return BigInt(char.charCodeAt(0) - 97 + 10);
-  if (char >= 'A' && char <= 'Z') return BigInt(char.charCodeAt(0) - 65 + (base <= 36 ? 10 : 36));
+  if (/[0-9]/.test(char)) return BigInt(char.charCodeAt(0) - 48);
+  if (/[a-z]/.test(char)) return BigInt(char.charCodeAt(0) - 97 + 10);
+  if (/[A-Z]/.test(char)) return BigInt(char.charCodeAt(0) - 65 + (base <= 36 ? 10 : 36));
   return char === '@' ? 62n : 63n;
 };
 
@@ -116,7 +116,7 @@ const parse = (context) => {
       const precedence = BINARY.get(op);
       if (precedence === undefined || precedence < minimum) return left;
       take();
-      const start = operandStart();
+      const start = op === '**' ? operandStart() : pos;
       const right = binary(op === '**' ? precedence : precedence + 1);
       left = { k: 'bin', op, left, right, start };
     }
@@ -128,12 +128,15 @@ const parse = (context) => {
       take();
       return { k: 'unary', op: text, operand: unary() };
     }
-    if (text === '++' || text === '--') {
+    if ((text === '++' || text === '--') && IDENTIFIER.test(tokens[pos + 1]?.text ?? '')) {
       take();
-      if (pos >= tokens.length) throw failToken(OPERAND_EXPECTED, lastIndex());
-      if (!IDENTIFIER.test(peek())) throw failToken('attempted assignment to non-variable', pos);
       const name = take().text;
       return { k: 'step', name, delta: text === '++' ? 1n : -1n, prefix: true };
+    }
+    if (text === '++' || text === '--') {
+      take();
+      if (pos >= tokens.length) throw failAt(OPERAND_EXPECTED, tokens[pos - 1].start + 1);
+      return unary();
     }
     return postfix();
   };
@@ -154,7 +157,7 @@ const parse = (context) => {
     const token = take();
     if (token.text === '(') {
       const node = expression();
-      if (peek() !== ')') throw failToken(CLOSE_EXPECTED, lastIndex());
+      if (peek() !== ')') throw failToken(CLOSE_EXPECTED, pos < tokens.length ? pos : lastIndex());
       take();
       return node;
     }
@@ -180,17 +183,6 @@ const power = (base, exponent) => {
   return result;
 };
 
-const shiftLeft = (value, count) => {
-  if (count < 0n) return shiftRight(value, -count);
-  return count >= 64n ? 0n : value << count;
-};
-
-const shiftRight = (value, count) => {
-  if (count < 0n) return shiftLeft(value, -count);
-  if (count >= 64n) return value < 0n ? -1n : 0n;
-  return value >> count;
-};
-
 const operate = (op, left, right, fail) => {
   switch (op) {
     case '+': return wrap(left + right);
@@ -203,8 +195,8 @@ const operate = (op, left, right, fail) => {
     case '**':
       if (right < 0n) throw fail('exponent less than 0');
       return power(left, right);
-    case '<<': return wrap(shiftLeft(left, right));
-    case '>>': return wrap(shiftRight(left, right));
+    case '<<': return wrap(left << (right & 63n));
+    case '>>': return left >> (right & 63n);
     case '<': return flag(left < right);
     case '<=': return flag(left <= right);
     case '>': return flag(left > right);
@@ -225,8 +217,9 @@ const unaryValue = (op, value) => {
 };
 
 const readVariable = (name, env) => {
-  const text = env.lookup(name);
-  if (text === undefined || text.trim() === '') return 0n;
+  const text = env.lookup(name) ?? '';
+  if (text.trim() === '') return 0n;
+  if (env.depth >= MAX_DEPTH) throw new ArithmeticError(name + ': expression recursion level exceeded (error token is "' + name + '")');
   return run(text, env.lookup, env.assign, env.depth + 1);
 };
 
@@ -249,9 +242,9 @@ const evaluate = (node, env) => {
       return node.prefix ? value : old;
     }
     case 'assign': {
-      const old = node.op === '=' ? 0n : readVariable(node.name, env);
+      const old = node.op === '=' ? null : readVariable(node.name, env);
       const right = evaluate(node.value, env);
-      const value = node.op === '=' ? right : operate(node.op.slice(0, -1), old, right, (detail) => env.failToken(detail, node.start));
+      const value = old === null ? right : operate(node.op.slice(0, -1), old, right, (detail) => env.failToken(detail, node.start));
       env.assign(node.name, String(value));
       return value;
     }
@@ -259,13 +252,12 @@ const evaluate = (node, env) => {
     case 'seq':
       evaluate(node.first, env);
       return evaluate(node.second, env);
-    default: return binaryValue(node, env);
+    case 'bin': return binaryValue(node, env);
   }
 };
 
 const run = (src, lookup, assign, depth) => {
   const text = src.replace(/\\\n/g, '');
-  if (depth > MAX_DEPTH) throw new ArithmeticError(text.replace(/^\s+/, '') + ': expression recursion level exceeded');
   const tokens = tokenize(text);
   if (tokens.length === 0) return 0n;
   const failAt = (detail, start, end = text.length) => new ArithmeticError(text.slice(0, end).replace(/^\s+/, '') + ': ' + detail + ' (error token is "' + text.slice(start, end) + '")');
