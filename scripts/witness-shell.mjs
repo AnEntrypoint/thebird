@@ -3602,9 +3602,13 @@ group('tar: an archive written to stdout is bytes, so gzip output passes through
   const written = await sh.run('cd /workspace && tar -czf - x.txt');
   check('tar: the stdout of tar -czf - is the gzip bytes, with the gzip magic', written.bytes !== null && written.bytes[0] === 0x1f && written.bytes[1] === 0x8b, JSON.stringify([written.stdout.length, written.bytes && written.bytes.length]));
   const dir = mkdtempSync(join(tmpdir(), 'tar-stdout-'));
-  writeFileSync(join(dir, 'out.tgz'), written.bytes);
-  const listed = execFileSync('tar', ['-tzf', join(dir, 'out.tgz')]).toString();
-  rmSync(dir, { recursive: true, force: true });
+  let listed;
+  try {
+    writeFileSync(join(dir, 'out.tgz'), written.bytes);
+    listed = execFileSync('tar', ['-tzf', join(dir, 'out.tgz')]).toString();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
   check('tar: GNU tar lists the stdout bytes of tar -czf - (GNU tar output)', listed === 'x.txt\n', JSON.stringify(listed));
 });
 
