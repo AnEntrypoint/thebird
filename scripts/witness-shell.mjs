@@ -4356,6 +4356,16 @@ group("let: each argument is an arithmetic expression, and the status is 1 for a
   await matchesBash('bash rows', cases);
 });
 
+group("arithmetic comparisons: each relational and equality operator gives 1 or 0, and a greater-than is not a bitwise or, as bash does", async () => {
+  const cases = [
+    ["echo $(( 2 > 1 )) $(( 1 > 2 )) $(( 2 >= 2 )) $(( 1 >= 2 ))", "1 0 1 0\n", '', 0],
+    ["echo $(( 1 < 2 )) $(( 2 < 1 )) $(( 2 <= 2 )) $(( 3 <= 2 ))", "1 0 1 0\n", '', 0],
+    ["echo $(( 3 == 3 )) $(( 3 == 4 )) $(( 3 != 4 )) $(( 3 != 3 ))", "1 0 1 0\n", '', 0],
+    ["echo $(( 2 > 1 ? 7 : 8 )) $(( 4 > 5 || 6 > 5 )) $(( 0 | 1 ))", "7 1 1\n", '', 0],
+  ];
+  await matchesBash('bash rows', cases);
+});
+
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
