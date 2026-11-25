@@ -7053,3 +7053,10 @@ Waits on the owner (or the machine):
 - The 5 hang-only mutants (not killed; the witness does not finish, so this is the owner's process-level decision): the TOKEN regex && to ||, tokenize end + to - (line 60), end at + 1 to - 1 (line 63), the power loop rest > 0n to >=, and rest >>= 1n to >>= 0n. They loop forever in synchronous code, which the row timeout cannot bound.
 - Of the first survey's 34 survivors, 9 lines still exist uniquely and are now reds; 25 are gone or rewritten by the fixes (shift code removed, digit ranges rewritten as regexes, the unary ++ rewritten, the assignment old value now null). They are recorded as removed, not as killed, because their mutants no longer exist in the module.
 - Window thebird-sweep2 (tree 903e4c4): DONE 0. Shell PASS=2096 FAIL=0; anchors unique (113), anchor and doc tests pass; unit 113 of 113; lint rc 0 (401 claims: 400 pass, 0 fail, 1 unverified: the Pyodide python3 claim, not counted as passing); sweep 242 caught, 5 hang, 0 survived; reds 65 of 65 CAUGHT (liveterm excluded, owner-held).
+
+### Full red set on the final tree
+
+- Window thebird-full on 11cebe4: the shell witness and the anchor and doc tests passed (anchors all 113 unique); then the reds, all 112 except liveterm (owner-held: its live rows skip without the $0 key, it stays MISSED). Result: 111 CAUGHT, 1 MISSED: parts, rc null, timed out at its 120 s cap.
+- parts runs node --test test/witness-parts.test.mjs. Unmutated, that test passes 2 of 2 and takes 165 s of CPU, so the 120 s cap killed the mutant run before its own cleanup ran; the cap was the fault, not the code under test. The window also reported a leftover witness-list scratch for the same reason.
+- Fix (commit 41cc26b): the parts red's timeoutMs is 600000 (ten minutes). Window thebird-parts on 41cc26b: DONE 0; parts CAUGHT rc=1 in 175 s.
+- Result for the stage: every non-liveterm red is CAUGHT on the final tree (111 on 11cebe4 and parts on 41cc26b). liveterm stays MISSED, owner-held.
