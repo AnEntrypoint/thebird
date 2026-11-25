@@ -115,5 +115,8 @@
 {"name":"leakheredoc","file":"web/shell-core.js","anchor":"if (!terminated) doc.token.warning = heredocWarning(src, doc);","replace":"if (terminated) doc.token.warning = heredocWarning(src, doc);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakreturn","file":"web/shell-core.js","anchor":"if (frames.length === 0) return","replace":"if (frames.length === 1) return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakwait","file":"web/shell-core.js","anchor":"if (!/^\\d+$/.test(String(arg))) {","replace":"if (false) {","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"leakprintf","file":"web/shell-core.js","anchor":"(argv.length ? ok(formatPrintf(argv))","replace":"(true ? ok(formatPrintf(argv))","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
+{"name":"leakprintf","file":"web/shell-core.js","anchor":"(argv.length ? ok(formatPrintf(argv))","replace":"(true ? ok(formatPrintf(argv))","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"pybundlesha","file":"web/python-bundle.js","anchor":"if (digest !== sha256) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
+{"name":"pybundlepin","file":"web/python-bundle.js","anchor":"if (CORE_PINS[name] && CORE_PINS[name] !== digest) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
+{"name":"pybundletrunc","file":"web/python-bundle.js","anchor":"if (data.length !== bytes) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000}
 ]
