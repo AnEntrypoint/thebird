@@ -133,6 +133,7 @@ The canonical web host is `bin/thebird-web-host.js` over `src/web-host.js`: `npm
 - `npm run lint:comments` (`scripts/lint-comments.mjs`) lists each comment in repo-owned tracked files with its file and line, and exits non-zero when there are any. Vendored bundles with comments are reported as VENDORED when their upstream is recorded. A tracked file of an unknown type fails.
 - `npm run lint:architecture` (`scripts/lint-architecture.mjs`) checks the claims in `ARCHITECTURE.md` and `AGENTS.md` against the code and records the `cc242f5` check. Its live checks need `web/vendor/bashkit/` present, because the lint does not generate it.
 - `npm run witness` (`scripts/witness.mjs`) drives headless Chromium through `scripts/browser-driver.mjs`, using `CHROME_BIN`, and checks the in-page shell end to end.
+- The witness groups are one file each in `scripts/witness/groups/`. The helpers they share are in `scripts/witness/shared.mjs`, and `scripts/witness.mjs` keeps the runner.
 - `npm run host:check` (`scripts/check-web-host.mjs`) verifies the canonical isolated host, the pinned txiki wasm, HTTP status/content types/COOP+COEP, and Chromium DOM for the terminal and fx/txiki-programmed visible features.
 
 ## Fresh-tree notes

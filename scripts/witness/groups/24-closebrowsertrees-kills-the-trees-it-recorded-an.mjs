@@ -1,0 +1,35 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { connect, createServer as createNetServer } from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { startNpmMirror } from '../../npm-mirror.mjs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startRelay } from '../../../src/relay.js';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from '../../browser-driver.mjs';
+import { vendorBashkit } from '../../vendor-bashkit.mjs';
+import { vendorFx } from '../../vendor-fx.mjs';
+import { vendorFloosie } from '../../vendor-floosie.mjs';
+import { buildPages } from '../../build-pages.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from '../../fx-stub-gateway.mjs';
+import { PAGE_HOST_TOOL_NAMES } from '../../../web/fx-host-tools.js';
+import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_BUDGET_MS, JOBS, LIVE_UNAVAILABLE, OPENROUTER_MODELS_URL, OPENROUTER_URL, PAGE_TOOLS, SITE_TYPES, TUI_PALETTE_RESIZE_SETTLED, TUI_RESIZE_SETTLED, TUI_SCREEN, TUI_STATE, TUI_TITLE, alive, binRunner, browserFor, check, chrome, craftCli, current, disposeContext, dotenvValue, fetchWithFallback, freeModels, freePort, getMirror, getRelay, group, groups, haveChrome, heavyTail, listening, liveCheck, liveProvider, liveRun, liveVerdict, loadAverage, pollAnswer, profileDir, providerVerdict, reapBrowserTrees, registryNet, root, runAt, runGroup, runHeavy, scope, scratchDir, scratchDirs, servePages, serveThenStop, services, shared, sharedBrowserFor, sharedBrowserStart, sharedPages, sharedProfile, skip, skipLive, spawnedPids, startChatStub, startProviderStub, stopPid, terminal, trackPid, webhostCli, webserverCli, within } from '../shared.mjs';
+
+group('closeBrowserTrees kills the trees it recorded and removes its run directory', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'thebird-run-'));
+  const runDir = join(dir, 'run');
+  const sleeper = spawn('sleep', ['30'], { stdio: 'ignore' });
+  trackPid(sleeper.pid);
+  const gone = new Promise((resolve) => sleeper.once('exit', resolve));
+  const driver = pathToFileURL(join(root, 'scripts', 'browser-driver.mjs')).href;
+  const script = `import { recordBrowserTree, closeBrowserTrees } from '${driver}'; recordBrowserTree(${sleeper.pid}); console.log(JSON.stringify(closeBrowserTrees()));`;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, THEBIRD_BROWSER_RUN_DIR: runDir }, encoding: 'utf8' });
+  await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 5000))]);
+  check('closeBrowserTrees reports and kills the recorded pid', run.status === 0 && JSON.parse(run.stdout || '[]').includes(sleeper.pid) && !alive(sleeper.pid), run.stdout + run.stderr);
+  check('closeBrowserTrees removes the run directory it recorded into', !existsSync(runDir), runDir);
+  await stopPid(sleeper.pid);
+  rmSync(dir, { recursive: true, force: true });
+});

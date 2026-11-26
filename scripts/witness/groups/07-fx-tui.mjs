@@ -1,0 +1,77 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { connect, createServer as createNetServer } from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { startNpmMirror } from '../../npm-mirror.mjs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startRelay } from '../../../src/relay.js';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from '../../browser-driver.mjs';
+import { vendorBashkit } from '../../vendor-bashkit.mjs';
+import { vendorFx } from '../../vendor-fx.mjs';
+import { vendorFloosie } from '../../vendor-floosie.mjs';
+import { buildPages } from '../../build-pages.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from '../../fx-stub-gateway.mjs';
+import { PAGE_HOST_TOOL_NAMES } from '../../../web/fx-host-tools.js';
+import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_BUDGET_MS, JOBS, LIVE_UNAVAILABLE, OPENROUTER_MODELS_URL, OPENROUTER_URL, PAGE_TOOLS, SITE_TYPES, TUI_PALETTE_RESIZE_SETTLED, TUI_RESIZE_SETTLED, TUI_SCREEN, TUI_STATE, TUI_TITLE, alive, binRunner, browserFor, check, chrome, craftCli, current, disposeContext, dotenvValue, fetchWithFallback, freeModels, freePort, getMirror, getRelay, group, groups, haveChrome, heavyTail, listening, liveCheck, liveProvider, liveRun, liveVerdict, loadAverage, pollAnswer, profileDir, providerVerdict, reapBrowserTrees, registryNet, root, runAt, runGroup, runHeavy, scope, scratchDir, scratchDirs, servePages, serveThenStop, services, shared, sharedBrowserFor, sharedBrowserStart, sharedPages, sharedProfile, skip, skipLive, spawnedPids, startChatStub, startProviderStub, stopPid, terminal, trackPid, webhostCli, webserverCli, within } from '../shared.mjs';
+
+group('fx-tui', async () => {
+  const tui = {};
+  await terminal([], {
+    interact: async ({ type, press, evaluate, waitFor, settle }) => {
+      const read = async (name) => {
+        tui[name] = { text: await evaluate(TUI_SCREEN), state: JSON.parse(await evaluate(TUI_STATE)), title: JSON.parse(await evaluate(TUI_TITLE)) };
+      };
+      const backspaces = async (count) => { for (let i = 0; i < count; i++) await press('Backspace'); };
+      await type('fx');
+      await press('Enter');
+      tui.welcomeShown = await settle(`globalThis.thebird.text().includes('Welcome to fx')`, 120000);
+      await read('welcome');
+      await evaluate(`globalThis.thebird.term.resize(70, 24)`);
+      tui.resizeSettled = await settle(TUI_RESIZE_SETTLED, 30000);
+      await read('resized');
+      await evaluate(`globalThis.thebird.term.resize(93, 29)`);
+      await new Promise((ok) => setTimeout(ok, 1500));
+      await type('hello');
+      tui.typedShown = await settle(`globalThis.thebird.text().split('\\n').some((line) => line.startsWith('┃ hello'))`, 30000);
+      await read('typed');
+      await backspaces(5);
+      await type('/');
+      tui.paletteShown = await settle(`globalThis.thebird.text().includes('type to filter')`, 30000);
+      await read('palette');
+      await press('Escape');
+      tui.paletteClosed = await settle(`!globalThis.thebird.text().includes('type to filter')`, 30000);
+      await read('escaped');
+      await backspaces(1);
+      await evaluate(`globalThis.thebird.term.resize(70, 24)`);
+      tui.paletteResizeSettled = await settle(TUI_PALETTE_RESIZE_SETTLED, 30000);
+      await read('paletteResized');
+      await press('c', { ctrl: true });
+      await new Promise((ok) => setTimeout(ok, 3000));
+      await read('ctrl-c');
+      await type('/exit');
+      await press('Enter');
+      tui.exited = await settle(`!document.body.dataset.tui`, 60000);
+      await settle(`globalThis.thebird.text().split('\\n').some((line) => line.startsWith('thebird /workspace>'))`, 60000);
+      await type('echo after-fx');
+      await press('Enter');
+      tui.shellAfter = await settle(`globalThis.thebird.text().split('\\n').includes('after-fx')`, 60000);
+      await read('after-exit');
+    },
+  });
+  const screenRows = (name) => tui[name]?.text.split('\n') ?? [];
+  const welcome = tui.welcome ?? { state: {}, title: null };
+  check('fx with no arguments opens the TUI: welcome, sign-in choices, input box and footer render in the page', tui.welcomeShown && screenRows('welcome').some((line) => line.includes('Welcome to fx')) && screenRows('welcome').some((line) => line.includes('› Sign in with Vercel')) && screenRows('welcome').some((line) => line.includes('Add an API key')) && screenRows('welcome').some((line) => line.startsWith('┃')) && screenRows('welcome').some((line) => line.includes('auto · grok-4.7')) && welcome.state.tui === 'fx', JSON.stringify(screenRows('welcome').slice(0, 6)));
+  check('the TUI cursor sits on the input line after the input box marker', welcome.state.cursorY === 2 && welcome.state.cursorX === 2 && screenRows('welcome')[2]?.startsWith('┃'), JSON.stringify({ x: welcome.state.cursorX, y: welcome.state.cursorY }));
+  check('the TUI draws the title in bold 256-colour palette 255 and the version in palette 245', welcome.title?.[0]?.bold === true && welcome.title[0].palette === true && welcome.title[0].fg === 255 && welcome.title[1]?.fg === 245 && welcome.title[1].palette === true, JSON.stringify(welcome.title));
+  check('typed text lands in the TUI input box', tui.typedShown && screenRows('typed').some((line) => line.startsWith('┃ hello')), JSON.stringify(screenRows('typed').slice(0, 3)));
+  check('a slash opens the TUI command palette with a filter header and the command rows', tui.paletteShown && screenRows('palette').some((line) => line.includes('type to filter')) && screenRows('palette').some((line) => /^ {2}\/help\b/.test(line)), JSON.stringify(screenRows('palette').slice(0, 4)));
+  check('escape closes the command palette and leaves the typed slash in the input', tui.paletteClosed && screenRows('escaped').some((line) => line.startsWith('┃ /')) && !tui.escaped.text.includes('type to filter'), JSON.stringify(screenRows('escaped').slice(0, 3)));
+  check('resizing the page reflows the TUI to 70 by 24 and keeps the welcome panel and the rules at 70 columns', tui.resizeSettled === true && tui.resized.state.cols === 70 && tui.resized.state.rows === 24 && screenRows('resized').some((line) => line.includes('Welcome to fx')) && screenRows('resized').filter((line) => /^─{70}$/.test(line)).length === 2, JSON.stringify({ settled: tui.resizeSettled, cols: tui.resized?.state.cols, rows: tui.resized?.state.rows, screen: screenRows('resized').slice(0, 4) }));
+  check('a resize after the command palette closes settles at 70 by 24, with no line wider than 70 columns and the input box drawn', tui.paletteResizeSettled === true && screenRows('paletteResized').some((line) => line.startsWith('┃')) && screenRows('paletteResized').every((line) => [...line].length <= 70), JSON.stringify({ settled: tui.paletteResizeSettled, screen: screenRows('paletteResized').slice(0, 4) }));
+  check('Ctrl-C inside the TUI does not end the TUI, which matches native fx', tui['ctrl-c']?.state.tui === 'fx', JSON.stringify(tui['ctrl-c']?.state));
+  check('/exit ends the TUI and the shell runs the next command', tui.exited && tui.shellAfter && tui['after-exit'].state.tui === null, JSON.stringify({ exited: tui.exited, shellAfter: tui.shellAfter, tui: tui['after-exit']?.state.tui ?? null }));
+});

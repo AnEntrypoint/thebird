@@ -1,0 +1,33 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { connect, createServer as createNetServer } from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { startNpmMirror } from '../../npm-mirror.mjs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startRelay } from '../../../src/relay.js';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from '../../browser-driver.mjs';
+import { vendorBashkit } from '../../vendor-bashkit.mjs';
+import { vendorFx } from '../../vendor-fx.mjs';
+import { vendorFloosie } from '../../vendor-floosie.mjs';
+import { buildPages } from '../../build-pages.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from '../../fx-stub-gateway.mjs';
+import { PAGE_HOST_TOOL_NAMES } from '../../../web/fx-host-tools.js';
+import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_BUDGET_MS, JOBS, LIVE_UNAVAILABLE, OPENROUTER_MODELS_URL, OPENROUTER_URL, PAGE_TOOLS, SITE_TYPES, TUI_PALETTE_RESIZE_SETTLED, TUI_RESIZE_SETTLED, TUI_SCREEN, TUI_STATE, TUI_TITLE, alive, binRunner, browserFor, check, chrome, craftCli, current, disposeContext, dotenvValue, fetchWithFallback, freeModels, freePort, getMirror, getRelay, group, groups, haveChrome, heavyTail, listening, liveCheck, liveProvider, liveRun, liveVerdict, loadAverage, pollAnswer, profileDir, providerVerdict, reapBrowserTrees, registryNet, root, runAt, runGroup, runHeavy, scope, scratchDir, scratchDirs, servePages, serveThenStop, services, shared, sharedBrowserFor, sharedBrowserStart, sharedPages, sharedProfile, skip, skipLive, spawnedPids, startChatStub, startProviderStub, stopPid, terminal, trackPid, webhostCli, webserverCli, within } from '../shared.mjs';
+
+group('thebird-craft ensure, sample and status print the JSON their npm scripts promise', async () => {
+  const craft = craftCli;
+  const apps = ['gridcraft', 'wordcraft', 'pdfcraft'];
+  const ensure = craft('ensure');
+  const ensured = JSON.parse(ensure.stdout || 'null');
+  check('craft ensure exits 0 and names the three craft apps it registered', ensure.status === 0 && ensured?.ok === true && apps.every((id) => ensured.registered.includes(id)), ensure.stdout.slice(0, 200));
+  const sample = craft('sample');
+  const sampled = JSON.parse(sample.stdout || 'null');
+  check('craft sample exits 0 and names a sample file for each craft app', sample.status === 0 && sampled?.ok === true && apps.every((id) => typeof sampled.samples?.[id] === 'string'), sample.stdout.slice(0, 200));
+  const status = craft('status');
+  const listed = JSON.parse(status.stdout || 'null');
+  check('craft status exits 0 and lists the three craft apps', status.status === 0 && Array.isArray(listed) && apps.every((id) => listed.some((app) => app.id === id)), status.stdout.slice(0, 200));
+});

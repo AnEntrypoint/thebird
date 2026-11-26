@@ -19,7 +19,8 @@ const inDoc = (name, fn) => {
   docLines = docs[name];
   fn();
 };
-const witness = readFileSync(join(root, 'scripts', 'witness.mjs'), 'utf8');
+const witnessFiles = [join(root, 'scripts', 'witness.mjs'), join(root, 'scripts', 'witness', 'shared.mjs'), ...readdirSync(join(root, 'scripts', 'witness', 'groups')).sort().map((name) => join(root, 'scripts', 'witness', 'groups', name))];
+const witness = witnessFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 const results = [];
 const covered = new Set();
 
@@ -52,7 +53,7 @@ const filesUnder = (path) => {
   if (!existsSync(full)) return [];
   return statSync(full).isDirectory() ? walk(full) : [full];
 };
-const fileHas = (path, needle) => existsSync(repo(path)) && read(path).toLowerCase().includes(needle.toLowerCase());
+const fileHas = (path, needle) => existsSync(repo(path)) && (path === 'scripts/witness.mjs' ? witness : read(path)).toLowerCase().includes(needle.toLowerCase());
 const versionIn = (path, needle) => {
   const files = filesUnder(path).filter((file) => /\.(m?js|json|js|md)$/.test(file));
   if (files.length === 0) return outcome(null, `${path} is not present in this checkout`);
