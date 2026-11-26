@@ -163,11 +163,11 @@ export async function startBrowser({ chrome, profile }) {
     const waiting = new Map();
     const sessions = new Map();
     const owners = new Map();
-    const send = (method, params = {}, sessionId) => withTimeout(new Promise((ok, fail) => {
+    const send = (method, params = {}, sessionId, budgetMs = CDP_TIMEOUT_MS) => withTimeout(new Promise((ok, fail) => {
       const id = nextId++;
       waiting.set(id, { ok, fail });
       socket.send(JSON.stringify({ id, method, params, sessionId }));
-    }), CDP_TIMEOUT_MS, method);
+    }), budgetMs, method);
     const blockRequests = (sessionId, blockUrls) => {
       if (blockUrls.length === 0) return;
       send('Network.enable', {}, sessionId).catch(() => {});
@@ -249,8 +249,8 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
     await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: blockUrls.length > 0, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
+    const evaluate = async (expression, budgetMs = CDP_TIMEOUT_MS) => {
+      const result = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId, budgetMs);
       return result.result?.value;
     };
     const until = performance.now() + timeoutMs;
@@ -279,7 +279,7 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
         limit: timeoutMs,
       }));
     }
-    return { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: globalThis.thebird.text() })")) };
+    return { logs, ...(await evaluate("({ engine: document.body.dataset.engine, out: globalThis.thebird.text() })", timeoutMs)) };
   } finally {
     sessions.delete(sessionId);
     await send('Target.closeTarget', { targetId }).catch(() => {});
