@@ -26,7 +26,7 @@ The prompt shows the working directory, read back with `pwd` after each run. Eac
 | `web/pty-adapter.js` | PTY-style adapter: keystrokes and paste in, output bytes out. Keeps the input line, cursor, history, Tab, the Ctrl keys and the run queue; `resize` sends the column and row count to the shell as the COLUMNS and LINES shell variables. |
 | `web/shell-client.js` | Page-side client for the worker: `run`, `complete`, `cwd`, `cancel`, `onOutput`, `ready`. Its `cancel` sets the shared cancel word on an isolated page and replaces the worker if a cancelled run does not answer within 1.5 s. |
 | `web/shell-worker.js` | Web Worker: hydrates OPFS, creates the shell, refuses background jobs, flushes OPFS. |
-| `web/bash-shell.js` | `createShell`, `hasBackgroundOperator`, the bashkit `Bash` with the twelve custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
+| `web/bash-shell.js` | `createShell`, the bashkit `Bash` with the twelve custom builtins from `web/builtins.js` and `COMMAND_TIMEOUT_MS`. |
 | `web/builtins.js` | `BUILTIN_NAMES` and `runBuiltin`: the one dispatch for `git`, `sqlite3`, `python3`, `pip`, `qjs`, `tjs`, `node`, `npm`, `npx`, `curl`, `wget`, `fx` and `playwriter`. The bash page and the txiki shell's bridge both call it. |
 | `web/shell-lookup.js` | Shell prologue defining `which`, `command` and `type`. |
 | `web/git-in-page.js` | `git` builtin: refuses remote verbs, then builds the git program from the texts below and runs it in the txiki engine with `runTjs`. |
