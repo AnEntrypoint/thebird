@@ -1889,6 +1889,7 @@ function expandSet(text) {
   return chars;
 }
 
+const BASH_OPTION_NAMES = ['allexport', 'braceexpand', 'emacs', 'errexit', 'errtrace', 'functrace', 'hashall', 'histexpand', 'history', 'ignoreeof', 'interactive-comments', 'keyword', 'monitor', 'noclobber', 'noexec', 'noglob', 'nolog', 'notify', 'nounset', 'onecmd', 'physical', 'pipefail', 'posix', 'privileged', 'verbose', 'vi', 'xtrace'];
 function formatPrintf([format = '', ...args]) {
   let index = 0;
   const text = format.replace(/\\(?:([0-7]{1,3})|(.))/g, (match, octal, ch) => (octal !== undefined ? String.fromCharCode(parseInt(octal, 8)) : (ESCAPES[ch] ?? match)));
@@ -2329,6 +2330,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   };
   const declaredNames = () => [...new Set([...frames.flatMap((frame) => [...frame.keys()]), ...vars.keys(), ...arrays.keys()])].sort();
   const readonlyBuiltin = (argv) => {
+    const badOption = argv.find((arg) => /^-./.test(arg) && ![...arg.slice(1)].every((letter) => 'aAfp'.includes(letter)));
+    if (badOption !== undefined) return { code: 2, out: '', err: 'readonly: -' + [...badOption.slice(1)].find((letter) => !'aAfp'.includes(letter)) + ': invalid option' + LINE_FEED + 'readonly: usage: readonly [-aAf] [name[=value] ...] or readonly -p' + LINE_FEED };
     const names = argv.filter((arg) => !/^-[A-Za-z]+$/.test(arg));
     if (names.length === 0) return { code: 0, out: [...readonly].sort().map((name) => declarationLine(name) + LINE_FEED).join(''), err: '' };
     for (const spec of names) {
@@ -2465,6 +2468,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code: 0, out: '', err };
   };
   const mapfileBuiltin = (argv, stdin) => {
+    if (argv[0]?.startsWith('-') && !['-t', '-n', '-s', '-O', '-d'].includes(argv[0])) return { code: 2, out: '', err: 'mapfile: ' + argv[0] + ': invalid option' + LINE_FEED + 'mapfile: usage: mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]' + LINE_FEED };
     let trim = false;
     let count = 0;
     let skip = 0;
@@ -2643,6 +2647,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code: 0, out: stackLine(), err: '' };
   };
   const dirsBuiltin = (argv) => {
+    const badOption = argv.find((arg) => /^[+-]/.test(arg) && !/^[+-]\d+$/.test(arg) && !/^-[clpv]+$/.test(arg));
+    if (badOption !== undefined) return { code: 2, out: '', err: 'dirs: ' + badOption + ': invalid number' + LINE_FEED + 'dirs: usage: dirs [-clpv] [+N] [-N]' + LINE_FEED };
     if (argv.includes('-c')) {
       dirStack.length = 0;
       return ok('');
@@ -2688,6 +2694,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out: '', err };
   };
   const jobsBuiltin = (argv) => {
+    const specErrors = argv.filter((arg) => !arg.startsWith('-')).map((spec) => (spec.startsWith('%') ? (resolveJob(spec).job === undefined ? 'jobs: ' + spec + ': no such job' + LINE_FEED : '') : 'jobs: warning: ' + spec + ': job specification requires leading ' + String.fromCharCode(96) + '%' + String.fromCharCode(39) + LINE_FEED + 'jobs: ' + spec + ': no such job' + LINE_FEED)).join('');
+    if (specErrors !== '') return { code: 1, out: '', err: specErrors };
     const list = [...jobs.values()].sort((a, b) => a.seq - b.seq);
     if (argv.includes('-p')) return ok(list.map((job) => job.pid + LINE_FEED).join(''));
     const current = list.at(-1);
@@ -2757,11 +2765,18 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     break: ({ argv }) => loopControl('break', argv),
     continue: ({ argv }) => loopControl('continue', argv),
     echo: ({ argv }) => ok(argv.join(' ') + '\n'),
-    printf: ({ argv }) => (argv.length ? ok(formatPrintf(argv)) : { code: 2, out: '', err: 'printf: usage: printf [-v var] format [arguments]\n' }),
+    printf: ({ argv }) => {
+      if (!argv.length) return { code: 2, out: '', err: 'printf: usage: printf [-v var] format [arguments]' + LINE_FEED };
+      const unknown = argv[0].split('%%').join('').match(/%[-+ #0-9.*]*([^bcdiouxXfFeEgGaAsq%0-9.*+ #-])/);
+      if (unknown) return { code: 1, out: '', err: 'printf: ' + String.fromCharCode(96) + unknown[0] + String.fromCharCode(39) + ': missing format character' + LINE_FEED };
+      return ok(formatPrintf(argv));
+    },
     true: () => ok(''),
     read: ({ argv, stdin, stream }) => readBuiltin(argv, stream ?? { text: stdin, pos: 0 }),
     let: ({ argv }) => letBuiltin(argv),
     unset: ({ argv }) => {
+      const badOption = argv.find((arg) => /^-./.test(arg) && arg !== '--' && !['-f', '-v', '-n'].includes(arg));
+      if (badOption !== undefined) return { code: 2, out: '', err: 'unset: ' + badOption + ': invalid option' + LINE_FEED + 'unset: usage: unset [-f] [-v] [-n] [name ...]' + LINE_FEED };
       const functionsOnly = argv[0] === '-f';
       let err = '';
       let code = 0;
@@ -2788,12 +2803,17 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return ok(table.map(line).join(''));
     },
     kill: async ({ argv }) => {
-      if (argv[0] === '-l') return ok(signalTable());
+      if (argv[0] === '-l') {
+        if (argv.length === 1) return ok(signalTable());
+        const badSignal = argv.slice(1).find((spec) => signalNumber(spec) === null);
+        if (badSignal !== undefined) return { code: 1, out: '', err: 'kill: ' + badSignal + ': invalid signal specification' + LINE_FEED };
+        return ok(argv.slice(1).map((spec) => (/^\d+$/.test(spec) ? (SIGNAL_NAMES[Number(spec) - 1] ?? '') : String(signalNumber(spec))) + LINE_FEED).join(''));
+      }
       const targets = [...argv];
       let out = '';
       let signo = SIGNALS.TERM;
       if (targets[0]?.startsWith('-')) {
-        const spec = targets.shift().slice(1);
+        const spec = targets[0] === '-s' || targets[0] === '-n' ? (targets.splice(0, 2)[1] ?? '') : targets.shift().slice(1);
         signo = signalNumber(spec);
         if (signo === null) return { code: 1, out: '', err: `kill: ${spec}: invalid signal specification\n` };
       }
@@ -2875,6 +2895,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       return { code, out: '', err };
     },
     cd: ({ argv }) => {
+      const badOption = argv.find((arg) => /^-./.test(arg) && ![...arg.slice(1)].every((letter) => 'LPe@'.includes(letter)));
+      if (badOption !== undefined) return { code: 2, out: '', err: 'cd: ' + badOption + ': invalid option' + LINE_FEED + 'cd: usage: cd [-L|[-P [-e]]] [-@] [dir]' + LINE_FEED };
       const target = resolvePath(argv[0] ?? '/workspace');
       if (!host.exists(target)) return { code: 1, out: '', err: `cd: ${argv[0]}: No such file or directory\n` };
       state.cwd = target;
@@ -3257,6 +3279,11 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     },
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
+      if (argv[0] !== undefined && !/^-?\d+$/.test(argv[0])) {
+        const failure = new ShellExit(2);
+        failure.text = bashLine('exit: ' + argv[0] + ': numeric argument required');
+        throw failure;
+      }
       throw new ShellExit(Number(argv[0] ?? state.status));
     },
     base64: ({ argv, stdin = '' }) => {
@@ -3585,16 +3612,22 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     help: () => unsupported('help'),
     enable: () => unsupported('enable'),
     export: ({ argv }) => {
+      let err = '';
+      let code = 0;
       for (const arg of argv) {
+        if (/^-[A-Za-z]+$/.test(arg)) continue;
         const eq = arg.indexOf('=');
         const name = eq > 0 ? arg.slice(0, eq) : arg;
-        if (eq > 0) setVariable(name, arg.slice(eq + 1));
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-          exported.add(name);
-          inherited.delete(name);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+          err += 'export: ' + String.fromCharCode(96) + arg + "': not a valid identifier" + LINE_FEED;
+          code = 1;
+          continue;
         }
+        if (eq > 0) setVariable(name, arg.slice(eq + 1));
+        exported.add(name);
+        inherited.delete(name);
       }
-      return ok('');
+      return { code, out: '', err };
     },
     local: ({ argv }) => declareBuiltin(argv, 'local', true),
     return: ({ argv }) => {
@@ -3616,6 +3649,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           positional = argv.slice(i + 1);
           return ok('');
         }
+        if ((argv[i] === '-o' || argv[i] === '+o') && argv[i + 1] !== undefined && !BASH_OPTION_NAMES.includes(argv[i + 1])) return { code: 2, out: '', err: 'set: ' + argv[i + 1] + ': invalid option name' + LINE_FEED };
         if (!/^[-+][ex]+$/.test(argv[i])) return { code: 2, out: '', err: `set: unsupported option ${argv[i]}\n` };
         for (const letter of argv[i].slice(1)) {
           if (letter === 'e') errexit = argv[i][0] === '-';

@@ -115,7 +115,7 @@
 {"name":"leakheredoc","file":"web/shell-core.js","anchor":"if (!terminated) doc.token.warning = heredocWarning(src, doc);","replace":"if (terminated) doc.token.warning = heredocWarning(src, doc);","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakreturn","file":"web/shell-core.js","anchor":"if (frames.length === 0 && sourceDepth === 0) return","replace":"if (frames.length === 1 && sourceDepth === 0) return","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"leakwait","file":"web/shell-core.js","anchor":"if (!/^\\d+$/.test(arg)) {","replace":"if (false) {","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"leakprintf","file":"web/shell-core.js","anchor":"(argv.length ? ok(formatPrintf(argv))","replace":"(true ? ok(formatPrintf(argv))","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"leakprintf","file":"web/shell-core.js","anchor":"return ok(formatPrintf(argv));","replace":"return ok(formatPrintf(argv.slice(0, 0)));","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"pybundlesha","file":"web/python-bundle.js","anchor":"if (digest !== sha256) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
 {"name":"pybundlepin","file":"web/python-bundle.js","anchor":"if (CORE_PINS[name] && CORE_PINS[name] !== digest) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
 {"name":"pybundletrunc","file":"web/python-bundle.js","anchor":"if (data.length !== bytes) throw","replace":"if (false) throw","command":["node","--test","test/python-bundle-verify.test.mjs"],"timeoutMs":60000},
@@ -152,5 +152,17 @@
 {"name":"callerframe","file":"web/shell-core.js","anchor":"callStack[index].line + ' ' + callStack[index - 1].name","replace":"callStack[index].line + ' ' + callStack[index].name","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"localopt","file":"web/shell-core.js","anchor":"else if (!['declare', 'local'].includes(command) || 'aAfFgiIlnrtux'.includes(flag)) flags.push(flag);","replace":"else flags.push(flag);","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"bashbuiltinprefix","file":"web/shell-core.js","anchor":"? bashLine(line) : line)","replace":"? line : line)","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
-{"name":"commandnotfoundprefix","file":"web/shell-core.js","anchor":"err: bashLine(name + ': command not found') + LINE_FEED","replace":"err: name + ': command not found' + LINE_FEED","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
+{"name":"commandnotfoundprefix","file":"web/shell-core.js","anchor":"err: bashLine(name + ': command not found') + LINE_FEED","replace":"err: name + ': command not found' + LINE_FEED","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valexport","file":"web/shell-core.js","anchor":"err += 'export: ' + String.fromCharCode(96) + arg","replace":"err += 'export: ' + arg","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valunset","file":"web/shell-core.js","anchor":"/^-./.test(arg) && arg !== '--'","replace":"false","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valreadonly","file":"web/shell-core.js","anchor":"/^-./.test(arg) && ![...arg.slice(1)].every((letter) => 'aAfp'","replace":"false && ![...arg.slice(1)].every((letter) => 'aAfp'","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valdirs","file":"web/shell-core.js","anchor":"/^[+-]/.test(arg)","replace":"false","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valprintf","file":"web/shell-core.js","anchor":"if (unknown) return","replace":"if (false) return","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valjobs","file":"web/shell-core.js","anchor":"if (specErrors !== '') return","replace":"if (false) return","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valkilllist","file":"web/shell-core.js","anchor":"if (badSignal !== undefined) return","replace":"if (false) return","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valexit","file":"web/shell-core.js","anchor":"if (argv[0] !== undefined && !/^-?","replace":"if (false && !/^-?","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valset","file":"web/shell-core.js","anchor":"&& !BASH_OPTION_NAMES.includes(argv[i + 1])","replace":"&& false","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valmapfile","file":"web/shell-core.js","anchor":"if (argv[0]?.startsWith('-') && ![","replace":"if (false && ![","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valcd","file":"web/shell-core.js","anchor":"if (badOption !== undefined) return { code: 2, out: '', err: 'cd: '","replace":"if (false) return { code: 2, out: '', err: 'cd: '","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"valkillsig","file":"web/shell-core.js","anchor":"targets[0] === '-s' || targets[0] === '-n'","replace":"targets[0] === '-x' || targets[0] === '-n'","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
 ]

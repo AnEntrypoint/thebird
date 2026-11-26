@@ -4661,6 +4661,20 @@ group("builtins: local rejects an unknown option with bash text", async () => ma
   ["f() { local -Q x; echo rc=$?; }; f","rc=2\n","bash: line 1: local: -Q: invalid option\nlocal: usage: local [option] name[=value] ...\n",0],
   ["f() { local -Z x=1; echo rc=$?; }; f","rc=2\n","bash: line 1: local: -Z: invalid option\nlocal: usage: local [option] name[=value] ...\n",0],
   ]));
+group("builtins: argument validation reports bash text and status", async () => matchesBash("builtins: argument validation", [
+  ["export 1x=2; echo rc=$?","rc=1\n","bash: line 1: export: `1x=2': not a valid identifier\n",0],
+  ["unset -Z x; echo rc=$?","rc=2\n","bash: line 1: unset: -Z: invalid option\nunset: usage: unset [-f] [-v] [-n] [name ...]\n",0],
+  ["readonly -Z; echo rc=$?","rc=2\n","bash: line 1: readonly: -Z: invalid option\nreadonly: usage: readonly [-aAf] [name[=value] ...] or readonly -p\n",0],
+  ["dirs -x; echo rc=$?","rc=2\n","bash: line 1: dirs: -x: invalid number\ndirs: usage: dirs [-clpv] [+N] [-N]\n",0],
+  ["printf '%z' ; echo rc=$?","rc=1\n","bash: line 1: printf: `%z': missing format character\n",0],
+  ["jobs nosuch; echo rc=$?","rc=1\n","bash: line 1: jobs: warning: nosuch: job specification requires leading `%'\nbash: line 1: jobs: nosuch: no such job\n",0],
+  ["kill -s NOSIG 1; echo rc=$?","rc=1\n","bash: line 1: kill: NOSIG: invalid signal specification\n",0],
+  ["kill -l NOSIG; echo rc=$?","rc=1\n","bash: line 1: kill: NOSIG: invalid signal specification\n",0],
+  ["exit abc; echo rc=$?","","bash: line 1: exit: abc: numeric argument required\n",2],
+  ["set -o nosuchopt; echo rc=$?","rc=2\n","bash: line 1: set: nosuchopt: invalid option name\n",0],
+  ["mapfile -q x; echo rc=$?","rc=2\n","bash: line 1: mapfile: -q: invalid option\nmapfile: usage: mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]\n",0],
+  ["cd -Z; echo rc=$?","rc=2\n","bash: line 1: cd: -Z: invalid option\ncd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n",0],
+  ]));
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
