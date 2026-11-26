@@ -4535,7 +4535,7 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["declare -a arr=(1 2 3); declare -p arr","declare -a arr=([0]=\"1\" [1]=\"2\" [2]=\"3\")\n","",0],
   ["f() { declare loc=1; echo $loc; }; f; echo ${loc-unset}","1\nunset\n","",0],
   ["declare -r R=5; R=6; echo rc=$? $R","","bash: line 1: R: readonly variable\n",1],
-  ["declare -p nosuch; echo rc=$?","rc=1\n","declare: nosuch: not found\n",0],
+  ["declare -p nosuch; echo rc=$?","rc=1\n","bash: line 1: declare: nosuch: not found\n",0],
   ["typeset -i t=1+1; echo $t","2\n","",0],
   ["set -- -a -b val x; while getopts \"ab:\" o; do echo $o:$OPTARG; done; echo $OPTIND","a:\nb:val\n4\n","",0],
   ["set -- -z; getopts ab o; echo $o $OPTIND; echo rc=$?","? 2\nrc=0\n","illegal option -- z\n",0],
@@ -4648,6 +4648,19 @@ group('builtins: caller with a non-numeric frame reports bash text and status 2'
   const badFrame = await sh.run('f() { caller x; echo rc=$?; }; f');
   check('builtins: caller x prints bash two-line text, the script goes on', badFrame.stdout === 'rc=2\n' && badFrame.stderr === 'bash: line 1: caller: x: invalid number\ncaller: usage: caller [expr]\n', JSON.stringify(badFrame));
 });
+group("builtins: runtime errors carry the bash line prefix", async () => matchesBash("builtins: runtime error prefixes", [
+  ["readonly R=1; unset R; echo rc=$?","rc=1\n","bash: line 1: unset: R: cannot unset: readonly variable\n",0],
+  ["declare -p nosuch_zz; echo rc=$?","rc=1\n","bash: line 1: declare: nosuch_zz: not found\n",0],
+  ["declare 1x=2; echo rc=$?","rc=1\n","bash: line 1: declare: `1x=2': not a valid identifier\n",0],
+  ["local x=1; echo rc=$?","rc=1\n","bash: line 1: local: can only be used in a function\n",0],
+  ["f() { local 1x; echo rc=$?; }; f","rc=1\n","bash: line 1: local: `1x': not a valid identifier\n",0],
+  ["declare -Q x; echo rc=$?","rc=2\n","bash: line 1: declare: -Q: invalid option\ndeclare: usage: declare [-aAfFgiIlnrtux] [name[=value] ...] or declare -p [-aAfFilnrtux] [name ...]\n",0],
+  ["readonly R=1; f() { unset R; echo rc=$?; }; f","rc=1\n","bash: line 1: unset: R: cannot unset: readonly variable\n",0],
+  ]));
+group("builtins: local rejects an unknown option with bash text", async () => matchesBash("builtins: local invalid option", [
+  ["f() { local -Q x; echo rc=$?; }; f","rc=2\n","bash: line 1: local: -Q: invalid option\nlocal: usage: local [option] name[=value] ...\n",0],
+  ["f() { local -Z x=1; echo rc=$?; }; f","rc=2\n","bash: line 1: local: -Z: invalid option\nlocal: usage: local [option] name[=value] ...\n",0],
+  ]));
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],

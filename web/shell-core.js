@@ -2268,6 +2268,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     }
     return prefix + '="' + quoteValue(scalarValue(name) ?? '') + '"';
   };
+  const builtinError = (text) => 'bash: line ' + (vars.get('LINENO') ?? '1') + ': ' + text + LINE_FEED;
   const printDeclarations = (names, command) => {
     let out = '';
     let err = '';
@@ -2275,7 +2276,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     for (const name of names) {
       if (isDeclared(name)) out += declarationLine(name) + LINE_FEED;
       else {
-        err += command + ': ' + name + ': not found' + LINE_FEED;
+        err += builtinError(command + ': ' + name + ': not found');
         code = 1;
       }
     }
@@ -2285,18 +2286,21 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     const flags = [];
     const names = [];
     let printing = false;
+    let invalidFlag;
     let globalScope = false;
     for (const arg of argv) {
       if (names.length === 0 && /^-[A-Za-z]+$/.test(arg)) {
         for (const flag of arg.slice(1)) {
           if (flag === 'p') printing = true;
           else if (flag === 'g') globalScope = true;
-          else flags.push(flag);
+          else if (!['declare', 'local'].includes(command) || 'aAfFgiIlnrtux'.includes(flag)) flags.push(flag);
+          else invalidFlag ??= flag;
         }
       } else names.push(arg);
     }
+    if (invalidFlag !== undefined) return { code: 2, out: '', err: builtinError(command + ': -' + invalidFlag + ': invalid option') + command + ': usage: ' + (command === 'local' ? 'local [option] name[=value] ...' : 'declare [-aAfFgiIlnrtux] [name[=value] ...] or declare -p [-aAfFilnrtux] [name ...]') + LINE_FEED };
     if (printing) return printDeclarations(names.length ? names : declaredNames(), command);
-    if (forceLocal && frames.length === 0) return { code: 1, out: '', err: 'local: can only be used in a function' + LINE_FEED };
+    if (forceLocal && frames.length === 0) return { code: 1, out: '', err: builtinError('local: can only be used in a function') };
     const frame = forceLocal || (!globalScope && frames.length > 0) ? frames.at(-1) : null;
     let err = '';
     let code = 0;
@@ -2305,7 +2309,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const name = eq < 0 ? spec : spec.slice(0, eq);
       const value = eq < 0 ? undefined : spec.slice(eq + 1);
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-        err += command + ': `' + spec + "': not a valid identifier" + LINE_FEED;
+        err += builtinError(command + ': `' + spec + "': not a valid identifier");
         code = 1;
         continue;
       }
@@ -2762,7 +2766,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       for (const name of argv[0] === '-f' || argv[0] === '-v' ? argv.slice(1) : argv) {
         if (functionsOnly) functions.delete(name);
         else if (readonly.has(name)) {
-          err += 'unset: ' + name + ': cannot unset: readonly variable' + LINE_FEED;
+          err += builtinError('unset: ' + name + ': cannot unset: readonly variable');
           code = 1;
         } else removeVariable(name);
       }

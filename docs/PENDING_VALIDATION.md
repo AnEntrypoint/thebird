@@ -7127,3 +7127,10 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: caller names the call site of each frame, as bash does' has 8 rows, all generated from bash -c, including a multi-line script where line numbers matter. Group 'builtins: caller with a non-numeric frame reports bash text and status 2' checks the two-line text. Shell witness PASS=2267 FAIL=0.
 - Red: callerframe names the frame's own function instead of its caller, and is CAUGHT alone. Anchors: all 151 unique.
 - Limits: the file name is bash's for a -c script. Sourced files are not given their own name.
+### local rejects an unknown option, as bash does
+
+- Claim: `local -Q x` and `local -Z x=1` inside a function print bash's `bash: line N: local: -Q: invalid option` and `local: usage: local [option] name[=value] ...` and return 2. Before, local accepted any option letter silently.
+- Change: declare and local validate their option letters against bash's set aAfFgiIlnrtux (p and g are handled before). Each command gets its own usage line.
+- Witness: group 'builtins: local rejects an unknown option with bash text' has two rows, both raw bash -c output with the prefix kept. Shell witness PASS=2276 FAIL=0.
+- Red: localopt accepts every option letter again, and is CAUGHT alone. Anchors: all 154 unique.
+- Limit: typeset is not given declare's usage text, because bash's typeset usage has not been checked.
