@@ -7182,3 +7182,9 @@ Waits on the owner (or the machine):
 - Window: thebird-shellhelp, 121 reds that guard web/shell-*.js or run the shell witness, on 2d30f54, not exclusive. Result: /workspace/tmp/thebird/thebird-shellhelp.result, reds: all caught, 121 CAUGHT, none missed.
 - The tree tested is 2d30f54, which is on origin/main.
 - Item 2 code: scripts/mutate-sweep.mjs now counts a hang (no RESULT within the 90-second limit) as caught and records hang true. The five hanging mutants are rerun in a separate window, recorded in specs/queue/thebird.md.
+### Hang reruns (item 2) and the witness split (item 3)
+
+- Hang reruns: thebird-hangs (exclusive, because the 90-second classification is time-based) ran the five hanging mutants one at a time on cb438bb. Each is recorded as caught with hang true: indices 0, 72, 75, 154 and 160 (TALLY caught 1 per run). Result: /workspace/tmp/thebird/thebird-hangs.result, ending HANGS_DONE. Records: /workspace/tmp/thebird/k/hangs/mutant-<index>.json.
+- Witness split: scripts/witness.mjs was 2353 lines with 86 groups. Now each group is one file in scripts/witness/groups/NN-slug.mjs, in the original order. scripts/witness/shared.mjs holds the top-level helpers and state the groups share (71 exported names). scripts/witness.mjs keeps the runner, and imports the shared names and then the group files in order.
+- Witness: node scripts/witness.mjs --list is byte-identical before and after the split (86 groups). Every group file and the shared module pass node --check. The 12 reds that pointed at scripts/witness.mjs are repointed to the file that holds their anchor, and all 171 anchors are unique. lint-architecture reads every witness file (401 pass, 0 fail, 0 unverified). test/witness-parts.test.mjs passes both tests.
+- Runtime proof: a full witness run on the committed split tree is queued as a separate exclusive ticket (thebird-witnessfull), because the witness measures time. Its result decides whether this split is green.
