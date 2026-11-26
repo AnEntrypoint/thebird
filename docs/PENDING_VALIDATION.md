@@ -7193,3 +7193,10 @@ Waits on the owner (or the machine):
 - Window: thebird-witnessfull3, exclusive, on 854fe7e. Result: /workspace/tmp/thebird/thebird-witnessfull3.result. Totals: PASS 311, FAIL 0, SKIP 1, GROUPS 87, WALL 506.9 s. The final line is 'all checks passed'.
 - The skip is the live-provider row, which needs OPENROUTER_KEY or a gateway on 127.0.0.1:8793 (owner-held, see the gy4 decision).
 - Pushed 854fe7e. It contains the cause fix 08d681a and the dead-code and fs-watch fixes. The earlier failing runs are recorded in this file's previous entries.
+### The relay mode fix is pushed; the playwriter-hello red came from the combined window
+
+- Commit 7e31ede (src/app-supervisor.js passes --no-bin-links; group 18 checks the committed mode 644 after npm run host:check; red bininks) is pushed. The cause: the site install (package.json declares thebird: file:../../..) linked the repository root's bin entries, which set bin/thebird-relay.js executable.
+- Part A, thebird-pwalone, on 7e31ede: group playwriter-hello alone passes: PASS 5, FAIL 0, wall 42.5 s (PWALONE_RC=0).
+- The red in thebird-binfix was in the combined window, not the commit. In that run the same group took 214.6 s, under host load 11 to 13, and the final read of the page (globalThis.thebird.text() in runTerminal) got no answer for 60 s (CDP_TIMEOUT_MS). That 60-second budget is fixed, so the failure is the page stalling under host load. This is the load-dependent timeout the queue item tracks.
+- Witness: group 18 passed both mode checks in thebird-binfix (644 committed mode; 77 of 77 host checks). Witness total in that combined run: PASS 309, FAIL 1 (playwriter-hello).
+- Next: the full witness on 7e31ede as its own part, thebird-fullwitness4. Its result is /workspace/tmp/thebird/thebird-fullwitness4.result.
