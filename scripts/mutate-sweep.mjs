@@ -73,8 +73,9 @@ try {
     const rows = text.split('\n');
     const result = rows.find((row) => row.startsWith('RESULT')) ?? null;
     const fails = rows.filter((row) => row.startsWith('FAIL')).map((row) => row.slice(0, 160));
-    const status = result === null ? 'hang' : fails.length > 0 ? 'caught' : 'survived';
-    results.push({ ...mutant, status, result, fails: fails.slice(0, 3), original: lines[mutant.line - 1].trim() });
+    const hang = result === null;
+    const status = hang || fails.length > 0 ? 'caught' : 'survived';
+    results.push({ ...mutant, status, hang, result, fails: fails.slice(0, 3), original: lines[mutant.line - 1].trim() });
     writeFileSync(outFile, JSON.stringify(results, null, 1));
   }
 } finally {

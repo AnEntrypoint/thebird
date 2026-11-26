@@ -7177,3 +7177,8 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: help, enable and bind answer as bash does' has six rows, all raw bash -c output with the prefix kept, including bind -l's full list. Shell witness PASS=2299 FAIL=0.
 - Reds: helpmiss (help prints every name's text) and bindlist (bind -l drops its first name) are each CAUGHT alone. Anchors: all 171 unique.
 - Limits, recorded as shipped: help with no arguments prints nothing, where bash prints its version header and list. enable with no arguments prints nothing, where bash prints its list. A disabled builtin is not run as an external command, so it reports command not found, where bash runs the external program; this shell has no external programs. bind accepts a binding and does nothing with it, because there is no readline.
+### Shell reds window on 2d30f54: 121 of 121 CAUGHT (help, enable, bind)
+
+- Window: thebird-shellhelp, 121 reds that guard web/shell-*.js or run the shell witness, on 2d30f54, not exclusive. Result: /workspace/tmp/thebird/thebird-shellhelp.result, reds: all caught, 121 CAUGHT, none missed.
+- The tree tested is 2d30f54, which is on origin/main.
+- Item 2 code: scripts/mutate-sweep.mjs now counts a hang (no RESULT within the 90-second limit) as caught and records hang true. The five hanging mutants are rerun in a separate window, recorded in specs/queue/thebird.md.
