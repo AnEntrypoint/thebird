@@ -7200,3 +7200,10 @@ Waits on the owner (or the machine):
 - The red in thebird-binfix was in the combined window, not the commit. In that run the same group took 214.6 s, under host load 11 to 13, and the final read of the page (globalThis.thebird.text() in runTerminal) got no answer for 60 s (CDP_TIMEOUT_MS). That 60-second budget is fixed, so the failure is the page stalling under host load. This is the load-dependent timeout the queue item tracks.
 - Witness: group 18 passed both mode checks in thebird-binfix (644 committed mode; 77 of 77 host checks). Witness total in that combined run: PASS 309, FAIL 1 (playwriter-hello).
 - Next: the full witness on 7e31ede as its own part, thebird-fullwitness4. Its result is /workspace/tmp/thebird/thebird-fullwitness4.result.
+### Full witness on 6ca2b9f, in two parts: 314 PASS, 0 FAIL
+
+- Part 1: thebird-witness2-p1, --part=1/2, exclusive, on 6ca2b9f. PASS 166, FAIL 0, SKIP 0, 44 groups, 336.6 s, PART_RC=0, MODE=644. Result: /workspace/tmp/thebird/thebird-witness2-p1.result.
+- Part 2: thebird-witness2-p2, --part=2/2, exclusive, on 6ca2b9f. PASS 148, FAIL 0, SKIP 0, 44 groups, 449.5 s, PART_RC=0, MODE=644. Result: /workspace/tmp/thebird/thebird-witness2-p2.result.
+- The two parts together: 314 PASS, 0 FAIL, and they cover the 87 groups once each. Both parts were under 30 minutes.
+- The three live-provider rows that failed in the previous part 1 (the 30-second request budget) pass with the 120-second budget, the live model answering in time. The playwriter-hello failure of the previous part 2 is gone: its polling reads take the terminal's budget.
+- Pushed 6ca2b9f, which contains the two fixes (every page read of a terminal run takes the terminal budget; the live provider request waits two minutes) and the earlier 60933ee.
