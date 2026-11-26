@@ -20,10 +20,10 @@ import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_B
 
 group('git-background', async () => {
   const background = await terminal([
-    ['run', 'echo refused-line & echo should-not-run'],
+    ['run', 'echo refused-line & wait; echo waited'],
     ['run', 'echo and-ok && echo and-ok2'],
     ['run', 'echo redir-ok 2>&1'],
     ['run', 'echo "quoted & kept"'],
   ]);
-  check('in-page bash refuses background jobs and keeps &&, redirects and quoted ampersands', background.out.includes('background jobs are not supported') && !/^should-not-run$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && /^quoted & kept$/m.test(background.out), background.out.split('\n').find((line) => line.includes('background jobs')) ?? 'no refusal line');
+  check('in-page bash runs a background job and waits for it, and keeps &&, redirects and quoted ampersands', /^refused-line$/m.test(background.out) && /^waited$/m.test(background.out) && /^and-ok2$/m.test(background.out) && /^redir-ok$/m.test(background.out) && background.out.includes('quoted & kept'), background.out.slice(0, 160));
 });

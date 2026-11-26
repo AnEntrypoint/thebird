@@ -104,6 +104,7 @@ import './witness/groups/83-hosting-pins.mjs';
 import './witness/groups/84-birdman.mjs';
 import './witness/groups/85-call-timeout.mjs';
 import './witness/groups/86-shell-budget.mjs';
+import './witness/groups/87-background-jobs.mjs';
 
 const argv = Object.fromEntries(process.argv.slice(2).map((arg) => {
   const [key, ...rest] = arg.replace(/^--/, '').split('=');
