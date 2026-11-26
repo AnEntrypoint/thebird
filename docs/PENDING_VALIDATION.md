@@ -7207,3 +7207,10 @@ Waits on the owner (or the machine):
 - The two parts together: 314 PASS, 0 FAIL, and they cover the 87 groups once each. Both parts were under 30 minutes.
 - The three live-provider rows that failed in the previous part 1 (the 30-second request budget) pass with the 120-second budget, the live model answering in time. The playwriter-hello failure of the previous part 2 is gone: its polling reads take the terminal's budget.
 - Pushed 6ca2b9f, which contains the two fixes (every page read of a terminal run takes the terminal budget; the live provider request waits two minutes) and the earlier 60933ee.
+### Background jobs run in bashkit: the full witness on c53fbf4 in two parts
+
+- Design: the page's bashkit shell runs `&` in order within a line (probe: `(sleep 0.3; echo late) & echo started; wait; echo done` gives started, late, done). The refusal was only a page policy, so the core-shell routing from f1c55be and 39b6360 is removed in 901c149 and hasBackgroundOperator is gone. ARCHITECTURE.md now says that jobs run in the page shell, and the architecture lint names that behaviour.
+- Mistake recorded: 39b6360 was pushed while its red bgjobroute was MISSED. That mutant (routing off) still passed the group, because bashkit produces the same output, so the red guarded nothing. Its removal is in 901c149; the red is not in the final tree.
+- Witness on c53fbf4: group 87 alone (thebird-bg4-a): PASS 2, FAIL 0, A_RC=0. Full witness in two parts, each one ticket: part 1 (thebird-bg4-p1): PASS 164, FAIL 0, SKIP 3, PART_RC=0, MODE=644. The three skips are the live-provider rows, which skip when the provider lists no free model (the existing policy; no 429 or other failure). Part 2 (thebird-bg4-p2): PASS 148, FAIL 0, PART_RC=0, MODE=644. Together: PASS 312, FAIL 0, SKIP 3, covering the 87 groups once each.
+- Why two parts and not one ticket: one full run takes about 34 minutes, over the 30-minute split rule, so the two parts are the full witness on c53fbf4.
+- Pushed c53fbf4 (with 901c149 and 39b6360 below it).
