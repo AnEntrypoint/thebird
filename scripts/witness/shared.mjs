@@ -35,7 +35,7 @@ process.on('unhandledRejection', (error) => {
   process.exit(1);
 });
 
-export const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+export const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const GROUP_BUDGET_MS = 2700000;
 export const COLD_START_MS = GROUP_BUDGET_MS - 120000;
 export const JOBS = Math.max(1, Number(process.env.THEBIRD_WITNESS_JOBS ?? 3));
