@@ -7170,3 +7170,10 @@ Waits on the owner (or the machine):
 
 - Window: thebird-shellfinal, 119 reds that guard web/shell-*.js or run the shell witness, on d00ecc3, not exclusive (none measures time). Result: /workspace/tmp/thebird/thebird-shellfinal.result, every red CAUGHT, reds: all caught. Missed: none. Anchors: all 169 unique.
 - The tree tested is d00ecc3, which is on origin/main. This entry is the only change after it.
+### help, enable and bind are supported (dispatcher decision 1)
+
+- Decision: ship help, enable and bind as supported, against the bash help text (dispatcher decision 1, recorded in specs/queue/thebird.md).
+- Change: BASH_HELP holds bash 5.3's help text for each of the 61 names compgen -b lists; BASH_READLINE_FUNCTIONS holds bind -l's 176 names. help NAME prints the text, and an unknown name prints bash's no-topics line with status 1. enable NAME and enable -n NAME set a disabled state, and enable of an unknown name prints bash's not-a-builtin line with status 1. bind -l lists the functions, and any other bind prints bash's line-editing warning with status 0. The wrapper that prefixes bash builtins' errors now uses the full bash list, so bind's warning carries the prefix too.
+- Witness: group 'builtins: help, enable and bind answer as bash does' has six rows, all raw bash -c output with the prefix kept, including bind -l's full list. Shell witness PASS=2299 FAIL=0.
+- Reds: helpmiss (help prints every name's text) and bindlist (bind -l drops its first name) are each CAUGHT alone. Anchors: all 171 unique.
+- Limits, recorded as shipped: help with no arguments prints nothing, where bash prints its version header and list. enable with no arguments prints nothing, where bash prints its list. A disabled builtin is not run as an external command, so it reports command not found, where bash runs the external program; this shell has no external programs. bind accepts a binding and does nothing with it, because there is no readline.
