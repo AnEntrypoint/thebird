@@ -7,7 +7,7 @@ const chrome = process.env.CHROME_BIN ?? '/data/cache/bin/chromium';
 const url = process.argv[2];
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const profile = await mkdtemp(join(tmpdir(), 'thebird-host-dom-'));
-const child = spawn(chrome, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, url], { stdio: ['ignore', 'ignore', 'pipe'] });
+const child = spawn(chrome, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, url], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
 let stderr = '';
 child.stderr.on('data', (data) => { stderr += data; });
 try {
@@ -67,10 +67,28 @@ try {
   process.stderr.write(`${error.message}\n${stderr}`);
   process.exitCode = 1;
 } finally {
-  await new Promise((done) => {
-    if (child.exitCode !== null || child.signalCode !== null) return done();
-    child.once('exit', done);
-    child.kill('SIGTERM');
-  });
-  await rm(profile, { recursive: true, force: true }).catch(() => {});
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {}
+  for (let i = 0; i < 50; i++) {
+    try {
+      process.kill(-child.pid, 0);
+    } catch {
+      break;
+    }
+    await sleep(100);
+  }
+  let removed = false;
+  for (let i = 0; i < 20 && !removed; i++) {
+    try {
+      await rm(profile, { recursive: true, force: true });
+      removed = true;
+    } catch {
+      await sleep(100);
+    }
+  }
+  if (!removed) {
+    process.stderr.write(`could not remove ${profile}\n`);
+    process.exitCode = 1;
+  }
 }
