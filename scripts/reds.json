@@ -166,5 +166,6 @@
 {"name":"valcd","file":"web/shell-core.js","anchor":"if (badOption !== undefined) return { code: 2, out: '', err: 'cd: '","replace":"if (false) return { code: 2, out: '', err: 'cd: '","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"valkillsig","file":"web/shell-core.js","anchor":"targets[0] === '-s' || targets[0] === '-n'","replace":"targets[0] === '-x' || targets[0] === '-n'","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"missingcd","file":"web/shell-core.js","anchor":"if (!host.exists(target)) return { code: 1, out: '', err: ","replace":"if (false) return { code: 1, out: '', err: ","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
-{"name":"missingsource","file":"web/shell-core.js","anchor":"if (!host.exists(path)) return { code: 1, out: '', err: builtinError(argv[0]","replace":"if (false) return { code: 1, out: '', err: builtinError(argv[0]","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
+{"name":"missingsource","file":"web/shell-core.js","anchor":"if (!host.exists(path)) return { code: 1, out: '', err: builtinError(argv[0]","replace":"if (false) return { code: 1, out: '', err: builtinError(argv[0]","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"exitcontinue","file":"web/shell-core.js","anchor":"return { code: 2, out: '', err: 'exit: ' + argv[0]","replace":"throw new ShellExit(2); return { code: 2, out: '', err: 'exit: ' + argv[0]","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
 ]

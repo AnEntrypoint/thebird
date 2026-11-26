@@ -4670,7 +4670,7 @@ group("builtins: argument validation reports bash text and status", async () => 
   ["jobs nosuch; echo rc=$?","rc=1\n","bash: line 1: jobs: warning: nosuch: job specification requires leading `%'\nbash: line 1: jobs: nosuch: no such job\n",0],
   ["kill -s NOSIG 1; echo rc=$?","rc=1\n","bash: line 1: kill: NOSIG: invalid signal specification\n",0],
   ["kill -l NOSIG; echo rc=$?","rc=1\n","bash: line 1: kill: NOSIG: invalid signal specification\n",0],
-  ["exit abc; echo rc=$?","","bash: line 1: exit: abc: numeric argument required\n",2],
+  ["exit abc; echo rc=$?","rc=2\n","bash: line 1: exit: abc: numeric argument required\n",0],
   ["set -o nosuchopt; echo rc=$?","rc=2\n","bash: line 1: set: nosuchopt: invalid option name\n",0],
   ["mapfile -q x; echo rc=$?","rc=2\n","bash: line 1: mapfile: -q: invalid option\nmapfile: usage: mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]\n",0],
   ["cd -Z; echo rc=$?","rc=2\n","bash: line 1: cd: -Z: invalid option\ncd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n",0],
@@ -4679,6 +4679,10 @@ group("builtins: a missing path reports bash text and status", async () => match
   ["cd /workspace/nonexistent_zz; echo rc=$?","rc=1\n","bash: line 1: cd: /workspace/nonexistent_zz: No such file or directory\n",0],
   ["pushd /workspace/nonexistent_zz; echo rc=$?","rc=1\n","bash: line 1: pushd: /workspace/nonexistent_zz: No such file or directory\n",0],
   [". /workspace/nonexistent_zz; echo rc=$?","rc=1\n","bash: line 1: /workspace/nonexistent_zz: No such file or directory\n",0],
+  ]));
+group("builtins: exit with a non-numeric argument returns 2 and goes on", async () => matchesBash("builtins: exit with a bad argument", [
+  ["f() { exit abc; echo in; }; f; echo rc=$?","in\nrc=0\n","bash: line 1: exit: abc: numeric argument required\n",0],
+  ["exit abc; echo after","after\n","bash: line 1: exit: abc: numeric argument required\n",0],
   ]));
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [

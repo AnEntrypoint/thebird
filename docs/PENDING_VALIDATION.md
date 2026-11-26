@@ -7160,3 +7160,9 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: a missing path reports bash text and status' has three rows, each raw bash -c output with the prefix kept. The earlier probe failure for cd was the probe host lacking exists, not the shell. Shell witness PASS=2291 FAIL=0.
 - Change: six builtinError call sites in declare, unset, local and break return plain text plus a line feed, because the bash prefix wrapper already prefixes lines that start with the builtin's name. The source missing-file site keeps builtinError, because its message starts with the file name, so the wrapper cannot tell it is source's.
 - Reds: missingcd and missingsource replace each missing-path check with a mutant and are each CAUGHT alone. Anchors: all 168 unique.
+### exit with a non-numeric argument returns 2 and the script goes on
+
+- Claim: `exit abc` prints bash's `bash: line N: exit: abc: numeric argument required` and returns status 2. It does not end the shell: bash runs on, so `exit abc; echo after` prints after, and `f() { exit abc; echo in; }; f` prints in. Subshells already carried the text.
+- Change: exit returns status 2 with the message, instead of ending the shell with status 2. The earlier witness row, which expected empty output and status 2, was wrong; the bash probe had shown rc=2 and status 0.
+- Witness: row exit abc; echo rc=$? is corrected to rc=2 with status 0, and group 'builtins: exit with a non-numeric argument returns 2 and goes on' adds the function and top-level cases, all from raw bash -c output. Shell witness PASS=2293 FAIL=0.
+- Red: exitcontinue throws before the return and is CAUGHT alone. Anchors: all 169 unique.

@@ -3279,11 +3279,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     },
     false: () => ({ code: 1, out: '', err: '' }),
     exit: ({ argv }) => {
-      if (argv[0] !== undefined && !/^-?\d+$/.test(argv[0])) {
-        const failure = new ShellExit(2);
-        failure.text = bashLine('exit: ' + argv[0] + ': numeric argument required');
-        throw failure;
-      }
+      if (argv[0] !== undefined && !/^-?\d+$/.test(argv[0])) return { code: 2, out: '', err: 'exit: ' + argv[0] + ': numeric argument required' + LINE_FEED };
       throw new ShellExit(Number(argv[0] ?? state.status));
     },
     base64: ({ argv, stdin = '' }) => {
