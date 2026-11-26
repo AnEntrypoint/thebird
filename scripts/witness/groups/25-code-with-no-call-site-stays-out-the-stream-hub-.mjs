@@ -20,7 +20,7 @@ import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_B
 
 group('code with no call site stays out: the stream hub and the exports nothing imported', async () => {
   const gone = ['createHub', 'revisionOf', 'fileIsDirty', 'playwriterVerbs', 'playwriterExecute', 'playwriterStatus'];
-  const sources = ['web', 'src', 'bin', 'scripts'].flatMap((dir) => readdirSync(join(root, dir), { recursive: true }).filter((file) => /\.m?js$/.test(file) && !file.includes('vendor') && file !== 'witness.mjs').map((file) => join(root, dir, file)));
+  const sources = ['web', 'src', 'bin', 'scripts'].flatMap((dir) => readdirSync(join(root, dir), { recursive: true }).filter((file) => /\.m?js$/.test(file) && !file.includes('vendor') && !/^witness(\.mjs|[\\/])/.test(file)).map((file) => join(root, dir, file)));
   const text = sources.map((file) => readFileSync(file, 'utf8')).join('\n');
   check('web/stream-hub.js is not in the tree', !existsSync(join(root, 'web', 'stream-hub.js')));
   for (const name of gone) check(name + ' has no definition or call site', !new RegExp('\\b' + name + '\\b').test(text), name);
