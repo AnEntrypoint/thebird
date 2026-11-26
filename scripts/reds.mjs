@@ -23,7 +23,7 @@ const command = (red) => (red.command ? [red.command[0], red.command.slice(1)] :
 const runWitness = (red) => new Promise((resolve) => {
   const [program, args] = command(red);
   live.child = spawn(program, args, { cwd: root, stdio: 'ignore', detached: true });
-  const timer = setTimeout(() => process.kill(-live.child.pid, 'SIGKILL'), red.timeoutMs ?? 1500000);
+  const timer = setTimeout(() => process.kill(-live.child.pid, 'SIGKILL'), red.timeoutMs ?? 600000);
   live.child.on('close', (code) => { clearTimeout(timer); resolve(code); });
 });
 const anchorHits = (red) => readFileSync(join(root, red.file), 'utf8').split(red.anchor).length - 1;
