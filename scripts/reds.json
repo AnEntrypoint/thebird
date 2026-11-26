@@ -148,5 +148,6 @@
 {"name":"bdexportsnap","file":"web/shell-core.js","anchor":"readonly: [...readonly], attributes: [...attributes],","replace":"readonly: [], attributes: [],","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"bdlocalprint","file":"web/shell-core.js","anchor":"      if (isDeclared(name)) out += declarationLine(name)","replace":"      if (vars.has(name) || arrays.has(name) || readonly.has(name)) out += declarationLine(name)","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"concatparse","file":"web/shell-arith.js","anchor":"const tokenizeArithmetic = (text) => {","replace":"const tokenize = (text) => {","command":["node","--test","test/shell-program-parses.test.mjs"],"timeoutMs":120000},
-{"name":"readonlyprefix","file":"web/shell-core.js","anchor":"this.text = 'bash: line ' + line + ': ' + name + ': readonly variable';","replace":"this.text = name + ': readonly variable';","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
+{"name":"readonlyprefix","file":"web/shell-core.js","anchor":"this.text = 'bash: line ' + line + ': ' + name + ': readonly variable';","replace":"this.text = name + ': readonly variable';","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"callerframe","file":"web/shell-core.js","anchor":"callStack[index].line + ' ' + callStack[index - 1].name","replace":"callStack[index].line + ' ' + callStack[index].name","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
 ]

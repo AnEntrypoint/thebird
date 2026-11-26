@@ -7120,3 +7120,10 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: a readonly assignment error names the line, as bash does' checks stdout empty, stderr with the prefix, and exit status 1. Two older rows that expected the unprefixed text (readonly x=1 and declare -r R=5) now expect the prefix, which bash prints. The shell witness is PASS=2258 FAIL=0.
 - Red: readonlyprefix restores the unprefixed text and is CAUGHT alone. bdreadonly, repointed to the new call, is CAUGHT alone. Anchors: all 150 unique.
 - Limits: other runtime errors (unset of a readonly name, the declare messages) keep their own text and are not yet checked against bash's prefix.
+### caller reports each frame as bash does
+
+- Claim: `caller` with no argument prints the call line and the file of the current function's call site (NULL when the call came from top level, bash otherwise). `caller N` prints the line where frame N was called, the name of the function that made that call, and bash. It returns 1 with no output when that caller frame does not exist, and a non-numeric argument prints bash's two lines with the `bash: line N:` prefix and returns 2.
+- Change: callFunction records a call stack entry (name, call line from LINENO, whether the call came from a function) next to the frame; caller reads that stack.
+- Witness: group 'builtins: caller names the call site of each frame, as bash does' has 8 rows, all generated from bash -c, including a multi-line script where line numbers matter. Group 'builtins: caller with a non-numeric frame reports bash text and status 2' checks the two-line text. Shell witness PASS=2267 FAIL=0.
+- Red: callerframe names the frame's own function instead of its caller, and is CAUGHT alone. Anchors: all 151 unique.
+- Limits: the file name is bash's for a -c script. Sourced files are not given their own name.

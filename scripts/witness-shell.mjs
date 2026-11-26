@@ -4633,6 +4633,21 @@ group('builtins: a readonly assignment error names the line, as bash does', asyn
   const readonlyRun = await sh.run('readonly R=1; R=2; echo rc=$?');
   check('builtins: readonly R=2 aborts with bash text and status 1', readonlyRun.stdout === '' && readonlyRun.stderr === 'bash: line 1: R: readonly variable' + String.fromCharCode(10) && readonlyRun.exitCode === 1, JSON.stringify(readonlyRun));
 });
+group("builtins: caller names the call site of each frame, as bash does", async () => matchesBash("builtins caller", [
+  ["caller; echo rc=$?","rc=1\n","",0],
+  ["f() { caller; }; f","1 NULL\n","",0],
+  ["f() { caller 0; }; f","","",1],
+  ["f() { caller 3; echo rc=$?; }; f","rc=1\n","",0],
+  ["g() { f; }; f() { caller 0; caller 1; caller 2; echo rc=$?; }; g","1 g bash\nrc=1\n","",0],
+  ["f() {\n  caller 0\n  caller\n}\n\n\ng() {\n  f\n}\ng\nf","8 g bash\n8 bash\n11 NULL\n","",0],
+  ["h() { echo x; caller 0; }; h; h","x\nx\n","",1],
+  ["f() { caller 0; }; f 2>&1; echo done","done\n","",0],
+  ]));
+group('builtins: caller with a non-numeric frame reports bash text and status 2', async () => {
+  const sh = await shell({});
+  const badFrame = await sh.run('f() { caller x; echo rc=$?; }; f');
+  check('builtins: caller x prints bash two-line text, the script goes on', badFrame.stdout === 'rc=2\n' && badFrame.stderr === 'bash: line 1: caller: x: invalid number\ncaller: usage: caller [expr]\n', JSON.stringify(badFrame));
+});
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],

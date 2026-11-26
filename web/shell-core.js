@@ -1920,6 +1920,7 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const aliases = new Map(saved?.aliases ?? []);
   const traps = new Map(saved?.traps ?? []);
   const dirStack = [...(saved?.dirStack ?? [])];
+  const callStack = [];
   const shopts = new Map(saved?.shopts ?? SHOPT_DEFAULTS);
   let umaskValue = saved?.umask ?? 0o022;
   let sourceDepth = 0;
@@ -2718,6 +2719,18 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     const letter = flag ? flag[1] : 'f';
     if (!(letter in limits)) return { code: 2, out: '', err: 'ulimit: -' + letter + ': invalid option' + LINE_FEED };
     return ok(limits[letter] + LINE_FEED);
+  };
+  const callerBuiltin = (argv) => {
+    const depth = callStack.length;
+    if (argv.length === 0) {
+      if (depth === 0) return { code: 1, out: '', err: '' };
+      const frame = callStack[depth - 1];
+      return ok(frame.line + ' ' + (frame.inFunction ? 'bash' : 'NULL') + LINE_FEED);
+    }
+    const index = depth - 1 - Number(argv[0]);
+    if (!/^\d+$/.test(argv[0])) return { code: 2, out: '', err: 'bash: line ' + (vars.get('LINENO') ?? '1') + ': caller: ' + argv[0] + ': invalid number' + LINE_FEED + 'caller: usage: caller [expr]' + LINE_FEED };
+    if (index < 1) return { code: 1, out: '', err: '' };
+    return ok(callStack[index].line + ' ' + callStack[index - 1].name + ' bash' + LINE_FEED);
   };
   const unsupported = (name) => ({ code: 2, out: '', err: name + ': not supported in this shell' + LINE_FEED });
   const applyAttributes = (name, value) => {
@@ -3555,7 +3568,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     disown: ({ argv }) => disownBuiltin(argv),
     logout: () => ({ code: 1, out: '', err: 'logout: not login shell: use ' + BACKTICK_CHAR + 'exit' + SINGLE_QUOTE + LINE_FEED }),
     suspend: () => ({ code: 1, out: '', err: 'suspend: cannot suspend: no job control' + LINE_FEED }),
-    caller: () => (frames.length === 0 ? { code: 1, out: '', err: '' } : unsupported('caller')),
+    caller: ({ argv }) => callerBuiltin(argv),
     history: () => ok(''),
     times: () => ok('0m0.000s 0m0.000s' + LINE_FEED + '0m0.000s 0m0.000s' + LINE_FEED),
     fc: () => ok(''),
@@ -4548,7 +4561,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   async function dispatch(argv, stdin, signal, stream, skipFunctions = false) {
     const name = argv[0];
-    if (!skipFunctions && functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal, stream);
+    if (!skipFunctions && functions.has(name)) return callFunction(name, functions.get(name), argv.slice(1), stdin, signal, stream);
     if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin: stream && stream.text === stdin ? stream.text.slice(stream.pos) : stdin, signal, stream });
     if (inPage.has(name)) return host.external(name, argv.slice(1), state.cwd);
     return { code: 127, out: '', err: `${name}: command not found\n` };
@@ -4761,9 +4774,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return { code, out: inner.out, err: inner.err };
   }
 
-  async function callFunction(body, args, stdin, signal, stream) {
+  async function callFunction(name, body, args, stdin, signal, stream) {
     const savedPositional = positional;
     positional = args;
+    callStack.push({ name, line: Number(vars.get('LINENO') ?? 1), inFunction: callStack.length > 0 });
     frames.push(new Map());
     const bodySink = { out: '', err: '', signal, stream: stream ?? { text: stdin, pos: 0 } };
     let result;
@@ -4778,6 +4792,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       result = { code: err.code, out: bodySink.out, err: bodySink.err };
     } finally {
       frames.pop();
+      callStack.pop();
       settleLocale();
       positional = savedPositional;
     }
