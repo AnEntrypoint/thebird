@@ -249,7 +249,7 @@ export async function runTerminal({ browser, browserContextId, url, timeoutMs = 
     await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: blockUrls.length > 0, flatten: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
 
-    const evaluate = async (expression, budgetMs = CDP_TIMEOUT_MS) => {
+    const evaluate = async (expression, budgetMs = timeoutMs) => {
       const result = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId, budgetMs);
       return result.result?.value;
     };

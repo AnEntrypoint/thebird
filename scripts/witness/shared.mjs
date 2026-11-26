@@ -106,7 +106,7 @@ export const providerVerdict = async (live) => {
   for (const model of live.models) {
     let res;
     try {
-      res = await fetch(live.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + live.key }, body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1 }), signal: AbortSignal.timeout(30000) });
+      res = await fetch(live.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + live.key }, body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1 }), signal: AbortSignal.timeout(120000) });
     } catch (error) {
       return { verdict: 'fail', detail: 'no answer from ' + live.url + ' (' + error.name + ')' };
     }
