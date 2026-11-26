@@ -2212,7 +2212,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   const resolvePath = (name) => normalize(name.startsWith('/') ? name : state.cwd + '/' + name);
 
   const loopControl = (kind, argv) => {
-    if (loopDepth === 0) return { code: 0, out: '', err: `${kind}: only meaningful in a loop\n` };
+    if (loopDepth === 0) return { code: 0, out: '', err: builtinError(kind + ": only meaningful in a `for', `while', or `until' loop") };
     throw new LoopSignal(kind, Math.min(Number(argv[0] ?? 1) || 1, loopDepth));
   };
 
@@ -2268,7 +2268,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     }
     return prefix + '="' + quoteValue(scalarValue(name) ?? '') + '"';
   };
-  const builtinError = (text) => 'bash: line ' + (vars.get('LINENO') ?? '1') + ': ' + text + LINE_FEED;
+  const bashLine = (text) => 'bash: line ' + (vars.get('LINENO') ?? '1') + ': ' + text;
+  const builtinError = (text) => bashLine(text) + LINE_FEED;
+  const prefixBuiltinErrors = (name, result) => (!BASH_BUILTINS.has(name) || !result.err ? result : { ...result, err: result.err.split(LINE_FEED).map((line) => (line.startsWith(name + ': line ') ? 'bash: ' + line : line.startsWith(name + ': ') && !line.startsWith(name + ': usage: ') ? bashLine(line) : line)).join(LINE_FEED) });
   const printDeclarations = (names, command) => {
     let out = '';
     let err = '';
@@ -2353,7 +2355,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   const sourceBuiltin = async (argv, signal) => {
     if (argv.length === 0) return { code: 2, out: '', err: 'source: filename argument required' + LINE_FEED };
     const path = resolvePath(argv[0]);
-    if (!host.exists(path)) return { code: 1, out: '', err: argv[0] + ': No such file or directory' + LINE_FEED };
+    if (!host.exists(path)) return { code: 1, out: '', err: builtinError(argv[0] + ': No such file or directory') };
     const text = readFileText(path);
     const savedPositional = positional;
     const sink = { out: '', err: '', signal };
@@ -2430,7 +2432,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         setVariable(name, '?');
         setVariable('OPTARG', letter);
       } else {
-        err = 'illegal option -- ' + letter + LINE_FEED;
+        err = 'bash: illegal option -- ' + letter + LINE_FEED;
         setVariable(name, '?');
         vars.delete('OPTARG');
       }
@@ -4566,9 +4568,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   async function dispatch(argv, stdin, signal, stream, skipFunctions = false) {
     const name = argv[0];
     if (!skipFunctions && functions.has(name)) return callFunction(name, functions.get(name), argv.slice(1), stdin, signal, stream);
-    if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin: stream && stream.text === stdin ? stream.text.slice(stream.pos) : stdin, signal, stream });
+    if (Object.hasOwn(commands, name)) return prefixBuiltinErrors(name, await commands[name]({ argv: argv.slice(1), stdin: stream && stream.text === stdin ? stream.text.slice(stream.pos) : stdin, signal, stream }));
     if (inPage.has(name)) return host.external(name, argv.slice(1), state.cwd);
-    return { code: 127, out: '', err: `${name}: command not found\n` };
+    return { code: 127, out: '', err: bashLine(name + ': command not found') + LINE_FEED };
   }
 
   async function runIf(node, stdin, sink) {

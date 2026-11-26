@@ -7134,3 +7134,10 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: local rejects an unknown option with bash text' has two rows, both raw bash -c output with the prefix kept. Shell witness PASS=2276 FAIL=0.
 - Red: localopt accepts every option letter again, and is CAUGHT alone. Anchors: all 154 unique.
 - Limit: typeset is not given declare's usage text, because bash's typeset usage has not been checked.
+### Builtin errors carry bash's line prefix, for every bash builtin
+
+- Claim: a bash builtin's own error text (`name: message`) is printed as `bash: line N: name: message`, as bash prints it in a script, and a usage line stays unprefixed. `command not found` and `source` of a missing file carry the prefix too. The eval syntax-error form `bash: eval: line N:` is kept as bash prints it. getopts' illegal option prints `bash: illegal option -- X` with no line, as bash does. break and continue outside a loop print bash's full text.
+- Change: dispatch passes every bash builtin's result through prefixBuiltinErrors, which prefixes a line that begins with the builtin's name, except its usage line. tar, date, jq and the other in-page tools are not bash builtins and keep their text. The 127 path and the missing-file path of source use the same helper.
+- Witness: the rows that expected the unprefixed text were re-baselined. 38 rows whose stdout and status matched real bash -c output took bash's stderr exactly. The read, break, kill, getopts and eval rows were rewritten to the text the probe confirmed against real bash. Shell witness PASS=2276 FAIL=0.
+- Reds: bashbuiltinprefix (the wrapper stops prefixing) and commandnotfoundprefix (the 127 path loses the prefix) are each CAUGHT alone. Anchors: all 156 unique.
+- Limits, recorded as the next item: the probe also found behaviour gaps that the prefix does not cover. export 1x=2 succeeds silently, unset -Z and readonly -Z are accepted, dirs -x, printf %z, jobs with a name, kill -s NOSIG, kill -l NOSIG, exit abc, set -o NAME and mapfile -q's usage line differ from bash. cd, pushd and . with a missing path were not probed on the witness host, because the probe host had no exists function.

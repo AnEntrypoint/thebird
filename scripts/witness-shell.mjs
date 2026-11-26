@@ -334,7 +334,7 @@ group('process: & starts a job, $! names its PID, ps lists it, kill signals it a
   const plain = await sh.run('ps');
   check('process: ps prints the header and the shell row when no job runs', plain.stdout === 'PID PPID STAT COMMAND\n100    0 S    thebird\n', JSON.stringify(plain.stdout));
   const missing = await sh.run('kill 999; echo rc=$?');
-  check('process: kill of a PID that is not running exits 1 with no such process', missing.stdout === 'rc=1\n' && missing.stderr === 'kill: (999) - No such process\n', JSON.stringify(missing.stderr));
+  check('process: kill of a PID that is not running exits 1 with no such process', missing.stdout === 'rc=1\n' && missing.stderr === 'bash: line 1: kill: (999) - No such process\n', JSON.stringify(missing.stderr));
   const idle = await sh.run('wait; echo rc=$?');
   check('process: wait with no jobs exits 0', idle.stdout === 'rc=0\n', JSON.stringify(idle.stdout));
   const joined = await sh.run('echo hi & wait; echo done');
@@ -629,7 +629,7 @@ group('loops: break leaves its loop, continue starts its next item, and both tak
   const continueOuter = await sh.run('for i in 1 2; do for j in a b; do continue 2; done; echo never; done; echo end');
   check('loops: continue 2 starts the next item of the outer loop', continueOuter.stdout === 'end\n', JSON.stringify(continueOuter.stdout));
   const outside = await sh.run('break; echo after-break');
-  check('loops: break outside a loop prints a message, and the shell goes on with status 0', outside.stdout === 'after-break\n' && /only meaningful in a loop/.test(outside.stderr) && outside.exitCode === 0, JSON.stringify(outside.stderr));
+  check('loops: break outside a loop prints a message, and the shell goes on with status 0', outside.stdout === 'after-break\n' && outside.stderr.startsWith('bash: line 1: break: only meaningful in a ') && outside.exitCode === 0, JSON.stringify(outside.stderr));
 });
 
 group('case: the first matching arm runs, with | alternatives, glob patterns and a default', async () => {
@@ -1141,9 +1141,9 @@ group('read: the builtin reads a line into names, splits it on IFS, and keeps ba
   const rd1 = await bash("IFS= read a b <<< 'x y'; echo \"[$a][$b]\"");
   check("read: IFS empty keeps the whole line in the first name, as bash does", rd1.stdout === "[x y][]\n" && rd1.stderr === "", JSON.stringify([rd1.stdout, rd1.stderr]));
   const rd2 = await bash("read -z x <<< 'a'; echo rc=$?");
-  check("read: an unknown option is refused with bash usage text and status 2", rd2.stdout === "rc=2\n" && rd2.stderr === "read: -z: invalid option\nread: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n", JSON.stringify([rd2.stdout, rd2.stderr]));
+  check("read: an unknown option is refused with bash usage text and status 2", rd2.stdout === "rc=2\n" && rd2.stderr === "bash: line 1: read: -z: invalid option\nread: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n", JSON.stringify([rd2.stdout, rd2.stderr]));
   const rd3 = await bash("read -q x <<< 'a'; echo rc=$?; echo \"[$x]\"");
-  check("read: an unknown option leaves the name unset and exits 2, as bash does", rd3.stdout === "rc=2\n[]\n" && rd3.stderr === "read: -q: invalid option\nread: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n", JSON.stringify([rd3.stdout, rd3.stderr]));
+  check("read: an unknown option leaves the name unset and exits 2, as bash does", rd3.stdout === "rc=2\n[]\n" && rd3.stderr === "bash: line 1: read: -q: invalid option\nread: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n", JSON.stringify([rd3.stdout, rd3.stderr]));
   const rd4 = await bash("read; echo rc=$?");
   check("read: with no input and no name it exits 1, as bash does", rd4.stdout === "rc=1\n" && rd4.stderr === "", JSON.stringify([rd4.stdout, rd4.stderr]));
   const rd5 = await bash("printf 'a\\nb\\nc\\n' | { read x; cat; }");
@@ -1181,7 +1181,7 @@ group('read: the builtin reads a line into names, splits it on IFS, and keeps ba
   const rd21 = await bash("read q <<< 'hs val'; echo \"[$q]\"");
   check("read: a here-string feeds read, as bash does", rd21.stdout === "[hs val]\n" && rd21.stderr === "", JSON.stringify([rd21.stdout, rd21.stderr]));
   const rd22 = await bash("printf 'x\\n' | { read 1bad; echo rc=$?; }");
-  check("read: an invalid name is refused with status 1, as bash does", rd22.stdout === "rc=1\n" && rd22.stderr === "read: `1bad': not a valid identifier\n", JSON.stringify([rd22.stdout, rd22.stderr]));
+  check("read: an invalid name is refused with status 1, as bash does", rd22.stdout === "rc=1\n" && rd22.stderr === "bash: line 1: read: `1bad': not a valid identifier\n", JSON.stringify([rd22.stdout, rd22.stderr]));
   const rd23 = await bash("mkdir -p /ex; printf 'k\\n' > /ex/in; { read v; echo \"[$v]\"; } < /ex/in");
   check("read: a group with a file on its input reads from the file, as bash does", rd23.stdout === "[k]\n" && rd23.stderr === "", JSON.stringify([rd23.stdout, rd23.stderr]));
   const rd24 = await bash("mkdir -p /ex; printf 'l1\\nl2\\n' > /ex/in; while read n; do echo \"w $n\"; done < /ex/in; echo end");
@@ -4383,8 +4383,8 @@ group("arithmetic errors: the message, the error token, the status and the abort
     ["x=$(( 1 / 0 )); echo after", "", "thebird: 1 / 0 : division by 0 (error token is \"0 \")\n", 1],
     ["(( 1 / 0 )); echo after st=$?", "after st=1\n", "thebird: ((: 1 / 0 : division by 0 (error token is \"0 \")\n", 0],
     ["(( 1 + )); echo st=$?", "st=1\n", "thebird: ((: 1 + : arithmetic syntax error: operand expected (error token is \"+ \")\n", 0],
-    ["let 1/0; echo after st=$?", "after st=1\n", "let: 1/0: division by 0 (error token is \"0\")\n", 0],
-    ["let; echo $?", "1\n", "let: expression expected\n", 0],
+    ["let 1/0; echo after st=$?","after st=1\n","bash: line 1: let: 1/0: division by 0 (error token is \"0\")\n",0],
+    ["let; echo $?","1\n","bash: line 1: let: expression expected\n",0],
     ["a=1; echo $(( a / (a - 1) ))", "", "thebird: a / (a - 1) : division by 0 (error token is \"(a - 1) \")\n", 1],
   ];
   await matchesBash('bash rows', cases);
@@ -4458,40 +4458,40 @@ group("internal messages: a heredoc at end of input, wait, return and printf rep
   ["cat <<EOF", "", "bash: line 1: warning: here-document at line 1 delimited by end-of-file (wanted `EOF')\n", 0],
   ["x=1; cat <<EOF | cat\nhi", "hi\n", "bash: line 2: warning: here-document at line 1 delimited by end-of-file (wanted `EOF')\n", 0],
   ["mkdir awk{<< cp", "", "bash: line 1: warning: here-document at line 1 delimited by end-of-file (wanted `cp')\n", 0],
-  ["wait x; echo st=$?", "st=1\n", "wait: `x': not a pid or valid job spec\n", 0],
-  ["wait 999999; echo st=$?", "st=127\n", "wait: pid 999999 is not a child of this shell\n", 0],
-  ["return; echo st=$?", "st=2\n", "return: can only `return' from a function or sourced script\n", 0],
-  ["return 3; echo st=$?", "st=2\n", "return: can only `return' from a function or sourced script\n", 0],
+  ["wait x; echo st=$?","st=1\n","bash: line 1: wait: `x': not a pid or valid job spec\n",0],
+  ["wait 999999; echo st=$?","st=127\n","bash: line 1: wait: pid 999999 is not a child of this shell\n",0],
+  ["return; echo st=$?","st=2\n","bash: line 1: return: can only `return' from a function or sourced script\n",0],
+  ["return 3; echo st=$?","st=2\n","bash: line 1: return: can only `return' from a function or sourced script\n",0],
   ["printf; echo st=$?", "st=2\n", "printf: usage: printf [-v var] format [arguments]\n", 0],
 ]));
 group("job specs: wait and kill resolve %n, %%, %+, %-, %name and %?name, and a waited job keeps its status until a job starts or wait runs alone, as bash does", async () => matchesBash("job specs", [
-  ["wait %1; echo st=$?","st=127\n","wait: %1: no such job\n",0],
-  ["kill %1; echo st=$?","st=1\n","kill: %1: no such job\n",0],
-  ["wait %; echo st=$?","st=127\n","wait: %: no such job\n",0],
+  ["wait %1; echo st=$?","st=127\n","bash: line 1: wait: %1: no such job\n",0],
+  ["kill %1; echo st=$?","st=1\n","bash: line 1: kill: %1: no such job\n",0],
+  ["wait %; echo st=$?","st=127\n","bash: line 1: wait: %: no such job\n",0],
   ["sleep 0 & wait %1; echo st=$?","st=0\n","",0],
   ["sleep 0 & wait %%; echo st=$?","st=0\n","",0],
   ["sleep 0 & wait %+; echo st=$?","st=0\n","",0],
   ["sleep 0 & wait %-; echo st=$?","st=0\n","",0],
   ["sleep 0 & wait %sleep; echo st=$?","st=0\n","",0],
   ["sleep 0 & wait %?lee; echo st=$?","st=0\n","",0],
-  ["sleep 0 & wait %ls; echo st=$?","st=127\n","wait: %ls: no such job\n",0],
+  ["sleep 0 & wait %ls; echo st=$?","st=127\n","bash: line 1: wait: %ls: no such job\n",0],
   ["(exit 3) & wait %1; echo st=$?","st=3\n","",0],
   ["(exit 3) & wait %1; wait %1; echo st=$?","st=3\n","",0],
   ["sleep 0 & wait %1; wait %1; echo st=$?","st=0\n","",0],
   ["sleep 0 & p=$!; wait $p; wait $p; echo st=$?","st=0\n","",0],
   ["(exit 3) & p=$!; wait $p; wait $p; echo st=$?","st=3\n","",0],
   ["sleep 0 & wait %1; (exit 7) & wait %1; echo st=$?","st=7\n","",0],
-  ["sleep 0 & wait %1; (exit 7) & wait %2; echo st=$?","st=127\n","wait: %2: no such job\n",0],
+  ["sleep 0 & wait %1; (exit 7) & wait %2; echo st=$?","st=127\n","bash: line 1: wait: %2: no such job\n",0],
   ["(exit 4) & (exit 5) & wait %1; echo st=$?; wait %2; echo st2=$?","st=4\nst2=5\n","",0],
   ["(exit 4) & (exit 5) & wait %2 %1; echo st=$?","st=4\n","",0],
-  ["(exit 4) & (exit 5) & wait %1 %9; echo st=$?","st=127\n","wait: %9: no such job\n",0],
+  ["(exit 4) & (exit 5) & wait %1 %9; echo st=$?","st=127\n","bash: line 1: wait: %9: no such job\n",0],
   ["(exit 4) & (exit 5) & wait %-; echo st=$?","st=4\n","",0],
-  ["(exit 4) & (exit 5) & wait %?xit; echo st=$?","st=127\n","wait: xit: ambiguous job spec\n",0],
-  ["sleep 0 & sleep 0 & wait %sl; echo st=$?","st=127\n","wait: sl: ambiguous job spec\n",0],
+  ["(exit 4) & (exit 5) & wait %?xit; echo st=$?","st=127\n","bash: line 1: wait: xit: ambiguous job spec\n",0],
+  ["sleep 0 & sleep 0 & wait %sl; echo st=$?","st=127\n","bash: line 1: wait: sl: ambiguous job spec\n",0],
   ["sleep 0 & sleep 0 & wait; echo st=$?","st=0\n","",0],
-  ["sleep 0 & wait; wait %1; echo st=$?","st=127\n","wait: %1: no such job\n",0],
+  ["sleep 0 & wait; wait %1; echo st=$?","st=127\n","bash: line 1: wait: %1: no such job\n",0],
   ["(exit 4) & (exit 5) & wait; echo st=$?","st=0\n","",0],
-  ["sleep 0 & wait %1; sleep 0 & sleep 0 & wait %2; (exit 6) & wait %3; echo st=$?","st=127\n","wait: %3: no such job\n",0],
+  ["sleep 0 & wait %1; sleep 0 & sleep 0 & wait %2; (exit 6) & wait %3; echo st=$?","st=127\n","bash: line 1: wait: %3: no such job\n",0],
   ]));
 group("job isolation: a background job runs in its own copy of the shell, as a fork does, so its assignments and subshells do not reach the foreground, and it sees the arrays and functions of the parent", async () => matchesBash("job isolation", [
   ["(exit 3) & p=$!; echo x; wait $p; echo st=$?","x\nst=3\n","",0],
@@ -4509,18 +4509,18 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["command echo hi; echo rc=$?","hi\nrc=0\n","",0],
   ["echo() { printf X; }; command echo hi; echo","hi\nX","",0],
   ["builtin echo hi","hi\n","",0],
-  ["builtin nosuch; echo rc=$?","rc=1\n","builtin: nosuch: not a shell builtin\n",0],
-  ["command nosuch; echo rc=$?","rc=127\n","nosuch: command not found\n",0],
+  ["builtin nosuch; echo rc=$?","rc=1\n","bash: line 1: builtin: nosuch: not a shell builtin\n",0],
+  ["command nosuch; echo rc=$?","rc=127\n","bash: line 1: nosuch: command not found\n",0],
   ["command; echo rc=$?","rc=0\n","",0],
   ["eval \"echo hi; echo there\"","hi\nthere\n","",0],
   ["x=3; eval \"echo \\$((x+1))\"","4\n","",0],
   ["eval \"exit 4\"; echo after","","",4],
-  ["eval \"if\"; echo rc=$?","rc=2\n","eval: line 2: syntax error: unexpected end of file from `if' command on line 1\n",0],
+  ["eval \"if\"; echo rc=$?","rc=2\n","bash: eval: line 2: syntax error: unexpected end of file from `if' command on line 1\n",0],
   ["eval; echo rc=$?","rc=0\n","",0],
   ["f() { eval \"return 5\"; }; f; echo rc=$?","rc=5\n","",0],
   ["echo \"y=7\" > s.sh; source s.sh; echo $y","7\n","",0],
   ["echo \"y=8\" > s.sh; . s.sh; echo $y","8\n","",0],
-  ["source nofile.sh; echo rc=$?","rc=1\n","nofile.sh: No such file or directory\n",0],
+  ["source nofile.sh; echo rc=$?","rc=1\n","bash: line 1: nofile.sh: No such file or directory\n",0],
   ["echo \"return 6\" > r.sh; source r.sh; echo rc=$?","rc=6\n","",0],
   ["echo \"echo args \\$1 \\$2\" > a.sh; source a.sh one two","args one two\n","",0],
   ["echo \"exit 3\" > e.sh; source e.sh; echo after","","",3],
@@ -4538,7 +4538,7 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["declare -p nosuch; echo rc=$?","rc=1\n","bash: line 1: declare: nosuch: not found\n",0],
   ["typeset -i t=1+1; echo $t","2\n","",0],
   ["set -- -a -b val x; while getopts \"ab:\" o; do echo $o:$OPTARG; done; echo $OPTIND","a:\nb:val\n4\n","",0],
-  ["set -- -z; getopts ab o; echo $o $OPTIND; echo rc=$?","? 2\nrc=0\n","illegal option -- z\n",0],
+  ["set -- -z; getopts ab o; echo $o $OPTIND; echo rc=$?","? 2\nrc=0\n","bash: illegal option -- z\n",0],
   ["set -- -z; getopts :ab o; echo $o $OPTARG","? z\n","",0],
   ["set --; getopts a o; echo rc=$?","rc=1\n","",0],
   ["printf \"a\\nb\\n\" | { mapfile -t m; echo ${#m[@]} ${m[1]}; }","2 b\n","",0],
@@ -4549,14 +4549,14 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["printf \"x\\ny\\n\" | { mapfile -t -O 2 m; echo ${m[2]} ${#m[@]}; }","x 2\n","",0],
   ["alias ll=\"ls -l\"; alias ll","alias ll='ls -l'\n","",0],
   ["alias ll=\"ls -l\"; alias","alias ll='ls -l'\n","",0],
-  ["alias nosuch; echo rc=$?","rc=1\n","alias: nosuch: not found\n",0],
-  ["alias e=echo; e hi; echo rc=$?","rc=127\n","e: command not found\n",0],
-  ["alias a=1; unalias a; alias a; echo rc=$?","rc=1\n","alias: a: not found\n",0],
-  ["unalias nosuch; echo rc=$?","rc=1\n","unalias: nosuch: not found\n",0],
+  ["alias nosuch; echo rc=$?","rc=1\n","bash: line 1: alias: nosuch: not found\n",0],
+  ["alias e=echo; e hi; echo rc=$?","rc=127\n","bash: line 1: e: command not found\n",0],
+  ["alias a=1; unalias a; alias a; echo rc=$?","rc=1\n","bash: line 1: alias: a: not found\n",0],
+  ["unalias nosuch; echo rc=$?","rc=1\n","bash: line 1: unalias: nosuch: not found\n",0],
   ["shopt nullglob","nullglob            \toff\n","",1],
   ["shopt -s nullglob; shopt nullglob; shopt -u nullglob","nullglob            \ton\n","",0],
   ["shopt -q nullglob; echo rc=$?","rc=1\n","",0],
-  ["shopt -s bogusopt; echo rc=$?","rc=1\n","shopt: bogusopt: invalid shell option name\n",0],
+  ["shopt -s bogusopt; echo rc=$?","rc=1\n","bash: line 1: shopt: bogusopt: invalid shell option name\n",0],
   ["shopt -p nullglob","shopt -u nullglob\n","",1],
   ["trap \"echo bye\" EXIT; echo hi","hi\nbye\n","",0],
   ["trap \"echo one\" EXIT; trap \"echo two\" EXIT; echo x","x\ntwo\n","",0],
@@ -4564,28 +4564,28 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["trap \"echo sig\" TERM; kill -TERM $$; echo after","sig\nafter\n","",0],
   ["trap; echo rc=$?","rc=0\n","",0],
   ["trap \"echo a\" INT; trap -p INT","trap -- 'echo a' SIGINT\n","",0],
-  ["trap \"echo x\" NOSIG; echo rc=$?","rc=1\n","trap: NOSIG: invalid signal specification\n",0],
+  ["trap \"echo x\" NOSIG; echo rc=$?","rc=1\n","bash: line 1: trap: NOSIG: invalid signal specification\n",0],
   ["trap \"echo e\" EXIT; exit 3","e\n","",3],
   ["pushd / >/dev/null; pwd; popd >/dev/null; echo ok","/\nok\n","",0],
-  ["popd; echo rc=$?","rc=1\n","popd: directory stack empty\n",0],
+  ["popd; echo rc=$?","rc=1\n","bash: line 1: popd: directory stack empty\n",0],
   ["cd /; dirs","/\n","",0],
   ["umask 077; umask","0077\n","",0],
   ["umask -S 077; umask -S","u=rwx,g=,o=\nu=rwx,g=,o=\n","",0],
-  ["umask 9; echo rc=$?","rc=1\n","umask: 9: octal number out of range\n",0],
+  ["umask 9; echo rc=$?","rc=1\n","bash: line 1: umask: 9: octal number out of range\n",0],
   ["hash; echo rc=$?","hash: hash table empty\nrc=0\n","",0],
-  ["hash nosuchcmd_zz; echo rc=$?","rc=1\n","hash: nosuchcmd_zz: not found\n",0],
+  ["hash nosuchcmd_zz; echo rc=$?","rc=1\n","bash: line 1: hash: nosuchcmd_zz: not found\n",0],
   ["hash -r; echo rc=$?","rc=0\n","",0],
   ["jobs; echo rc=$?","rc=0\n","",0],
-  ["fg; echo rc=$?","rc=1\n","fg: no job control\n",0],
-  ["bg; echo rc=$?","rc=1\n","bg: no job control\n",0],
-  ["disown; echo rc=$?","rc=1\n","disown: current: no such job\n",0],
-  ["logout; echo rc=$?","rc=1\n","logout: not login shell: use `exit'\n",0],
+  ["fg; echo rc=$?","rc=1\n","bash: line 1: fg: no job control\n",0],
+  ["bg; echo rc=$?","rc=1\n","bash: line 1: bg: no job control\n",0],
+  ["disown; echo rc=$?","rc=1\n","bash: line 1: disown: current: no such job\n",0],
+  ["logout; echo rc=$?","rc=1\n","bash: line 1: logout: not login shell: use `exit'\n",0],
   ["caller; echo rc=$?","rc=1\n","",0],
   ["history; echo rc=$?","rc=0\n","",0],
   ["times | wc -l","2\n","",0],
   ["compgen -W \"alpha beta gamma\" al","alpha\n","",0],
   ["fc; echo rc=$?","rc=0\n","",0],
-  ["suspend; echo rc=$?","rc=1\n","suspend: cannot suspend: no job control\n",0],
+  ["suspend; echo rc=$?","rc=1\n","bash: line 1: suspend: cannot suspend: no job control\n",0],
   ["complete; echo rc=$?","rc=0\n","",0],
   ["ulimit -n >/dev/null; echo rc=$?","rc=0\n","",0],
   ]));
@@ -4594,23 +4594,23 @@ group("builtins batch two: running and finished jobs, disown, declare -p flags, 
   ["(exit 3) & sleep 0.3; jobs; wait","[1]+  Exit 3                     ( exit 3 )\n","",0],
   ["sleep 1 & disown; jobs; echo rc=$?","rc=0\n","",0],
   ["sleep 1 & disown %1; jobs; wait","","",0],
-  ["disown %9; echo rc=$?","rc=1\n","disown: %9: no such job\n",0],
+  ["disown %9; echo rc=$?","rc=1\n","bash: line 1: disown: %9: no such job\n",0],
   ["export E=1; declare -p E","declare -x E=\"1\"\n","",0],
   ["declare -i n=4; declare -p n","declare -i n=\"4\"\n","",0],
   ["readonly R=5; declare -p R","declare -r R=\"5\"\n","",0],
   ["declare -x -r X=2; declare -p X","declare -rx X=\"2\"\n","",0],
   ["alias q=\"echo \\$1 it\\`s\"; alias q","alias q='echo $1 it`s'\n","",0],
-  ["alias a\"=b\"; alias a\" e\"; echo rc=$?","rc=1\n","alias: a e: not found\n",0],
+  ["alias a\"=b\"; alias a\" e\"; echo rc=$?","rc=1\n","bash: line 1: alias: a e: not found\n",0],
   ["trap \"\" TERM; kill -TERM $$; echo ignored","ignored\n","",0],
-  ["eval \"echo a; if\"; echo rc=$?","rc=2\n","eval: line 2: syntax error: unexpected end of file from `if' command on line 1\n",0],
+  ["eval \"echo a; if\"; echo rc=$?","rc=2\n","bash: eval: line 2: syntax error: unexpected end of file from `if' command on line 1\n",0],
   ["echo \"return 7\" > r7.sh; source r7.sh x y; echo rc=$?","rc=7\n","",0],
   ["trap \"echo bye\" EXIT; trap - EXIT; echo x","x\n","",0],
-  ["f() { echo in; }; unset -f f; f; echo rc=$?","rc=127\n","f: command not found\n",0],
+  ["f() { echo in; }; unset -f f; f; echo rc=$?","rc=127\n","bash: line 1: f: command not found\n",0],
   ["shopt -s extglob; shopt -q extglob; echo rc=$?","rc=0\n","",0],
   ["umask -S 022; umask -S","u=rwx,g=rx,o=rx\nu=rwx,g=rx,o=rx\n","",0],
   ["hash -r; hash; echo rc=$?","hash: hash table empty\nrc=0\n","",0],
   ["compgen -W \"one two\" z; echo rc=$?","rc=1\n","",0],
-  ["command -V nosuch_zz; echo rc=$?","rc=1\n","command: nosuch_zz: not found\n",0],
+  ["command -V nosuch_zz; echo rc=$?","rc=1\n","bash: line 1: command: nosuch_zz: not found\n",0],
   ["type -t readonly","builtin\n","",0],
   ]));
 group("builtins batch three: dirs -v after pushd, a declared integer inherited by a background job, and getopts OPTIND across two calls", async () => matchesBash("builtins batch three", [
@@ -4623,8 +4623,8 @@ group("builtins batch four: declare -a with array arguments, local -i, a declare
   ["f() { local -i x=2+3; echo $x; }; f","5\n","",0],
   ["f() { local y=1; declare -p y; }; f","declare -- y=\"1\"\n","",0],
   ["trap 'echo err' ERR; false; echo after","err\nafter\n","",0],
-  ["set -- -z; getopts ab: o; echo $o $OPTARG $OPTIND","? 2\n","illegal option -- z\n",0],
-  ["alias ll='ls -l'; unalias ll; alias ll; echo rc=$?","rc=1\n","alias: ll: not found\n",0],
+  ["set -- -z; getopts ab: o; echo $o $OPTARG $OPTIND","? 2\n","bash: illegal option -- z\n",0],
+  ["alias ll='ls -l'; unalias ll; alias ll; echo rc=$?","rc=1\n","bash: line 1: alias: ll: not found\n",0],
   ["shopt -s nullglob; shopt | head -n 1","array_expand_once   \toff\n","",0],
   ["mapfile -t m <<< \"x\\ny\"; echo ${#m[@]} ${m[1]}","1\n","",0],
   ]));
@@ -4665,7 +4665,7 @@ group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on 
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],
     ['false; echo $? $?', '1 1\n', '', 0],
-    ['kill -NOPE 1; echo rc=$?', 'rc=1\n', 'kill: NOPE: invalid signal specification\n', 0],
+    ['kill -NOPE 1; echo rc=$?', 'rc=1\n', 'bash: line 1: kill: NOPE: invalid signal specification\n', 0],
     ['x="a b"; echo hi > $x"q"; echo rc=$?', 'rc=1\n', 'thebird: $x"q": ambiguous redirect\n', 0],
   ];
   await matchesBash('bash rows', cases);
