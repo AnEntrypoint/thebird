@@ -29,26 +29,6 @@ const coreHost = (host) => ({
   },
 });
 
-export function hasBackgroundOperator(command) {
-  let quote = null;
-  for (let i = 0; i < command.length; i++) {
-    const c = command[i];
-    if (quote) {
-      if (c === quote) quote = null;
-      else if (c === '\\' && quote === '"') i++;
-      continue;
-    }
-    if (c === '\\') i++;
-    else if (c === '"' || c === "'") quote = c;
-    else if (c === '&') {
-      if (command[i + 1] === '&') i++;
-      else if (['>', '<', '|', ';'].includes(command[i - 1]) || command[i + 1] === '>') continue;
-      else return true;
-    }
-  }
-  return false;
-}
-
 export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMAND_TIMEOUT_MS } = {}) {
   await initBashkit();
   const host = createHost();
@@ -90,13 +70,6 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
   let size = '';
   return {
     async run(command, { onOutput } = {}) {
-      if (hasBackgroundOperator(command)) {
-        const jobShell = createCoreShell({ host: coreHost(host), cwd: current });
-        const result = await jobShell.run(command);
-        current = jobShell.cwd();
-        status = result.exitCode;
-        return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr };
-      }
       const restore = status === 0 ? '' : `(exit ${status}); `;
       running = true;
       cancelled = false;

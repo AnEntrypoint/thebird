@@ -143,7 +143,7 @@ function architectureStatic() {
   record('A flag the page cannot honour is refused with the command to use instead', outcome(fileHas('web/curl-in-page.js', 'const refuse') && fileHas('web/curl-in-page.js', 'ADVICE'), 'curl-in-page.js refuses with advice'));
   record('The page\'s shell functions', outcome(fileHas('web/shell-lookup.js', 'builtin command -v') && fileHas('web/shell-lookup.js', 'builtin type'), 'shell-lookup.js defines the functions over builtin command -v and builtin type'));
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', outcome(fileHas('web/bash-shell.js', 'EMULATION_NOTE') && fileHas('web/bash-shell.js', 'uname|whoami|hostname|id|ps|kill|tar'), 'bash-shell.js labels these commands as emulations'));
-  record('A line with a background operator (`&`) runs in the core shell', outcome(fileHas('web/bash-shell.js', 'hasBackgroundOperator') && fileHas('web/bash-shell.js', 'jobShell'), 'bash-shell.js sends a line with a background operator to the core shell'));
+  record('Background jobs run in the page shell', outcome(!fileHas('web/shell-worker.js', 'background jobs are not supported'), 'shell-worker.js no longer refuses a background line'));
   record('Symlinks are link entries', outcome(fileHas('web/shims/fs.js', 'links.json') && fileHas('web/shims/fs.js', 'LINKS_FILE'), 'fs.js stores its link table in links.json'));
   record('`fs.watch` is a no-op', outcome(witness.includes('fs.watch returns an inert handle') && !fileHas('web/shims/fs.js', 'chmod') && !fileHas('web/shims/fs.js', 'lock'), 'the witness checks the inert handle, and fs.js has no file modes or locks'));
   record('`hydrate()`', outcome(fileHas('web/shims/fs.js', 'export async function hydrate') || fileHas('web/shims/fs.js', 'export function hydrate'), 'fs.js exports hydrate'));
@@ -178,7 +178,7 @@ function architectureStatic() {
   cites('| `curl`, `wget` | txiki.js fetch', ['in-page curl and wget fetch from a host that sends CORS headers', 'in-page curl refuses a non-loopback host that sends no CORS headers, and the shell goes on', 'tjs -e awaits txiki fetch, and the request goes out through the page']);
   cites('The page\'s shell functions', ['which, command -v and type agree for every name Tab offers, path or builtin', 'in-page which drives an if: a found name passes and a missing one fails']);
   cites('each in-page builtin reports as a builtin', ['in-page git is reported as a builtin by type, command -v and which']);
-  cites('A line with a background operator (`&`) runs in the core shell', ['in-page bash runs a background job and waits for it, and keeps &&, redirects and quoted ampersands']);
+  cites('Background jobs run in the page shell', ['in-page bash runs a background job and waits for it, and keeps &&, redirects and quoted ampersands']);
   cites('`node` is an alias for the txiki engine', ['node -v prints a version']);
   cites('a host binary that is not in the page, such as `ruby`', ['in-page bash reports host tools it lacks as exit 127']);
   cites('Ctrl-C while busy drops the queue', ['in-page terminal Ctrl-C cancels a running command and the shell carries on']);
@@ -331,7 +331,7 @@ function liveRecords(blocks) {
   record('`ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations', P('tar', (t) => /tar \(bashkit\)/.test(t), 'tar reports bashkit'));
   record('each in-page builtin reports as a builtin', P('type-t', (t) => t === 'builtin', '`type -t git` says builtin'));
   record('The page\'s shell functions', P('type-fn', (t) => /function/.test(t), '`type which` says it is a function'));
-  record('A line with a background operator (`&`) runs in the core shell', P('amp', (t) => /^x$/m.test(t), 'a bare & runs in the core shell, and the line after it prints'));
+  record('Background jobs run in the page shell', P('amp', (t) => /^x$/m.test(t), 'a bare & runs in the core shell, and the line after it prints'));
   record('`parseFetchArgs` in `web/curl-in-page.js` reads short clusters', P('curl-SL', (t) => !t.includes('not supported in the in-page shell'), 'combined -SL is accepted'));
   record('A flag the page cannot honour is refused with the command to use instead', P('curl-v', (t) => t.includes('prints the body only'), 'an unhonoured flag names what to use'));
   record('| `curl`, `wget` | txiki.js fetch', P('curl-cors', (t) => t.includes('cors-host-hello'), 'curl succeeds on a CORS host'));
