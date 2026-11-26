@@ -1,0 +1,31 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { connect, createServer as createNetServer } from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { startNpmMirror } from '../../npm-mirror.mjs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startRelay } from '../../../src/relay.js';
+import { closeBrowserTree, closeBrowserTrees, runTerminal, startBrowser, withTimeout } from '../../browser-driver.mjs';
+import { vendorBashkit } from '../../vendor-bashkit.mjs';
+import { vendorFx } from '../../vendor-fx.mjs';
+import { vendorFloosie } from '../../vendor-floosie.mjs';
+import { buildPages } from '../../build-pages.mjs';
+import { startFxStubGateway, FX_STUB_KEY } from '../../fx-stub-gateway.mjs';
+import { PAGE_HOST_TOOL_NAMES } from '../../../web/fx-host-tools.js';
+import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_BUDGET_MS, JOBS, LIVE_UNAVAILABLE, OPENROUTER_MODELS_URL, OPENROUTER_URL, PAGE_TOOLS, SITE_TYPES, TUI_PALETTE_RESIZE_SETTLED, TUI_RESIZE_SETTLED, TUI_SCREEN, TUI_STATE, TUI_TITLE, alive, binRunner, browserFor, check, chrome, craftCli, current, disposeContext, dotenvValue, fetchWithFallback, freeModels, freePort, getMirror, getRelay, group, groups, haveChrome, heavyTail, listening, liveCheck, liveProvider, liveRun, liveVerdict, loadAverage, pollAnswer, profileDir, providerVerdict, reapBrowserTrees, registryNet, root, runAt, runGroup, runHeavy, scope, scratchDir, scratchDirs, servePages, serveThenStop, services, shared, sharedBrowserFor, sharedBrowserStart, sharedPages, sharedProfile, skip, skipLive, spawnedPids, startChatStub, startProviderStub, stopPid, terminal, trackPid, webhostCli, webserverCli, within } from '../shared.mjs';
+
+group('background jobs outlive their line, wait works across lines, and a job is reaped at its deadline', async () => {
+  const outlive = await terminal([['run', '(sleep 1; echo late) &'], ['run', 'echo between'], ['run', 'sleep 2; echo after']]);
+  const lines = outlive.out.split('\n');
+  const at = (text) => lines.indexOf(text);
+  check('a job started on one line outlives it: between prints first, the job output comes before after', at('between') >= 0 && at('late') > at('between') && at('after') > at('late'), lines.slice(-6).join(' / ').slice(0, 160));
+  const waited = await terminal([['run', '(sleep 1; echo slow) &'], ['run', 'wait; echo waited']]);
+  const wl = waited.out.split('\n');
+  check('wait on a later line returns after the job, and the job output comes before waited', wl.indexOf('slow') >= 0 && wl.indexOf('waited') > wl.indexOf('slow'), wl.slice(-5).join(' / ').slice(0, 160));
+  const reaped = await terminal([['run', '(sleep 30; echo never) &'], ['run', 'sleep 4; echo still-here']], { params: [['commandTimeoutMs', '2000']] });
+  check('a job is reaped at its deadline: its output never prints, and the shell reports the reap', !reaped.out.includes('never') && reaped.out.includes('reaped at its deadline') && reaped.out.includes('still-here'), reaped.out.slice(-200).replace(/\n/g, ' / '));
+});

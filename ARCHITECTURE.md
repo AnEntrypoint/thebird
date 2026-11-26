@@ -84,7 +84,7 @@ The page's shell functions `which`, `command -v` and `type` (`web/shell-lookup.j
 
 `ps`, `uname`, `hostname`, `id`, `whoami`, `kill` and `tar` are emulations that report sandbox values. A command that names one of them gets a note saying so.
 
-Background jobs run in the page shell: `cmd &` starts a job in bashkit, and `wait` returns when the job has finished, as witnessed by group 87. `node` is an alias for the txiki engine (see the txiki section), and a host binary that is not in the page, such as `ruby`, exits 127.
+Background jobs run in the page shell. `cmd &` starts a job in its own bashkit instance on the page filesystem, and the job outlives its line until its deadline (`commandTimeoutMs`); the job is then reaped. `wait` and `jobs` see jobs across lines. Witnessed by groups 87 and 88. `node` is an alias for the txiki engine (see the txiki section), and a host binary that is not in the page, such as `ruby`, exits 127.
 
 ## Commit gate
 
