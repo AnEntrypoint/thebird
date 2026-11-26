@@ -146,5 +146,6 @@
 {"name":"bdreturnsource","file":"web/shell-core.js","anchor":"if (frames.length === 0 && sourceDepth === 0) return { code: 2","replace":"if (frames.length === 0) return { code: 2","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"bdsubshelldesc","file":"web/shell-core.js","anchor":"'( ' + describeList(cmd.list) + ' )'","replace":"'(' + describeList(cmd.list) + ')'","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
 {"name":"bdexportsnap","file":"web/shell-core.js","anchor":"readonly: [...readonly], attributes: [...attributes],","replace":"readonly: [], attributes: [],","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
-{"name":"bdlocalprint","file":"web/shell-core.js","anchor":"      if (isDeclared(name)) out += declarationLine(name)","replace":"      if (vars.has(name) || arrays.has(name) || readonly.has(name)) out += declarationLine(name)","command":["npm","run","-s","witness:shell"],"timeoutMs":60000}
+{"name":"bdlocalprint","file":"web/shell-core.js","anchor":"      if (isDeclared(name)) out += declarationLine(name)","replace":"      if (vars.has(name) || arrays.has(name) || readonly.has(name)) out += declarationLine(name)","command":["npm","run","-s","witness:shell"],"timeoutMs":60000},
+{"name":"concatparse","file":"web/shell-arith.js","anchor":"const tokenizeArithmetic = (text) => {","replace":"const tokenize = (text) => {","command":["node","--test","test/shell-program-parses.test.mjs"],"timeoutMs":120000}
 ]

@@ -7107,3 +7107,9 @@ Waits on the owner (or the machine):
 - Wall time per part (step start to end, excluding gate wait): r1 6m50s, r2 8m13s, r3 10m09s, r4 5m56s, r5 7m23s, r6 1m45s. The longest single red took 249 s. Gate waits between parts were long (r5 waited about 40 minutes for its grant), which is the cost of queueing one part at a time, not of the parts.
 - Cause of the earlier failure, recorded: breds1 on ec990a9 hung at settle under the 25-minute default cap; d5deccb caps every red at 600000 ms, and the reds run above passed under that cap. Whether settle passes only when run alone is not separately measured, since it passed in the shared window.
 - Pushed: d5deccb (the cap), the two ledger commits before this one, and this entry, as each green window lands.
+### Shell program parse witness: the concatenated txiki program must parse as a module
+
+- The claim: the program that web/shell-in-txiki.js builds by concatenating its MODULES list parses as one ES module. The collision that broke it (top-level tokenize and parse in both shell-arith.js and shell-core.js) was found by hand; no check covered it.
+- Witness: test/shell-program-parses.test.mjs builds the same concatenation from the MODULES list and runs node --check on it as a module, in a throwaway directory under .thebird/. It passes on the current tree.
+- Red: concatparse restores the tokenize declaration in web/shell-arith.js. It is CAUGHT alone (rc 1, restored true), and the anchors check reports all 149 unique.
+- Limits: the test checks module syntax, not evaluation. A duplicate binding that only fails at run time is not covered.
