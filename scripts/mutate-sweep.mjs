@@ -30,6 +30,11 @@ lines.forEach((line, index) => {
   });
 });
 
+const bound = (flag, fallback) => {
+  const hit = flags.find((flagText) => flagText.startsWith(flag + '='));
+  return hit === undefined ? fallback : Number(hit.slice(flag.length + 1));
+};
+const selectedMutants = mutants.slice(bound('--from', 0), bound('--to', mutants.length));
 if (flags.includes('--count')) {
   console.log('mutants', mutants.length);
   process.exit(0);
@@ -60,7 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
 
 const results = [];
 try {
-  for (const mutant of mutants) {
+  for (const mutant of selectedMutants) {
     live = true;
     writeFileSync(file, mutated(mutant));
     const text = await runWitness();

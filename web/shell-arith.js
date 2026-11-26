@@ -50,7 +50,7 @@ const numberValue = (token, failAt) => {
   return BigInt(token.text);
 };
 
-const tokenize = (text) => {
+const tokenizeArithmetic = (text) => {
   const tokens = [];
   let end = 0;
   for (;;) {
@@ -68,7 +68,7 @@ const tokenize = (text) => {
   }
 };
 
-const parse = (context) => {
+const parseArithmetic = (context) => {
   const { tokens, failAt, failToken } = context;
   let pos = 0;
   const peek = () => tokens[pos]?.text;
@@ -258,12 +258,12 @@ const evaluate = (node, env) => {
 
 const run = (src, lookup, assign, depth) => {
   const text = src.replace(/\\\n/g, '');
-  const tokens = tokenize(text);
+  const tokens = tokenizeArithmetic(text);
   if (tokens.length === 0) return 0n;
   const failAt = (detail, start, end = text.length) => new ArithmeticError(text.slice(0, end).replace(/^\s+/, '') + ': ' + detail + ' (error token is "' + text.slice(start, end) + '")');
   const failToken = (detail, index) => failAt(detail, tokens[index].start);
   const context = { tokens, failAt, failToken, lookup, assign, depth, failToken };
-  return evaluate(parse(context), context);
+  return evaluate(parseArithmetic(context), context);
 };
 
 export function evaluateArithmetic(src, lookup, assign) {

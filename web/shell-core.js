@@ -72,7 +72,14 @@ const selectMenu = (items, columnsValue) => {
 const CONDITIONAL_BINARY = new Set(['==', '=', '!=', '=~', '<', '>', '-eq', '-ne', '-lt', '-le', '-gt', '-ge']);
 const SHELL_BUILTINS = new Set(['echo', 'printf', 'true', 'false', 'exit', 'export', 'local', 'return', 'test', '[', 'command', 'type', 'which', 'wait']);
 const SHELL_PID = 100;
-const SIGNALS = { HUP: 1, INT: 2, KILL: 9, TERM: 15 };
+const SIGNAL_NAMES = ["HUP","INT","QUIT","ILL","TRAP","ABRT","BUS","FPE","KILL","USR1","SEGV","USR2","PIPE","ALRM","TERM","STKFLT","CHLD","CONT","STOP","TSTP","TTIN","TTOU","URG","XCPU","XFSZ","VTALRM","PROF","WINCH","IO","PWR","SYS",null,null,"RTMIN","RTMIN+1","RTMIN+2","RTMIN+3","RTMIN+4","RTMIN+5","RTMIN+6","RTMIN+7","RTMIN+8","RTMIN+9","RTMIN+10","RTMIN+11","RTMIN+12","RTMIN+13","RTMIN+14","RTMIN+15","RTMAX-14","RTMAX-13","RTMAX-12","RTMAX-11","RTMAX-10","RTMAX-9","RTMAX-8","RTMAX-7","RTMAX-6","RTMAX-5","RTMAX-4","RTMAX-3","RTMAX-2","RTMAX-1","RTMAX"];
+const SHOPT_DEFAULTS = [["array_expand_once",false],["assoc_expand_once",false],["autocd",false],["bash_source_fullpath",false],["cdable_vars",false],["cdspell",false],["checkhash",false],["checkjobs",false],["checkwinsize",true],["cmdhist",true],["compat31",false],["compat32",false],["compat40",false],["compat41",false],["compat42",false],["compat43",false],["compat44",false],["complete_fullquote",true],["direxpand",false],["dirspell",false],["dotglob",false],["execfail",false],["expand_aliases",false],["extdebug",false],["extglob",false],["extquote",true],["failglob",false],["force_fignore",true],["globasciiranges",true],["globskipdots",true],["globstar",false],["gnu_errfmt",false],["histappend",false],["histreedit",false],["histverify",false],["hostcomplete",true],["huponexit",false],["inherit_errexit",false],["interactive_comments",true],["lastpipe",false],["lithist",false],["localvar_inherit",false],["localvar_unset",false],["login_shell",false],["mailwarn",false],["no_empty_cmd_completion",false],["nocaseglob",false],["nocasematch",false],["noexpand_translation",false],["nullglob",false],["patsub_replacement",true],["progcomp",true],["progcomp_alias",false],["promptvars",true],["restricted_shell",false],["shift_verbose",false],["sourcepath",true],["varredir_close",false],["xpg_echo",false]];
+const LINE_FEED = String.fromCharCode(10);
+const TAB_CHAR = String.fromCharCode(9);
+const SINGLE_QUOTE = String.fromCharCode(39);
+const BACKSLASH = String.fromCharCode(92);
+const BACKTICK_CHAR = String.fromCharCode(96);
+const SIGNALS = Object.fromEntries(SIGNAL_NAMES.flatMap((name, index) => (name === null ? [] : [[name, index + 1]])));
 const NULL_DEVICE = '/dev/null';
 
 class ShellExit {
@@ -81,6 +88,12 @@ class ShellExit {
   }
 }
 
+class ReadonlyError extends ShellExit {
+  constructor(name) {
+    super(1);
+    this.text = name + ': readonly variable';
+  }
+}
 class ReturnSignal {
   constructor(code) {
     this.code = code;
@@ -643,6 +656,7 @@ function parse(tokens, partial = false) {
     const assigns = [];
     const words = [];
     const redirects = [];
+    const arrayArgs = [];
     while (pos < tokens.length) {
       const token = tokens[pos];
       if (token.parts && !words.length && isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(') {
@@ -653,6 +667,10 @@ function parse(tokens, partial = false) {
       } else if (token.parts && !words.length && isAssignment(token.parts)) {
         assigns.push(parseAssignment(token.parts));
         pos++;
+      } else if (token.parts && isArrayAssignment(token.parts) && tokens[pos + 1]?.op === '(') {
+        const name = token.parts[0].s.slice(0, -1);
+        arrayArgs.push({ name, values: parseArrayValue() });
+        words.push([{ k: 'lit', s: name }]);
       } else if (token.parts) {
         words.push(token.parts);
         pos++;
@@ -660,7 +678,7 @@ function parse(tokens, partial = false) {
       else break;
     }
     if (!assigns.length && !words.length && !redirects.length) throw syntaxError(`unexpected '${tokens[pos]?.op ?? 'end of input'}'`);
-    return { type: 'simple', assigns: words.length ? assigns.filter((assign) => !assign.array) : assigns, words, redirects, line };
+    return { type: 'simple', assigns: words.length ? assigns.filter((assign) => !assign.array) : assigns, words, redirects, line, arrayArgs };
   };
 
   const parseTrailingRedirects = () => {
@@ -957,10 +975,10 @@ export function parseScript(src, firstLine, substitution = false) {
   return parse(tokenize(src, firstLine, substitution));
 }
 
-function syntaxReport(err, src) {
+function syntaxReport(err, src, origin = 'bash: -c') {
   if (!err.bash) return err.message + '\n';
   const line = err.line ?? (err.eof ? src.replace(/\n$/, '').split('\n').length + 1 : 1 + (src.slice(0, err.at ?? src.length).match(/\n/g) ?? []).length);
-  const prefix = 'bash: -c: line ' + line + ': ';
+  const prefix = origin + ': line ' + line + ': ';
   const echoed = err.echo ? prefix + '`' + src.split('\n')[line - 1] + "'\n" : '';
   const head = err.message ? prefix + err.message + '\n' : '';
   const near = err.near === undefined ? '' : prefix + 'syntax error near `' + err.near + "'\n";
@@ -1897,6 +1915,15 @@ export function createShell({ host, cwd = '/workspace', builtins = [], saved = n
   const exported = new Set(saved?.exported ?? ['LANG']);
   const inherited = new Set(saved ? [] : ['LANG']);
   const prefixNames = new Set();
+  const readonly = new Set(saved?.readonly ?? []);
+  const attributes = new Map(saved?.attributes ?? []);
+  const aliases = new Map(saved?.aliases ?? []);
+  const traps = new Map(saved?.traps ?? []);
+  const dirStack = [...(saved?.dirStack ?? [])];
+  const shopts = new Map(saved?.shopts ?? SHOPT_DEFAULTS);
+  let umaskValue = saved?.umask ?? 0o022;
+  let sourceDepth = 0;
+  let arrayArgValues = null;
   const localeWarnings = [];
   const childLocale = () => localeChoice((name) => (exported.has(name) || prefixNames.has(name) ? vars.get(name) : undefined));
   const childLocaleMode = () => LOCALE_MODES.get(childLocale().value) ?? 'bytes';
@@ -2220,6 +2247,493 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     }
   };
 
+  const quoteValue = (value) => value.replace(/[\\"$`]/g, (char) => '\\' + char);
+  const declarationFlags = (name) => {
+    const attrs = attributes.get(name) ?? '';
+    return [arrays.has(name) ? 'a' : '', attrs.includes('i') ? 'i' : '', attrs.includes('l') ? 'l' : '', readonly.has(name) ? 'r' : '', attrs.includes('u') ? 'u' : '', exported.has(name) ? 'x' : ''].join('');
+  };
+  const scalarValue = (name) => {
+    for (let i = frames.length - 1; i >= 0; i--) {
+      if (frames[i].has(name)) return frames[i].get(name);
+    }
+    return vars.get(name);
+  };
+  const isDeclared = (name) => frames.some((frame) => frame.has(name)) || vars.has(name) || arrays.has(name) || readonly.has(name);
+  const declarationLine = (name) => {
+    const prefix = 'declare -' + (declarationFlags(name) || '-') + ' ' + name;
+    if (arrays.has(name)) {
+      const items = [...arrays.get(name)].sort((a, b) => a[0] - b[0]).map(([index, value]) => '[' + index + ']="' + quoteValue(value) + '"');
+      return prefix + '=(' + items.join(' ') + ')';
+    }
+    return prefix + '="' + quoteValue(scalarValue(name) ?? '') + '"';
+  };
+  const printDeclarations = (names, command) => {
+    let out = '';
+    let err = '';
+    let code = 0;
+    for (const name of names) {
+      if (isDeclared(name)) out += declarationLine(name) + LINE_FEED;
+      else {
+        err += command + ': ' + name + ': not found' + LINE_FEED;
+        code = 1;
+      }
+    }
+    return { code, out, err };
+  };
+  const declareBuiltin = (argv, command, forceLocal = false) => {
+    const flags = [];
+    const names = [];
+    let printing = false;
+    let globalScope = false;
+    for (const arg of argv) {
+      if (names.length === 0 && /^-[A-Za-z]+$/.test(arg)) {
+        for (const flag of arg.slice(1)) {
+          if (flag === 'p') printing = true;
+          else if (flag === 'g') globalScope = true;
+          else flags.push(flag);
+        }
+      } else names.push(arg);
+    }
+    if (printing) return printDeclarations(names.length ? names : declaredNames(), command);
+    if (forceLocal && frames.length === 0) return { code: 1, out: '', err: 'local: can only be used in a function' + LINE_FEED };
+    const frame = forceLocal || (!globalScope && frames.length > 0) ? frames.at(-1) : null;
+    let err = '';
+    let code = 0;
+    for (const spec of names) {
+      const eq = spec.indexOf('=');
+      const name = eq < 0 ? spec : spec.slice(0, eq);
+      const value = eq < 0 ? undefined : spec.slice(eq + 1);
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+        err += command + ': `' + spec + "': not a valid identifier" + LINE_FEED;
+        code = 1;
+        continue;
+      }
+      if (frame && !frame.has(name)) frame.set(name, vars.get(name) ?? '');
+      const attrs = new Set(attributes.get(name) ?? '');
+      for (const flag of flags) if ('ilu'.includes(flag)) attrs.add(flag);
+      if (attrs.size) attributes.set(name, [...attrs].join(''));
+      if (arrayArgValues?.has(name)) arrays.set(name, new Map(arrayArgValues.get(name).map((item, index) => [index, item])));
+      else if (flags.includes('a') && !arrays.has(name)) arrays.set(name, new Map());
+      if (value !== undefined) setVariable(name, value);
+      if (flags.includes('x')) exported.add(name);
+      if (flags.includes('r')) readonly.add(name);
+    }
+    return { code, out: '', err };
+  };
+  const declaredNames = () => [...new Set([...frames.flatMap((frame) => [...frame.keys()]), ...vars.keys(), ...arrays.keys()])].sort();
+  const readonlyBuiltin = (argv) => {
+    const names = argv.filter((arg) => !/^-[A-Za-z]+$/.test(arg));
+    if (names.length === 0) return { code: 0, out: [...readonly].sort().map((name) => declarationLine(name) + LINE_FEED).join(''), err: '' };
+    for (const spec of names) {
+      const eq = spec.indexOf('=');
+      const name = eq < 0 ? spec : spec.slice(0, eq);
+      if (eq >= 0) setVariable(name, spec.slice(eq + 1));
+      readonly.add(name);
+    }
+    return ok('');
+  };
+  const runText = async (text, sink, origin) => {
+    const parsed = parseScriptPartial(text);
+    if (parsed.error) {
+      sink.err += syntaxReport(parsed.error, text, origin);
+      return 2;
+    }
+    return runSequence(parsed.list, '', sink);
+  };
+  const evalBuiltin = async (argv, signal) => {
+    const sink = { out: '', err: '', signal };
+    const code = argv.length ? await runText(argv.join(' '), sink, 'eval') : 0;
+    return { code, out: sink.out, err: sink.err };
+  };
+  const sourceBuiltin = async (argv, signal) => {
+    if (argv.length === 0) return { code: 2, out: '', err: 'source: filename argument required' + LINE_FEED };
+    const path = resolvePath(argv[0]);
+    if (!host.exists(path)) return { code: 1, out: '', err: argv[0] + ': No such file or directory' + LINE_FEED };
+    const text = readFileText(path);
+    const savedPositional = positional;
+    const sink = { out: '', err: '', signal };
+    if (argv.length > 1) positional = argv.slice(1);
+    sourceDepth += 1;
+    let code;
+    try {
+      code = await runText(text, sink, argv[0]);
+    } catch (err) {
+      if (!(err instanceof ReturnSignal)) throw err;
+      code = err.code;
+    } finally {
+      sourceDepth -= 1;
+      positional = savedPositional;
+    }
+    return { code, out: sink.out, err: sink.err };
+  };
+  const commandBuiltin = (argv, stdin, signal, stream) => {
+    const args = argv[0] === '-p' ? argv.slice(1) : argv;
+    if (args[0] === '-v') return lookupNames(args.slice(1));
+    if (args[0] === '-V') return describeNames(args.slice(1));
+    if (args.length === 0) return ok('');
+    return dispatch(args, stdin, signal, stream, true);
+  };
+  const describeNames = (names) => {
+    let out = '';
+    let err = '';
+    let code = 0;
+    for (const name of names) {
+      const found = locate(name);
+      if (found === null) {
+        err += 'command: ' + name + ': not found' + LINE_FEED;
+        code = 1;
+      } else if (functions.has(name)) out += name + ' is a function' + LINE_FEED;
+      else if (isShellBuiltin(name)) out += name + ' is a shell builtin' + LINE_FEED;
+      else out += name + ' is ' + found + LINE_FEED;
+    }
+    return { code, out, err };
+  };
+  const builtinBuiltin = (argv, stdin, signal, stream) => {
+    if (argv.length === 0) return ok('');
+    if (!Object.hasOwn(commands, argv[0]) && !inPage.has(argv[0])) return { code: 1, out: '', err: 'builtin: ' + argv[0] + ': not a shell builtin' + LINE_FEED };
+    return dispatch(argv, stdin, signal, stream, true);
+  };
+  const getoptsState = { index: 0, offset: 1 };
+  const getoptsBuiltin = (argv) => {
+    if (argv.length < 2) return { code: 2, out: '', err: 'getopts: usage: getopts optstring name [arg ...]' + LINE_FEED };
+    const [optstring, name, ...given] = argv;
+    const words = given.length ? given : positional;
+    const optind = Number(vars.get('OPTIND') ?? 1);
+    if (optind !== getoptsState.index) getoptsState.offset = 1;
+    const word = words[optind - 1];
+    if (word === undefined || word === '-' || !word.startsWith('-')) {
+      setVariable(name, '?');
+      return { code: 1, out: '', err: '' };
+    }
+    if (word === '--') {
+      vars.set('OPTIND', String(optind + 1));
+      getoptsState.index = optind + 1;
+      getoptsState.offset = 1;
+      setVariable(name, '?');
+      return { code: 1, out: '', err: '' };
+    }
+    const silent = optstring.startsWith(':');
+    const spec = silent ? optstring.slice(1) : optstring;
+    const letter = word[getoptsState.offset];
+    const at = letter === ':' ? -1 : spec.indexOf(letter);
+    const next = getoptsState.offset + 1;
+    let nextIndex = next < word.length ? optind : optind + 1;
+    let nextOffset = next < word.length ? next : 1;
+    let err = '';
+    if (at < 0) {
+      if (silent) {
+        setVariable(name, '?');
+        setVariable('OPTARG', letter);
+      } else {
+        err = 'illegal option -- ' + letter + LINE_FEED;
+        setVariable(name, '?');
+        vars.delete('OPTARG');
+      }
+    } else if (spec[at + 1] === ':') {
+      let optarg = null;
+      if (next < word.length) optarg = word.slice(next);
+      else if (optind < words.length) {
+        optarg = words[optind];
+        nextIndex = optind + 2;
+      }
+      if (optarg !== null) {
+        setVariable(name, letter);
+        setVariable('OPTARG', optarg);
+      } else if (silent) {
+        setVariable(name, ':');
+        setVariable('OPTARG', letter);
+      } else {
+        err = 'option requires an argument -- ' + letter + LINE_FEED;
+        setVariable(name, '?');
+        vars.delete('OPTARG');
+      }
+      nextOffset = 1;
+    } else {
+      setVariable(name, letter);
+      vars.delete('OPTARG');
+    }
+    vars.set('OPTIND', String(nextIndex));
+    getoptsState.index = nextIndex;
+    getoptsState.offset = nextOffset;
+    return { code: 0, out: '', err };
+  };
+  const mapfileBuiltin = (argv, stdin) => {
+    let trim = false;
+    let count = 0;
+    let skip = 0;
+    let origin = 0;
+    let delim = LINE_FEED;
+    let index = 0;
+    while (index < argv.length && argv[index].startsWith('-')) {
+      const flag = argv[index];
+      if (flag === '-t') {
+        trim = true;
+        index += 1;
+      } else if (flag === '-n' || flag === '-s' || flag === '-O' || flag === '-d') {
+        const value = argv[index + 1] ?? '';
+        if (flag === '-n') count = Number(value);
+        else if (flag === '-s') skip = Number(value);
+        else if (flag === '-O') origin = Number(value);
+        else delim = value === '' ? String.fromCharCode(0) : value[0];
+        index += 2;
+      } else return { code: 2, out: '', err: 'mapfile: ' + flag + ': invalid option' + LINE_FEED };
+    }
+    const target = argv[index] ?? 'MAPFILE';
+    const lines = [];
+    let position = 0;
+    while (position < stdin.length) {
+      const end = stdin.indexOf(delim, position);
+      if (end < 0) {
+        lines.push(stdin.slice(position));
+        break;
+      }
+      lines.push(trim ? stdin.slice(position, end) : stdin.slice(position, end + 1));
+      position = end + 1;
+    }
+    const selected = lines.slice(skip, count > 0 ? skip + count : undefined);
+    const entries = origin ? (arrays.get(target) ?? new Map()) : new Map();
+    selected.forEach((line, offset) => entries.set(origin + offset, line));
+    arrays.set(target, entries);
+    return ok('');
+  };
+  const aliasText = (name) => 'alias ' + name + '=' + SINGLE_QUOTE + aliases.get(name).split(SINGLE_QUOTE).join(SINGLE_QUOTE + BACKSLASH + SINGLE_QUOTE + SINGLE_QUOTE) + SINGLE_QUOTE + LINE_FEED;
+  const aliasBuiltin = (argv) => {
+    if (argv.length === 0) return ok([...aliases.keys()].sort().map(aliasText).join(''));
+    let out = '';
+    let err = '';
+    let code = 0;
+    for (const arg of argv) {
+      const eq = arg.indexOf('=');
+      if (eq > 0) aliases.set(arg.slice(0, eq), arg.slice(eq + 1));
+      else if (aliases.has(arg)) out += aliasText(arg);
+      else {
+        err += 'alias: ' + arg + ': not found' + LINE_FEED;
+        code = 1;
+      }
+    }
+    return { code, out, err };
+  };
+  const unaliasBuiltin = (argv) => {
+    if (argv.length === 0) return { code: 2, out: '', err: 'unalias: usage: unalias [-a] name [name ...]' + LINE_FEED };
+    if (argv[0] === '-a') {
+      aliases.clear();
+      return ok('');
+    }
+    let err = '';
+    let code = 0;
+    for (const name of argv) {
+      if (!aliases.delete(name)) {
+        err += 'unalias: ' + name + ': not found' + LINE_FEED;
+        code = 1;
+      }
+    }
+    return { code, out: '', err };
+  };
+  const shoptLine = (name) => name.padEnd(20) + TAB_CHAR + (shopts.get(name) ? 'on' : 'off') + LINE_FEED;
+  const shoptPrintLine = (name) => 'shopt ' + (shopts.get(name) ? '-s' : '-u') + ' ' + name + LINE_FEED;
+  const shoptBuiltin = (argv) => {
+    let mode = null;
+    let quiet = false;
+    let print = false;
+    const names = [];
+    for (const arg of argv) {
+      if (names.length === 0 && /^-[a-z]+$/.test(arg)) {
+        for (const flag of arg.slice(1)) {
+          if (flag === 's') mode = true;
+          else if (flag === 'u') mode = false;
+          else if (flag === 'q') quiet = true;
+          else if (flag === 'p') print = true;
+        }
+      } else names.push(arg);
+    }
+    const listed = names.length ? names : [...shopts.keys()].filter((name) => mode === null || shopts.get(name) === mode);
+    let out = '';
+    let err = '';
+    let code = 0;
+    for (const name of listed) {
+      if (!shopts.has(name)) {
+        err += 'shopt: ' + name + ': invalid shell option name' + LINE_FEED;
+        code = 1;
+      } else if (mode !== null && names.length) shopts.set(name, mode);
+      else if (!quiet && print) out += shoptPrintLine(name);
+      else if (!quiet) out += shoptLine(name);
+      if (shopts.has(name) && mode === null && !shopts.get(name)) code = 1;
+    }
+    return { code, out, err };
+  };
+  const signalName = (spec) => {
+    const upper = spec.toUpperCase().replace(/^SIG/, '');
+    if (['EXIT', 'ERR', 'DEBUG', 'RETURN'].includes(upper)) return upper;
+    if (/^[0-9]+$/.test(spec)) return Number(spec) === 0 ? 'EXIT' : SIGNAL_NAMES[Number(spec) - 1] ?? null;
+    return SIGNAL_NAMES.includes(upper) ? upper : null;
+  };
+  const trapOrder = (name) => (name === 'EXIT' ? 0 : SIGNAL_NAMES.indexOf(name) + 1);
+  const trapLine = (name) => 'trap -- ' + SINGLE_QUOTE + traps.get(name).split(SINGLE_QUOTE).join(SINGLE_QUOTE + BACKSLASH + SINGLE_QUOTE + SINGLE_QUOTE) + SINGLE_QUOTE + ' ' + (name === 'EXIT' ? name : 'SIG' + name) + LINE_FEED;
+  const trapList = (names) => [...names].sort((a, b) => trapOrder(a) - trapOrder(b)).map(trapLine).join('');
+  const signalTable = () => {
+    const entries = SIGNAL_NAMES.map((name, index) => (name === null ? null : String(index + 1).padStart(2) + ') SIG' + name)).filter((entry) => entry !== null);
+    return entries.map((entry, index) => entry + (index % 5 === 4 ? LINE_FEED : TAB_CHAR)).join('') + (entries.length % 5 === 0 ? '' : LINE_FEED);
+  };
+  const trapBuiltin = (argv) => {
+    if (argv.length === 0 || (argv[0] === '-p' && argv.length === 1)) return ok(trapList(traps.keys()));
+    if (argv[0] === '-p') return ok(trapList(argv.slice(1).map(signalName).filter((name) => name !== null && traps.has(name))));
+    if (argv[0] === '-l') return ok(signalTable());
+    const removing = argv[0] === '-' || (argv.length === 1 && signalName(argv[0]) !== null);
+    const action = removing ? null : argv[0];
+    const specs = removing ? (argv[0] === '-' ? argv.slice(1) : argv) : argv.slice(1);
+    let err = '';
+    let code = 0;
+    for (const spec of specs) {
+      const name = signalName(spec);
+      if (name === null) {
+        err += 'trap: ' + spec + ': invalid signal specification' + LINE_FEED;
+        code = 1;
+      } else if (action === null) traps.delete(name);
+      else traps.set(name, action);
+    }
+    return { code, out: '', err };
+  };
+  let inErrorTrap = false;
+  const runTrapAction = async (action) => {
+    const sink = { out: '', err: '', signal: undefined };
+    let code;
+    try {
+      code = await runText(action, sink, 'trap');
+    } catch (err) {
+      if (!(err instanceof ShellExit)) throw err;
+      code = err.code;
+    }
+    return { code, out: sink.out, err: sink.err };
+  };
+  const runErrorTrap = async (sink) => {
+    if (inErrorTrap) return;
+    inErrorTrap = true;
+    try {
+      const trapped = await runTrapAction(traps.get('ERR'));
+      sink.out += trapped.out;
+      sink.err += trapped.err;
+    } finally {
+      inErrorTrap = false;
+    }
+  };
+  const stackLine = () => [state.cwd, ...dirStack].join(' ') + LINE_FEED;
+  const changeDirectory = (path) => commands.cd({ argv: [path] });
+  const pushdBuiltin = (argv) => {
+    const target = argv.length ? argv[0] : dirStack[0];
+    if (target === undefined) return { code: 1, out: '', err: 'pushd: no other directory' + LINE_FEED };
+    const before = state.cwd;
+    const moved = changeDirectory(target);
+    if (moved.code !== 0) return { code: moved.code, out: '', err: moved.err.split('cd:').join('pushd:') };
+    if (argv.length) dirStack.unshift(before);
+    else dirStack[0] = before;
+    return { code: 0, out: stackLine(), err: '' };
+  };
+  const popdBuiltin = () => {
+    if (dirStack.length === 0) return { code: 1, out: '', err: 'popd: directory stack empty' + LINE_FEED };
+    const moved = changeDirectory(dirStack[0]);
+    if (moved.code !== 0) return { code: moved.code, out: '', err: moved.err.split('cd:').join('popd:') };
+    dirStack.shift();
+    return { code: 0, out: stackLine(), err: '' };
+  };
+  const dirsBuiltin = (argv) => {
+    if (argv.includes('-c')) {
+      dirStack.length = 0;
+      return ok('');
+    }
+    const entries = [state.cwd, ...dirStack];
+    if (argv.includes('-v')) return ok(entries.map((entry, index) => String(index).padStart(2) + '  ' + entry + LINE_FEED).join(''));
+    if (argv.includes('-p')) return ok(entries.map((entry) => entry + LINE_FEED).join(''));
+    return ok(stackLine());
+  };
+  const symbolicMask = (mask) => ['u', 'g', 'o'].map((who, index) => {
+    const allowed = 7 - ((mask >> (6 - 3 * index)) & 7);
+    return who + '=' + (allowed & 4 ? 'r' : '') + (allowed & 2 ? 'w' : '') + (allowed & 1 ? 'x' : '');
+  }).join(',') + LINE_FEED;
+  const umaskBuiltin = (argv) => {
+    const symbolic = argv[0] === '-S';
+    const operands = symbolic ? argv.slice(1) : argv;
+    if (operands.length === 0) return ok(symbolic ? symbolicMask(umaskValue) : umaskValue.toString(8).padStart(4, '0') + LINE_FEED);
+    const value = operands[0];
+    if (/^[0-9]+$/.test(value) && /[89]/.test(value)) return { code: 1, out: '', err: 'umask: ' + value + ': octal number out of range' + LINE_FEED };
+    if (!/^[0-7]+$/.test(value)) return { code: 1, out: '', err: 'umask: ' + value + ': invalid symbolic mode' + LINE_FEED };
+    umaskValue = parseInt(value, 8) & 0o777;
+    return ok(symbolic ? symbolicMask(umaskValue) : '');
+  };
+  const hashTable = new Map();
+  const hashBuiltin = (argv) => {
+    if (argv[0] === '-r') {
+      hashTable.clear();
+      return ok('');
+    }
+    if (argv.length === 0) {
+      if (hashTable.size === 0) return ok('hash: hash table empty' + LINE_FEED);
+      return ok('hits' + TAB_CHAR + 'command' + LINE_FEED + [...hashTable].map(([, path]) => String(0).padStart(4) + TAB_CHAR + path + LINE_FEED).join(''));
+    }
+    let err = '';
+    let code = 0;
+    for (const name of argv) {
+      const found = locate(name);
+      if (found === null || !found.startsWith('/')) {
+        err += 'hash: ' + name + ': not found' + LINE_FEED;
+        code = 1;
+      } else hashTable.set(name, found);
+    }
+    return { code, out: '', err };
+  };
+  const jobsBuiltin = (argv) => {
+    const list = [...jobs.values()].sort((a, b) => a.seq - b.seq);
+    if (argv.includes('-p')) return ok(list.map((job) => job.pid + LINE_FEED).join(''));
+    const current = list.at(-1);
+    const previous = list.at(-2);
+    return ok(list.map((job) => {
+      const mark = job === current ? '+' : job === previous ? '-' : ' ';
+      const status = job.done ? (job.code === 0 ? 'Done' : 'Exit ' + job.code) : 'Running';
+      return '[' + job.number + ']' + mark + '  ' + status.padEnd(27) + job.command + (job.done ? '' : ' &') + LINE_FEED;
+    }).join(''));
+  };
+  const disownBuiltin = (argv) => {
+    if (argv.includes('-a')) {
+      jobs.clear();
+      return ok('');
+    }
+    const specs = argv.filter((arg) => !arg.startsWith('-'));
+    if (specs.length === 0) specs.push('%');
+    let err = '';
+    let code = 0;
+    for (const spec of specs) {
+      const found = spec.startsWith('%') ? resolveJob(spec) : { job: jobs.get(Number(spec)) };
+      if (found.ambiguous !== undefined) {
+        err += 'disown: ' + found.ambiguous + ': ambiguous job spec' + LINE_FEED;
+        code = 1;
+      } else if (!found.job) {
+        err += 'disown: ' + (spec === '%' ? 'current' : spec) + ': no such job' + LINE_FEED;
+        code = 1;
+      } else jobs.delete(found.job.pid);
+    }
+    return { code, out: '', err };
+  };
+  const limits = { c: '0', d: 'unlimited', f: 'unlimited', n: '1024', s: '8192', u: 'unlimited', v: 'unlimited' };
+  const ulimitBuiltin = (argv) => {
+    const flag = argv.find((arg) => /^-[a-zA-Z]$/.test(arg));
+    const letter = flag ? flag[1] : 'f';
+    if (!(letter in limits)) return { code: 2, out: '', err: 'ulimit: -' + letter + ': invalid option' + LINE_FEED };
+    return ok(limits[letter] + LINE_FEED);
+  };
+  const unsupported = (name) => ({ code: 2, out: '', err: name + ': not supported in this shell' + LINE_FEED });
+  const applyAttributes = (name, value) => {
+    const attrs = attributes.get(name) ?? '';
+    if (attrs.includes('i')) return String(evaluateText(value));
+    if (attrs.includes('u')) return value.toUpperCase();
+    if (attrs.includes('l')) return value.toLowerCase();
+    return value;
+  };
+  const compgenBuiltin = (argv) => {
+    if (argv[0] !== '-W') return { code: 2, out: '', err: 'compgen: only -W is supported in this shell' + LINE_FEED };
+    const words = (argv[1] ?? '').split(/\s+/).filter(Boolean);
+    const prefix = argv[2] ?? '';
+    const matches = words.filter((word) => word.startsWith(prefix));
+    return { code: matches.length ? 0 : 1, out: matches.map((word) => word + LINE_FEED).join(''), err: '' };
+  };
   const commands = {
     break: ({ argv }) => loopControl('break', argv),
     continue: ({ argv }) => loopControl('continue', argv),
@@ -2230,11 +2744,16 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     let: ({ argv }) => letBuiltin(argv),
     unset: ({ argv }) => {
       const functionsOnly = argv[0] === '-f';
+      let err = '';
+      let code = 0;
       for (const name of argv[0] === '-f' || argv[0] === '-v' ? argv.slice(1) : argv) {
         if (functionsOnly) functions.delete(name);
-        else removeVariable(name);
+        else if (readonly.has(name)) {
+          err += 'unset: ' + name + ': cannot unset: readonly variable' + LINE_FEED;
+          code = 1;
+        } else removeVariable(name);
       }
-      return ok('');
+      return { code, out: '', err };
     },
     sleep: ({ argv, signal }) => sleepFor(Number(argv[0] ?? 0) * 1000, signal),
     ps: () => {
@@ -2249,9 +2768,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const line = (row) => `${row.pid.padStart(pidWidth)} ${row.ppid.padStart(ppidWidth)} ${row.stat.padEnd(statWidth)} ${row.command}\n`;
       return ok(table.map(line).join(''));
     },
-    kill: ({ argv }) => {
-      if (argv[0] === '-l') return ok(Object.keys(SIGNALS).join(' ') + '\n');
+    kill: async ({ argv }) => {
+      if (argv[0] === '-l') return ok(signalTable());
       const targets = [...argv];
+      let out = '';
       let signo = SIGNALS.TERM;
       if (targets[0]?.startsWith('-')) {
         const spec = targets.shift().slice(1);
@@ -2279,6 +2799,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         if (!Number.isInteger(pid)) {
           err += `kill: ${target}: arguments must be process or job IDs\n`;
           code = 1;
+        } else if (pid === SHELL_PID && traps.has(SIGNAL_NAMES[signo - 1])) {
+          const trapped = await runTrapAction(traps.get(SIGNAL_NAMES[signo - 1]));
+          out += trapped.out;
+          err += trapped.err;
         } else if (pid === SHELL_PID) {
           err += `kill: (${pid}) - Operation not permitted\n`;
           code = 1;
@@ -2287,7 +2811,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           code = 1;
         } else jobs.get(pid).control.abort(new Signalled(signo));
       }
-      return { code, out: '', err };
+      return { code, out, err };
     },
     wait: async ({ argv, signal }) => {
       if (argv.length === 0) {
@@ -3006,6 +3530,41 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
       return { code, out, err: '' };
     },
+    eval: ({ argv, signal }) => evalBuiltin(argv, signal),
+    source: ({ argv, signal }) => sourceBuiltin(argv, signal),
+    '.': ({ argv, signal }) => sourceBuiltin(argv, signal),
+    readonly: ({ argv }) => readonlyBuiltin(argv),
+    declare: ({ argv }) => declareBuiltin(argv, 'declare'),
+    typeset: ({ argv }) => declareBuiltin(argv, 'typeset'),
+    getopts: ({ argv }) => getoptsBuiltin(argv),
+    mapfile: ({ argv, stdin }) => mapfileBuiltin(argv, stdin),
+    readarray: ({ argv, stdin }) => mapfileBuiltin(argv, stdin),
+    builtin: ({ argv, stdin, signal, stream }) => builtinBuiltin(argv, stdin, signal, stream),
+    alias: ({ argv }) => aliasBuiltin(argv),
+    unalias: ({ argv }) => unaliasBuiltin(argv),
+    shopt: ({ argv }) => shoptBuiltin(argv),
+    trap: ({ argv }) => trapBuiltin(argv),
+    pushd: ({ argv }) => pushdBuiltin(argv),
+    popd: () => popdBuiltin(),
+    dirs: ({ argv }) => dirsBuiltin(argv),
+    umask: ({ argv }) => umaskBuiltin(argv),
+    hash: ({ argv }) => hashBuiltin(argv),
+    jobs: ({ argv }) => jobsBuiltin(argv),
+    fg: () => ({ code: 1, out: '', err: 'fg: no job control' + LINE_FEED }),
+    bg: () => ({ code: 1, out: '', err: 'bg: no job control' + LINE_FEED }),
+    disown: ({ argv }) => disownBuiltin(argv),
+    logout: () => ({ code: 1, out: '', err: 'logout: not login shell: use ' + BACKTICK_CHAR + 'exit' + SINGLE_QUOTE + LINE_FEED }),
+    suspend: () => ({ code: 1, out: '', err: 'suspend: cannot suspend: no job control' + LINE_FEED }),
+    caller: () => (frames.length === 0 ? { code: 1, out: '', err: '' } : unsupported('caller')),
+    history: () => ok(''),
+    times: () => ok('0m0.000s 0m0.000s' + LINE_FEED + '0m0.000s 0m0.000s' + LINE_FEED),
+    fc: () => ok(''),
+    complete: ({ argv }) => (argv.length === 0 ? ok('') : unsupported('complete')),
+    compgen: ({ argv }) => compgenBuiltin(argv),
+    ulimit: ({ argv }) => ulimitBuiltin(argv),
+    bind: () => unsupported('bind'),
+    help: () => unsupported('help'),
+    enable: () => unsupported('enable'),
     export: ({ argv }) => {
       for (const arg of argv) {
         const eq = arg.indexOf('=');
@@ -3018,18 +3577,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       }
       return ok('');
     },
-    local: ({ argv }) => {
-      const frame = frames.at(-1);
-      for (const arg of argv) {
-        const eq = arg.indexOf('=');
-        const name = eq < 0 ? arg : arg.slice(0, eq);
-        frame?.set(name, eq < 0 ? '' : arg.slice(eq + 1));
-        if (LOCALE_NAMES.includes(name)) settleLocale(name, eq < 0 || arg.slice(eq + 1) === '');
-      }
-      return ok('');
-    },
+    local: ({ argv }) => declareBuiltin(argv, 'local', true),
     return: ({ argv }) => {
-      if (frames.length === 0) return { code: 2, out: '', err: "return: can only `return' from a function or sourced script\n" };
+      if (frames.length === 0 && sourceDepth === 0) return { code: 2, out: '', err: "return: can only `return' from a function or sourced script\n" };
       throw new ReturnSignal(Number(argv[0] ?? state.status));
     },
     ':': () => ok(''),
@@ -3062,7 +3612,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     },
     which: ({ argv }) => lookupNames(argv),
     type: ({ argv }) => typeNames(argv),
-    command: ({ argv, stdin, signal }) => (argv[0] === '-v' ? lookupNames(argv.slice(1)) : dispatch(argv, stdin, signal)),
+    command: ({ argv, stdin, signal, stream }) => commandBuiltin(argv, stdin, signal, stream),
     cat({ argv, stdin }) {
       if (!argv.length) return ok(stdin ?? '');
       let out = '';
@@ -3171,9 +3721,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       signal?.addEventListener('abort', onAbort, { once: true });
     });
 
+  const isShellBuiltin = (name) => SHELL_BUILTINS.has(name) || inPage.has(name) || (BASH_BUILTINS.has(name) && Object.hasOwn(commands, name));
   const locate = (name) => {
     if (functions.has(name)) return name;
-    if (inPage.has(name) || SHELL_BUILTINS.has(name)) return name;
+    if (isShellBuiltin(name)) return name;
     if (Object.hasOwn(commands, name)) return `/bin/${name}`;
     return null;
   };
@@ -3200,10 +3751,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
         code = 1;
         if (!mode) err += `type: ${name}: not found\n`;
       } else if (mode === '-t') {
-        const kind = functions.has(name) ? 'function' : SHELL_BUILTINS.has(name) || inPage.has(name) ? 'builtin' : 'file';
+        const kind = functions.has(name) ? 'function' : isShellBuiltin(name) ? 'builtin' : 'file';
         out += kind + '\n';
       } else if (functions.has(name)) out += `${name} is a function\n`;
-      else if (SHELL_BUILTINS.has(name) || inPage.has(name)) out += `${name} is a shell builtin\n`;
+      else if (isShellBuiltin(name)) out += `${name} is a shell builtin\n`;
       else out += `${name} is ${found}\n`;
     }
     return { code, out, err };
@@ -3263,7 +3814,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     if (name === '#') return String(positional.length);
     if (name === '@' || name === '*') return positional.join(' ');
     if (name === '0') return 'thebird';
-    if (name === '$') return '1';
+    if (name === '$') return String(SHELL_PID);
     if (name === '!') return lastPid === null ? '' : String(lastPid);
     for (let i = frames.length - 1; i >= 0; i--) {
       if (frames[i].has(name)) return frames[i].get(name);
@@ -3313,6 +3864,8 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   };
 
   const setVariable = (name, value, quiet = false) => {
+    if (readonly.has(name)) throw new ReadonlyError(name);
+    value = applyAttributes(name, value);
     if (arrays.has(name)) return setElement(name, 0, value);
     const frame = frames.at(-1);
     if (frame?.has(name)) frame.set(name, value);
@@ -3473,7 +4026,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   const describeList = (list) => list.items.map((item, i) => (i === 0 ? '' : ' ' + item.op + ' ') + describePipe(item.pipe)).join('');
   const describeCommand = (cmd) => {
     if (cmd.type === 'simple') return cmd.words.map((parts) => parts.map(describePart).join('')).join(' ');
-    if (cmd.type === 'subshell') return '(' + describeList(cmd.list) + ')';
+    if (cmd.type === 'subshell') return '( ' + describeList(cmd.list) + ' )';
     if (cmd.type === 'group') return '{ ' + describeList(cmd.list) + '; }';
     if (cmd.type === 'arith') return '((' + cmd.src + '))';
     return cmd.type;
@@ -3533,6 +4086,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       for (const [name, value] of assigned) setVariable(name, value);
       return { code: 0, out: '', err: takeLocaleWarnings() };
     }
+    arrayArgValues = new Map(await Promise.all((node.arrayArgs ?? []).map(async ({ name, values }) => [name, await expandWords(values, sink)])));
     const saved = new Map(assigned.map(([name]) => [name, vars.get(name)]));
     const priorPrefix = [...prefixNames];
     const external = !BASH_BUILTINS.has(argv[0]) && !functions.has(argv[0]);
@@ -3542,6 +4096,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const result = await runCommand(node, argv, stdin, sink, stream);
       return { ...result, err: takeLocaleWarnings() + result.err };
     } finally {
+      arrayArgValues = null;
       prefixNames.clear();
       for (const name of priorPrefix) prefixNames.add(name);
       for (const [name, value] of saved) {
@@ -3890,6 +4445,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     } catch (err) {
       if (!(err instanceof ShellExit)) throw err;
       code = err.code;
+      if (err.text) inner.err += err.text + LINE_FEED;
     } finally {
       state.cwd = savedCwd;
       vars.clear();
@@ -3990,9 +4546,9 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
     return functions.has(name) || Object.hasOwn(commands, name) || inPage.has(name);
   }
 
-  async function dispatch(argv, stdin, signal, stream) {
+  async function dispatch(argv, stdin, signal, stream, skipFunctions = false) {
     const name = argv[0];
-    if (functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal, stream);
+    if (!skipFunctions && functions.has(name)) return callFunction(functions.get(name), argv.slice(1), stdin, signal, stream);
     if (Object.hasOwn(commands, name)) return commands[name]({ argv: argv.slice(1), stdin: stream && stream.text === stdin ? stream.text.slice(stream.pos) : stdin, signal, stream });
     if (inPage.has(name)) return host.external(name, argv.slice(1), state.cwd);
     return { code: 127, out: '', err: `${name}: command not found\n` };
@@ -4333,6 +4889,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       const guarded = list.items[i + 1]?.op === '&&' || list.items[i + 1]?.op === '||';
       status = guarded ? await suspendErrexit(() => runPipeline(pipe, stdin, sink)) : await runPipeline(pipe, stdin, sink);
       state.status = status;
+      if (status !== 0 && !guarded && errexitSuspended === 0 && traps.has('ERR')) await runErrorTrap(sink);
       if (status !== 0 && errexit && !guarded && errexitSuspended === 0) throw new ShellExit(status);
     }
     return status;
@@ -4340,7 +4897,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
 
   const toolContext = (stdin) => ({ host, cwd: state.cwd, stdin: stdin ?? '', resolve: resolvePath, format: formatPrintf });
 
-  const snapshotState = () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], arrays: [...arrays].map(([name, entries]) => [name, [...entries]]), positional: [...positional], nextPid, lastPid, errexit, xtrace });
+  const snapshotState = () => ({ cwd: state.cwd, status: state.status, vars: [...vars], exported: [...exported], modes: [...modes], functions: [...functions], arrays: [...arrays].map(([name, entries]) => [name, [...entries]]), positional: [...positional], readonly: [...readonly], attributes: [...attributes], aliases: [...aliases], traps: [...traps], dirStack, shopts: [...shopts], umask: umaskValue, nextPid, lastPid, errexit, xtrace });
   const forkJobShell = () => createShell({ host, cwd: state.cwd, builtins, saved: snapshotState() });
   const stopJobs = async () => {
     const running = [...jobs.values()].filter((job) => !job.done);
@@ -4367,7 +4924,10 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
           sink.err += syntaxReport(parsed.error, script);
         }
       } catch (err) {
-        if (err instanceof ShellExit) code = err.code;
+        if (err instanceof ShellExit) {
+          code = err.code;
+          if (err.text) sink.err += err.text + LINE_FEED;
+        }
         else if (control.signal.aborted && control.signal.reason instanceof TimedOut) {
           code = 124;
           sink.err += 'timeout: command timed out\n';
@@ -4384,6 +4944,13 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
       } finally {
         clearTimeout(timer);
         signal?.removeEventListener('abort', cancel);
+      }
+      const exitAction = traps.get('EXIT');
+      if (exitAction !== undefined) {
+        traps.delete('EXIT');
+        const trapped = await runTrapAction(exitAction);
+        sink.out += trapped.out;
+        sink.err += trapped.err;
       }
       await stopJobs();
       runSink = null;
