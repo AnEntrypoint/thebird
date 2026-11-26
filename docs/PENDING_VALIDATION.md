@@ -7188,3 +7188,8 @@ Waits on the owner (or the machine):
 - Witness split: scripts/witness.mjs was 2353 lines with 86 groups. Now each group is one file in scripts/witness/groups/NN-slug.mjs, in the original order. scripts/witness/shared.mjs holds the top-level helpers and state the groups share (71 exported names). scripts/witness.mjs keeps the runner, and imports the shared names and then the group files in order.
 - Witness: node scripts/witness.mjs --list is byte-identical before and after the split (86 groups). Every group file and the shared module pass node --check. The 12 reds that pointed at scripts/witness.mjs are repointed to the file that holds their anchor, and all 171 anchors are unique. lint-architecture reads every witness file (401 pass, 0 fail, 0 unverified). test/witness-parts.test.mjs passes both tests.
 - Runtime proof: a full witness run on the committed split tree is queued as a separate exclusive ticket (thebird-witnessfull), because the witness measures time. Its result decides whether this split is green.
+### Split witness green on 854fe7e: 311 PASS, 0 FAIL, 1 SKIP
+
+- Window: thebird-witnessfull3, exclusive, on 854fe7e. Result: /workspace/tmp/thebird/thebird-witnessfull3.result. Totals: PASS 311, FAIL 0, SKIP 1, GROUPS 87, WALL 506.9 s. The final line is 'all checks passed'.
+- The skip is the live-provider row, which needs OPENROUTER_KEY or a gateway on 127.0.0.1:8793 (owner-held, see the gy4 decision).
+- Pushed 854fe7e. It contains the cause fix 08d681a and the dead-code and fs-watch fixes. The earlier failing runs are recorded in this file's previous entries.
