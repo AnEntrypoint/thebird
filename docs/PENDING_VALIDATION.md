@@ -7154,3 +7154,9 @@ Waits on the owner (or the machine):
 - Witness: group 'builtins: argument validation reports bash text and status' has 12 rows, each raw bash -c output with the prefix kept. Shell witness PASS=2288 FAIL=0.
 - Reds: 13 new reds (valexport, valunset, valreadonly, valdirs, valprintf, valjobs, valkilllist, valexit, valset, valmapfile, valcd, valkillsig) each replace one check with a mutant, and each is CAUGHT alone. leakprintf is repointed to the new printf return and CAUGHT. Anchors: all 166 unique.
 - Limits, recorded: exit inside a subshell drops the bash text, because runSubshell does not carry the message (the status is right). set -o accepts bash's valid names only for the two it implements, and says unsupported for the rest, as before. cd, pushd and . with a missing path are still not checked on the witness host.
+### Missing paths for cd, pushd and ., and the redundant builtinError calls removed
+
+- Claim: cd, pushd and . with a missing path print bash's text with the prefix (cd: and pushd: name the builtin, . prints the path alone), and return status 1.
+- Witness: group 'builtins: a missing path reports bash text and status' has three rows, each raw bash -c output with the prefix kept. The earlier probe failure for cd was the probe host lacking exists, not the shell. Shell witness PASS=2291 FAIL=0.
+- Change: six builtinError call sites in declare, unset, local and break return plain text plus a line feed, because the bash prefix wrapper already prefixes lines that start with the builtin's name. The source missing-file site keeps builtinError, because its message starts with the file name, so the wrapper cannot tell it is source's.
+- Reds: missingcd and missingsource replace each missing-path check with a mutant and are each CAUGHT alone. Anchors: all 168 unique.

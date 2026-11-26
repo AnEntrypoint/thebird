@@ -164,5 +164,7 @@
 {"name":"valset","file":"web/shell-core.js","anchor":"&& !BASH_OPTION_NAMES.includes(argv[i + 1])","replace":"&& false","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"valmapfile","file":"web/shell-core.js","anchor":"if (argv[0]?.startsWith('-') && ![","replace":"if (false && ![","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
 {"name":"valcd","file":"web/shell-core.js","anchor":"if (badOption !== undefined) return { code: 2, out: '', err: 'cd: '","replace":"if (false) return { code: 2, out: '', err: 'cd: '","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
-{"name":"valkillsig","file":"web/shell-core.js","anchor":"targets[0] === '-s' || targets[0] === '-n'","replace":"targets[0] === '-x' || targets[0] === '-n'","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
+{"name":"valkillsig","file":"web/shell-core.js","anchor":"targets[0] === '-s' || targets[0] === '-n'","replace":"targets[0] === '-x' || targets[0] === '-n'","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"missingcd","file":"web/shell-core.js","anchor":"if (!host.exists(target)) return { code: 1, out: '', err: ","replace":"if (false) return { code: 1, out: '', err: ","command":["npm","run","-s","witness:shell"],"timeoutMs":120000},
+{"name":"missingsource","file":"web/shell-core.js","anchor":"if (!host.exists(path)) return { code: 1, out: '', err: builtinError(argv[0]","replace":"if (false) return { code: 1, out: '', err: builtinError(argv[0]","command":["npm","run","-s","witness:shell"],"timeoutMs":120000}
 ]
