@@ -90,6 +90,13 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
   let size = '';
   return {
     async run(command, { onOutput } = {}) {
+      if (hasBackgroundOperator(command)) {
+        const jobShell = createCoreShell({ host: coreHost(host), cwd: current });
+        const result = await jobShell.run(command);
+        current = jobShell.cwd();
+        status = result.exitCode;
+        return { ok: result.exitCode === 0, exitCode: result.exitCode, signal: null, output: result.stdout + result.stderr };
+      }
       const restore = status === 0 ? '' : `(exit ${status}); `;
       running = true;
       cancelled = false;

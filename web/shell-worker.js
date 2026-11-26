@@ -1,7 +1,7 @@
 import { Buffer } from './shims/buffer.js';
 import { existsSync, flushFs, hydrate, mkdirSync, readdirSync, writeFileSync } from './shims/fs.js';
 import { posix } from './shims/path.js';
-import { createShell, hasBackgroundOperator } from './bash-shell.js';
+import { createShell } from './bash-shell.js';
 import { onPythonPhase } from './python-in-page.js';
 import { clearCancel, setCancelWord } from './txiki-in-page.js';
 import { settleTakeover } from './takeover.js';
@@ -43,7 +43,6 @@ const windowFromUrl = (search) => {
 };
 globalThis.Buffer = Buffer;
 onPythonPhase((phase, detail) => postMessage({ phase, detail }));
-const BACKGROUND_REFUSED = 'background jobs are not supported in the in-page shell; run the command in the foreground';
 
 function completions(prefix, cwd) {
   const slash = prefix.lastIndexOf('/');
@@ -88,8 +87,6 @@ try {
         reply = { id: data.id, ok: true, result };
       } else if (data.query === 'cwd') {
         reply = { id: data.id, ok: true, result: shell.cwd() };
-      } else if (hasBackgroundOperator(data.run)) {
-        reply = { id: data.id, ok: false, error: BACKGROUND_REFUSED };
       } else {
         clearCancel();
         globalThis.THEBIRD_FX = data.fx;
