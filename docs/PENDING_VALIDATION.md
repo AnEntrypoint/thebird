@@ -7166,3 +7166,7 @@ Waits on the owner (or the machine):
 - Change: exit returns status 2 with the message, instead of ending the shell with status 2. The earlier witness row, which expected empty output and status 2, was wrong; the bash probe had shown rc=2 and status 0.
 - Witness: row exit abc; echo rc=$? is corrected to rc=2 with status 0, and group 'builtins: exit with a non-numeric argument returns 2 and goes on' adds the function and top-level cases, all from raw bash -c output. Shell witness PASS=2293 FAIL=0.
 - Red: exitcontinue throws before the return and is CAUGHT alone. Anchors: all 169 unique.
+### Final shell reds window on d00ecc3: 119 of 119 CAUGHT
+
+- Window: thebird-shellfinal, 119 reds that guard web/shell-*.js or run the shell witness, on d00ecc3, not exclusive (none measures time). Result: /workspace/tmp/thebird/thebird-shellfinal.result, every red CAUGHT, reds: all caught. Missed: none. Anchors: all 169 unique.
+- The tree tested is d00ecc3, which is on origin/main. This entry is the only change after it.
