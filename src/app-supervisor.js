@@ -55,7 +55,7 @@ const appFolderFor = async (projectRoot, id) => {
 const needsInstall = (folder, pkg) => Object.keys(pkg.dependencies ?? {}).length > 0 && !existsSync(join(folder, 'node_modules'));
 
 const install = (folder, id, fd) => new Promise((ok, fail) => {
-  const child = spawn('npm', ['install', '--no-audit', '--no-fund'], { cwd: folder, stdio: ['ignore', fd, fd] });
+  const child = spawn('npm', ['install', '--no-audit', '--no-fund', '--no-bin-links'], { cwd: folder, stdio: ['ignore', fd, fd] });
   child.once('error', fail);
   child.once('exit', (code) => (code === 0 ? ok() : fail(new Error('npm install failed for ' + id + ' with exit code ' + code))));
 });

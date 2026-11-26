@@ -25,5 +25,6 @@ group('npm run host:check passes every check of the canonical host on its own po
   const summary = out.match(/RESULT PASS=(\d+) FAIL=(\d+)/);
   const failLines = out.split('\n').filter((line) => line.startsWith('FAIL ')).length;
   check('npm run host:check exits 0', run.status === 0, `exit ${run.status} ${run.error?.message ?? ''}`);
+  check('npm run host:check leaves bin/thebird-relay.js at its committed mode 644', (statSync(join(root, 'bin', 'thebird-relay.js')).mode & 0o777) === 0o644, (statSync(join(root, 'bin', 'thebird-relay.js')).mode & 0o777).toString(8));
   check('npm run host:check reports RESULT with no failed check', summary !== null && Number(summary[1]) > 0 && Number(summary[2]) === 0 && failLines === 0, summary ? summary[0] : 'no RESULT line');
 });
