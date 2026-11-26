@@ -4525,7 +4525,7 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["echo \"echo args \\$1 \\$2\" > a.sh; source a.sh one two","args one two\n","",0],
   ["echo \"exit 3\" > e.sh; source e.sh; echo after","","",3],
   ["readonly x=1; echo $x","1\n","",0],
-  ["readonly x=1; x=2; echo rc=$? $x","","x: readonly variable\n",1],
+  ["readonly x=1; x=2; echo rc=$? $x","","bash: line 1: x: readonly variable\n",1],
   ["readonly -p | grep x= ; echo ok","ok\n","",0],
   ["declare -i n=2+3; echo $n","5\n","",0],
   ["declare -i n; n=4*2; echo $n","8\n","",0],
@@ -4534,7 +4534,7 @@ group("builtins: command, builtin, eval, source, readonly, declare and local, ge
   ["declare -a arr=(1 2 3); echo ${arr[1]}","2\n","",0],
   ["declare -a arr=(1 2 3); declare -p arr","declare -a arr=([0]=\"1\" [1]=\"2\" [2]=\"3\")\n","",0],
   ["f() { declare loc=1; echo $loc; }; f; echo ${loc-unset}","1\nunset\n","",0],
-  ["declare -r R=5; R=6; echo rc=$? $R","","R: readonly variable\n",1],
+  ["declare -r R=5; R=6; echo rc=$? $R","","bash: line 1: R: readonly variable\n",1],
   ["declare -p nosuch; echo rc=$?","rc=1\n","declare: nosuch: not found\n",0],
   ["typeset -i t=1+1; echo $t","2\n","",0],
   ["set -- -a -b val x; while getopts \"ab:\" o; do echo $o:$OPTARG; done; echo $OPTIND","a:\nb:val\n4\n","",0],
@@ -4628,6 +4628,11 @@ group("builtins batch four: declare -a with array arguments, local -i, a declare
   ["shopt -s nullglob; shopt | head -n 1","array_expand_once   \toff\n","",0],
   ["mapfile -t m <<< \"x\\ny\"; echo ${#m[@]} ${m[1]}","1\n","",0],
   ]));
+group('builtins: a readonly assignment error names the line, as bash does', async () => {
+  const sh = await shell({});
+  const readonlyRun = await sh.run('readonly R=1; R=2; echo rc=$?');
+  check('builtins: readonly R=2 aborts with bash text and status 1', readonlyRun.stdout === '' && readonlyRun.stderr === 'bash: line 1: R: readonly variable' + String.fromCharCode(10) && readonlyRun.exitCode === 1, JSON.stringify(readonlyRun));
+});
 group('arithmetic <=, kill with an invalid signal, and an ambiguous redirect on a word with a quoted part, as bash does', async () => {
   const cases = [
     ['echo $(( 3 <= 3 )) $(( 4 <= 3 ))', '1 0\n', '', 0],

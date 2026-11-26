@@ -7113,3 +7113,10 @@ Waits on the owner (or the machine):
 - Witness: test/shell-program-parses.test.mjs builds the same concatenation from the MODULES list and runs node --check on it as a module, in a throwaway directory under .thebird/. It passes on the current tree.
 - Red: concatparse restores the tokenize declaration in web/shell-arith.js. It is CAUGHT alone (rc 1, restored true), and the anchors check reports all 149 unique.
 - Limits: the test checks module syntax, not evaluation. A duplicate binding that only fails at run time is not covered.
+### Readonly assignment error carries bash's line prefix
+
+- Claim: `readonly R=1; R=2` writes `bash: line 1: R: readonly variable` to stderr, exits 1, and the script stops, as bash does. The text lacked the `bash: line N:` prefix.
+- Change: ReadonlyError takes the line from LINENO, which runSimple sets to the current command's line, and builds the prefix at the throw site. The fallback is line 1 when LINENO is unset.
+- Witness: group 'builtins: a readonly assignment error names the line, as bash does' checks stdout empty, stderr with the prefix, and exit status 1. Two older rows that expected the unprefixed text (readonly x=1 and declare -r R=5) now expect the prefix, which bash prints. The shell witness is PASS=2258 FAIL=0.
+- Red: readonlyprefix restores the unprefixed text and is CAUGHT alone. bdreadonly, repointed to the new call, is CAUGHT alone. Anchors: all 150 unique.
+- Limits: other runtime errors (unset of a readonly name, the declare messages) keep their own text and are not yet checked against bash's prefix.

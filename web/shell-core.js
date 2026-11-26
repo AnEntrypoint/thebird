@@ -89,9 +89,9 @@ class ShellExit {
 }
 
 class ReadonlyError extends ShellExit {
-  constructor(name) {
+  constructor(name, line) {
     super(1);
-    this.text = name + ': readonly variable';
+    this.text = 'bash: line ' + line + ': ' + name + ': readonly variable';
   }
 }
 class ReturnSignal {
@@ -3864,7 +3864,7 @@ const expandStat = (format, name, info, linkTarget, locale) => format.replace(/%
   };
 
   const setVariable = (name, value, quiet = false) => {
-    if (readonly.has(name)) throw new ReadonlyError(name);
+    if (readonly.has(name)) throw new ReadonlyError(name, vars.get('LINENO') ?? '1');
     value = applyAttributes(name, value);
     if (arrays.has(name)) return setElement(name, 0, value);
     const frame = frames.at(-1);
