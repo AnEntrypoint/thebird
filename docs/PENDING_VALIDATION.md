@@ -7221,3 +7221,11 @@ Waits on the owner (or the machine):
 - Fixes on the way, all in the commits below: the reap check gives the job a 3 s deadline and runs its foreground under the per-line limit (4aef1e9); the group title has no comma, because the witness selector splits --group on commas (e701f3e); the reap check matches a printed line named never, not the echoed command (5a562a0); the reds name the group exactly, the core jobreap red runs the shell witness again, and the page reap red now removes the reap message (9ef1b29).
 - Witness: group 88 alone on 9ef1b29: PASS 4, FAIL 0, LIFE_GROUP_RC=0. Reds on 9ef1b29: jobreap CAUGHT rc=1, jobreapmsg CAUGHT rc=1, jobsplit CAUGHT rc=1, reds all caught, LIFE_REDS_RC=0. MODE 644. Full witness parts on 5a562a0 (the same code; 9ef1b29 changes only the red table): part 1 on e701f3e PASS 167 FAIL 0 PART_RC=0; part 2 on 5a562a0 PASS 151 FAIL 0 PART_RC=0, MODE 644.
 - Pushed 9ef1b29, which contains fe3adf0, 4aef1e9, e701f3e, 5a562a0 and 9ef1b29.
+### Liveterm red dropped: its mutant is not detectable
+
+- The red: its mutant removed closeBrowserTrees() before process.exit(143) in scripts/lint-live.mjs, and its check, scripts/lint-live-timeout.mjs, requires that no browser or scratch directory is left at a live timeout. It never read `$0` and never needed a key.
+- Diagnostic (thebird-liveterm, b75c53d): MISSED rc=0. The explicit cleanup was redundant with the exit handlers.
+- Rework (26d8bfb): the mutant replaced the exit path with process.kill(process.pid, 'SIGKILL'), so no exit handler runs. Witness (thebird-liveterm2): UNMUTATED_RC=0, and the reworked red MISSED rc=0, with processes 0 and entries 0 after the SIGKILL.
+- Cause: the browser exits when its parent process dies, so a left-over browser is not produced by the lint's own timeout path, and the check cannot observe the lint's cleanup. No mutant of that path is detectable by this check.
+- Decision: the red is dropped. The timeout check itself stays, and it still passes on the unmutated tree.
+- Full red set after the drop: 174 reds, all CAUGHT on b75c53d, as recorded in the queue.
