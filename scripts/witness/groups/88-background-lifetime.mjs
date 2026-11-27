@@ -26,6 +26,6 @@ group('background jobs outlive their line, wait works across lines, and a job is
   const waited = await terminal([['run', '(sleep 1; echo slow) &'], ['run', 'wait; echo waited']]);
   const wl = waited.out.split('\n');
   check('wait on a later line returns after the job, and the job output comes before waited', wl.indexOf('slow') >= 0 && wl.indexOf('waited') > wl.indexOf('slow'), wl.slice(-5).join(' / ').slice(0, 160));
-  const reaped = await terminal([['run', '(sleep 30; echo never) &'], ['run', 'sleep 4; echo still-here']], { params: [['commandTimeoutMs', '2000']] });
+  const reaped = await terminal([['run', '(sleep 30; echo never) &'], ['run', 'sleep 1; echo mid'], ['run', 'sleep 2.5; echo still-here']], { params: [['commandTimeoutMs', '3000']] });
   check('a job is reaped at its deadline: its output never prints, and the shell reports the reap', !reaped.out.includes('never') && reaped.out.includes('reaped at its deadline') && reaped.out.includes('still-here'), reaped.out.slice(-200).replace(/\n/g, ' / '));
 });
