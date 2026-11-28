@@ -45,6 +45,14 @@ export function streamPlan({ prompt, tools = [] }) {
       finish: 'tool-calls',
     };
   }
+  const stream = text.match(/\[stream:(\d+):(\d+):(\d+)\]/);
+  if (stream) {
+    const [count, size, delayMs] = stream.slice(1).map(Number);
+    const chunk = 'x'.repeat(size);
+    const events = Array.from({ length: count }, (_, index) => ({ type: 'text-delta', id: 't', delta: index + 1 + ':' + chunk + NL }));
+    events.push({ type: 'text-delta', id: 't', delta: 'END-OF-STREAM' });
+    return { events, finish: 'stop', delayMs };
+  }
   if (lines > 0) {
     const body = Array.from({ length: lines }, (_, index) => `line ${index + 1}`).join('\n');
     return { events: [{ type: 'text-delta', id: 't', delta: body }], finish: 'stop' };
@@ -91,8 +99,13 @@ export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
       }
       const plan = streamPlan(request);
       res.writeHead(200, { ...CORS, 'content-type': 'text/event-stream' });
-      for (const event of plan.events) res.write(sseEvent(event));
-      res.end(sseEvent({ type: 'finish', finishReason: { unified: plan.finish } }));
+      (async () => {
+        for (const event of plan.events) {
+          res.write(sseEvent(event));
+          if (plan.delayMs) await new Promise((done) => setTimeout(done, plan.delayMs));
+        }
+        res.end(sseEvent({ type: 'finish', finishReason: { unified: plan.finish } }));
+      })();
     });
   });
   return new Promise((ok, fail) => {
