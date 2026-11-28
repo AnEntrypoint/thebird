@@ -21,7 +21,7 @@ import { COLD_START_MS, DEFAULT_CONTEXT_GROUPS, FX_TUI_TOOLS, GRAPHEMES, GROUP_B
 group('fx-stream-bisect', async () => {
   const fxStub = await startFxStubGateway();
   const fxInit = `window.THEBIRD_FX = ${JSON.stringify({ apiKey: FX_STUB_KEY, model: 'anthropic/claude-haiku-5.5', gatewayChatUrl: fxStub.url })};`;
-  const cases = [["bytes-100k","5:20000:100",100000],["bytes-300k","6:50000:100",300000],["bytes-600k","12:50000:100",600000],["bytes-1200k","12:100000:100",1200000],["time-20s","20:100:1000",2000],["time-40s","40:100:1000",4000],["time-60s","60:100:1000",6000]];
+  const cases = [["bytes-100k","5:20000:100",100000],["bytes-300k","6:50000:100",300000],["bytes-600k","12:50000:100",600000],["bytes-1048576","16:65536:50",1048576],["bytes-1048577","16:65537:50",1048577],["bytes-3m","30:100000:50",3000000],["bytes-1200k","12:100000:100",1200000],["time-20s","20:100:1000",2000],["time-40s","40:100:1000",4000],["time-60s","60:100:1000",6000]];
   for (const [name, directive, expectedBytes] of cases) {
     const run = await terminal([['run', 'fx ask [stream:' + directive + '] ' + name]], { initScript: fxInit, timeoutMs: 300000 });
     const indexes = [...run.out.matchAll(/^(\d+):x+/gm)].map((m) => Number(m[1]));

@@ -1,4 +1,4 @@
-import { Bash, initBashkit } from './vendor/bashkit/index.js';
+import { Bash, ExecutionProfile, initBashkit } from './vendor/bashkit/index.js';
 import { createHost } from './shims/bashkit-host.js';
 import { BUILTIN_NAMES, runBuiltin } from './builtins.js';
 import { lookupPrologue } from './shell-lookup.js';
@@ -98,7 +98,7 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
   let status = 0;
   const startJob = (text) => {
     const id = ++jobSeq;
-    const jobBash = new Bash({ cwd: current, fs: host, customBuiltins, timeoutMs: commandTimeoutMs });
+    const jobBash = new Bash({ cwd: current, fs: host, customBuiltins, timeoutMs: commandTimeoutMs, profile: ExecutionProfile.Interactive });
     const job = { id, command: text.trim(), status: 'running', exitCode: 0 };
     jobs.set(id, job);
     const timer = setTimeout(() => {
@@ -149,7 +149,7 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
     builtinStatus = 0;
     return withNewline([...jobs.values()].map((job) => `[${job.id}]  ${job.status === 'running' ? 'Running' : job.status === 'done' ? 'Done' : job.status === 'reaped' ? 'Terminated' : 'Exit ' + job.exitCode}  ${job.command} &`).join('\n'));
   };
-  const bash = new Bash({ cwd, fs: host, customBuiltins, timeoutMs: commandTimeoutMs });
+  const bash = new Bash({ cwd, fs: host, customBuiltins, timeoutMs: commandTimeoutMs, profile: ExecutionProfile.Interactive });
   await bash.execute(lookupPrologue([...BUILTIN_NAMES, ...CORE_NAMES]));
   await bash.execute([...CORE_NAMES, ...JOB_NAMES].map(coreWrapper).join(''));
   const commandNames = [...new Set((await bash.execute('for n in $(compgen -c); do command -v "$n" >/dev/null && echo "$n"; done')).stdout.split('\n').filter(Boolean))].sort();
