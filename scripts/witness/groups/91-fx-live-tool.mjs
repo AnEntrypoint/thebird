@@ -40,6 +40,8 @@ const captureProxy = (target) => {
       status: upstream.status,
       bytes: text.length,
       toolCalls: (text.match(/"tool_calls"/g) ?? []).length,
+      toolNames: [...new Set([...text.matchAll(/"name":\s*"([a-z_]+)"/g)].map((match) => match[1]))],
+      arguments: [...text.matchAll(/"arguments":\s*"((?:[^"\\]|\\.)*)"/g)].map((match) => match[1]).join('').slice(0, 240),
       finish: [...text.matchAll(/"finish_reason":\s*"([a-z_]+)"/g)].map((match) => match[1]).at(-1) ?? null,
     });
     res.writeHead(upstream.status, { ...cors, 'content-type': upstream.headers.get('content-type') ?? 'application/json' });
@@ -53,22 +55,30 @@ const captureProxy = (target) => {
 };
 
 group('fx-live-tool', async () => {
-  const names = ['the live request offers thebird_run to the provider', 'fx ask on the live provider runs a tool: the file its command wrote exists', 'the live turn does not end with incomplete stream'];
+  const names = ['the live request offers bash to the provider', 'fx ask on the live provider runs bash: the file its command wrote exists', 'the live turn does not end with incomplete stream'];
   const live = await liveRun(names);
   if (!live) return;
-  const proxy = await captureProxy(live.url);
-  const marker = 'live-tool-' + Date.now();
-  const run = await terminal([
-    ['run', "fx ask 'Call the thebird_run tool exactly once with the command: echo " + marker + " > /workspace/live-tool.txt . Then reply with the single word done.'"],
-    ['run', 'od -c /workspace/live-tool.txt'],
-    ['run', 'cat /workspace/live-tool.txt'],
-  ], {
-    initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: live.key, model: live.model, gatewayChatUrl: proxy.url })};`,
-    timeoutMs: 600000,
-  });
-  await proxy.close();
-  const detail = JSON.stringify({ model: live.model, requests: proxy.captured, tail: run.out.slice(-300) });
-  liveCheck(names[0], proxy.captured.length > 0 && proxy.captured.every((request) => request.tools.includes('thebird_run')), detail);
-  liveCheck(names[1], run.out.split('\n').filter((line) => line === marker).length === 1, detail);
+  const candidates = [live.model, ...live.models.filter((model) => model !== live.model)].slice(0, 3);
+  let outcome = null;
+  for (const [attempt, model] of candidates.entries()) {
+    if (attempt > 0) await new Promise((done) => setTimeout(done, 30000));
+    const proxy = await captureProxy(live.url);
+    const marker = 'live-tool-' + Date.now();
+    const run = await terminal([
+      ['run', "fx ask 'Call the bash tool exactly once with the command: echo " + marker + " > /workspace/live-tool.txt . Then reply with the single word done.'"],
+      ['run', 'od -c /workspace/live-tool.txt'],
+      ['run', 'cat /workspace/live-tool.txt'],
+    ], {
+      initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: live.key, model, gatewayChatUrl: proxy.url })};`,
+      timeoutMs: 600000,
+    });
+    await proxy.close();
+    outcome = { model, attempt, marker, run, captured: proxy.captured, limited: proxy.captured.some((request) => request.status === 429) };
+    if (!outcome.limited) break;
+  }
+  const { model, marker, run, captured, limited } = outcome;
+  const detail = JSON.stringify({ model, limited, requests: captured, tail: run.out.slice(-300) });
+  liveCheck(names[0], captured.length > 0 && captured.every((request) => request.tools.includes('bash')), detail);
+  liveCheck(names[1], run.out.split('\n').filter((line) => line === marker).length === 1, limited ? detail + ' 429' : detail);
   liveCheck(names[2], !run.out.includes('incomplete stream'), detail);
 });
