@@ -55,6 +55,16 @@ const coreHost = (host) => ({
   },
 });
 
+const commandRunner = (cwd, signal, commandTimeoutMs) => {
+  let shell = null;
+  const cancel = () => shell?.cancel();
+  signal.addEventListener('abort', cancel, { once: true });
+  return async (command) => {
+    shell ??= await createShell({ cwd, commandTimeoutMs });
+    return shell.run(command);
+  };
+};
+
 export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMAND_TIMEOUT_MS } = {}) {
   await initBashkit();
   const host = createHost();
@@ -71,7 +81,7 @@ export async function createShell({ cwd = '/workspace', commandTimeoutMs = COMMA
     if (lineOutput) lineOutput(text);
     else pendingOutput += text;
   };
-  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: commandTimeoutMs }).then((text) => {
+  const customBuiltins = Object.fromEntries(BUILTIN_NAMES.map((name) => [name, (ctx) => runBuiltin(name, ctx.argv, { cwd: ctx.cwd, signal: abort.signal, timeoutMs: commandTimeoutMs, exec: commandRunner(ctx.cwd, abort.signal, commandTimeoutMs) }).then((text) => {
     builtinStatus = 0;
     return withNewline(text);
   }, (err) => {

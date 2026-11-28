@@ -1,7 +1,7 @@
 import { createFxEngine, supportsJspi } from './vendor/fx/engine.js';
 import { wasmRuntimeFactory } from './vendor/fx/wasm-runtime.js';
 import { requestTakeover } from './takeover.js';
-import { PAGE_HOST_TOOLS } from './fx-host-tools.js';
+import { PAGE_HOST_TOOLS, createPageHostTools } from './fx-host-tools.js';
 import { THEBIRD_FX_SYSTEM_PROMPT, fxPromptFor } from './fx-capabilities.js';
 import { DEFAULT_MODEL, providerOf } from './fx-provider.js';
 
@@ -41,7 +41,9 @@ const textOf = (turn) => (async () => {
 const customEngine = ({ provider, apiKey }) => ({ provider, credentials: () => ({ apiKey }) });
 const gatewayEngine = ({ apiKey, gatewayChatUrl }) => ({ apiKey, gatewayChatUrl });
 
-const ask = async (argv, signal) => {
+const askTools = (exec) => globalThis.THEBIRD_FX_TOOLS ?? (exec ? createPageHostTools({ bash: exec }) : PAGE_HOST_TOOLS);
+
+const ask = async (argv, signal, exec) => {
   const prompt = argv.join(' ').trim();
   if (!prompt) throw new Error(USAGE);
   if (!supportsJspi()) throw new Error('fx needs WebAssembly JSPI: open thebird in Chrome or Edge 137+');
@@ -51,7 +53,7 @@ const ask = async (argv, signal) => {
     wasm: WASM_URL,
     ...(provider ? customEngine({ ...options, provider }) : gatewayEngine(options)),
     model: options.model ?? DEFAULT_MODEL,
-    tools: globalThis.THEBIRD_FX_TOOLS ?? PAGE_HOST_TOOLS,
+    tools: askTools(exec),
     workspace: globalThis.THEBIRD_FX_WORKSPACE,
   }, wasmRuntimeFactory());
   if (signal.aborted) {
@@ -74,7 +76,7 @@ const ask = async (argv, signal) => {
   }
 };
 
-export async function fxBuiltin(argv, { signal } = {}) {
+export async function fxBuiltin(argv, { signal, exec } = {}) {
   const [command, ...rest] = argv;
   if (argv.length === 0) {
     const code = await requestTakeover('fx', { fx: globalThis.THEBIRD_FX ?? {} });
@@ -92,6 +94,6 @@ export async function fxBuiltin(argv, { signal } = {}) {
     if (!wasm?.ok) throw new Error('fx-core.wasm is missing: run node scripts/vendor-fx.mjs');
     return `fx ready: JSPI ${supportsJspi() ? 'available' : 'missing'}; core ${wasm.headers.get('content-type') ?? 'unknown type'}`;
   }
-  if (command === 'ask') return ask(rest, signal ?? new AbortController().signal);
+  if (command === 'ask') return ask(rest, signal ?? new AbortController().signal, exec);
   throw new Error(`fx: unknown command '${command}'\n${USAGE}`);
 }

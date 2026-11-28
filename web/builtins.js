@@ -24,9 +24,9 @@ const RUNNERS = {
   npx: ({ argv, cwd, signal, timeoutMs }) => npxBuiltin(argv, cwd, { signal, timeoutMs }),
   curl: ({ argv, cwd, signal }) => curlBuiltin('curl', argv, cwd, signal),
   wget: ({ argv, cwd, signal }) => curlBuiltin('wget', argv, cwd, signal),
-  fx: ({ argv, signal }) => fxBuiltin(argv, { signal }),
+  fx: ({ argv, signal, exec }) => fxBuiltin(argv, { signal, exec }),
   playwriter: ({ argv, signal }) => playwriterBuiltin(argv, { signal }),
   feature: async ({ argv }) => JSON.stringify(await applyFeatureRequest(JSON.parse(argv[0]))),
 };
 
-export const runBuiltin = (name, argv, { cwd, signal, timeoutMs } = {}) => RUNNERS[name]({ argv, cwd, signal, timeoutMs });
+export const runBuiltin = (name, argv, { cwd, signal, timeoutMs, exec } = {}) => RUNNERS[name]({ argv, cwd, signal, timeoutMs, exec });
