@@ -109,6 +109,7 @@ import './witness/groups/88-background-lifetime.mjs';
 import './witness/groups/89-fx-long-stream.mjs';
 import './witness/groups/90-fx-stream-bisect.mjs';
 import './witness/groups/91-fx-live-tool.mjs';
+import './witness/groups/92-fx-messages-protocol.mjs';
 
 const argv = Object.fromEntries(process.argv.slice(2).map((arg) => {
   const [key, ...rest] = arg.replace(/^--/, '').split('=');

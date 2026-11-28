@@ -17,7 +17,7 @@ const snakeCase = (key) => key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerC
 
 export const providerRegistry = (provider) => JSON.stringify({
   [provider.name]: {
-    protocol: 'openai-chat-completions',
+    protocol: provider.protocol ?? 'openai-chat-completions',
     base_url: provider.baseUrl,
     auth: { type: 'none' },
     model_metadata: Object.fromEntries(Object.entries(provider.models).map(([model, metadata]) => [
