@@ -49,7 +49,7 @@ export function streamPlan({ prompt, tools = [] }) {
   if (stream) {
     const [count, size, delayMs] = stream.slice(1).map(Number);
     const chunk = 'x'.repeat(size);
-    const events = Array.from({ length: count }, (_, index) => ({ type: 'text-delta', id: 't', delta: index + 1 + ':' + chunk + NL }));
+    const events = Array.from({ length: count }, (_, index) => ({ type: 'text-delta', id: 't', delta: index + 1 + ':' + chunk + '\n' }));
     events.push({ type: 'text-delta', id: 't', delta: 'END-OF-STREAM' });
     return { events, finish: 'stop', delayMs };
   }
