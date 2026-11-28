@@ -67,6 +67,7 @@ export function streamPlan({ prompt, tools = [] }) {
 
 export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
   const seen = [];
+  const streams = [];
   const server = createServer((req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS);
@@ -99,12 +100,19 @@ export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
       }
       const plan = streamPlan(request);
       res.writeHead(200, { ...CORS, 'content-type': 'text/event-stream' });
+      const record = { prompt, events: plan.events.length, written: 0, closedEarly: false, startedAt: Date.now(), ms: 0 };
+      streams.push(record);
+      let finished = false;
+      res.on('close', () => { record.ms = Date.now() - record.startedAt; if (!finished) record.closedEarly = true; });
       (async () => {
         for (const event of plan.events) {
+          if (res.destroyed) return;
           res.write(sseEvent(event));
+          record.written += 1;
           if (plan.delayMs) await new Promise((done) => setTimeout(done, plan.delayMs));
         }
         res.end(sseEvent({ type: 'finish', finishReason: { unified: plan.finish } }));
+        finished = true;
       })();
     });
   });
@@ -113,6 +121,7 @@ export function startFxStubGateway({ port = 0, host = '127.0.0.1' } = {}) {
     server.listen(port, host, () => ok({
       url: `http://${host}:${server.address().port}/v4/ai/language-model`,
       seen,
+      streams,
       close: () => new Promise((done) => server.close(done)),
     }));
   });
