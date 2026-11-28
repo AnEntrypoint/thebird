@@ -24,14 +24,14 @@ group('fx-live-tool', async () => {
   if (!live) return;
   const marker = 'live-tool-' + Date.now();
   const run = await terminal([
-    ['run', "fx ask Use the thebird_run tool to run this shell command, then reply done: echo " + marker + " > /workspace/live-tool.txt"],
-    ['run', 'cat /workspace/live-tool.txt'],
+    ['run', "fx ask 'Call the thebird_run tool exactly once with the command: echo " + marker + " > /workspace/live-tool.txt . Then reply with the single word done.'"],
+    ['run', 'od -c /workspace/live-tool.txt'], ['run', 'cat /workspace/live-tool.txt'],
   ], {
     initScript: `window.THEBIRD_FX = ${JSON.stringify({ apiKey: live.key, model: live.model, gatewayChatUrl: live.url })};`,
     timeoutMs: 600000,
   });
-  const ids = run.logs.filter((line) => line.includes(' net-request ') && line.includes(live.url)).map((line) => line.split(' ')[3]);
-  const responses = run.logs.filter((line) => ids.some((id) => line.includes(' net-response ' + id + ' ') || line.includes(' net-finished ' + id + ' ') || line.includes(' net-failed ' + id + ' '))).map((line) => line.split(' ').slice(2, 7).join(' '));
+  const ids = run.logs.filter((line) => line.includes(' net-request ') && line.includes(live.url)).map((line) => line.split(' ')[2]);
+  const responses = run.logs.filter((line) => ids.some((id) => line.includes(' net-response ' + id + ' ') || line.includes(' net-finished ' + id + ' ') || line.includes(' net-failed ' + id + ' '))).map((line) => line.split(' ').slice(1, 6).join(' '));
   const detail = JSON.stringify({ tail: run.out.slice(-400), responses });
   const wrote = run.out.split('\n').filter((line) => line === marker).length;
   liveCheck(names[0], wrote === 1, detail);
